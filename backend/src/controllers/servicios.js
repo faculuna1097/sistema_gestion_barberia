@@ -11,17 +11,19 @@ const TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001';
  * @returns {JSON} Array de servicios con id, nombre y precio
  */
 export const getServicios = async (req, res) => {
+  console.log('[getServicios] Solicitud recibida — tenant_id:', TENANT_ID);
   try {
     const result = await query(
       `SELECT id, nombre, precio 
        FROM servicio 
        WHERE tenant_id = $1 AND activo = true 
-       ORDER BY nombre ASC`,
+       ORDER BY (nombre = 'Corte') ASC, precio ASC`,
       [TENANT_ID]
     );
+    console.log('[getServicios] Servicios encontrados:', result.rows.length, result.rows);
     res.json(result.rows);
   } catch (error) {
-    console.error('Error en getServicios:', error);
+    console.error('[getServicios] Error al consultar la base de datos:', error);
     res.status(500).json({ error: 'Error al obtener servicios' });
   }
 };

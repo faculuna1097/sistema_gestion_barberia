@@ -21,9 +21,12 @@ const TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001';
  * @param {Response} res - Devuelve la venta creada con su id y monto total
  */
 export const createVenta = async (req, res) => {
+  console.log('[createVenta] Solicitud recibida — body:', req.body);
+
   const { producto_id, cantidad, precio_unitario, forma_pago } = req.body;
 
   if (!producto_id || !cantidad || !precio_unitario || !forma_pago) {
+    console.warn('[createVenta] Validación fallida — campos faltantes:', { producto_id, cantidad, precio_unitario, forma_pago });
     return res.status(400).json({ 
       error: 'Faltan campos requeridos: producto_id, cantidad, precio_unitario, forma_pago' 
     });
@@ -33,24 +36,29 @@ export const createVenta = async (req, res) => {
 
   try {
     // 1. Verificar stock disponible antes de registrar
+    console.log('[createVenta] Verificando stock — producto_id:', producto_id);
     const stockResult = await query(
       `SELECT stock_actual FROM producto WHERE id = $1 AND tenant_id = $2`,
       [producto_id, TENANT_ID]
     );
 
     if (!stockResult.rows.length) {
+      console.warn('[createVenta] Producto no encontrado — producto_id:', producto_id);
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
 
     const stockActual = stockResult.rows[0].stock_actual;
+    console.log('[createVenta] Stock actual:', stockActual, '| Cantidad solicitada:', cantidad);
 
     if (stockActual < cantidad) {
+      console.warn('[createVenta] Stock insuficiente — disponible:', stockActual, '| solicitado:', cantidad);
       return res.status(400).json({ 
         error: `Stock insuficiente. Disponible: ${stockActual}, solicitado: ${cantidad}` 
       });
     }
 
     // 2. Registrar la venta
+    console.log('[createVenta] Insertando venta — producto_id:', producto_id, '| cantidad:', cantidad, '| forma_pago:', forma_pago);
     const ventaResult = await query(
       `INSERT INTO venta (tenant_id, producto_id, cantidad, precio_unitario, forma_pago, usuario_registro)
        VALUES ($1, $2, $3, $4, $5, $6)
@@ -59,12 +67,15 @@ export const createVenta = async (req, res) => {
     );
 
     ventaId = ventaResult.rows[0].id;
+    console.log('[createVenta] Venta insertada — venta_id:', ventaId);
 
     // 3. Descontar stock del producto
+    console.log('[createVenta] Descontando stock — producto_id:', producto_id, '| cantidad a descontar:', cantidad);
     await query(
       `UPDATE producto SET stock_actual = stock_actual - $1 WHERE id = $2`,
       [cantidad, producto_id]
     );
+    console.log('[createVenta] Stock actualizado correctamente — stock nuevo estimado:', stockActual - cantidad);
 
     res.status(201).json({
       message: 'Venta registrada correctamente',
@@ -73,13 +84,17 @@ export const createVenta = async (req, res) => {
     });
 
   } catch (error) {
+    console.error('[createVenta] Error durante el registro — venta_id al momento del fallo:', ventaId, '| error:', error);
+
     // Si la venta se insertó pero el UPDATE de stock falló, eliminamos la venta
     if (ventaId) {
+      console.warn('[createVenta] Iniciando cleanup — eliminando venta huérfana con id:', ventaId);
       await query(`DELETE FROM venta WHERE id = $1`, [ventaId]).catch((cleanupError) => {
-        console.error('Error en cleanup de venta huérfana:', cleanupError.message);
+        console.error('[createVenta] Error en cleanup de venta huérfana:', cleanupError.message);
       });
+      console.log('[createVenta] Cleanup completado — venta eliminada:', ventaId);
     }
-    console.error('Error en createVenta:', error);
+
     res.status(500).json({ error: 'Error al registrar la venta' });
   }
 };

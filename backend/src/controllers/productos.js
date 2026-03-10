@@ -12,6 +12,7 @@ const TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001';
  * @returns {JSON} Array de productos con id, nombre, precio y stock_actual
  */
 export const getProductos = async (req, res) => {
+  console.log('[getProductos] Solicitud recibida — tenant_id:', TENANT_ID);
   try {
     const result = await query(
       `SELECT id, nombre, precio, stock_actual 
@@ -20,9 +21,10 @@ export const getProductos = async (req, res) => {
        ORDER BY nombre ASC`,
       [TENANT_ID]
     );
+    console.log('[getProductos] Productos encontrados:', result.rows.length, result.rows);
     res.json(result.rows);
   } catch (error) {
-    console.error('Error en getProductos:', error);
+    console.error('[getProductos] Error al consultar la base de datos:', error);
     res.status(500).json({ error: 'Error al obtener productos' });
   }
 };

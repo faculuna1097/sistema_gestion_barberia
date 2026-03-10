@@ -9,6 +9,8 @@ dotenv.config();
 
 const { Pool } = pg;
 
+console.log('[db] Inicializando pool — host:', process.env.DB_HOST, '| port:', process.env.DB_PORT, '| database:', process.env.DB_NAME, '| user:', process.env.DB_USER);
+
 const pool = new Pool({
   host:     process.env.DB_HOST,
   port:     Number(process.env.DB_PORT),
@@ -21,7 +23,9 @@ const pool = new Pool({
   connectionTimeoutMillis: 5000,     // falla si no conecta en 5s (evita colgar)
 });
 
-pool.on('error', (err) => console.error('❌ Error inesperado en pool:', err.message));
+pool.on('connect', () => console.log('[db] Nueva conexión abierta en el pool'));
+pool.on('remove', () => console.log('[db] Conexión removida del pool'));
+pool.on('error', (err) => console.error('❌ [db] Error inesperado en pool:', err.message));
 
 /**
  * query
@@ -37,10 +41,12 @@ export const query = (text, params) => pool.query(text, params);
  * Verifica que la conexión a PostgreSQL funciona al arrancar el servidor.
  */
 export const testConnection = async () => {
+  console.log('[db] Ejecutando testConnection...');
   try {
     await pool.query('SELECT 1');
-    console.log('✅ Conexión a PostgreSQL establecida');
+    console.log('✅ [db] Conexión a PostgreSQL establecida correctamente');
   } catch (err) {
-    console.error('❌ Error conectando a PostgreSQL:', err.message);
+    console.error('❌ [db] Error conectando a PostgreSQL:', err.message);
+    console.error('❌ [db] Verificá las variables de entorno: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD');
   }
 };

@@ -8,7 +8,6 @@ import cors from 'cors';
 import { testConnection } from './config/db.js';
 
 // --- Importación de rutas ---
-// Cada archivo de rutas agrupa los endpoints de un recurso
 import barberoRoutes from './routes/barberos.js';
 import servicioRoutes from './routes/servicios.js';
 import productoRoutes from './routes/productos.js';
@@ -17,24 +16,28 @@ import ventaRoutes from './routes/ventas.js';
 import gastoRoutes from './routes/gastos.js';
 import categoriaRoutes from './routes/categorias.js';
 
+console.log('[index] Iniciando Barbershop Manager API...');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // --- Middlewares globales ---
-// cors: permite que el frontend (en otro puerto) haga requests al backend
-// express.json(): parsea el body de los POST/PUT como JSON automáticamente
 app.use(cors());
 app.use(express.json());
 
+// Middleware de logging global — loguea cada request que llega al servidor
+app.use((req, res, next) => {
+  console.log(`[index] ${req.method} ${req.url}`, req.body && Object.keys(req.body).length ? '— body:' : '', req.body && Object.keys(req.body).length ? req.body : '');
+  next();
+});
+
 // --- Ruta de salud (health check) ---
-// Sirve para verificar que el servidor está corriendo sin tocar la DB
 app.get('/api/health', (req, res) => {
+  console.log('[index] Health check solicitado');
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // --- Registro de rutas por recurso ---
-// Cada prefijo agrupa todos los endpoints de ese recurso
 app.use('/api/barberos', barberoRoutes);
 app.use('/api/servicios', servicioRoutes);
 app.use('/api/productos', productoRoutes);
@@ -43,12 +46,19 @@ app.use('/api/ventas', ventaRoutes);
 app.use('/api/gastos', gastoRoutes);
 app.use('/api/categorias', categoriaRoutes);
 
+console.log('[index] Rutas registradas: /api/barberos, /api/servicios, /api/productos, /api/cortes, /api/ventas, /api/gastos, /api/categorias');
+
 // --- Arranque del servidor ---
 const startServer = async () => {
-  await testConnection(); // verifica conexión a PostgreSQL antes de abrir el puerto
+  console.log('[index] Verificando conexión a la base de datos...');
+  await testConnection();
   app.listen(PORT, () => {
-    console.log(`Servidor corriendo en http://localhost:${PORT}`);
+    console.log(`[index] ✅ Servidor corriendo en http://localhost:${PORT}`);
+    console.log(`[index] Entorno: ${process.env.NODE_ENV || 'development'}`);
   });
 };
 
-startServer();
+startServer().catch((err) => {
+  console.error('[index] ❌ Error fatal al iniciar el servidor:', err.message);
+  process.exit(1);
+});
