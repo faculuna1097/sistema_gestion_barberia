@@ -1,5 +1,7 @@
 // /backend/src/routes/cortes.js
 import { Router } from 'express';
-// POST se agrega en el Paso 3
+import { createCorte } from '../controllers/cortes.js';
+
 const router = Router();
+router.post('/', createCorte);
 export default router;

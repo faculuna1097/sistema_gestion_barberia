@@ -15,6 +15,8 @@ import productoRoutes from './routes/productos.js';
 import corteRoutes from './routes/cortes.js';
 import ventaRoutes from './routes/ventas.js';
 import gastoRoutes from './routes/gastos.js';
+import categoriaRoutes from './routes/categorias.js';
+
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -39,6 +41,7 @@ app.use('/api/productos', productoRoutes);
 app.use('/api/cortes', corteRoutes);
 app.use('/api/ventas', ventaRoutes);
 app.use('/api/gastos', gastoRoutes);
+app.use('/api/categorias', categoriaRoutes);
 
 // --- Arranque del servidor ---
 const startServer = async () => {

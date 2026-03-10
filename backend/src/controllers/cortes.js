@@ -1,0 +1,75 @@
+// /backend/src/controllers/cortes.js
+// Controlador del recurso "corte".
+// Usa inserts secuenciales con cleanup manual en lugar de transacciones formales,
+// por compatibilidad con Supabase Session Pooler (PgBouncer).
+
+import { query } from '../config/db.js';
+
+const TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001';
+
+/**
+ * createCorte
+ * Registra un nuevo corte y sus servicios asociados.
+ * Flujo: inserta corte → inserta cada servicio → si algo falla, borra el corte.
+ *
+ * @param {Request} req - Body esperado:
+ *   {
+ *     barbero_id: string (UUID),
+ *     servicios: Array<{ id: string, precio: number }>,
+ *     forma_pago: 'efectivo' | 'mercado_pago',
+ *     propina: number
+ *   }
+ * @param {Response} res - Devuelve el corte creado con su id y monto total
+ */
+export const createCorte = async (req, res) => {
+  const { barbero_id, servicios, forma_pago, propina } = req.body;
+
+  // Validación de campos requeridos
+  if (!barbero_id || !servicios || !servicios.length || !forma_pago) {
+    return res.status(400).json({ 
+      error: 'Faltan campos requeridos: barbero_id, servicios, forma_pago' 
+    });
+  }
+
+  // Calculamos monto total sumando los precios de todos los servicios
+  const monto_total = servicios.reduce((sum, s) => sum + Number(s.precio), 0);
+
+  let corteId = null;
+
+  try {
+    // 1. Insertar el corte principal
+    const corteResult = await query(
+      `INSERT INTO corte (tenant_id, barbero_id, forma_pago, propina, monto_total, usuario_registro)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id`,
+      [TENANT_ID, barbero_id, forma_pago, propina || 0, monto_total, null]
+    );
+
+    corteId = corteResult.rows[0].id;
+
+    // 2. Insertar cada servicio del corte
+    for (const servicio of servicios) {
+      await query(
+        `INSERT INTO corte_servicio (corte_id, servicio_id, precio)
+         VALUES ($1, $2, $3)`,
+        [corteId, servicio.id, servicio.precio]
+      );
+    }
+
+    res.status(201).json({
+      message: 'Corte registrado correctamente',
+      corte_id: corteId,
+      monto_total
+    });
+
+  } catch (error) {
+    // Si algo falló después de insertar el corte, lo eliminamos para evitar registros huérfanos
+    if (corteId) {
+      await query(`DELETE FROM corte WHERE id = $1`, [corteId]).catch((cleanupError) => {
+        console.error('Error en cleanup de corte huérfano:', cleanupError.message);
+      });
+    }
+    console.error('Error en createCorte:', error);
+    res.status(500).json({ error: 'Error al registrar el corte' });
+  }
+};
