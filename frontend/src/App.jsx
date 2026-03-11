@@ -4,7 +4,10 @@ import MainScreen from "./screens/MainScreen";
 import FlujoCorte from "./screens/flows/FlujoCorte";
 import FlujoVenta from "./screens/flows/FlujoVenta";
 import FlujoGasto from "./screens/flows/FlujoGasto";
+import PantallaLoginAdmin from "./screens/PantallaLoginAdmin";
+import PanelAdmin from "./screens/admin/PanelAdmin";
 import { getBarberos, getServicios, getProductos, getCategorias } from "./services/api";
+
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState("main");
@@ -74,6 +77,27 @@ export default function App() {
       categorias={datos.categorias} />;
   }
 
+  // ── Login de administrador ──────────────────────────────────────────────────
+  if (currentScreen === "loginAdmin") {
+    console.log('[App] Renderizando PantallaLoginAdmin');
+    return (
+      <PantallaLoginAdmin
+        onAcceso={() => {
+          console.log('[App] Acceso admin concedido — navegando a panel admin');
+          setCurrentScreen("admin"); // <- PanelAdmin, próximo paso
+        }}
+        onCancelar={volverAlInicio}
+        pinCorrecto="1234" // <- temporal, reemplazar con tenant.pin_admin cuando haya auth
+      />
+    );
+  }
+
+  // ── Panel de administrador ──────────────────────────────────────────────────
+  if (currentScreen === "admin") {
+    console.log('[App] Renderizando PanelAdmin');
+    return <PanelAdmin onSalir={volverAlInicio} />;
+  }
+
   return (
     <MainScreen
       onNuevoCorte={() => {
@@ -88,7 +112,10 @@ export default function App() {
         console.log('[App] Navegando a → nuevoGasto');
         setCurrentScreen("nuevoGasto");
       }}
-      onAdminAccess={() => console.log('[App] Admin — próximo paso')}
+      onAdminAccess={() => {
+        console.log('[App] Navegando a → loginAdmin');
+        setCurrentScreen("loginAdmin");
+      }}
       onSpotify={() => {
         console.log('[App] Abriendo Spotify');
         window.open("https://open.spotify.com", "_blank");
