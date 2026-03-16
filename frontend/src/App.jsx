@@ -95,7 +95,7 @@ export default function App() {
   // ── Panel de administrador ──────────────────────────────────────────────────
   if (currentScreen === "admin") {
     console.log('[App] Renderizando PanelAdmin');
-    return <PanelAdmin onSalir={volverAlInicio} />;
+    return <PanelAdmin onCerrarSesion={() => setCurrentScreen("main")} />;
   }
 
   return (

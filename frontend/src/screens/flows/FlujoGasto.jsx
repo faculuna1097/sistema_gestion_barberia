@@ -50,7 +50,7 @@ export default function FlujoGasto({ onVolver, categorias }) {
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState(null);
   const [descripcion, setDescripcion] = useState("");
   const [monto, setMonto] = useState("");
-  const [pagadoPor, setPagadoPor] = useState(null);
+  const [formaPago, setFormaPago] = useState(null);
 
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState(null);
@@ -90,7 +90,7 @@ export default function FlujoGasto({ onVolver, categorias }) {
       categoria_id: categoriaSeleccionada.id,
       descripcion,
       monto: montoFinal,
-      pagado_por: pagadoPor,
+      forma_pago: formaPago,
       usuario_registro: null, // auth pendiente para fase futura
     };
     console.log('[FlujoGasto] Confirmando gasto — payload:', payload);
@@ -164,10 +164,7 @@ export default function FlujoGasto({ onVolver, categorias }) {
         <div style={styles.descripcionContainer}>
           <textarea
             value={descripcion}
-            onChange={(e) => {
-              console.log('[FlujoGasto] Descripción actualizada:', e.target.value);
-              setDescripcion(e.target.value);
-            }}
+            onChange={(e) => setDescripcion(e.target.value)}
             placeholder="Ej: Compra de shampoo y acondicionador..."
             style={styles.descripcionInput}
             autoFocus
@@ -202,10 +199,7 @@ export default function FlujoGasto({ onVolver, categorias }) {
               type="number"
               min="0"
               value={monto}
-              onChange={(e) => {
-                console.log('[FlujoGasto] Monto ingresado:', e.target.value);
-                setMonto(e.target.value);
-              }}
+              onChange={(e) => setMonto(e.target.value)}
               placeholder="0"
               style={styles.montoInput}
               autoFocus
@@ -229,24 +223,24 @@ export default function FlujoGasto({ onVolver, categorias }) {
     );
   }
 
-  // ─── PASO 4 — ¿Quién pagó? ───────────────────────────────────────────────────
+  // ─── PASO 4 — Forma de pago ───────────────────────────────────────────────────
   if (paso === 4) {
     return (
-      <PasoLayout paso={4} total={5} titulo="¿Quién pagó?" onVolver={retroceder}>
+      <PasoLayout paso={4} total={5} titulo="Seleccioná el medio de pago" onVolver={retroceder}>
         <div style={styles.gridDos}>
           {[
-            { key: "negocio", label: "El negocio", emoji: "🏪" },
-            { key: "administrador", label: "Administrador", emoji: "👤" },
+            { key: "efectivo", label: "Efectivo", emoji: "💵" },
+            { key: "mercado_pago", label: "Mercado Pago", emoji: "📱" },
           ].map((op) => (
             <button
               key={op.key}
               style={{
                 ...styles.btnOpcionGrande,
-                ...(pagadoPor === op.key ? styles.btnOpcionActivo : {}),
+                ...(formaPago === op.key ? styles.btnOpcionActivo : {}),
               }}
               onClick={() => {
-                console.log('[FlujoGasto] Pagado por seleccionado:', op.key);
-                setPagadoPor(op.key);
+                console.log('[FlujoGasto] Forma de pago seleccionada:', op.key);
+                setFormaPago(op.key);
                 avanzar();
               }}
             >
@@ -265,7 +259,7 @@ export default function FlujoGasto({ onVolver, categorias }) {
       categoria: categoriaSeleccionada?.nombre,
       descripcion,
       monto: montoFinal,
-      pagadoPor,
+      formaPago,
     });
     return (
       <PasoLayout paso={5} total={5} titulo="Confirmá el gasto" onVolver={retroceder}>
@@ -286,9 +280,9 @@ export default function FlujoGasto({ onVolver, categorias }) {
           <div style={styles.resumenDivider} />
 
           <div style={styles.resumenFila}>
-            <span style={styles.resumenLabel}>Pagado por</span>
+            <span style={styles.resumenLabel}>Pago</span>
             <span style={styles.resumenValor}>
-              {pagadoPor === "negocio" ? "El negocio" : "Administrador"}
+              {formaPago === "efectivo" ? "Efectivo" : "Mercado Pago"}
             </span>
           </div>
 
@@ -371,7 +365,6 @@ const styles = {
     color: "#111111", fontSize: CONFIG.tamanoTextoBoton, fontWeight: "600", cursor: "pointer", fontFamily: "inherit",
   },
   emoji: { fontSize: "clamp(28px, 4vw, 40px)" },
-  // ── Descripción ──
   descripcionContainer: { display: "flex", flexDirection: "column", gap: "3vh", width: "100%" },
   descripcionInput: {
     width: "100%", padding: "2vh 2vw", borderRadius: "16px",
@@ -380,7 +373,6 @@ const styles = {
     fontFamily: "'DM Sans', Arial, sans-serif", resize: "none",
     outline: "none", lineHeight: "1.5", boxSizing: "border-box",
   },
-  // ── Monto ──
   montoContainer: { display: "flex", flexDirection: "column", alignItems: "center", gap: "3vh", width: "100%" },
   montoInputRow: { display: "flex", alignItems: "center", gap: "12px" },
   montoMoneda: { fontSize: "clamp(28px, 4vw, 44px)", fontWeight: "300", color: "#333333" },
@@ -389,7 +381,6 @@ const styles = {
     border: "none", borderBottom: "3px solid #1a7a4a", outline: "none",
     width: "200px", textAlign: "center", backgroundColor: "transparent", fontFamily: "inherit",
   },
-  // ── Botones acción ──
   btnContinuar: {
     width: "100%", padding: "2.5vh 0", borderRadius: "16px", border: "none",
     backgroundColor: "#1a7a4a", color: "#ffffff", fontSize: "clamp(16px, 1.8vw, 20px)",
@@ -402,7 +393,6 @@ const styles = {
     boxShadow: "0 4px 20px rgba(26, 122, 74, 0.25)", fontFamily: "inherit",
   },
   btnDeshabilitado: { backgroundColor: "#cccccc", boxShadow: "none", cursor: "not-allowed" },
-  // ── Resumen ──
   resumenCard: {
     width: "100%", backgroundColor: "#fafafa", borderRadius: "20px",
     border: "1.5px solid #eeeeee", padding: "3vh 4vw",
@@ -415,7 +405,6 @@ const styles = {
   resumenDivider: { height: "1px", backgroundColor: "#eeeeee", width: "100%" },
   resumenTotalLabel: { fontSize: "clamp(17px, 2vw, 21px)", fontWeight: "700", color: "#111111" },
   resumenTotalValor: { fontSize: "clamp(20px, 2.5vw, 28px)", fontWeight: "700", color: "#1a7a4a" },
-  // ── Éxito ──
   exitoIcono: {
     width: "80px", height: "80px", borderRadius: "50%", backgroundColor: "#1a7a4a",
     color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center",

@@ -1,45 +1,270 @@
 // /frontend/src/screens/admin/PanelAdmin.jsx
-// Pantalla placeholder del Panel de Administrador.
-// Por ahora solo muestra que el acceso fue exitoso.
+// Panel de administrador completo.
+// Layout: sidebar fijo a la izquierda (220px) + área de contenido a la derecha.
+// El sidebar controla qué sección se muestra. Cada sección es autónoma.
+//
 // Props:
-//   onSalir — función para volver a la pantalla principal
+//   onCerrarSesion — callback para volver a la pantalla principal
 
-export default function PanelAdmin({ onSalir }) {
-  console.log('[PanelAdmin] Montado');
+import { useState } from "react";
+import SeccionInicio     from "./sections/SeccionInicio";
+import SeccionCaja       from "./sections/SeccionCaja";
+import SeccionPlanillas  from "./sections/SeccionPlanillas";
+import SeccionGastos     from "./sections/SeccionGastos";
+import SeccionVentas     from "./sections/SeccionVentas";
+import SeccionGestion    from "./sections/SeccionGestion";
+
+// ─── Items del sidebar ────────────────────────────────────────────────────────
+// Cada ítem tiene: id, emoji, label, componente a renderizar
+const SECCIONES = [
+  { id: "inicio",     emoji: "🏠", label: "Inicio",    componente: SeccionInicio    },
+  { id: "caja",       emoji: "💰", label: "Caja",      componente: SeccionCaja      },
+  { id: "planillas",  emoji: "📋", label: "Planillas", componente: SeccionPlanillas },
+  { id: "gastos",     emoji: "💸", label: "Gastos",    componente: SeccionGastos    },
+  { id: "ventas",     emoji: "🛍️", label: "Ventas",    componente: SeccionVentas    },
+  { id: "gestion",    emoji: "⚙️", label: "Gestión",   componente: SeccionGestion   },
+];
+
+// ─── Componente principal ─────────────────────────────────────────────────────
+export default function PanelAdmin({ onCerrarSesion }) {
+  console.log("[PanelAdmin] Montado");
+
+  // seccionActiva controla qué sección se muestra en el área de contenido
+  const [seccionActiva, setSeccionActiva] = useState("inicio");
+
+  // Busca el componente correspondiente a la sección activa
+  const SeccionActual = SECCIONES.find((s) => s.id === seccionActiva)?.componente;
+
+  const handleCerrarSesion = () => {
+    console.log("[PanelAdmin] Cerrando sesión");
+    onCerrarSesion();
+  };
+
+  const handleNavegar = (id) => {
+    console.log("[PanelAdmin] Navegando a sección:", id);
+    setSeccionActiva(id);
+  };
 
   return (
-    <div style={styles.pantalla}>
-      <div style={styles.lineaSuperior} />
-      <p style={styles.texto}>Panel de Administrador</p>
-      <button style={styles.btnSalir} onClick={() => {
-        console.log('[PanelAdmin] Cerrando sesión — volviendo a pantalla principal');
-        onSalir();
-      }}>
-        Cerrar sesión
-      </button>
+    <div style={styles.contenedor}>
+
+      {/* ── SIDEBAR ─────────────────────────────────────────────────────── */}
+      <aside style={styles.sidebar}>
+
+        {/* Encabezado del sidebar — nombre del negocio */}
+        <div style={styles.sidebarHeader}>
+          <div style={styles.logoMarca}>
+            <span style={styles.logoIcono}>✂️</span>
+            <span style={styles.logoTexto}>Kingsai Studio</span>
+          </div>
+        </div>
+
+        {/* Línea divisoria */}
+        <div style={styles.divisor} />
+
+        {/* Ítems de navegación */}
+        <nav style={styles.nav}>
+          {SECCIONES.map((seccion) => {
+            const activo = seccionActiva === seccion.id;
+            return (
+              <button
+                key={seccion.id}
+                style={{
+                  ...styles.navItem,
+                  ...(activo ? styles.navItemActivo : {}),
+                }}
+                onPointerDown={() => handleNavegar(seccion.id)}
+              >
+                {/* Indicador lateral verde cuando está activo */}
+                <span style={{
+                  ...styles.navIndicador,
+                  ...(activo ? styles.navIndicadorActivo : {}),
+                }} />
+                <span style={styles.navEmoji}>{seccion.emoji}</span>
+                <span style={styles.navLabel}>{seccion.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Espaciador flexible — empuja el botón cerrar sesión al fondo */}
+        <div style={{ flex: 1 }} />
+
+        {/* Línea divisoria */}
+        <div style={styles.divisor} />
+
+        {/* Botón cerrar sesión */}
+        <div style={styles.sidebarFooter}>
+          <button
+            style={styles.btnCerrarSesion}
+            onPointerDown={handleCerrarSesion}
+          >
+            <span style={styles.navEmoji}>🔓</span>
+            <span>Cerrar sesión</span>
+          </button>
+        </div>
+
+      </aside>
+
+      {/* ── ÁREA DE CONTENIDO ────────────────────────────────────────────── */}
+      <main style={styles.contenido}>
+        {SeccionActual && <SeccionActual />}
+      </main>
+
     </div>
   );
 }
 
+// ─── Estilos ──────────────────────────────────────────────────────────────────
 const styles = {
-  pantalla: {
-    width: "100vw", height: "100vh", backgroundColor: "#ffffff",
-    display: "flex", flexDirection: "column", alignItems: "center",
-    justifyContent: "center", gap: "24px",
+  // Layout raíz: sidebar + contenido en fila, ocupa toda la pantalla
+  contenedor: {
+    width: "100vw",
+    height: "100vh",
+    display: "flex",
+    flexDirection: "row",
     fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
+    backgroundColor: "#f4f4f5",
+    overflow: "hidden",
+  },
+
+  // ── Sidebar ────────────────────────────────────────────────────────────
+  sidebar: {
+    width: "220px",
+    minWidth: "220px",
+    height: "100vh",
+    backgroundColor: "#1a1a1a",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+    // Sombra sutil hacia la derecha para separar visualmente del contenido
+    boxShadow: "2px 0 12px rgba(0, 0, 0, 0.25)",
+  },
+
+  sidebarHeader: {
+    padding: "28px 20px 20px",
+  },
+
+  logoMarca: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+  },
+
+  logoIcono: {
+    fontSize: "22px",
+    lineHeight: 1,
+  },
+
+  logoTexto: {
+    fontSize: "15px",
+    fontWeight: "700",
+    color: "#ffffff",
+    letterSpacing: "0.01em",
+    // Truncar si el nombre es muy largo
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+
+  divisor: {
+    height: "1px",
+    backgroundColor: "#2e2e2e",
+    margin: "0 16px",
+  },
+
+  // ── Navegación ─────────────────────────────────────────────────────────
+  nav: {
+    display: "flex",
+    flexDirection: "column",
+    padding: "12px 0",
+    gap: "2px",
+  },
+
+  navItem: {
     position: "relative",
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: "12px",
+    // Padding izquierdo amplio para dejar espacio al indicador lateral
+    padding: "14px 20px 14px 24px",
+    border: "none",
+    backgroundColor: "transparent",
+    color: "#9a9a9a",
+    fontSize: "15px",
+    fontWeight: "500",
+    cursor: "pointer",
+    fontFamily: "inherit",
+    textAlign: "left",
+    width: "100%",
+    transition: "background-color 0.15s, color 0.15s",
+    borderRadius: "0",
   },
-  lineaSuperior: {
-    position: "absolute", top: 0, left: 0, right: 0, height: "4px",
-    background: "linear-gradient(90deg, #1a7a4a 0%, #2dba6e 50%, #1a7a4a 100%)",
+
+  // Estado activo del ítem de navegación
+  navItemActivo: {
+    backgroundColor: "rgba(26, 122, 74, 0.15)",
+    color: "#ffffff",
   },
-  texto: {
-    fontSize: "28px", fontWeight: "700", color: "#111111", margin: 0,
+
+  // Barra indicadora lateral izquierda (visible solo en ítem activo)
+  navIndicador: {
+    position: "absolute",
+    left: 0,
+    top: "50%",
+    transform: "translateY(-50%)",
+    width: "3px",
+    height: "0%",
+    backgroundColor: "#1a7a4a",
+    borderRadius: "0 3px 3px 0",
+    transition: "height 0.2s",
   },
-  btnSalir: {
-    padding: "14px 32px", borderRadius: "12px", border: "1.5px solid #e8e8e8",
-    backgroundColor: "#fafafa", color: "#555555", fontSize: "16px",
-    fontWeight: "500", cursor: "pointer",
-    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
+
+  navIndicadorActivo: {
+    height: "60%",
+  },
+
+  navEmoji: {
+    fontSize: "18px",
+    lineHeight: 1,
+    // Ancho fijo para alinear todos los labels
+    width: "22px",
+    textAlign: "center",
+    flexShrink: 0,
+  },
+
+  navLabel: {
+    letterSpacing: "0.01em",
+  },
+
+  // ── Footer del sidebar ─────────────────────────────────────────────────
+  sidebarFooter: {
+    padding: "12px 0 20px",
+  },
+
+  btnCerrarSesion: {
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: "12px",
+    padding: "14px 20px 14px 24px",
+    width: "100%",
+    border: "none",
+    backgroundColor: "transparent",
+    color: "#9a9a9a",
+    fontSize: "15px",
+    fontWeight: "500",
+    cursor: "pointer",
+    fontFamily: "inherit",
+    textAlign: "left",
+  },
+
+  // ── Área de contenido ──────────────────────────────────────────────────
+  contenido: {
+    flex: 1,
+    height: "100vh",
+    overflow: "auto",
+    backgroundColor: "#f4f4f5",
   },
 };
