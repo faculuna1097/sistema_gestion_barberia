@@ -316,7 +316,7 @@ export default function SeccionPlanillas() {
             {detalleData.length > 0 && (
               <div style={styles.barraAcciones}>
                 <button style={styles.btnExportar} onPointerDown={exportarDetalle}>
-                  ↓ Exportar Excel
+                  📥 Exportar Excel
                 </button>
               </div>
             )}
