@@ -17,6 +17,8 @@ import gastoRoutes from './routes/gastos.js';
 import categoriaRoutes from './routes/categorias.js';
 import planillasRouter from "./routes/planillas.js";
 import cajaRouter from './routes/caja.js';
+import gestionRouter from './routes/gestion.js';
+
 
 console.log('[index] Iniciando Barbershop Manager API...');
 
@@ -49,9 +51,10 @@ app.use('/api/gastos', gastoRoutes);
 app.use('/api/categorias', categoriaRoutes);
 app.use("/api/planillas", planillasRouter);
 app.use('/api/caja', cajaRouter);
+app.use('/api/gestion', gestionRouter);
 
 
-console.log('[index] Rutas registradas: /api/barberos, /api/servicios, /api/productos, /api/cortes, /api/ventas, /api/gastos, /api/categorias');
+console.log('[index] Rutas registradas: /api/barberos, /api/servicios, /api/productos, /api/cortes, /api/ventas, /api/gastos, /api/categorias, /api/gestion');
 
 // --- Arranque del servidor ---
 const startServer = async () => {

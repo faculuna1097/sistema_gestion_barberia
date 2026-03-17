@@ -1,5 +1,5 @@
 // /frontend/src/App.jsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import MainScreen from "./screens/MainScreen";
 import FlujoCorte from "./screens/flows/FlujoCorte";
 import FlujoVenta from "./screens/flows/FlujoVenta";
@@ -12,8 +12,7 @@ import { getBarberos, getServicios, getProductos, getCategorias } from "./servic
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState("main");
 
-  // Datos precargados — se cargan una vez al arrancar la app
-  // Así los flujos no tienen demora cuando el usuario los abre
+  // Datos precargados — se cargan al arrancar y cada vez que se cierra el panel admin
   const [datos, setDatos] = useState({
     barberos: [],
     servicios: [],
@@ -23,33 +22,51 @@ export default function App() {
     error: null,
   });
 
-  useEffect(() => {
+  /**
+   * precargarDatos — carga barberos, servicios, productos y categorías en paralelo.
+   * Se llama al arrancar la app y al cerrar el panel admin, para reflejar
+   * cualquier cambio hecho desde Gestión (altas, ediciones, cambios de estado).
+   */
+  const precargarDatos = useCallback(async () => {
     console.log('[App] Iniciando precarga de datos...');
-    const precargarDatos = async () => {
-      try {
-        const [barberos, servicios, productos, categorias] = await Promise.all([
-          getBarberos(),
-          getServicios(),
-          getProductos(),
-          getCategorias(),
-        ]);
-        console.log('[App] Datos precargados correctamente —', {
-          barberos: barberos.length,
-          servicios: servicios.length,
-          productos: productos.length,
-          categorias: categorias.length,
-        });
-        setDatos({ barberos, servicios, productos, categorias, cargando: false, error: null });
-      } catch (err) {
-        console.error('[App] Error al precargar datos:', err);
-        setDatos((prev) => ({ ...prev, cargando: false, error: "Error al cargar datos" }));
-      }
-    };
-    precargarDatos();
+    setDatos(prev => ({ ...prev, cargando: true, error: null }));
+    try {
+      const [barberos, servicios, productos, categorias] = await Promise.all([
+        getBarberos(),
+        getServicios(),
+        getProductos(),
+        getCategorias(),
+      ]);
+      console.log('[App] Datos precargados correctamente —', {
+        barberos: barberos.length,
+        servicios: servicios.length,
+        productos: productos.length,
+        categorias: categorias.length,
+      });
+      setDatos({ barberos, servicios, productos, categorias, cargando: false, error: null });
+    } catch (err) {
+      console.error('[App] Error al precargar datos:', err);
+      setDatos(prev => ({ ...prev, cargando: false, error: "Error al cargar datos" }));
+    }
   }, []);
+
+  // Carga inicial al arrancar la app
+  useEffect(() => {
+    precargarDatos();
+  }, [precargarDatos]);
 
   const volverAlInicio = () => {
     console.log('[App] Volviendo a pantalla principal — pantalla anterior:', currentScreen);
+    setCurrentScreen("main");
+  };
+
+  /**
+   * cerrarSesionAdmin — recarga los datos antes de volver a la pantalla principal,
+   * para que los flujos reflejen cualquier cambio hecho desde Gestión.
+   */
+  const cerrarSesionAdmin = () => {
+    console.log('[App] Cerrando sesión admin — recargando datos...');
+    precargarDatos();
     setCurrentScreen("main");
   };
 
@@ -77,14 +94,13 @@ export default function App() {
       categorias={datos.categorias} />;
   }
 
-  // ── Login de administrador ──────────────────────────────────────────────────
   if (currentScreen === "loginAdmin") {
     console.log('[App] Renderizando PantallaLoginAdmin');
     return (
       <PantallaLoginAdmin
         onAcceso={() => {
           console.log('[App] Acceso admin concedido — navegando a panel admin');
-          setCurrentScreen("admin"); // <- PanelAdmin, próximo paso
+          setCurrentScreen("admin");
         }}
         onCancelar={volverAlInicio}
         pinCorrecto="1234" // <- temporal, reemplazar con tenant.pin_admin cuando haya auth
@@ -92,10 +108,9 @@ export default function App() {
     );
   }
 
-  // ── Panel de administrador ──────────────────────────────────────────────────
   if (currentScreen === "admin") {
     console.log('[App] Renderizando PanelAdmin');
-    return <PanelAdmin onCerrarSesion={() => setCurrentScreen("main")} />;
+    return <PanelAdmin onCerrarSesion={cerrarSesionAdmin} />;
   }
 
   return (
