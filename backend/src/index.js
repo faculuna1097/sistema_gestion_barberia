@@ -18,6 +18,8 @@ import categoriaRoutes from './routes/categorias.js';
 import planillasRouter from "./routes/planillas.js";
 import cajaRouter from './routes/caja.js';
 import gestionRouter from './routes/gestion.js';
+import balancesRouter from './routes/balances.js';
+
 
 
 console.log('[index] Iniciando Barbershop Manager API...');
@@ -52,6 +54,8 @@ app.use('/api/categorias', categoriaRoutes);
 app.use("/api/planillas", planillasRouter);
 app.use('/api/caja', cajaRouter);
 app.use('/api/gestion', gestionRouter);
+app.use('/api/balances', balancesRouter);
+
 
 
 console.log('[index] Rutas registradas: /api/barberos, /api/servicios, /api/productos, /api/cortes, /api/ventas, /api/gastos, /api/categorias, /api/gestion');

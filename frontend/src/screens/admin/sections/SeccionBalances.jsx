@@ -1,0 +1,853 @@
+// /frontend/src/screens/admin/sections/SeccionBalances.jsx
+// Sección Balances del panel de administrador.
+// Tab 1 — Balance mensual: cards resumen + desglose por barbero + gastos por categoría.
+// Tab 2 — Histórico anual: tabla de los últimos 12 meses con variación vs mes anterior.
+// Toggle de comisiones: muestra/oculta columnas de comisión y ajusta los totales.
+
+import { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Formatea un número como moneda argentina */
+const fmt = (n) =>
+  Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+const MESES = [
+  'Enero','Febrero','Marzo','Abril','Mayo','Junio',
+  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'
+];
+
+/** Devuelve el mes actual en formato YYYY-MM (con timezone Argentina) */
+const mesActual = () =>
+  new Date().toLocaleDateString('sv-SE', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+  }).slice(0, 7);
+
+/** Devuelve el label legible de un mes YYYY-MM → "Marzo 2026" */
+const labelMes = (mes) => {
+  const [anio, m] = mes.split('-').map(Number);
+  return `${MESES[m - 1]} ${anio}`;
+};
+
+/** Versión corta para la tabla histórica → "Mar 2026" */
+const labelMesCorto = (mes) => {
+  const nombres = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const [anio, m] = mes.split('-').map(Number);
+  return `${nombres[m - 1]} ${anio}`;
+};
+
+/** Avanza o retrocede un mes desde un string YYYY-MM */
+const moverMes = (mes, delta) => {
+  const [anio, m] = mes.split('-').map(Number);
+  const d = new Date(anio, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
+// ─── Subcomponentes ───────────────────────────────────────────────────────────
+
+/** Card de KPI grande con título, valor y color de acento */
+const KpiCard = ({ titulo, valor, color, subtitulo }) => (
+  <div style={styles.kpiCard}>
+    <span style={styles.kpiTitulo}>{titulo}</span>
+    <span style={{ ...styles.kpiValor, color }}>${fmt(valor)}</span>
+    {subtitulo && <span style={styles.kpiSubtitulo}>{subtitulo}</span>}
+  </div>
+);
+
+/** Toggle pill reutilizable */
+const TogglePill = ({ activo, onToggle, labelOn, labelOff }) => (
+  <button
+    onPointerDown={onToggle}
+    style={{
+      ...styles.togglePill,
+      backgroundColor: activo ? '#e8f5e9' : '#f5f5f5',
+      color: activo ? '#2e7d32' : '#888888',
+      border: `1.5px solid ${activo ? '#a5d6a7' : '#e0e0e0'}`,
+    }}
+  >
+    <span style={{
+      ...styles.toggleDot,
+      backgroundColor: activo ? '#2e7d32' : '#cccccc',
+    }} />
+    {activo ? labelOn : labelOff}
+  </button>
+);
+
+// ─── Ícono Excel (inline SVG) ─────────────────────────────────────────────────
+const ExcelIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    style={{ marginRight: '6px' }}>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="8" y1="13" x2="16" y2="13" />
+    <line x1="8" y1="17" x2="16" y2="17" />
+  </svg>
+);
+
+// ─── Componente principal ─────────────────────────────────────────────────────
+export default function SeccionBalances() {
+  const [tabActivo, setTabActivo] = useState('mensual');
+  const [mesSeleccionado, setMesSeleccionado] = useState(mesActual());
+  const [mostrarComisiones, setMostrarComisiones] = useState(true);
+
+  // Estado Tab 1
+  const [datosMensual, setDatosMensual] = useState(null);
+  const [cargandoMensual, setCargandoMensual] = useState(false);
+  const [errorMensual, setErrorMensual] = useState(null);
+
+  // Estado Tab 2
+  const [datosHistorico, setDatosHistorico] = useState(null);
+  const [cargandoHistorico, setCargandoHistorico] = useState(false);
+  const [errorHistorico, setErrorHistorico] = useState(null);
+
+  // ── Carga de datos ──────────────────────────────────────────────────────────
+
+  /** Carga el balance del mes seleccionado */
+  const cargarMensual = async (mes) => {
+    setCargandoMensual(true);
+    setErrorMensual(null);
+    try {
+      console.log('[SeccionBalances] Cargando balance mensual:', mes);
+      const res = await fetch(`${API_URL}/api/balances/mensual?mes=${mes}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const datos = await res.json();
+      setDatosMensual(datos);
+      console.log('[SeccionBalances] Balance mensual cargado — resumen:', datos.resumen);
+    } catch (err) {
+      console.error('[SeccionBalances] Error al cargar balance mensual:', err);
+      setErrorMensual('No se pudo cargar el balance. Intentá de nuevo.');
+    } finally {
+      setCargandoMensual(false);
+    }
+  };
+
+  /** Carga el histórico anual (solo la primera vez que se abre el tab) */
+  const cargarHistorico = async () => {
+    if (datosHistorico) return; // Ya cargado
+    setCargandoHistorico(true);
+    setErrorHistorico(null);
+    try {
+      console.log('[SeccionBalances] Cargando histórico anual');
+      const res = await fetch(`${API_URL}/api/balances/historico?cantidad=12`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const datos = await res.json();
+      setDatosHistorico(datos);
+      console.log('[SeccionBalances] Histórico cargado — meses:', datos.length);
+    } catch (err) {
+      console.error('[SeccionBalances] Error al cargar histórico:', err);
+      setErrorHistorico('No se pudo cargar el histórico. Intentá de nuevo.');
+    } finally {
+      setCargandoHistorico(false);
+    }
+  };
+
+  // Cargar mensual al montar y cuando cambia el mes
+  useEffect(() => {
+    cargarMensual(mesSeleccionado);
+  }, [mesSeleccionado]);
+
+  // Cargar histórico cuando el usuario cambia al tab
+  useEffect(() => {
+    if (tabActivo === 'historico') cargarHistorico();
+  }, [tabActivo]);
+
+  // ── Navegación de mes ───────────────────────────────────────────────────────
+  const irMesAnterior = () => setMesSeleccionado((m) => moverMes(m, -1));
+  const irMesSiguiente = () => {
+    const siguiente = moverMes(mesSeleccionado, 1);
+    if (siguiente <= mesActual()) setMesSeleccionado(siguiente);
+  };
+  const esMesActual = mesSeleccionado >= mesActual();
+
+  // ── Exportar Excel ──────────────────────────────────────────────────────────
+
+  /**
+   * exportarExcel — exporta los datos del tab activo.
+   * Tab mensual: hoja "Barberos" + hoja "Egresos".
+   * Tab histórico: hoja "Histórico" con los últimos 12 meses.
+   */
+  const exportarExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    if (tabActivo === 'mensual' && datosMensual) {
+      console.log('[SeccionBalances] Exportando Excel mensual — mes:', mesSeleccionado);
+      // Hoja 1: Ingresos por barbero
+      const filasBarberos = datosMensual.serviciosPorBarbero.map((b) => ({
+        Barbero:           b.nombre,
+        Cortes:            b.cortes,
+        'Monto servicios': b.monto_servicios,
+        'Comisión %':      b.comision_valor,
+        'Monto comisión':  b.monto_comision,
+        'Neto negocio':    b.neto_negocio,
+      }));
+      if (datosMensual.productos.total > 0) {
+        filasBarberos.push({
+          Barbero: 'Productos vendidos',
+          Cortes: '—',
+          'Monto servicios': datosMensual.productos.total,
+          'Comisión %': '—',
+          'Monto comisión': 0,
+          'Neto negocio': datosMensual.productos.total,
+        });
+      }
+      filasBarberos.push({
+        Barbero: 'TOTAL',
+        Cortes: datosMensual.serviciosPorBarbero.reduce((a, b) => a + b.cortes, 0),
+        'Monto servicios': datosMensual.resumen.ingresos_brutos,
+        'Comisión %': '—',
+        'Monto comisión': datosMensual.resumen.total_comisiones,
+        'Neto negocio': datosMensual.resumen.ingresos_netos,
+      });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasBarberos), 'Ingresos');
+
+      // Hoja 2: Egresos por categoría
+      const filasEgresos = datosMensual.gastos.porCategoria.map((g) => ({
+        Categoría: g.categoria,
+        Total:     g.total,
+      }));
+      filasEgresos.push({ Categoría: 'TOTAL EGRESOS', Total: datosMensual.resumen.egresos });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasEgresos), 'Egresos');
+
+      XLSX.writeFile(wb, `Balance_${mesSeleccionado}.xlsx`);
+      console.log('[SeccionBalances] Excel mensual generado: Balance_' + mesSeleccionado + '.xlsx');
+    }
+
+    if (tabActivo === 'historico' && datosHistorico) {
+      console.log('[SeccionBalances] Exportando Excel histórico');
+      const filas = datosHistorico.map((f) => ({
+        Mes:               f.label,
+        'Ingresos brutos': f.ingresos_brutos,
+        'Comisiones':      f.total_comisiones,
+        'Ingresos netos':  f.ingresos_netos,
+        'Egresos':         f.egresos,
+        'Balance neto':    f.balance_neto,
+        'Var. vs anterior': f.variacion_vs_anterior !== null ? `${f.variacion_vs_anterior}%` : '—',
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Histórico');
+      XLSX.writeFile(wb, `Balances_historico.xlsx`);
+      console.log('[SeccionBalances] Excel histórico generado');
+    }
+  };
+
+  // Determina si hay datos para habilitar el botón exportar
+  const puedeExportar =
+    (tabActivo === 'mensual' && datosMensual !== null) ||
+    (tabActivo === 'historico' && datosHistorico !== null && datosHistorico.length > 0);
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
+  return (
+    <div style={styles.contenedor}>
+
+      {/* ── Encabezado ──────────────────────────────────────────────────────── */}
+      <div style={styles.encabezado}>
+        <h2 style={styles.titulo}>Balances</h2>
+
+        {/* Tabs */}
+        <div style={styles.tabsContainer}>
+          {[
+            { key: 'mensual', label: 'Balance mensual' },
+            { key: 'historico', label: 'Histórico anual' },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onPointerDown={() => setTabActivo(tab.key)}
+              style={{
+                ...styles.tabBtn,
+                ...(tabActivo === tab.key ? styles.tabBtnActivo : {}),
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          TAB 1 — BALANCE MENSUAL
+      ══════════════════════════════════════════════════════════════════════ */}
+      {tabActivo === 'mensual' && (
+        <div style={styles.tabContenido}>
+
+          {/* Controles: toggle comisiones | selector de mes | exportar Excel */}
+          <div style={styles.controlesRow}>
+
+            {/* Izquierda — toggle comisiones */}
+            <div>
+              <TogglePill
+                activo={mostrarComisiones}
+                onToggle={() => setMostrarComisiones((v) => !v)}
+                labelOn="Con comisiones"
+                labelOff="Sin comisiones"
+              />
+            </div>
+
+            {/* Centro — selector de mes */}
+            <div style={styles.selectorMes}>
+              <button onPointerDown={irMesAnterior} style={styles.btnMes}>‹</button>
+              <span style={styles.labelMes}>{labelMes(mesSeleccionado)}</span>
+              <button
+                onPointerDown={irMesSiguiente}
+                style={{ ...styles.btnMes, ...(esMesActual ? styles.btnMesDeshabilitado : {}) }}
+                disabled={esMesActual}
+              >›</button>
+            </div>
+
+            {/* Derecha — exportar Excel */}
+            <div style={{ justifySelf: 'end' }}>
+              <button
+                style={{
+                  ...styles.btnExportar,
+                  ...(!puedeExportar ? styles.btnExportarDeshabilitado : {}),
+                }}
+                onPointerDown={exportarExcel}
+                disabled={!puedeExportar}
+              >
+                <ExcelIcon /> Exportar Excel
+              </button>
+            </div>
+          </div>
+
+          {/* Estado de carga / error */}
+          {cargandoMensual && <p style={styles.estadoTexto}>Cargando...</p>}
+          {errorMensual && <p style={styles.errorTexto}>{errorMensual}</p>}
+
+          {datosMensual && !cargandoMensual && (
+            <>
+              {/* ── Cards KPI ────────────────────────────────────────────── */}
+              <div style={styles.kpiGrid}>
+                <KpiCard
+                  titulo="Ingresos del negocio"
+                  valor={mostrarComisiones
+                    ? datosMensual.resumen.ingresos_netos
+                    : datosMensual.resumen.ingresos_brutos}
+                  color="#1a7a4a"
+                  subtitulo={mostrarComisiones ? 'Después de comisiones' : 'Bruto sin descontar comisiones'}
+                />
+                <KpiCard
+                  titulo="Egresos"
+                  valor={datosMensual.resumen.egresos}
+                  color="#c0392b"
+                  subtitulo="Gastos del mes"
+                />
+                <KpiCard
+                  titulo="Balance neto"
+                  valor={mostrarComisiones
+                    ? datosMensual.resumen.balance_neto
+                    : datosMensual.resumen.ingresos_brutos - datosMensual.resumen.egresos}
+                  color={
+                    (mostrarComisiones
+                      ? datosMensual.resumen.balance_neto
+                      : datosMensual.resumen.ingresos_brutos - datosMensual.resumen.egresos) >= 0
+                      ? '#1a7a4a' : '#c0392b'
+                  }
+                  subtitulo="Ingresos − Egresos"
+                />
+              </div>
+
+              {/* ── Desglose por barbero ──────────────────────────────────── */}
+              <div style={styles.bloque}>
+                <h3 style={styles.bloqueTitulo}>Ingresos por barbero</h3>
+                <table style={styles.tabla}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Barbero</th>
+                      <th style={{ ...styles.th, textAlign: 'right' }}>Cortes</th>
+                      <th style={{ ...styles.th, textAlign: 'right' }}>Monto servicios</th>
+                      {mostrarComisiones && <>
+                        <th style={{ ...styles.th, textAlign: 'right' }}>Comisión %</th>
+                        <th style={{ ...styles.th, textAlign: 'right' }}>Monto comisión</th>
+                        <th style={{ ...styles.th, textAlign: 'right' }}>Neto negocio</th>
+                      </>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {datosMensual.serviciosPorBarbero.map((b) => (
+                      <tr key={b.barbero_id} style={styles.trHover}>
+                        <td style={styles.td}>{b.nombre}</td>
+                        <td style={{ ...styles.td, textAlign: 'right' }}>{b.cortes}</td>
+                        <td style={{ ...styles.td, textAlign: 'right', color: '#1a7a4a', fontWeight: 600 }}>
+                          ${fmt(b.monto_servicios)}
+                        </td>
+                        {mostrarComisiones && <>
+                          <td style={{ ...styles.td, textAlign: 'right' }}>{b.comision_valor}%</td>
+                          <td style={{ ...styles.td, textAlign: 'right', color: '#c0392b' }}>
+                            ${fmt(b.monto_comision)}
+                          </td>
+                          <td style={{ ...styles.td, textAlign: 'right', fontWeight: 700 }}>
+                            ${fmt(b.neto_negocio)}
+                          </td>
+                        </>}
+                      </tr>
+                    ))}
+
+                    {/* Fila de productos */}
+                    {datosMensual.productos.total > 0 && (
+                      <tr style={{ ...styles.trHover, backgroundColor: '#f9f9f9' }}>
+                        <td style={{ ...styles.td, color: '#555', fontStyle: 'italic' }}>Productos vendidos</td>
+                        <td style={{ ...styles.td, textAlign: 'right', color: '#888' }}>—</td>
+                        <td style={{ ...styles.td, textAlign: 'right', color: '#1a7a4a', fontWeight: 600 }}>
+                          ${fmt(datosMensual.productos.total)}
+                        </td>
+                        {mostrarComisiones && <>
+                          <td style={{ ...styles.td, textAlign: 'right', color: '#888' }}>—</td>
+                          <td style={{ ...styles.td, textAlign: 'right', color: '#888' }}>—</td>
+                          <td style={{ ...styles.td, textAlign: 'right', fontWeight: 700 }}>
+                            ${fmt(datosMensual.productos.total)}
+                          </td>
+                        </>}
+                      </tr>
+                    )}
+
+                    {/* Fila total */}
+                    <tr style={styles.trTotal}>
+                      <td style={{ ...styles.tdTotal }}>Total</td>
+                      <td style={{ ...styles.tdTotal, textAlign: 'right' }}>
+                        {datosMensual.serviciosPorBarbero.reduce((a, b) => a + b.cortes, 0)}
+                      </td>
+                      <td style={{ ...styles.tdTotal, textAlign: 'right', color: '#1a7a4a' }}>
+                        ${fmt(datosMensual.resumen.ingresos_brutos)}
+                      </td>
+                      {mostrarComisiones && <>
+                        <td style={styles.tdTotal} />
+                        <td style={{ ...styles.tdTotal, textAlign: 'right', color: '#c0392b' }}>
+                          ${fmt(datosMensual.resumen.total_comisiones)}
+                        </td>
+                        <td style={{ ...styles.tdTotal, textAlign: 'right', color: '#1a7a4a' }}>
+                          ${fmt(datosMensual.resumen.ingresos_netos)}
+                        </td>
+                      </>}
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Nota propinas */}
+                {datosMensual.propinas.total > 0 && (
+                  <p style={styles.notaPropinas}>
+                    💡 Propinas generadas en el período: <strong>${fmt(datosMensual.propinas.total)}</strong> — van al barbero, no incluidas en el balance.
+                  </p>
+                )}
+              </div>
+
+              {/* ── Desglose de egresos ──────────────────────────────────── */}
+              {datosMensual.gastos.porCategoria.length > 0 && (
+                <div style={styles.bloque}>
+                  <h3 style={styles.bloqueTitulo}>Egresos por categoría</h3>
+                  <table style={styles.tabla}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>Categoría</th>
+                        <th style={{ ...styles.th, textAlign: 'right' }}>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {datosMensual.gastos.porCategoria.map((g) => (
+                        <tr key={g.categoria} style={styles.trHover}>
+                          <td style={styles.td}>{g.categoria}</td>
+                          <td style={{ ...styles.td, textAlign: 'right', color: '#c0392b', fontWeight: 600 }}>
+                            ${fmt(g.total)}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr style={styles.trTotal}>
+                        <td style={styles.tdTotal}>Total egresos</td>
+                        <td style={{ ...styles.tdTotal, textAlign: 'right', color: '#c0392b' }}>
+                          ${fmt(datosMensual.resumen.egresos)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Sin datos */}
+              {datosMensual.serviciosPorBarbero.length === 0 &&
+               datosMensual.gastos.porCategoria.length === 0 && (
+                <p style={styles.estadoTexto}>Sin movimientos en {labelMes(mesSeleccionado)}.</p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          TAB 2 — HISTÓRICO ANUAL
+      ══════════════════════════════════════════════════════════════════════ */}
+      {tabActivo === 'historico' && (
+        <div style={styles.tabContenido}>
+
+          {/* Controles: toggle comisiones | label | exportar Excel */}
+          <div style={styles.controlesRow}>
+
+            {/* Izquierda — toggle comisiones */}
+            <div>
+              <TogglePill
+                activo={mostrarComisiones}
+                onToggle={() => setMostrarComisiones((v) => !v)}
+                labelOn="Con comisiones"
+                labelOff="Sin comisiones"
+              />
+            </div>
+
+            {/* Centro — label */}
+            <span style={styles.labelSecundario}>Últimos 12 meses</span>
+
+            {/* Derecha — exportar Excel */}
+            <div style={{ justifySelf: 'end' }}>
+              <button
+                style={{
+                  ...styles.btnExportar,
+                  ...(!puedeExportar ? styles.btnExportarDeshabilitado : {}),
+                }}
+                onPointerDown={exportarExcel}
+                disabled={!puedeExportar}
+              >
+                <ExcelIcon /> Exportar Excel
+              </button>
+            </div>
+          </div>
+
+          {cargandoHistorico && <p style={styles.estadoTexto}>Cargando...</p>}
+          {errorHistorico && <p style={styles.errorTexto}>{errorHistorico}</p>}
+
+          {datosHistorico && !cargandoHistorico && (
+            <div style={styles.bloque}>
+              <table style={styles.tabla}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Mes</th>
+                    <th style={{ ...styles.th, textAlign: 'right' }}>Ingresos brutos</th>
+                    {mostrarComisiones && <>
+                      <th style={{ ...styles.th, textAlign: 'right' }}>Comisiones</th>
+                      <th style={{ ...styles.th, textAlign: 'right' }}>Ingresos netos</th>
+                    </>}
+                    <th style={{ ...styles.th, textAlign: 'right' }}>Egresos</th>
+                    <th style={{ ...styles.th, textAlign: 'right' }}>Balance</th>
+                    <th style={{ ...styles.th, textAlign: 'center' }}>vs anterior</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {datosHistorico.map((fila) => {
+                    const balance = mostrarComisiones
+                      ? fila.balance_neto
+                      : fila.ingresos_brutos - fila.egresos;
+                    const ingresos = mostrarComisiones
+                      ? fila.ingresos_netos
+                      : fila.ingresos_brutos;
+                    const esMesActualFila = fila.mes === mesActual();
+
+                    return (
+                      <tr key={fila.mes} style={{
+                        ...styles.trHover,
+                        ...(esMesActualFila ? styles.trMesActual : {}),
+                      }}>
+                        <td style={{ ...styles.td, fontWeight: esMesActualFila ? 700 : 400 }}>
+                          {fila.label}
+                          {esMesActualFila && (
+                            <span style={styles.badgeMesActual}>Actual</span>
+                          )}
+                        </td>
+                        <td style={{ ...styles.td, textAlign: 'right' }}>
+                          ${fmt(fila.ingresos_brutos)}
+                        </td>
+                        {mostrarComisiones && <>
+                          <td style={{ ...styles.td, textAlign: 'right', color: '#c0392b' }}>
+                            ${fmt(fila.total_comisiones)}
+                          </td>
+                          <td style={{ ...styles.td, textAlign: 'right', color: '#1a7a4a', fontWeight: 600 }}>
+                            ${fmt(fila.ingresos_netos)}
+                          </td>
+                        </>}
+                        <td style={{ ...styles.td, textAlign: 'right', color: '#c0392b' }}>
+                          ${fmt(fila.egresos)}
+                        </td>
+                        <td style={{ ...styles.td, textAlign: 'right', fontWeight: 700,
+                          color: balance >= 0 ? '#1a7a4a' : '#c0392b' }}>
+                          ${fmt(balance)}
+                        </td>
+                        <td style={{ ...styles.td, textAlign: 'center' }}>
+                          {fila.variacion_vs_anterior !== null ? (
+                            <span style={{
+                              ...styles.badgeVariacion,
+                              backgroundColor: fila.variacion_vs_anterior >= 0 ? '#e8f5e9' : '#fdecea',
+                              color: fila.variacion_vs_anterior >= 0 ? '#2e7d32' : '#c0392b',
+                            }}>
+                              {fila.variacion_vs_anterior >= 0 ? '▲' : '▼'} {Math.abs(fila.variacion_vs_anterior)}%
+                            </span>
+                          ) : (
+                            <span style={{ color: '#ccc' }}>—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {datosHistorico.length === 0 && (
+                <p style={styles.estadoTexto}>Sin datos históricos todavía.</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Estilos ──────────────────────────────────────────────────────────────────
+const styles = {
+  contenedor: {
+    padding: '36px 40px',
+    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
+    color: '#111111',
+    maxWidth: '1100px',
+  },
+  encabezado: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '28px',
+    flexWrap: 'wrap',
+    gap: '16px',
+  },
+  titulo: {
+    fontSize: '26px',
+    fontWeight: '700',
+    margin: 0,
+    color: '#111111',
+  },
+  tabsContainer: {
+    display: 'flex',
+    gap: '8px',
+    backgroundColor: '#f5f5f5',
+    borderRadius: '12px',
+    padding: '4px',
+  },
+  tabBtn: {
+    padding: '8px 20px',
+    borderRadius: '9px',
+    border: 'none',
+    backgroundColor: 'transparent',
+    color: '#888888',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    fontFamily: "'DM Sans', Arial, sans-serif",
+    transition: 'all 0.15s',
+  },
+  tabBtnActivo: {
+    backgroundColor: '#ffffff',
+    color: '#111111',
+    fontWeight: '600',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.10)',
+  },
+  tabContenido: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '24px',
+  },
+  controlesRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr auto 1fr',
+    alignItems: 'center',
+    gap: '16px',
+  },
+  selectorMes: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+  },
+  btnMes: {
+    width: '36px',
+    height: '36px',
+    borderRadius: '8px',
+    border: '1.5px solid #e0e0e0',
+    backgroundColor: '#fff',
+    fontSize: '20px',
+    color: '#333',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    lineHeight: 1,
+  },
+  btnMesDeshabilitado: {
+    color: '#ccc',
+    cursor: 'not-allowed',
+    borderColor: '#f0f0f0',
+  },
+  labelMes: {
+    fontSize: '17px',
+    fontWeight: '600',
+    color: '#111',
+    minWidth: '160px',
+    textAlign: 'center',
+  },
+  btnExportar: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '10px 18px',
+    borderRadius: '10px',
+    border: '1.5px solid #1a7a4a',
+    backgroundColor: '#fff',
+    color: '#1a7a4a',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  btnExportarDeshabilitado: {
+    borderColor: '#e0e0e0',
+    color: '#bbb',
+    cursor: 'not-allowed',
+  },
+  labelSecundario: {
+    fontSize: '14px',
+    color: '#888',
+    fontWeight: '500',
+  },
+  togglePill: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '8px 16px',
+    borderRadius: '20px',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: '600',
+    fontFamily: "'DM Sans', Arial, sans-serif",
+    transition: 'all 0.2s',
+  },
+
+  toggleDot: {
+    width: '10px',
+    height: '10px',
+    borderRadius: '50%',
+    flexShrink: 0,
+  },
+  kpiGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '16px',
+  },
+  kpiCard: {
+    backgroundColor: '#fafafa',
+    border: '1.5px solid #eeeeee',
+    borderRadius: '16px',
+    padding: '24px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  kpiTitulo: {
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#888888',
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+  },
+  kpiValor: {
+    fontSize: '28px',
+    fontWeight: '700',
+    letterSpacing: '-0.02em',
+  },
+  kpiSubtitulo: {
+    fontSize: '12px',
+    color: '#aaaaaa',
+  },
+  bloque: {
+    backgroundColor: '#ffffff',
+    border: '1.5px solid #eeeeee',
+    borderRadius: '16px',
+    overflow: 'hidden',
+  },
+  bloqueTitulo: {
+    fontSize: '13px',
+    fontWeight: '700',
+    color: '#555555',
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    margin: 0,
+    padding: '16px 20px',
+    borderBottom: '1px solid #f0f0f0',
+    backgroundColor: '#fafafa',
+  },
+  tabla: {
+    width: '100%',
+    borderCollapse: 'collapse',
+  },
+  th: {
+    padding: '12px 20px',
+    fontSize: '11px',
+    fontWeight: '700',
+    color: '#999999',
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    textAlign: 'left',
+    backgroundColor: '#fafafa',
+    borderBottom: '1px solid #f0f0f0',
+  },
+  td: {
+    padding: '14px 20px',
+    fontSize: '14px',
+    color: '#333333',
+    borderBottom: '1px solid #f7f7f7',
+  },
+  trHover: {
+    transition: 'background 0.1s',
+  },
+  trTotal: {
+    backgroundColor: '#f7f7f7',
+    borderTop: '2px solid #eeeeee',
+  },
+  tdTotal: {
+    padding: '14px 20px',
+    fontSize: '14px',
+    fontWeight: '700',
+    color: '#111111',
+  },
+  trMesActual: {
+    backgroundColor: '#f0faf5',
+  },
+  badgeMesActual: {
+    marginLeft: '8px',
+    fontSize: '10px',
+    fontWeight: '700',
+    backgroundColor: '#1a7a4a',
+    color: '#ffffff',
+    padding: '2px 7px',
+    borderRadius: '8px',
+    verticalAlign: 'middle',
+  },
+  badgeVariacion: {
+    display: 'inline-block',
+    padding: '3px 9px',
+    borderRadius: '10px',
+    fontSize: '12px',
+    fontWeight: '700',
+  },
+  notaPropinas: {
+    fontSize: '13px',
+    color: '#888888',
+    margin: '0',
+    padding: '12px 20px',
+    borderTop: '1px solid #f0f0f0',
+    backgroundColor: '#fafafa',
+  },
+  estadoTexto: {
+    textAlign: 'center',
+    color: '#999999',
+    fontSize: '15px',
+    padding: '40px 0',
+  },
+  errorTexto: {
+    textAlign: 'center',
+    color: '#c0392b',
+    fontSize: '14px',
+    padding: '20px 0',
+  },
+};

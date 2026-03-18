@@ -3,9 +3,11 @@
 // Diseñada para iPad en landscape (1024x768+). Sin login, acceso directo.
 
 import { useState } from "react";
+import logoKingsai from "../assets/logo_kingsai_graffiti.jpeg";
 
 // ─── Íconos SVG inline ────────────────────────────────────────────────────────
-// Usamos SVG inline para no depender de librerías externas en esta etapa.
+// Solo se mantienen los íconos de los botones de esquina (Spotify y candado).
+// Los botones principales usan emojis directamente.
 
 const LockIcon = () => (
   <svg
@@ -36,72 +38,14 @@ const SpotifyIcon = () => (
   </svg>
 );
 
-const ScissorsIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="32"
-    height="32"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="6" cy="6" r="3" />
-    <circle cx="6" cy="18" r="3" />
-    <line x1="20" y1="4" x2="8.12" y2="15.88" />
-    <line x1="14.47" y1="14.48" x2="20" y2="20" />
-    <line x1="8.12" y1="8.12" x2="12" y2="12" />
-  </svg>
-);
-
-const ShoppingBagIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="32"
-    height="32"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-    <line x1="3" y1="6" x2="21" y2="6" />
-    <path d="M16 10a4 4 0 0 1-8 0" />
-  </svg>
-);
-
-const ReceiptIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="32"
-    height="32"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z" />
-    <line x1="8" y1="8" x2="16" y2="8" />
-    <line x1="8" y1="12" x2="16" y2="12" />
-    <line x1="8" y1="16" x2="12" y2="16" />
-  </svg>
-);
-
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function MainScreen({
-  onNuevoCorte,    // Función a llamar al presionar "Ingresar Corte"
+  onNuevoCorte,   // Función a llamar al presionar "Ingresar Corte"
   onNuevaVenta,   // Función a llamar al presionar "Ingresar Venta"
   onNuevoGasto,   // Función a llamar al presionar "Ingresar Gasto"
   onAdminAccess,  // Función a llamar al presionar el candado
   onSpotify,      // Función a llamar al presionar el ícono de Spotify
-  logoUrl,        // URL del logo de la barbería (opcional, usa placeholder si no se provee)
 }) {
   // Estado para el feedback visual al presionar un botón (efecto de "presionado")
   const [pressed, setPressed] = useState(null);
@@ -135,7 +79,7 @@ export default function MainScreen({
         fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
       }}
     >
-      {/* ── Líneas decorativas de fondo (sutil, no distrae) ──────────────── */}
+      {/* ── Línea decorativa superior ─────────────────────────────────────── */}
       <div style={styles.bgAccentTop} />
       <div style={styles.bgAccentBottom} />
 
@@ -144,14 +88,11 @@ export default function MainScreen({
 
         {/* Logo de la barbería */}
         <div style={styles.logoArea}>
-          {logoUrl ? (
-            <img src={logoUrl} alt="Logo de la barbería" style={styles.logoImage} />
-          ) : (
-            // Placeholder: se reemplaza cuando llegue el archivo .png
-            <div style={styles.logoPlaceholder}>
-              <span style={styles.logoPlaceholderText}>KINGSAI STUDIO</span>
-            </div>
-          )}
+          <img
+            src={logoKingsai}
+            alt="Kingsai Studio"
+            style={styles.logoImage}
+          />
         </div>
 
         {/* Separador fino */}
@@ -160,7 +101,7 @@ export default function MainScreen({
         {/* ── Fila de botones principales (Corte + Venta) ───────────────── */}
         <div style={styles.primaryButtonRow}>
 
-          {/* INGRESAR CORTE — verde */}
+          {/* INGRESAR CORTE — verde oliva */}
           <button
             style={{
               ...styles.primaryButton,
@@ -170,11 +111,11 @@ export default function MainScreen({
             onPointerDown={() => handlePress("corte", onNuevoCorte)}
             aria-label="Ingresar nuevo corte"
           >
-            <span style={styles.buttonIcon}><ScissorsIcon /></span>
+            <span style={styles.emojiIcon}>💈</span>
             <span style={styles.buttonLabel}>Ingresar Corte</span>
           </button>
 
-          {/* INGRESAR VENTA — verde */}
+          {/* INGRESAR VENTA — verde oliva */}
           <button
             style={{
               ...styles.primaryButton,
@@ -184,13 +125,13 @@ export default function MainScreen({
             onPointerDown={() => handlePress("venta", onNuevaVenta)}
             aria-label="Ingresar nueva venta"
           >
-            <span style={styles.buttonIcon}><ShoppingBagIcon /></span>
+            <span style={styles.emojiIcon}>🥤</span>
             <span style={styles.buttonLabel}>Ingresar Venta</span>
           </button>
 
         </div>
 
-        {/* ── Botón secundario (Gasto) — rojo, ancho completo ──────────── */}
+        {/* ── Botón Gasto — rojo ladrillo, ancho completo ───────────────── */}
         <button
           style={{
             ...styles.secondaryButton,
@@ -200,7 +141,7 @@ export default function MainScreen({
           onPointerDown={() => handlePress("gasto", onNuevoGasto)}
           aria-label="Ingresar nuevo gasto"
         >
-          <span style={styles.buttonIcon}><ReceiptIcon /></span>
+          <span style={styles.emojiIcon}>💰</span>
           <span style={styles.buttonLabel}>Ingresar Gasto</span>
         </button>
 
@@ -236,27 +177,23 @@ export default function MainScreen({
         title="Panel administrador"
       >
         <LockIcon />
-        {/* <span style={styles.cornerButtonLabel}>Admin</span> */}
       </button>
 
     </div>
   );
 }
 
-// ─── Estilos (objeto JS — equivalente a CSS inline con estructura) ────────────
-// Separamos los estilos del JSX para mantener el componente limpio y legible.
-// En React, los estilos inline se escriben como objetos JavaScript.
-
+// ─── Estilos ──────────────────────────────────────────────────────────────────
 const styles = {
 
-  // Línea decorativa superior — acento geométrico sutil
+  // Línea decorativa superior — degradado oliva
   bgAccentTop: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     height: "4px",
-    background: "linear-gradient(90deg, #1a7a4a 0%, #2dba6e 50%, #1a7a4a 100%)",
+    background: "linear-gradient(90deg, #4a6741 0%, #7a9e6e 50%, #4a6741 100%)",
   },
 
   // Línea decorativa inferior
@@ -269,7 +206,7 @@ const styles = {
     backgroundColor: "#f0f0f0",
   },
 
-  // Contenedor del contenido central — apila logo + botones verticalmente
+  // Contenedor central — paddingBottom desplaza el bloque hacia arriba
   centerContent: {
     display: "flex",
     flexDirection: "column",
@@ -278,9 +215,10 @@ const styles = {
     width: "100%",
     maxWidth: "820px",
     padding: "0 5vw",
+    paddingBottom: "6vh",
   },
 
-  // Área del logo — espacio definido para la imagen horizontal
+  // Área del logo
   logoArea: {
     width: "100%",
     display: "flex",
@@ -289,33 +227,15 @@ const styles = {
     marginBottom: "4px",
   },
 
-  // Imagen del logo (cuando se provee el .png)
+  // Imagen del logo
   logoImage: {
-    maxHeight: "90px",
-    maxWidth: "380px",
+    maxHeight: "310px",
+    maxWidth: "720px",
     objectFit: "contain",
+    objectPosition: "center top",
   },
 
-  // Placeholder del logo — se ve hasta que llegue el .png real
-  logoPlaceholder: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "16px 48px",
-    border: "1.5px solid #e0e0e0",
-    borderRadius: "8px",
-  },
-
-  // Texto del placeholder del logo
-  logoPlaceholderText: {
-    fontSize: "26px",
-    fontWeight: "700",
-    letterSpacing: "0.12em",
-    color: "#111111",
-    fontFamily: "'DM Serif Display', 'Georgia', serif",
-  },
-
-  // Separador horizontal fino entre logo y botones
+  // Separador fino entre logo y botones
   divider: {
     width: "48px",
     height: "2px",
@@ -323,7 +243,7 @@ const styles = {
     borderRadius: "2px",
   },
 
-  // Fila horizontal con los dos botones principales (Corte + Venta)
+  // Fila con los dos botones principales
   primaryButtonRow: {
     display: "flex",
     flexDirection: "row",
@@ -331,7 +251,7 @@ const styles = {
     width: "100%",
   },
 
-  // Estilo base compartido por ambos botones principales
+  // Estilo base de los botones principales (Corte y Venta)
   primaryButton: {
     flex: 1,
     display: "flex",
@@ -350,7 +270,7 @@ const styles = {
     WebkitTapHighlightColor: "transparent",
   },
 
-  // Botón rojo — ancho completo, más bajo en altura que los verdes
+  // Botón Gasto — ancho completo, dirección horizontal
   secondaryButton: {
     width: "100%",
     display: "flex",
@@ -368,33 +288,31 @@ const styles = {
     WebkitTapHighlightColor: "transparent",
   },
 
-  // Color verde — aplicado a los botones Corte y Venta
+  // Verde oliva — Corte y Venta
   greenButton: {
-    backgroundColor: "#1a7a4a",
+    backgroundColor: "#4a6741",
     color: "#ffffff",
-    boxShadow: "0 4px 20px rgba(26, 122, 74, 0.25)",
+    boxShadow: "0 4px 20px rgba(74, 103, 65, 0.28)",
   },
 
-  // Color rojo — aplicado al botón Gasto
+  // Rojo ladrillo — Gasto
   redButton: {
-    backgroundColor: "#c0392b",
+    backgroundColor: "#b5451b",
     color: "#ffffff",
-    boxShadow: "0 4px 20px rgba(192, 57, 43, 0.22)",
+    boxShadow: "0 4px 20px rgba(181, 69, 27, 0.25)",
   },
 
-  // Estado "presionado" — feedback táctil visual
+  // Feedback visual al presionar
   buttonPressed: {
     transform: "scale(0.97)",
     boxShadow: "none",
     opacity: 0.92,
   },
 
-  // Ícono dentro del botón
-  buttonIcon: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    opacity: 0.9,
+  // Emoji dentro del botón
+  emojiIcon: {
+    fontSize: "clamp(28px, 3.5vw, 42px)",
+    lineHeight: 1,
   },
 
   // Texto del botón
@@ -405,13 +323,12 @@ const styles = {
     lineHeight: 1,
   },
 
-  // Estilo base de los botones de esquina (Spotify + Admin)
+  // Botones de esquina (Spotify y Admin)
   cornerButton: {
     position: "absolute",
     display: "flex",
     flexDirection: "row",
     alignItems: "center",
-    gap: "0px",
     padding: "1.8vh 2vw",
     borderRadius: "40px",
     border: "1.5px solid #e8e8e8",
@@ -423,25 +340,17 @@ const styles = {
     WebkitTapHighlightColor: "transparent",
   },
 
-  // Label del botón de esquina
-  cornerButtonLabel: {
-    fontSize: "13px",
-    fontWeight: "500",
-    letterSpacing: "0.03em",
-    color: "#555555",
-  },
-
-  // Botón de Spotify — color verde de Spotify
+  // Spotify — verde Spotify
   spotifyButton: {
     color: "#1DB954",
   },
 
-  // Botón de Admin — color neutro oscuro
+  // Admin — gris oscuro
   adminButton: {
     color: "#444444",
   },
 
-  // Estado presionado para botones de esquina
+  // Feedback presionado en botones de esquina
   cornerButtonPressed: {
     backgroundColor: "#f5f5f5",
     borderColor: "#d0d0d0",

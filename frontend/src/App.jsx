@@ -24,8 +24,8 @@ export default function App() {
 
   /**
    * precargarDatos — carga barberos, servicios, productos y categorías en paralelo.
-   * Se llama al arrancar la app y al cerrar el panel admin, para reflejar
-   * cualquier cambio hecho desde Gestión (altas, ediciones, cambios de estado).
+   * Se llama al arrancar la app, al cerrar el panel admin, y al volver de FlujoVenta
+   * (que modifica el stock de productos).
    */
   const precargarDatos = useCallback(async () => {
     console.log('[App] Iniciando precarga de datos...');
@@ -83,11 +83,20 @@ export default function App() {
     return <FlujoCorte onVolver={volverAlInicio}
       barberos={datos.barberos} servicios={datos.servicios} />;
   }
+
   if (currentScreen === "nuevaVenta") {
     console.log('[App] Renderizando FlujoVenta');
-    return <FlujoVenta onVolver={volverAlInicio}
-      productos={datos.productos} />;
+    return <FlujoVenta
+      onVolver={() => {
+        // FlujoVenta modifica el stock — hay que recargar productos al volver
+        console.log('[App] Volviendo desde FlujoVenta — recargando datos de productos...');
+        precargarDatos();
+        setCurrentScreen("main");
+      }}
+      productos={datos.productos}
+    />;
   }
+
   if (currentScreen === "nuevoGasto") {
     console.log('[App] Renderizando FlujoGasto');
     return <FlujoGasto onVolver={volverAlInicio}

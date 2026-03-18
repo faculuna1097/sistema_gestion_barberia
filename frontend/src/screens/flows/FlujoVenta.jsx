@@ -167,6 +167,16 @@ export default function FlujoVenta({ onVolver, productos }) {
         onVolver={retroceder}
       >
         <div style={styles.cantidadContainer}>
+
+          <p style={{
+            ...styles.stockDisponible,
+            ...(productoSeleccionado?.stock_actual === 0 ? styles.stockAgotado : {}),
+          }}>
+            {productoSeleccionado?.stock_actual === 0
+              ? "Sin stock disponible"
+              : `Stock disponible: ${productoSeleccionado?.stock_actual}`}
+          </p>
+
           <div style={styles.cantidadRow}>
             <button
               style={{
@@ -186,11 +196,17 @@ export default function FlujoVenta({ onVolver, productos }) {
             </button>
             <span style={styles.cantidadValor}>{cantidad}</span>
             <button
-              style={styles.btnCantidad}
-              onClick={() => {
-                console.log('[FlujoVenta] Cantidad incrementada:', cantidad + 1);
-                setCantidad((c) => c + 1);
+              style={{
+                ...styles.btnCantidad,
+                ...(cantidad >= productoSeleccionado?.stock_actual ? styles.btnCantidadDeshabilitado : {}),
               }}
+              onClick={() => {
+                if (cantidad < productoSeleccionado?.stock_actual) {
+                  console.log('[FlujoVenta] Cantidad incrementada:', cantidad + 1);
+                  setCantidad((c) => c + 1);
+                }
+              }}
+              disabled={cantidad >= productoSeleccionado?.stock_actual}
               aria-label="Sumar unidad"
             >
               +
@@ -202,11 +218,15 @@ export default function FlujoVenta({ onVolver, productos }) {
           </p>
 
           <button
-            style={styles.btnContinuar}
+            style={{
+              ...styles.btnContinuar,
+              ...(productoSeleccionado?.stock_actual === 0 ? styles.btnDeshabilitado : {}),
+            }}
             onClick={() => {
               console.log('[FlujoVenta] Cantidad confirmada:', cantidad);
               avanzar();
             }}
+            disabled={productoSeleccionado?.stock_actual === 0}
           >
             Continuar
           </button>
@@ -367,6 +387,8 @@ const styles = {
   precioProducto: { fontSize: "clamp(13px, 1.4vw, 16px)", fontWeight: "400", color: "#666666" },
   // ── Cantidad ──
   cantidadContainer: { display: "flex", flexDirection: "column", alignItems: "center", gap: "3vh", width: "100%" },
+  stockDisponible: { fontSize: "clamp(14px, 1.6vw, 17px)", color: "#888888", margin: 0 },
+  stockAgotado: { color: "#c0392b", fontWeight: "600" },
   cantidadRow: { display: "flex", alignItems: "center", gap: "4vw" },
   btnCantidad: {
     width: "72px", height: "72px", borderRadius: "20px",
