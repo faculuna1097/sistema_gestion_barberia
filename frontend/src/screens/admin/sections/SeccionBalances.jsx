@@ -604,7 +604,7 @@ const styles = {
     padding: '36px 40px',
     fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
     color: '#111111',
-    maxWidth: '1100px',
+    //maxWidth: '1100px',
   },
   encabezado: {
     display: 'flex',

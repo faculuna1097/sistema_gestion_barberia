@@ -386,7 +386,7 @@ const styles = {
   contenedor: {
     padding: '32px 36px',
     fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
-    maxWidth: '1100px',
+    //maxWidth: '1100px',
   },
 
   // Encabezado
