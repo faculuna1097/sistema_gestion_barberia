@@ -3,6 +3,7 @@
 // Diseñada para iPad en landscape (1024x768+). Sin login, acceso directo.
 
 import { useState } from "react";
+// TODO: la imagen debe venir de la base de datos o ser configurable, no hardcodeada. Por ahora se importa directamente.
 import logoKingsai from "../assets/logo_kingsai_graffiti.jpeg";
 
 // ─── Íconos SVG inline ────────────────────────────────────────────────────────

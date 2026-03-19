@@ -28,7 +28,7 @@ const BackspaceIcon = () => (
 );
 
 // ─── Componente principal ─────────────────────────────────────────────────────
-export default function PantallaLoginAdmin({ onAcceso, onCancelar, pinCorrecto = "1234" }) {
+export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {  
   console.log('[PantallaLoginAdmin] Montada');
 
   const [pin, setPin] = useState("");
@@ -57,17 +57,17 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, pinCorrecto =
     setPin((p) => p.slice(0, -1));
   };
 
-  // ── Validar PIN ─────────────────────────────────────────────────────────────
-  const validarPin = (pinIngresado) => {
-    console.log('[PantallaLoginAdmin] Validando PIN...');
+  // ── Validar PIN — llama al backend y recibe un JWT ──────────────────────────
+const validarPin = async (pinIngresado) => {
+  console.log('[PantallaLoginAdmin] Validando PIN contra el backend...');
+  try {
+    const respuesta = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/auth/verificar-pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: pinIngresado }),
+    });
 
-    if (pinIngresado === pinCorrecto) {
-      console.log('[PantallaLoginAdmin] PIN correcto — acceso concedido');
-      setEstado("exito");
-      setTimeout(() => {
-        onAcceso();
-      }, 600);
-    } else {
+    if (!respuesta.ok) {
       console.log('[PantallaLoginAdmin] PIN incorrecto');
       setEstado("error");
       setShake(true);
@@ -76,8 +76,27 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, pinCorrecto =
         setEstado("idle");
         setShake(false);
       }, 800);
+      return;
     }
-  };
+
+    const { token } = await respuesta.json();
+    console.log('[PantallaLoginAdmin] PIN correcto — acceso concedido');
+    setEstado("exito");
+    setTimeout(() => {
+      onAcceso(token);
+    }, 600);
+
+  } catch (err) {
+    console.error('[PantallaLoginAdmin] Error al contactar el backend:', err);
+    setEstado("error");
+    setShake(true);
+    setTimeout(() => {
+      setPin("");
+      setEstado("idle");
+      setShake(false);
+    }, 800);
+  }
+};
 
   // ── Teclado físico (opcional, para desarrollo en desktop) ──────────────────
   useEffect(() => {

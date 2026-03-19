@@ -11,6 +11,9 @@ import { getBarberos, getServicios, getProductos, getCategorias } from "./servic
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState("main");
+  // TODO: el token queda guardado en memoria por ahora. Cuando implementemos el reemplazo
+  // del TENANT_ID hardcodeado, vamos a leer el tenant_id desde este token con jwt-decode. Por ahora el token se guarda pero no se usa todavía.
+  const [token, setToken] = useState(null);
 
   // Datos precargados — se cargan al arrancar y cada vez que se cierra el panel admin
   const [datos, setDatos] = useState({
@@ -28,7 +31,7 @@ export default function App() {
    * (que modifica el stock de productos).
    */
   const precargarDatos = useCallback(async () => {
-    console.log('[App] Iniciando precarga de datos...');
+    //console.log('[App] Iniciando precarga de datos...');
     setDatos(prev => ({ ...prev, cargando: true, error: null }));
     try {
       const [barberos, servicios, productos, categorias] = await Promise.all([
@@ -71,7 +74,7 @@ export default function App() {
   };
 
   if (datos.cargando) {
-    console.log('[App] Esperando precarga de datos...');
+    //console.log('[App] Esperando precarga de datos...');
   }
 
   if (datos.error) {
@@ -104,17 +107,17 @@ export default function App() {
   }
 
   if (currentScreen === "loginAdmin") {
-    console.log('[App] Renderizando PantallaLoginAdmin');
-    return (
-      <PantallaLoginAdmin
-        onAcceso={() => {
-          console.log('[App] Acceso admin concedido — navegando a panel admin');
-          setCurrentScreen("admin");
-        }}
-        onCancelar={volverAlInicio}
-        pinCorrecto="1234" // <- temporal, reemplazar con tenant.pin_admin cuando haya auth
-      />
-    );
+      console.log('[App] Renderizando PantallaLoginAdmin');
+      return (
+        <PantallaLoginAdmin
+          onAcceso={(token) => {
+            console.log('[App] Acceso admin concedido — token recibido, navegando a panel admin');
+            setToken(token);
+            setCurrentScreen("admin");
+          }}
+          onCancelar={volverAlInicio}
+        />
+      );
   }
 
   if (currentScreen === "admin") {
