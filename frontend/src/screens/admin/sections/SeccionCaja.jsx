@@ -1,12 +1,45 @@
 // /frontend/src/screens/admin/sections/SeccionCaja.jsx
 // Sección Caja del Panel de Administrador.
-// Tab 1: movimientos del día actual + totales neto por canal.
+// Tab 1: movimientos del día seleccionado + totales neto por canal.
 // Tab 2 y Tab 3: placeholders para v1.1.
 
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+// ─── Helpers de fecha ─────────────────────────────────────────────────────────
+
+const MESES = [
+  'Enero','Febrero','Marzo','Abril','Mayo','Junio',
+  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'
+];
+const DIAS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+
+/**
+ * getFechaHoy — devuelve hoy en formato 'YYYY-MM-DD' en timezone AR
+ */
+const getFechaHoy = () =>
+  new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
+
+/**
+ * desplazarDia — suma o resta días a un string 'YYYY-MM-DD'
+ */
+const desplazarDia = (fechaStr, delta) => {
+  const [anio, mes, dia] = fechaStr.split('-').map(Number);
+  const fecha = new Date(anio, mes - 1, dia + delta);
+  return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+};
+
+/**
+ * fechaALabel — convierte 'YYYY-MM-DD' en label legible
+ * ej: "Miércoles 18 de Marzo de 2026"
+ */
+const fechaALabel = (fechaStr) => {
+  const [anio, mes, dia] = fechaStr.split('-').map(Number);
+  const fecha = new Date(anio, mes - 1, dia);
+  return `${DIAS[fecha.getDay()]} ${dia} de ${MESES[mes - 1]} de ${anio}`;
+};
 
 // ─── Ícono Excel (inline SVG) ─────────────────────────────────────────────────
 const ExcelIcon = () => (
@@ -81,22 +114,9 @@ function ModalConfirmarEliminar({ movimiento, onConfirmar, onCancelar }) {
   );
 }
 
-/**
- * getLabelFechaHoy — devuelve la fecha actual formateada
- * como "Miércoles 18 de Marzo de 2026"
- */
-const getLabelFechaHoy = () => {
-  return new Date().toLocaleDateString('es-AR', {
-    timeZone: 'America/Argentina/Buenos_Aires',
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).replace(/^./, c => c.toUpperCase());
-};
-
 // ─── Tab 1: Movimientos del día ───────────────────────────────────────────────
 function TabMovimientos() {
+  const [fecha, setFecha]             = useState(getFechaHoy);
   const [movimientos, setMovimientos] = useState([]);
   const [cargando, setCargando]       = useState(true);
   const [error, setError]             = useState(null);
@@ -104,16 +124,14 @@ function TabMovimientos() {
   const [eliminando, setEliminando]   = useState(false);
   const [soloNegocio, setSoloNegocio] = useState(false);
 
-    // ── Lista filtrada ────────────────────────────────────────────────────────
-  // Cuando el toggle está activo, oculta cortes de barberos con 100% de comisión.
-  // Ventas y gastos siempre se muestran.
-  const movimientosFiltrados = soloNegocio
-    ? movimientos.filter(m => m.tipo !== 'corte' || Number(m.comision_valor) < 100)
-    : movimientos;
+  const esHoy = fecha === getFechaHoy();
 
+  // ── Carga al cambiar de fecha ─────────────────────────────────────────────
   useEffect(() => {
-    console.log('[SeccionCaja] Cargando movimientos del día...');
-    fetch(`${API_URL}/api/caja/movimientos-dia`)
+    console.log('[SeccionCaja] Cargando movimientos — fecha:', fecha);
+    setCargando(true);
+    setError(null);
+    fetch(`${API_URL}/api/caja/movimientos-dia?fecha=${fecha}`)
       .then(r => r.json())
       .then(data => {
         console.log('[SeccionCaja] Movimientos cargados:', data.movimientos?.length);
@@ -122,10 +140,17 @@ function TabMovimientos() {
       })
       .catch(err => {
         console.error('[SeccionCaja] Error al cargar movimientos:', err);
-        setError('No se pudieron cargar los movimientos del día.');
+        setError('No se pudieron cargar los movimientos.');
         setCargando(false);
       });
-  }, []);
+  }, [fecha]);
+
+  // ── Lista filtrada ────────────────────────────────────────────────────────
+  // Cuando el toggle está activo, oculta cortes de barberos con 100% de comisión.
+  // Ventas y gastos siempre se muestran.
+  const movimientosFiltrados = soloNegocio
+    ? movimientos.filter(m => m.tipo !== 'corte' || Number(m.comision_valor) < 100)
+    : movimientos;
 
   // ── Totales neto por canal ────────────────────────────────────────────────
   const efectivoNeto = movimientosFiltrados.reduce((acc, m) => {
@@ -137,8 +162,6 @@ function TabMovimientos() {
     if (m.forma_pago !== 'mercado_pago') return acc;
     return m.tipo === 'gasto' ? acc - Number(m.monto) : acc + Number(m.monto);
   }, 0);
-
-
 
   // ── Eliminar ──────────────────────────────────────────────────────────────
   const confirmarEliminar = async () => {
@@ -174,9 +197,8 @@ function TabMovimientos() {
     const ws = XLSX.utils.json_to_sheet(datos);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Movimientos del día');
-    const fecha = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(wb, `movimientos-${fecha}.xlsx`);
-    console.log('[SeccionCaja] Exportación Excel completada');
+    console.log('[SeccionCaja] Exportación Excel completada — fecha:', fecha);
   };
 
   if (cargando) return (
@@ -226,8 +248,10 @@ function TabMovimientos() {
         </div>
       </div>
 
-      {/* ── Fila acciones: toggle izq | fecha centro | exportar der ──────── */}
+      {/* ── Fila acciones: toggle izq | selector fecha centro | exportar der ─ */}
       <div style={styles.accionesRow}>
+
+        {/* Toggle Solo Barberos */}
         <div>
           <button
             style={{
@@ -243,7 +267,32 @@ function TabMovimientos() {
             Solo Barberos
           </button>
         </div>
-        <p style={styles.labelFecha}>{getLabelFechaHoy()}</p>
+
+        {/* Selector de fecha */}
+        <div style={styles.selectorFecha}>
+          <button
+            style={styles.btnDia}
+            onPointerDown={() => setFecha(d => desplazarDia(d, -1))}
+          >
+            ‹
+          </button>
+          <div style={styles.labelFechaContenedor}>
+            <span style={styles.labelFecha}>{fechaALabel(fecha)}</span>
+            {esHoy && <span style={styles.badgeHoy}>HOY</span>}
+          </div>
+          <button
+            style={{
+              ...styles.btnDia,
+              ...(esHoy ? styles.btnDiaDeshabilitado : {}),
+            }}
+            onPointerDown={() => { if (!esHoy) setFecha(d => desplazarDia(d, +1)); }}
+            disabled={esHoy}
+          >
+            ›
+          </button>
+        </div>
+
+        {/* Exportar */}
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button
             style={movimientos.length === 0
@@ -261,7 +310,7 @@ function TabMovimientos() {
       {/* ── Tabla ────────────────────────────────────────────────────────── */}
       {movimientosFiltrados.length === 0 ? (
         <div style={styles.estadoCentrado}>
-          <p style={styles.estadoTexto}>No hay movimientos registrados hoy.</p>
+          <p style={styles.estadoTexto}>No hay movimientos registrados este día.</p>
         </div>
       ) : (
         <div style={styles.tablaWrapper}>
@@ -366,7 +415,7 @@ export default function SeccionCaja() {
       <div style={styles.encabezado}>
         <div>
           <h2 style={styles.titulo}>Caja</h2>
-          <p style={styles.subtitulo}>Movimientos del día de hoy</p>
+          <p style={styles.subtitulo}>Movimientos por día</p>
         </div>
 
         <div style={styles.tabPillContenedor}>
@@ -439,24 +488,47 @@ const styles = {
     border: '1.5px solid #eeeeee', backgroundColor: '#fafafa',
   },
   totalEmoji: { fontSize: '32px', lineHeight: 1 },
-  mpLogo: {
-    height: '50px', objectFit: 'contain',
-  },
+  mpLogo: { height: '50px', objectFit: 'contain' },
   totalLabel: {
     margin: '0 0 4px', fontSize: '12px', color: '#888888',
     fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.05em',
   },
   totalMonto: { margin: 0, fontSize: '26px', fontWeight: '700' },
 
-  // Fila acciones (toggle | fecha | exportar)
+  // Fila acciones (toggle | selector fecha | exportar)
   accionesRow: {
     display: 'grid', gridTemplateColumns: '1fr auto 1fr',
     alignItems: 'center', marginBottom: '16px',
   },
-  labelFecha: {
-    margin: 0, fontSize: '15px', fontWeight: '600', color: '#111111',
-    minWidth: '200px', textAlign: 'center',
+
+  // Selector de fecha
+  selectorFecha: {
+    display: 'flex', alignItems: 'center', gap: '12px',
   },
+  btnDia: {
+    width: '36px', height: '36px', borderRadius: '8px',
+    border: '1.5px solid #e0e0e0', backgroundColor: '#ffffff',
+    fontSize: '20px', color: '#333333', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    lineHeight: 1, fontFamily: 'inherit',
+  },
+  btnDiaDeshabilitado: {
+    color: '#cccccc', cursor: 'not-allowed', borderColor: '#f0f0f0',
+  },
+  labelFechaContenedor: {
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
+  },
+  labelFecha: {
+    fontSize: '15px', fontWeight: '600', color: '#111111',
+    minWidth: '220px', textAlign: 'center',
+  },
+  badgeHoy: {
+    fontSize: '10px', color: '#1a7a4a', backgroundColor: '#c8ead8',
+    padding: '2px 8px', borderRadius: '20px', textTransform: 'uppercase',
+    fontWeight: '600', letterSpacing: '0.05em',
+  },
+
+  // Exportar
   btnExportar: {
     display: 'flex', alignItems: 'center',
     padding: '10px 18px', borderRadius: '10px',

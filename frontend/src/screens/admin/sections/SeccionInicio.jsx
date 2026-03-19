@@ -56,7 +56,7 @@ function CardDia({ data }) {
 
         {/* Clientes */}
         <div style={styles.metricaBloque}>
-          <span style={styles.metricaEmoji}>🧑‍🦱</span>
+          <span style={styles.metricaEmoji}>👤</span>
           <div style={styles.metricaTextos}>
             <span style={styles.metricaNumero}>{clientes_dia}</span>
             <span style={styles.metricaLabel}>

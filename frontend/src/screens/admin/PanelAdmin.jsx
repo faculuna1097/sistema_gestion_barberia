@@ -6,7 +6,12 @@
 // Props:
 //   onCerrarSesion — callback para volver a la pantalla principal
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+
+
 import SeccionInicio     from "./sections/SeccionInicio";
 import SeccionCaja       from "./sections/SeccionCaja";
 import SeccionPlanillas  from "./sections/SeccionPlanillas";
@@ -30,6 +35,21 @@ const SECCIONES = [
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function PanelAdmin({ onCerrarSesion }) {
   console.log("[PanelAdmin] Montado");
+
+  const [nombreNegocio, setNombreNegocio] = useState('');
+
+  useEffect(() => {
+    console.log('[PanelAdmin] Cargando nombre del negocio...');
+    fetch(`${API_URL}/api/gestion/negocio`)
+      .then(r => r.json())
+      .then(data => {
+        console.log('[PanelAdmin] Nombre del negocio cargado:', data.nombre_negocio);
+        setNombreNegocio(data.nombre_negocio);
+      })
+      .catch(err => {
+        console.error('[PanelAdmin] Error al cargar nombre del negocio:', err);
+      });
+  }, []);
 
   // seccionActiva controla qué sección se muestra en el área de contenido
   const [seccionActiva, setSeccionActiva] = useState("inicio");
@@ -56,8 +76,8 @@ export default function PanelAdmin({ onCerrarSesion }) {
         {/* Encabezado del sidebar — nombre del negocio */}
         <div style={styles.sidebarHeader}>
           <div style={styles.logoMarca}>
-            <span style={styles.logoIcono}>✂️</span>
-            <span style={styles.logoTexto}>Kingsai Studio</span>
+            <span style={styles.logoIcono}>💈</span>
+            <span style={styles.logoTexto}>{nombreNegocio}</span>
           </div>
         </div>
 
@@ -159,14 +179,15 @@ const styles = {
   },
 
   logoTexto: {
-    fontSize: "15px",
-    fontWeight: "700",
-    color: "#ffffff",
-    letterSpacing: "0.01em",
-    // Truncar si el nombre es muy largo
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#ffffff',
+    letterSpacing: '0.08em',   // Raleway respira bien con tracking generoso
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    fontFamily: "'Raleway', 'DM Sans', sans-serif",
+    textTransform: 'uppercase', // opcional — le da más carácter
   },
 
   divisor: {

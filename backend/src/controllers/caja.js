@@ -2,21 +2,28 @@
 import { query } from '../config/db.js';
 
 const TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001';
+const TZ = 'America/Argentina/Buenos_Aires';
 
 /**
- * getMovimientosDia — devuelve todos los movimientos del día actual
+ * getMovimientosDia — devuelve todos los movimientos del día solicitado
  * ordenados por timestamp: cortes, ventas y gastos mergeados.
+ * Query param: fecha (YYYY-MM-DD, opcional — default: hoy en timezone AR)
  * Retorna: { movimientos: [...] }
  */
 export const getMovimientosDia = async (req, res) => {
-  console.log('[Caja] Request recibido: GET /api/caja/movimientos-dia');
+  // Si viene fecha por query param la usamos; si no, calculamos hoy en AR
+  const fecha = req.query.fecha
+    || new Date().toLocaleDateString('sv-SE', { timeZone: TZ });
+
+  console.log(`[Caja] Request recibido: GET /api/caja/movimientos-dia — fecha: ${fecha}`);
+
   try {
     // ── Query 1: Cortes del día ──────────────────────────────────────────────
     const cortesResult = await query(
       `SELECT
-        c.id,   
-        c.timestamp,
-         TO_CHAR(c.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires', 'HH24:MI') AS hora,
+         c.id,
+         c.timestamp,
+         TO_CHAR(c.timestamp AT TIME ZONE $2, 'HH24:MI') AS hora,
          b.nombre AS barbero_nombre,
          COALESCE(cs_agg.servicios, '') AS detalle,
          c.monto_total AS monto,
@@ -33,10 +40,9 @@ export const getMovimientosDia = async (req, res) => {
          GROUP BY cs.corte_id
        ) cs_agg ON cs_agg.corte_id = c.id
        WHERE c.tenant_id = $1
-         AND (c.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
-             = (NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+         AND DATE(c.timestamp AT TIME ZONE $2) = $3::date
        ORDER BY c.timestamp ASC`,
-      [TENANT_ID]
+      [TENANT_ID, TZ, fecha]
     );
 
     // ── Query 2: Ventas del día ──────────────────────────────────────────────
@@ -44,7 +50,7 @@ export const getMovimientosDia = async (req, res) => {
       `SELECT
          v.id,
          v.timestamp,
-         TO_CHAR(v.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires', 'HH24:MI') AS hora,
+         TO_CHAR(v.timestamp AT TIME ZONE $2, 'HH24:MI') AS hora,
          NULL AS barbero_nombre,
          p.nombre || ' x' || v.cantidad AS detalle,
          (v.precio_unitario * v.cantidad) AS monto,
@@ -54,19 +60,17 @@ export const getMovimientosDia = async (req, res) => {
        FROM venta v
        JOIN producto p ON v.producto_id = p.id
        WHERE v.tenant_id = $1
-         AND (v.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
-             = (NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+         AND DATE(v.timestamp AT TIME ZONE $2) = $3::date
        ORDER BY v.timestamp ASC`,
-      [TENANT_ID]
+      [TENANT_ID, TZ, fecha]
     );
 
     // ── Query 3: Gastos del día ──────────────────────────────────────────────
-    // pagado_por = 'negocio' | 'administrador' (no tiene efectivo/mercado_pago)
     const gastosResult = await query(
       `SELECT
          g.id,
          g.timestamp,
-         TO_CHAR(g.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires', 'HH24:MI') AS hora,
+         TO_CHAR(g.timestamp AT TIME ZONE $2, 'HH24:MI') AS hora,
          NULL AS barbero_nombre,
          cg.nombre || ': ' || g.descripcion AS detalle,
          g.monto AS monto,
@@ -76,10 +80,9 @@ export const getMovimientosDia = async (req, res) => {
        FROM gasto g
        JOIN categoria_gasto cg ON g.categoria_id = cg.id
        WHERE g.tenant_id = $1
-         AND (g.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
-             = (NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+         AND DATE(g.timestamp AT TIME ZONE $2) = $3::date
        ORDER BY g.timestamp ASC`,
-      [TENANT_ID]
+      [TENANT_ID, TZ, fecha]
     );
 
     // ── Merge y orden cronológico ────────────────────────────────────────────
@@ -89,11 +92,11 @@ export const getMovimientosDia = async (req, res) => {
       ...gastosResult.rows,
     ].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    console.log('[Caja] Movimientos del día obtenidos:', movimientos.length);
+    console.log('[Caja] Movimientos obtenidos:', movimientos.length, '| fecha:', fecha);
     res.json({ movimientos });
 
   } catch (err) {
-    console.error('[Caja] Error al obtener movimientos del día:', err);
+    console.error('[Caja] Error al obtener movimientos:', err);
     res.status(500).json({ error: 'Error al obtener movimientos del día' });
   }
 };
@@ -116,7 +119,6 @@ export const eliminarMovimiento = async (req, res) => {
       console.log('[Caja] Corte eliminado — id:', id);
 
     } else if (tipo === 'venta') {
-      // Primero obtenemos cantidad y producto_id para restaurar stock
       const ventaResult = await query(
         'SELECT producto_id, cantidad FROM venta WHERE id = $1 AND tenant_id = $2',
         [id, TENANT_ID]
@@ -125,13 +127,11 @@ export const eliminarMovimiento = async (req, res) => {
         return res.status(404).json({ error: 'Venta no encontrada' });
       }
       const { producto_id, cantidad } = ventaResult.rows[0];
-
       await query(
         'UPDATE producto SET stock_actual = stock_actual + $1 WHERE id = $2',
         [cantidad, producto_id]
       );
       console.log('[Caja] Stock restaurado — producto_id:', producto_id, '| cantidad:', cantidad);
-
       await query('DELETE FROM venta WHERE id = $1 AND tenant_id = $2', [id, TENANT_ID]);
       console.log('[Caja] Venta eliminada — id:', id);
 

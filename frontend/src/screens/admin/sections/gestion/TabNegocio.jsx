@@ -100,7 +100,7 @@ export default function TabNegocio() {
         {error && <p style={styles.errorTextoInline}>{error}</p>}
 
         {exito && (
-          <p style={styles.exitoTexto}>✓ Nombre actualizado correctamente.</p>
+          <p style={styles.exitoTexto}>✓ Nombre actualizado. Se verá reflejado al volver a ingresar al panel.</p>
         )}
 
         <button
