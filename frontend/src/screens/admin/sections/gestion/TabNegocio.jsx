@@ -122,7 +122,8 @@ export default function TabNegocio() {
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 const styles = {
   contenedor: {
-    maxWidth: '780px',
+    maxWidth: '580px',
+    margin: '0 auto',
   },
   card: {
     backgroundColor: '#fafafa',

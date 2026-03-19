@@ -1,15 +1,36 @@
-// frontend/src/screens/admin/sections/SeccionCaja.jsx
+// /frontend/src/screens/admin/sections/SeccionCaja.jsx
 // Sección Caja del Panel de Administrador.
-// Tab 1 implementado: movimientos del día + totales neto por método de pago.
-// Tab 2 y Tab 3: placeholders para construir en el próximo paso.
+// Tab 1: movimientos del día actual + totales neto por canal.
+// Tab 2 y Tab 3: placeholders para v1.1.
 
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Ícono Excel (inline SVG) ─────────────────────────────────────────────────
+const ExcelIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    style={{ marginRight: '6px' }}>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="8" y1="13" x2="16" y2="13" />
+    <line x1="8" y1="17" x2="16" y2="17" />
+  </svg>
+);
 
+// ─── Badge forma de pago ──────────────────────────────────────────────────────
+const BadgeFormaPago = ({ forma }) => {
+  const estilos = forma === 'efectivo'
+    ? { backgroundColor: '#e8f5e9', color: '#2e7d32' }
+    : { backgroundColor: '#e3f2fd', color: '#1565c0' };
+  return (
+    <span style={{ ...styles.badge, ...estilos }}>
+      {forma === 'efectivo' ? 'Efectivo' : 'Mercado Pago'}
+    </span>
+  );
+};
 
 // ─── Modal de confirmación de eliminación ─────────────────────────────────────
 function ModalConfirmarEliminar({ movimiento, onConfirmar, onCancelar }) {
@@ -60,13 +81,35 @@ function ModalConfirmarEliminar({ movimiento, onConfirmar, onCancelar }) {
   );
 }
 
+/**
+ * getLabelFechaHoy — devuelve la fecha actual formateada
+ * como "Miércoles 18 de Marzo de 2026"
+ */
+const getLabelFechaHoy = () => {
+  return new Date().toLocaleDateString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).replace(/^./, c => c.toUpperCase());
+};
+
 // ─── Tab 1: Movimientos del día ───────────────────────────────────────────────
 function TabMovimientos() {
   const [movimientos, setMovimientos] = useState([]);
-  const [cargando, setCargando] = useState(true);
-  const [error, setError] = useState(null);
+  const [cargando, setCargando]       = useState(true);
+  const [error, setError]             = useState(null);
   const [movimientoAEliminar, setMovimientoAEliminar] = useState(null);
-  const [eliminando, setEliminando] = useState(false);
+  const [eliminando, setEliminando]   = useState(false);
+  const [soloNegocio, setSoloNegocio] = useState(false);
+
+    // ── Lista filtrada ────────────────────────────────────────────────────────
+  // Cuando el toggle está activo, oculta cortes de barberos con 100% de comisión.
+  // Ventas y gastos siempre se muestran.
+  const movimientosFiltrados = soloNegocio
+    ? movimientos.filter(m => m.tipo !== 'corte' || Number(m.comision_valor) < 100)
+    : movimientos;
 
   useEffect(() => {
     console.log('[SeccionCaja] Cargando movimientos del día...');
@@ -85,15 +128,17 @@ function TabMovimientos() {
   }, []);
 
   // ── Totales neto por canal ────────────────────────────────────────────────
-  const efectivoNeto = movimientos.reduce((acc, m) => {
+  const efectivoNeto = movimientosFiltrados.reduce((acc, m) => {
     if (m.forma_pago !== 'efectivo') return acc;
     return m.tipo === 'gasto' ? acc - Number(m.monto) : acc + Number(m.monto);
   }, 0);
 
-  const mercadoPagoNeto = movimientos.reduce((acc, m) => {
+  const mercadoPagoNeto = movimientosFiltrados.reduce((acc, m) => {
     if (m.forma_pago !== 'mercado_pago') return acc;
     return m.tipo === 'gasto' ? acc - Number(m.monto) : acc + Number(m.monto);
   }, 0);
+
+
 
   // ── Eliminar ──────────────────────────────────────────────────────────────
   const confirmarEliminar = async () => {
@@ -119,11 +164,11 @@ function TabMovimientos() {
   // ── Exportar Excel ────────────────────────────────────────────────────────
   const exportarExcel = () => {
     const datos = movimientos.map(m => ({
-      Hora: m.hora,
-      Tipo: m.tipo === 'corte' ? 'Corte' : m.tipo === 'venta' ? 'Venta' : 'Gasto',
-      Barbero: m.barbero_nombre || '—',
-      Detalle: m.detalle,
-      Monto: m.tipo === 'gasto' ? -Number(m.monto) : Number(m.monto),
+      Hora:            m.hora,
+      Tipo:            m.tipo === 'corte' ? 'Corte' : m.tipo === 'venta' ? 'Venta' : 'Gasto',
+      Barbero:         m.barbero_nombre || '—',
+      Detalle:         m.detalle,
+      Monto:           m.tipo === 'gasto' ? -Number(m.monto) : Number(m.monto),
       'Forma de pago': m.forma_pago === 'efectivo' ? 'Efectivo' : 'Mercado Pago',
     }));
     const ws = XLSX.utils.json_to_sheet(datos);
@@ -134,12 +179,17 @@ function TabMovimientos() {
     console.log('[SeccionCaja] Exportación Excel completada');
   };
 
-  if (cargando) return <p style={styles.estadoTexto}>Cargando movimientos...</p>;
-  if (error)    return <p style={styles.errorTexto}>{error}</p>;
+  if (cargando) return (
+    <div style={styles.estadoCentrado}>
+      <div style={styles.spinner} />
+      <p style={styles.estadoTexto}>Cargando movimientos...</p>
+    </div>
+  );
+
+  if (error) return <div style={styles.errorBox}>{error}</div>;
 
   return (
     <div>
-      {/* ── Modal de confirmación ─────────────────────────────────────────── */}
       {movimientoAEliminar && (
         <ModalConfirmarEliminar
           movimiento={movimientoAEliminar}
@@ -159,8 +209,14 @@ function TabMovimientos() {
             </p>
           </div>
         </div>
+
         <div style={styles.totalCard}>
-          <span style={styles.totalEmoji}>📱</span>
+          <img
+            src="/mercadopago.png"
+            alt="Mercado Pago"
+            style={styles.mpLogo}
+            onError={e => { e.target.style.display = 'none'; }}
+          />
           <div>
             <p style={styles.totalLabel}>Mercado Pago neto</p>
             <p style={{ ...styles.totalMonto, color: mercadoPagoNeto >= 0 ? '#1a7a4a' : '#c0392b' }}>
@@ -170,16 +226,43 @@ function TabMovimientos() {
         </div>
       </div>
 
-      {/* ── Fila de acciones ─────────────────────────────────────────────── */}
+      {/* ── Fila acciones: toggle izq | fecha centro | exportar der ──────── */}
       <div style={styles.accionesRow}>
-        <button style={styles.btnExportar} onPointerDown={exportarExcel}>
-          📥 Exportar Excel
-        </button>
+        <div>
+          <button
+            style={{
+              ...styles.btnToggle,
+              ...(soloNegocio ? styles.btnToggleActivo : {}),
+            }}
+            onPointerDown={() => setSoloNegocio(v => !v)}
+          >
+            <span style={{
+              ...styles.togglePunto,
+              backgroundColor: soloNegocio ? '#2e7d32' : '#aaaaaa',
+            }} />
+            Solo Barberos
+          </button>
+        </div>
+        <p style={styles.labelFecha}>{getLabelFechaHoy()}</p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            style={movimientos.length === 0
+              ? { ...styles.btnExportar, ...styles.btnExportarDeshabilitado }
+              : styles.btnExportar}
+            onPointerDown={exportarExcel}
+            disabled={movimientos.length === 0}
+          >
+            <ExcelIcon />
+            Exportar Excel
+          </button>
+        </div>
       </div>
 
       {/* ── Tabla ────────────────────────────────────────────────────────── */}
-      {movimientos.length === 0 ? (
-        <p style={styles.estadoTexto}>No hay movimientos registrados hoy.</p>
+      {movimientosFiltrados.length === 0 ? (
+        <div style={styles.estadoCentrado}>
+          <p style={styles.estadoTexto}>No hay movimientos registrados hoy.</p>
+        </div>
       ) : (
         <div style={styles.tablaWrapper}>
           <table style={styles.tabla}>
@@ -191,14 +274,13 @@ function TabMovimientos() {
               </tr>
             </thead>
             <tbody>
-              {movimientos.map((m, i) => (
+              {movimientosFiltrados.map((m, i) => (
                 <tr
                   key={m.id || i}
-                  style={{
-                    backgroundColor:
-                      m.tipo === 'gasto' ? '#fff8f8'
-                      : i % 2 === 0 ? '#ffffff' : '#fafafa',
-                  }}
+                  style={m.tipo === 'gasto'
+                    ? { backgroundColor: '#fff8f8' }
+                    : i % 2 === 0 ? styles.filaImpar : styles.filaPar
+                  }
                 >
                   <td style={styles.td}>{m.hora}</td>
                   <td style={styles.td}>
@@ -228,12 +310,7 @@ function TabMovimientos() {
                     $ {Number(m.monto).toLocaleString('es-AR')}
                   </td>
                   <td style={styles.td}>
-                    <span style={{
-                      ...styles.badgePago,
-                      ...(m.forma_pago === 'efectivo' ? styles.badgeEfectivo : styles.badgeMP),
-                    }}>
-                      {m.forma_pago === 'efectivo' ? 'Efectivo' : 'Mercado Pago'}
-                    </span>
+                    <BadgeFormaPago forma={m.forma_pago} />
                   </td>
                   <td style={styles.tdAccion}>
                     <button
@@ -256,12 +333,20 @@ function TabMovimientos() {
 
 // ─── Tab 2: Cierre de caja (placeholder) ──────────────────────────────────────
 function TabCierre() {
-  return <p style={styles.estadoTexto}>Cierre de caja — próximamente.</p>;
+  return (
+    <div style={styles.estadoCentrado}>
+      <p style={styles.estadoTexto}>Cierre de caja — próximamente.</p>
+    </div>
+  );
 }
 
 // ─── Tab 3: Historial de cierres (placeholder) ────────────────────────────────
 function TabHistorial() {
-  return <p style={styles.estadoTexto}>Historial de cierres — próximamente.</p>;
+  return (
+    <div style={styles.estadoCentrado}>
+      <p style={styles.estadoTexto}>Historial de cierres — próximamente.</p>
+    </div>
+  );
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -276,28 +361,35 @@ export default function SeccionCaja() {
 
   return (
     <div style={styles.contenedor}>
-      {/* ── Tab bar ──────────────────────────────────────────────────────── */}
-      <div style={styles.tabBar}>
-        {tabs.map(t => (
-          <button
-            key={t.key}
-            style={{
-              ...styles.tabBtn,
-              ...(tabActivo === t.key ? styles.tabBtnActivo : {}),
-            }}
-            onPointerDown={() => setTabActivo(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
+
+      {/* ── Encabezado: título izq + tabs pill der ───────────────────────── */}
+      <div style={styles.encabezado}>
+        <div>
+          <h2 style={styles.titulo}>Caja</h2>
+          <p style={styles.subtitulo}>Movimientos del día de hoy</p>
+        </div>
+
+        <div style={styles.tabPillContenedor}>
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              style={{
+                ...styles.tabPill,
+                ...(tabActivo === t.key ? styles.tabPillActivo : {}),
+              }}
+              onPointerDown={() => setTabActivo(t.key)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── Contenido activo ─────────────────────────────────────────────── */}
-      <div style={styles.tabContenido}>
-        {tabActivo === 'movimientos' && <TabMovimientos />}
-        {tabActivo === 'cierre'      && <TabCierre />}
-        {tabActivo === 'historial'   && <TabHistorial />}
-      </div>
+      {tabActivo === 'movimientos' && <TabMovimientos />}
+      {tabActivo === 'cierre'      && <TabCierre />}
+      {tabActivo === 'historial'   && <TabHistorial />}
+
     </div>
   );
 }
@@ -305,111 +397,152 @@ export default function SeccionCaja() {
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 const styles = {
   contenedor: {
+    padding: '36px 40px',
     fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
   },
 
-  // Tab bar
-  tabBar: {
-    display: 'flex', gap: '4px',
-    borderBottom: '2px solid #eeeeee', marginBottom: '28px',
+  // Encabezado
+  encabezado: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+    marginBottom: '28px',
   },
-  tabBtn: {
-    padding: '12px 24px', fontSize: '15px', fontWeight: '500',
-    color: '#888888', border: 'none', background: 'none', cursor: 'pointer',
-    borderBottom: '2px solid transparent', marginBottom: '-2px',
-    fontFamily: 'inherit', borderRadius: '8px 8px 0 0', transition: 'color 0.15s',
+  titulo: {
+    fontSize: '26px', fontWeight: '700', color: '#111111', margin: '0 0 4px',
   },
-  tabBtnActivo: {
-    color: '#1a7a4a', borderBottom: '2px solid #1a7a4a', fontWeight: '600',
+  subtitulo: {
+    fontSize: '14px', color: '#888888', margin: 0,
   },
-  tabContenido: {},
 
-  // Totales
+  // Tabs pill
+  tabPillContenedor: {
+    display: 'flex', gap: '2px',
+    backgroundColor: '#f5f5f5', borderRadius: '12px', padding: '4px',
+  },
+  tabPill: {
+    padding: '8px 16px', borderRadius: '8px', border: 'none',
+    backgroundColor: 'transparent', color: '#888888',
+    fontSize: '14px', fontWeight: '500', cursor: 'pointer',
+    fontFamily: 'inherit', transition: 'all 0.15s',
+  },
+  tabPillActivo: {
+    backgroundColor: '#ffffff', color: '#111111', fontWeight: '600',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.10)',
+  },
+
+  // Cards de totales
   totalesRow: {
-    display: 'flex', gap: '16px', marginBottom: '24px',
+    display: 'flex', gap: '16px', marginBottom: '20px',
   },
   totalCard: {
     flex: 1, display: 'flex', alignItems: 'center', gap: '16px',
     padding: '20px 24px', borderRadius: '16px',
     border: '1.5px solid #eeeeee', backgroundColor: '#fafafa',
   },
-  totalEmoji: { fontSize: '30px' },
+  totalEmoji: { fontSize: '32px', lineHeight: 1 },
+  mpLogo: {
+    height: '50px', objectFit: 'contain',
+  },
   totalLabel: {
-    margin: '0 0 4px', fontSize: '12px',
-    color: '#888888', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.05em',
+    margin: '0 0 4px', fontSize: '12px', color: '#888888',
+    fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.05em',
   },
   totalMonto: { margin: 0, fontSize: '26px', fontWeight: '700' },
 
-  // Acciones
+  // Fila acciones (toggle | fecha | exportar)
   accionesRow: {
-    display: 'flex', justifyContent: 'flex-end', marginBottom: '16px',
+    display: 'grid', gridTemplateColumns: '1fr auto 1fr',
+    alignItems: 'center', marginBottom: '16px',
+  },
+  labelFecha: {
+    margin: 0, fontSize: '15px', fontWeight: '600', color: '#111111',
+    minWidth: '200px', textAlign: 'center',
   },
   btnExportar: {
-    padding: '9px 18px', borderRadius: '10px',
-    border: '1.5px solid #e0e0e0', backgroundColor: '#ffffff',
-    color: '#444444', fontSize: '14px', fontWeight: '500',
+    display: 'flex', alignItems: 'center',
+    padding: '10px 18px', borderRadius: '10px',
+    border: '1.5px solid #1a7a4a', backgroundColor: '#ffffff',
+    color: '#1a7a4a', fontSize: '14px', fontWeight: '600',
     cursor: 'pointer', fontFamily: 'inherit',
+  },
+  btnExportarDeshabilitado: {
+    borderColor: '#e0e0e0', color: '#bbbbbb', cursor: 'not-allowed',
+  },
+
+  // Toggle Solo Barberos
+  btnToggle: {
+    display: 'flex', alignItems: 'center', gap: '10px',
+    padding: '8px 16px', borderRadius: '20px',
+    border: '1.5px solid #e0e0e0', backgroundColor: '#f5f5f5',
+    color: '#888888', fontSize: '13px', fontWeight: '600',
+    cursor: 'pointer', fontFamily: "'DM Sans', Arial, sans-serif",
+  },
+  btnToggleActivo: {
+    backgroundColor: '#e8f5e9', color: '#2e7d32',
+    border: '1.5px solid #a5d6a7',
+  },
+  togglePunto: {
+    width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0,
   },
 
   // Tabla
   tablaWrapper: {
-    overflowX: 'auto', borderRadius: '12px', border: '1.5px solid #eeeeee',
+    borderRadius: '12px', border: '1.5px solid #eeeeee',
+    overflow: 'hidden', overflowX: 'auto',
   },
-  tabla: { width: '100%', borderCollapse: 'collapse', fontSize: '14px' },
+  tabla: { width: '100%', borderCollapse: 'collapse' },
   th: {
-    padding: '13px 16px', textAlign: 'left', fontSize: '11px',
-    fontWeight: '600', color: '#888888',
-    textTransform: 'uppercase', letterSpacing: '0.07em',
-    borderBottom: '1.5px solid #eeeeee', backgroundColor: '#fafafa',
+    padding: '12px 20px', fontSize: '11px', fontWeight: '700',
+    color: '#999999', textTransform: 'uppercase', letterSpacing: '0.06em',
+    backgroundColor: '#fafafa', borderBottom: '1px solid #f0f0f0',
+    textAlign: 'left', whiteSpace: 'nowrap',
+  },
+  thAccion: {
+    padding: '12px 16px', width: '48px',
+    backgroundColor: '#fafafa', borderBottom: '1px solid #f0f0f0',
   },
   td: {
-    padding: '13px 16px', color: '#333333',
-    borderBottom: '1px solid #f0f0f0', fontSize: '14px',
+    padding: '14px 20px', fontSize: '14px', color: '#333333',
+    borderBottom: '1px solid #f7f7f7', verticalAlign: 'middle',
   },
+  tdAccion: {
+    padding: '8px 12px', textAlign: 'center',
+    borderBottom: '1px solid #f7f7f7', verticalAlign: 'middle',
+  },
+  filaImpar: { backgroundColor: '#ffffff' },
+  filaPar:   { backgroundColor: '#fafafa' },
+
+  // Badge genérico (tipo + forma de pago)
   badge: {
     display: 'inline-block', padding: '3px 10px',
     borderRadius: '20px', fontSize: '12px', fontWeight: '600',
   },
 
-  // Estados
-  estadoTexto: {
-    textAlign: 'center', color: '#888888', fontSize: '15px', padding: '48px 0', margin: 0,
-  },
-  errorTexto: {
-    textAlign: 'center', color: '#c0392b', fontSize: '15px', padding: '48px 0', margin: 0,
-  },
-
-  // Badges de forma de pago
-  badgePago: {
-    display: 'inline-block',
-    padding: '3px 10px',
-    borderRadius: '20px',
-    fontSize: '12px',
-    fontWeight: '600',
-  },
-  badgeEfectivo: {
-    backgroundColor: '#e8f5e9',
-    color: '#2e7d32',
-  },
-  badgeMP: {
-    backgroundColor: '#e3f2fd',
-    color: '#1565c0',
-  },
-// Botón X en tabla
-  thAccion: {
-    padding: '13px 16px', width: '48px',
-    borderBottom: '1.5px solid #eeeeee', backgroundColor: '#fafafa',
-  },
-  tdAccion: {
-    padding: '8px 12px', textAlign: 'center',
-    borderBottom: '1px solid #f0f0f0',
-  },
+  // Botón X
   btnX: {
     width: '30px', height: '30px', borderRadius: '8px',
     border: '1.5px solid #f5c6c6', backgroundColor: '#fff5f5',
     color: '#c0392b', fontSize: '13px', cursor: 'pointer',
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
     lineHeight: 1,
+  },
+
+  // Estados
+  estadoCentrado: {
+    display: 'flex', flexDirection: 'column', alignItems: 'center',
+    justifyContent: 'center', padding: '60px 0', gap: '16px',
+  },
+  estadoTexto: {
+    fontSize: '15px', color: '#888888', margin: 0,
+  },
+  errorBox: {
+    padding: '16px 20px', borderRadius: '10px',
+    backgroundColor: '#fdecea', color: '#c0392b',
+    fontSize: '14px', marginBottom: '16px',
+  },
+  spinner: {
+    width: '32px', height: '32px', borderRadius: '50%',
+    border: '3px solid #e8e8e8', borderTopColor: '#1a7a4a',
+    animation: 'spin 0.8s linear infinite',
   },
 
   // Modal
@@ -441,8 +574,8 @@ const styles = {
   modalFila: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
   },
-  modalLabel: { fontSize: '13px', color: '#888888' },
-  modalValor: { fontSize: '14px', color: '#111111', fontWeight: '600' },
+  modalLabel:   { fontSize: '13px', color: '#888888' },
+  modalValor:   { fontSize: '14px', color: '#111111', fontWeight: '600' },
   modalDivider: { height: '1px', backgroundColor: '#eeeeee' },
   modalBotones: { display: 'flex', gap: '12px' },
   btnCancelar: {
@@ -457,5 +590,4 @@ const styles = {
     color: '#ffffff', fontSize: '15px', fontWeight: '600',
     cursor: 'pointer', fontFamily: 'inherit',
   },
-
 };

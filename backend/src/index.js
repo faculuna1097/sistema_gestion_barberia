@@ -19,6 +19,7 @@ import planillasRouter from "./routes/planillas.js";
 import cajaRouter from './routes/caja.js';
 import gestionRouter from './routes/gestion.js';
 import balancesRouter from './routes/balances.js';
+import inicioRoutes from './routes/inicio.js';
 
 
 
@@ -55,6 +56,7 @@ app.use("/api/planillas", planillasRouter);
 app.use('/api/caja', cajaRouter);
 app.use('/api/gestion', gestionRouter);
 app.use('/api/balances', balancesRouter);
+app.use('/api/inicio', inicioRoutes);
 
 
 

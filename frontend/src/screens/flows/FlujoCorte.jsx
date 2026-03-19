@@ -182,34 +182,43 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
   }
 
   // ─── PASO 3 — Forma de pago ──────────────────────────────────────────────────
-  if (paso === 3) {
-    return (
-      <PasoLayout paso={3} total={5} titulo="Seleccione el medio de pago" onVolver={retroceder}>
-        <div style={styles.gridDos}>
-          {[
-            { key: "efectivo", label: "Efectivo", emoji: "💵" },
-            { key: "mercado_pago", label: "Mercado Pago", emoji: "📱" },
-          ].map((op) => (
-            <button
-              key={op.key}
-              style={{
-                ...styles.btnOpcionGrande,
-                ...(formaPago === op.key ? styles.btnOpcionActivo : {}),
-              }}
-              onClick={() => {
-                console.log('[FlujoCorte] Forma de pago seleccionada:', op.key);
-                setFormaPago(op.key);
-                avanzar();
-              }}
-            >
-              <span style={styles.emoji}>{op.emoji}</span>
-              <span>{op.label}</span>
-            </button>
-          ))}
-        </div>
-      </PasoLayout>
-    );
-  }
+if (paso === 3) {
+  return (
+    <PasoLayout paso={3} total={5} titulo="Seleccione el medio de pago" onVolver={retroceder}>
+      <div style={styles.gridDos}>
+        {[
+          { key: "efectivo", label: "Efectivo", icono: <span style={styles.emoji}>💵</span> },
+          {
+            key: "mercado_pago", label: "Mercado Pago", icono: (
+              <img
+                src="/mercadopago.png"
+                alt="Mercado Pago"
+                style={styles.mpLogo}
+                onError={(e) => { e.target.style.display = "none"; }}
+              />
+            )
+          },
+        ].map((op) => (
+          <button
+            key={op.key}
+            style={{
+              ...styles.btnOpcionGrande,
+              ...(formaPago === op.key ? styles.btnOpcionActivo : {}),
+            }}
+            onClick={() => {
+              console.log('[FlujoCorte] Forma de pago seleccionada:', op.key);
+              setFormaPago(op.key);
+              avanzar();
+            }}
+          >
+            {op.icono}
+            <span>{op.label}</span>
+          </button>
+        ))}
+      </div>
+    </PasoLayout>
+  );
+}
 
   // ─── PASO 4 — Propina ────────────────────────────────────────────────────────
   if (paso === 4) {
@@ -403,7 +412,7 @@ const styles = {
     borderRadius: "20px", border: "2px solid #e8e8e8", backgroundColor: "#fafafa",
     color: "#111111", fontSize: CONFIG.tamanoTextoBoton, fontWeight: "600", cursor: "pointer", fontFamily: "inherit",
   },
-  emoji: { fontSize: "clamp(28px, 4vw, 40px)" },
+  
   precioServicio: { fontSize: "clamp(13px, 1.4vw, 16px)", fontWeight: "400", color: "#666666" },
   btnContinuar: {
     width: "100%", padding: "2.5vh 0", borderRadius: "16px", border: "none",
@@ -445,4 +454,11 @@ const styles = {
   exitoTexto: { fontSize: "28px", fontWeight: "700", color: "#111111", margin: "0 0 12px", fontFamily: "'DM Sans', Arial, sans-serif" },
   exitoMonto: { fontSize: "22px", fontWeight: "400", color: "#1a7a4a", margin: 0, fontFamily: "'DM Sans', Arial, sans-serif" },
   errorTexto: { color: "#c0392b", fontSize: "15px", textAlign: "center", margin: 0 },
+
+  mpLogo: {
+  height: "clamp(34px, 4vw, 62px)",
+  width: "auto",
+  objectFit: "contain",
+  },
+  emoji: { fontSize: "clamp(34px, 4vw, 42px)" },
 };

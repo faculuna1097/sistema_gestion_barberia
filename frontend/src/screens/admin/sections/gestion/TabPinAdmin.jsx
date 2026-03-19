@@ -178,7 +178,8 @@ export default function TabPinAdmin() {
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 const styles = {
   contenedor: {
-    maxWidth: '420px',
+    maxWidth: '580px',
+    margin: '0 auto',
   },
   card: {
     backgroundColor: '#fafafa',

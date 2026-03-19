@@ -1,3 +1,4 @@
+SeccionPlanillas.jsx
 // /frontend/src/screens/admin/sections/SeccionPlanillas.jsx
 // Sección de planillas semanales del panel de administrador.
 //
@@ -267,7 +268,10 @@ export default function SeccionPlanillas() {
 
       {/* ── FILA 1: título | tabs principales ─────────────────────────── */}
       <div style={styles.fila1}>
-        <h2 style={styles.titulo}>Planillas</h2>
+        <div>
+          <h2 style={styles.titulo}>Planillas</h2>
+          <p style={styles.subtitulo}>Cortes y comisiones por barbero, semana a semana</p>
+        </div>
         <div style={styles.tabsContainer}>
           {[
             { id: "detalle", label: "Detalle por barbero" },
@@ -433,11 +437,11 @@ export default function SeccionPlanillas() {
                             <td style={{ ...styles.tdTotal, textAlign: "right" }}>
                               {mostrarComisiones && infoComisionActiva ? (
                                 <span style={styles.comisionValor}>
-                                  {ars(comisionDelDia)}
+                                  {ars(comisionDelDia + totalProp)}
                                   <span style={styles.comisionTipo}>
                                     {infoComisionActiva.comision_tipo === "porcentaje"
-                                      ? ` (${infoComisionActiva.comision_valor}%)`
-                                      : ` ($${infoComisionActiva.comision_valor}/c)`}
+                                      ? ` (${infoComisionActiva.comision_valor}% + prop)`
+                                      : ` ($${infoComisionActiva.comision_valor}/c + prop)`}
                                   </span>
                                 </span>
                               ) : null}
@@ -537,11 +541,11 @@ const styles = {
     flexWrap: "wrap",
     gap: "16px",
   },
-  titulo: {
-    fontSize: "26px",
-    fontWeight: "700",
-    margin: 0,
-    color: "#111111",
+    titulo: {
+    fontSize: '24px', fontWeight: '700', color: '#111', margin: '0 0 4px',
+  },
+  subtitulo: {
+    fontSize: '14px', color: '#888', margin: 0,
   },
 
   // ── Fila 2: toggle | selector semana | exportar ──────────────────────────

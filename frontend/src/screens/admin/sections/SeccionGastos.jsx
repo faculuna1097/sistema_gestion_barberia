@@ -325,6 +325,15 @@ export default function SeccionGastos() {
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr style={styles.filaTotalGeneral}>
+                  <td colSpan={4} style={{ ...styles.tdTotal, textAlign: 'left' }}>Total del mes</td>
+                  <td style={{ ...styles.tdTotal, textAlign: 'right', color: '#c0392b' }}>
+                    {formatMonto(totalGeneral)}
+                  </td>
+                  <td style={styles.tdTotal} />
+                </tr>
+              </tfoot>
             </table>
           </div>
 

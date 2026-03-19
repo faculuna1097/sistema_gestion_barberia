@@ -3,7 +3,7 @@
 // Contiene 5 sub-secciones (tabs internos): Barberos, Servicios, Productos,
 // Datos del negocio y Cambio de PIN admin.
 // Cada tab carga sus propios datos al activarse — no hay precarga global.
-// Estilo de tabs idéntico a SeccionCaja.
+// Estilo visual idéntico a SeccionBalances.
 
 import { useState } from 'react';
 import TabBarberos from './gestion/TabBarberos.jsx';
@@ -29,23 +29,29 @@ export default function SeccionGestion() {
   return (
     <div style={styles.contenedor}>
 
-      {/* ── Tab bar ── */}
-      <div style={styles.tabBar}>
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            style={{
-              ...styles.tabBtn,
-              ...(tabActiva === tab.key ? styles.tabBtnActivo : {}),
-            }}
-            onPointerDown={() => {
-              console.log('[SeccionGestion] Tab seleccionada:', tab.key);
-              setTabActiva(tab.key);
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* ── Encabezado: título + tabs en el mismo row ── */}
+      <div style={styles.encabezado}>
+        <div>
+          <h2 style={styles.titulo}>Gestión</h2>
+          <p style={styles.subtitulo}>Administración de barberos, servicios, productos y configuración</p>
+        </div>
+        <div style={styles.tabsContainer}>
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              style={{
+                ...styles.tabBtn,
+                ...(tabActiva === tab.key ? styles.tabBtnActivo : {}),
+              }}
+              onPointerDown={() => {
+                console.log('[SeccionGestion] Tab seleccionada:', tab.key);
+                setTabActiva(tab.key);
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── Contenido del tab activo ── */}
@@ -61,35 +67,56 @@ export default function SeccionGestion() {
   );
 }
 
-// ─── Estilos — idénticos a SeccionCaja ───────────────────────────────────────
+// ─── Estilos — idénticos a SeccionBalances ────────────────────────────────────
 const styles = {
   contenedor: {
+    padding: '36px 40px',
     fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
+    color: '#111111',
   },
-  tabBar: {
+  encabezado: {
     display: 'flex',
-    gap: '4px',
-    borderBottom: '2px solid #eeeeee',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: '28px',
+    flexWrap: 'wrap',
+    gap: '16px',
+  },
+  titulo: {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: '#111',
+    margin: '0 0 4px',
+  },
+  subtitulo: {
+    fontSize: '14px',
+    color: '#888',
+    margin: 0,
+  },
+  tabsContainer: {
+    display: 'flex',
+    gap: '8px',
+    backgroundColor: '#f5f5f5',
+    borderRadius: '12px',
+    padding: '4px',
   },
   tabBtn: {
-    padding: '12px 24px',
-    fontSize: '15px',
-    fontWeight: '500',
-    color: '#888888',
+    padding: '8px 20px',
+    borderRadius: '9px',
     border: 'none',
-    background: 'none',
+    backgroundColor: 'transparent',
+    color: '#888888',
+    fontSize: '14px',
+    fontWeight: '500',
     cursor: 'pointer',
-    borderBottom: '2px solid transparent',
-    marginBottom: '-2px',
-    fontFamily: 'inherit',
-    borderRadius: '8px 8px 0 0',
-    transition: 'color 0.15s',
+    fontFamily: "'DM Sans', Arial, sans-serif",
+    transition: 'all 0.15s',
   },
   tabBtnActivo: {
-    color: '#1a7a4a',
-    borderBottom: '2px solid #1a7a4a',
+    backgroundColor: '#ffffff',
+    color: '#111111',
     fontWeight: '600',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.10)',
   },
   tabContenido: {},
 };

@@ -244,8 +244,10 @@ export default function SeccionBalances() {
 
       {/* ── Encabezado ──────────────────────────────────────────────────────── */}
       <div style={styles.encabezado}>
-        <h2 style={styles.titulo}>Balances</h2>
-
+        <div>
+          <h2 style={styles.titulo}>Balances</h2>
+          <p style={styles.subtitulo}>Visualizacion mensual de la economia del negocio</p>
+        </div>
         {/* Tabs */}
         <div style={styles.tabsContainer}>
           {[
@@ -356,7 +358,7 @@ export default function SeccionBalances() {
                     <tr>
                       <th style={styles.th}>Barbero</th>
                       <th style={{ ...styles.th, textAlign: 'right' }}>Cortes</th>
-                      <th style={{ ...styles.th, textAlign: 'right' }}>Monto servicios</th>
+                      <th style={{ ...styles.th, textAlign: 'right' }}>Monto</th>
                       {mostrarComisiones && <>
                         <th style={{ ...styles.th, textAlign: 'right' }}>Comisión %</th>
                         <th style={{ ...styles.th, textAlign: 'right' }}>Monto comisión</th>
@@ -615,10 +617,10 @@ const styles = {
     gap: '16px',
   },
   titulo: {
-    fontSize: '26px',
-    fontWeight: '700',
-    margin: 0,
-    color: '#111111',
+    fontSize: '24px', fontWeight: '700', color: '#111', margin: '0 0 4px',
+  },
+  subtitulo: {
+    fontSize: '14px', color: '#888', margin: 0,
   },
   tabsContainer: {
     display: 'flex',

@@ -84,6 +84,7 @@ export default function FlujoGasto({ onVolver, categorias }) {
   /**
    * confirmarGasto — arma el payload y llama al endpoint POST /api/gastos.
    * En caso de éxito muestra la pantalla de confirmación y vuelve al inicio.
+   * Si la categoría es Productos, espera 4 segundos para que se lea el recordatorio de stock.
    */
   const confirmarGasto = async () => {
     const payload = {
@@ -100,10 +101,12 @@ export default function FlujoGasto({ onVolver, categorias }) {
       const respuesta = await registrarGasto(payload);
       console.log('[FlujoGasto] Gasto registrado exitosamente — respuesta:', respuesta);
       setExito(true);
+      // Si la categoría es Productos se da más tiempo para leer el recordatorio de stock
+      const demora = categoriaSeleccionada?.nombre === "Productos" ? 4000 : 2000;
       setTimeout(() => {
         console.log('[FlujoGasto] Redirigiendo a pantalla principal tras éxito');
         onVolver();
-      }, 2000);
+      }, demora);
     } catch (err) {
       console.error('[FlujoGasto] Error al registrar el gasto:', err);
       setError("Error al guardar el gasto. Intentá de nuevo.");
@@ -115,12 +118,21 @@ export default function FlujoGasto({ onVolver, categorias }) {
   // ── Pantalla de éxito ────────────────────────────────────────────────────────
   if (exito) {
     console.log('[FlujoGasto] Mostrando pantalla de éxito — monto:', montoFinal);
+    const esProducto = categoriaSeleccionada?.nombre === "Productos";
     return (
       <div style={styles.pantallaCentrada}>
         <div style={styles.lineaSuperior} />
         <div style={styles.exitoIcono}>✓</div>
         <p style={styles.exitoTexto}>¡Gasto registrado!</p>
         <p style={styles.exitoMonto}>$ {montoFinal.toLocaleString("es-AR")}</p>
+        {esProducto && (
+          <div style={styles.recordatorioCard}>
+            <span style={styles.recordatorioIcono}>📦</span>
+            <p style={styles.recordatorioTexto}>
+              Si compraste productos para vender, recordá actualizar el stock en <strong>Gestión → Productos</strong>
+            </p>
+          </div>
+        )}
       </div>
     );
   }
@@ -229,8 +241,15 @@ export default function FlujoGasto({ onVolver, categorias }) {
       <PasoLayout paso={4} total={5} titulo="Seleccioná el medio de pago" onVolver={retroceder}>
         <div style={styles.gridDos}>
           {[
-            { key: "efectivo", label: "Efectivo", emoji: "💵" },
-            { key: "mercado_pago", label: "Mercado Pago", emoji: "📱" },
+            { key: "efectivo", label: "Efectivo", icono: <span style={styles.emoji}>💵</span> },
+            { key: "mercado_pago", label: "Mercado Pago", icono: (
+              <img
+                src="/mercadopago.png"
+                alt="Mercado Pago"
+                style={styles.mpLogo}
+                onError={(e) => { e.target.style.display = "none"; }}
+              />
+            )},
           ].map((op) => (
             <button
               key={op.key}
@@ -244,7 +263,7 @@ export default function FlujoGasto({ onVolver, categorias }) {
                 avanzar();
               }}
             >
-              <span style={styles.emoji}>{op.emoji}</span>
+              {op.icono}
               <span>{op.label}</span>
             </button>
           ))}
@@ -364,7 +383,6 @@ const styles = {
     borderRadius: "20px", border: "2px solid #e8e8e8", backgroundColor: "#fafafa",
     color: "#111111", fontSize: CONFIG.tamanoTextoBoton, fontWeight: "600", cursor: "pointer", fontFamily: "inherit",
   },
-  emoji: { fontSize: "clamp(28px, 4vw, 40px)" },
   descripcionContainer: { display: "flex", flexDirection: "column", gap: "3vh", width: "100%" },
   descripcionInput: {
     width: "100%", padding: "2vh 2vw", borderRadius: "16px",
@@ -412,5 +430,21 @@ const styles = {
   },
   exitoTexto: { fontSize: "28px", fontWeight: "700", color: "#111111", margin: "0 0 12px", fontFamily: "'DM Sans', Arial, sans-serif" },
   exitoMonto: { fontSize: "22px", fontWeight: "400", color: "#1a7a4a", margin: 0, fontFamily: "'DM Sans', Arial, sans-serif" },
+  recordatorioCard: {
+    marginTop: "32px", backgroundColor: "#fff8e1", border: "1.5px solid #f9a825",
+    borderRadius: "16px", padding: "20px 28px", maxWidth: "420px",
+    display: "flex", alignItems: "flex-start", gap: "14px",
+  },
+  recordatorioIcono: { fontSize: "28px", flexShrink: 0 },
+  recordatorioTexto: {
+    fontSize: "clamp(14px, 1.5vw, 16px)", color: "#5d4037", margin: 0,
+    lineHeight: "1.5", fontFamily: "'DM Sans', Arial, sans-serif",
+  },
   errorTexto: { color: "#c0392b", fontSize: "15px", textAlign: "center", margin: 0 },
+  mpLogo: {
+    height: "clamp(34px, 4vw, 62px)",
+    width: "auto",
+    objectFit: "contain",
+  },
+  emoji: { fontSize: "clamp(34px, 4vw, 42px)" },
 };

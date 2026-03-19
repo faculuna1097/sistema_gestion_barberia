@@ -327,6 +327,16 @@ export default function SeccionVentas() {
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr style={styles.filaTotalGeneral}>
+                  <td colSpan={4} style={{ ...styles.tdTotal, textAlign: 'left' }}>Total del mes</td>
+                  <td style={{ ...styles.tdTotal, color: '#1a7a4a' }}>
+                    {formatMonto(totalGeneral)}
+                  </td>
+                  <td style={styles.tdTotal} />
+                  <td style={styles.tdTotal} />
+                </tr>
+              </tfoot>
             </table>
           </div>
 

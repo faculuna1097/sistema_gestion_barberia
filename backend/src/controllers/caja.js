@@ -21,6 +21,7 @@ export const getMovimientosDia = async (req, res) => {
          COALESCE(cs_agg.servicios, '') AS detalle,
          c.monto_total AS monto,
          c.forma_pago,
+         b.comision_valor,
          'corte' AS tipo
        FROM corte c
        JOIN barbero b ON c.barbero_id = b.id
@@ -48,6 +49,7 @@ export const getMovimientosDia = async (req, res) => {
          p.nombre || ' x' || v.cantidad AS detalle,
          (v.precio_unitario * v.cantidad) AS monto,
          v.forma_pago,
+         NULL AS comision_valor,
          'venta' AS tipo
        FROM venta v
        JOIN producto p ON v.producto_id = p.id
@@ -69,6 +71,7 @@ export const getMovimientosDia = async (req, res) => {
          cg.nombre || ': ' || g.descripcion AS detalle,
          g.monto AS monto,
          g.forma_pago,
+         NULL AS comision_valor,
          'gasto' AS tipo
        FROM gasto g
        JOIN categoria_gasto cg ON g.categoria_id = cg.id
