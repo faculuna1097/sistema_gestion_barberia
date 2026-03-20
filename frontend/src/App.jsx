@@ -8,14 +8,19 @@ import PantallaLoginAdmin from "./screens/PantallaLoginAdmin";
 import PanelAdmin from "./screens/admin/PanelAdmin";
 import { getBarberos, getServicios, getProductos, getCategorias } from "./services/api";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState("main");
   // TODO: el token queda guardado en memoria por ahora. Cuando implementemos el reemplazo
-  // del TENANT_ID hardcodeado, vamos a leer el tenant_id desde este token con jwt-decode. Por ahora el token se guarda pero no se usa todavía.
+  // del TENANT_ID hardcodeado, vamos a leer el tenant_id desde este token con jwt-decode.
   const [token, setToken] = useState(null);
 
-  // Datos precargados — se cargan al arrancar y cada vez que se cierra el panel admin
+  // URL del logo del negocio — se carga UNA SOLA VEZ al arrancar la app.
+  // No se recarga con precargarDatos porque el logo no cambia durante el uso normal.
+  const [logoUrl, setLogoUrl] = useState(null);
+
+  // Datos operativos — se recargan al arrancar y cada vez que algo los modifica
   const [datos, setDatos] = useState({
     barberos: [],
     servicios: [],
@@ -26,12 +31,30 @@ export default function App() {
   });
 
   /**
+   * cargarLogo — obtiene la URL del logo desde la DB una única vez al arrancar.
+   * Se ejecuta solo en el montaje inicial del componente.
+   */
+  useEffect(() => {
+    const cargarLogo = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/gestion/negocio`);
+        const data = await res.json();
+        setLogoUrl(data.logo || null);
+        console.log('[App] Logo del negocio cargado:', data.logo ? 'sí' : 'no');
+      } catch (err) {
+        console.error('[App] Error al cargar logo del negocio:', err);
+        // Si falla, la app sigue funcionando sin logo
+      }
+    };
+    cargarLogo();
+  }, []); // [] — se ejecuta solo al montar, nunca más
+
+  /**
    * precargarDatos — carga barberos, servicios, productos y categorías en paralelo.
    * Se llama al arrancar la app, al cerrar el panel admin, y al volver de FlujoVenta
-   * (que modifica el stock de productos).
+   * (que modifica el stock de productos). El logo NO se recarga aquí.
    */
   const precargarDatos = useCallback(async () => {
-    //console.log('[App] Iniciando precarga de datos...');
     setDatos(prev => ({ ...prev, cargando: true, error: null }));
     try {
       const [barberos, servicios, productos, categorias] = await Promise.all([
@@ -64,18 +87,14 @@ export default function App() {
   };
 
   /**
-   * cerrarSesionAdmin — recarga los datos antes de volver a la pantalla principal,
-   * para que los flujos reflejen cualquier cambio hecho desde Gestión.
+   * cerrarSesionAdmin — recarga los datos operativos antes de volver a la pantalla
+   * principal, para reflejar cualquier cambio hecho desde Gestión.
    */
   const cerrarSesionAdmin = () => {
     console.log('[App] Cerrando sesión admin — recargando datos...');
     precargarDatos();
     setCurrentScreen("main");
   };
-
-  if (datos.cargando) {
-    //console.log('[App] Esperando precarga de datos...');
-  }
 
   if (datos.error) {
     console.error('[App] Estado de error activo:', datos.error);
@@ -107,17 +126,17 @@ export default function App() {
   }
 
   if (currentScreen === "loginAdmin") {
-      console.log('[App] Renderizando PantallaLoginAdmin');
-      return (
-        <PantallaLoginAdmin
-          onAcceso={(token) => {
-            console.log('[App] Acceso admin concedido — token recibido, navegando a panel admin');
-            setToken(token);
-            setCurrentScreen("admin");
-          }}
-          onCancelar={volverAlInicio}
-        />
-      );
+    console.log('[App] Renderizando PantallaLoginAdmin');
+    return (
+      <PantallaLoginAdmin
+        onAcceso={(token) => {
+          console.log('[App] Acceso admin concedido — token recibido, navegando a panel admin');
+          setToken(token);
+          setCurrentScreen("admin");
+        }}
+        onCancelar={volverAlInicio}
+      />
+    );
   }
 
   if (currentScreen === "admin") {
@@ -147,6 +166,7 @@ export default function App() {
         console.log('[App] Abriendo Spotify');
         window.open("https://open.spotify.com", "_blank");
       }}
+      logoUrl={logoUrl}
     />
   );
 }

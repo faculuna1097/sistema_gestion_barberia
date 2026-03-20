@@ -81,10 +81,11 @@ function CardDia({ data }) {
       </div>
 
       {/* Badge comparativa */}
-      <div style={styles.badgeRow}>
+      {/* <div style={styles.badgeRow}>
         <BadgeVariacion pct={diferencia_pct_dia} sinDatosLabel="Sin datos de ayer" />
         <span style={styles.badgeSubLabel}>vs ayer a esta hora</span>
-      </div>
+      </div> */}
+      
     </Card>
   );
 }

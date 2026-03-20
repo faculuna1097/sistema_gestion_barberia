@@ -4,7 +4,7 @@
 
 import { query } from '../config/db.js';
 
-// TENANT TEMPORAL — en producción esto vendrá del token JWT del usuario autenticado
+// TODO: En producción, el tenant_id debería obtenerse del token JWT del usuario autenticado.
 const TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001';
 
 /**

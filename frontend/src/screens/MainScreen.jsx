@@ -3,8 +3,6 @@
 // Diseñada para iPad en landscape (1024x768+). Sin login, acceso directo.
 
 import { useState } from "react";
-// TODO: la imagen debe venir de la base de datos o ser configurable, no hardcodeada. Por ahora se importa directamente.
-import logoKingsai from "../assets/logo_kingsai_graffiti.jpeg";
 
 // ─── Íconos SVG inline ────────────────────────────────────────────────────────
 // Solo se mantienen los íconos de los botones de esquina (Spotify y candado).
@@ -47,6 +45,7 @@ export default function MainScreen({
   onNuevoGasto,   // Función a llamar al presionar "Ingresar Gasto"
   onAdminAccess,  // Función a llamar al presionar el candado
   onSpotify,      // Función a llamar al presionar el ícono de Spotify
+  logoUrl,        // URL del logo del negocio cargada desde la DB (puede ser null)
 }) {
   // Estado para el feedback visual al presionar un botón (efecto de "presionado")
   const [pressed, setPressed] = useState(null);
@@ -87,17 +86,20 @@ export default function MainScreen({
       {/* ── Contenido central ─────────────────────────────────────────────── */}
       <div style={styles.centerContent}>
 
-        {/* Logo de la barbería */}
-        <div style={styles.logoArea}>
-          <img
-            src={logoKingsai}
-            alt="Kingsai Studio"
-            style={styles.logoImage}
-          />
-        </div>
-
-        {/* Separador fino */}
-        <div style={styles.divider} />
+        {/* Logo de la barbería — solo se renderiza si logoUrl existe */}
+        {logoUrl && (
+          <>
+            <div style={styles.logoArea}>
+              <img
+                src={logoUrl}
+                alt="Logo del negocio"
+                style={styles.logoImage}
+              />
+            </div>
+            {/* Separador fino entre logo y botones */}
+            <div style={styles.divider} />
+          </>
+        )}
 
         {/* ── Fila de botones principales (Corte + Venta) ───────────────── */}
         <div style={styles.primaryButtonRow}>
@@ -228,7 +230,7 @@ const styles = {
     marginBottom: "4px",
   },
 
-  // Imagen del logo
+  // Imagen del logo — mismas dimensiones que antes
   logoImage: {
     maxHeight: "310px",
     maxWidth: "720px",
