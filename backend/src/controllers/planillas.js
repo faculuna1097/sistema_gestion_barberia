@@ -1,11 +1,7 @@
 // /backend/src/controllers/planillas.js
 // Controlador para los endpoints de planillas semanales.
-// Maneja detalle por barbero y resumen consolidado de la semana.
 
-//import pool from "../config/db.js";
 import { query } from '../config/db.js';
-
-const TENANT_ID = "a1b2c3d4-0000-0000-0000-000000000001";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -13,58 +9,49 @@ const TENANT_ID = "a1b2c3d4-0000-0000-0000-000000000001";
  * Convierte un string de semana ISO (ej: "2025-W12") a fechas lunes y domingo.
  * Usa el estándar ISO 8601: la semana empieza el lunes y la semana 1
  * es la que contiene el 4 de enero.
- *
- * @param {string} semanaStr - Formato "YYYY-WNN" ej: "2025-W12"
+ * @param {string} semanaStr - Formato "YYYY-WNN"
  * @returns {{ lunes: string, domingo: string }} - Fechas en formato "YYYY-MM-DD"
  */
 function semanaAFechas(semanaStr) {
-  const [yearStr, wStr] = semanaStr.split("-W");
+  const [yearStr, wStr] = semanaStr.split('-W');
   const year = parseInt(yearStr);
   const week = parseInt(wStr);
 
-  // El 4 de enero siempre pertenece a la semana 1 (ISO 8601)
   const jan4 = new Date(year, 0, 4);
-  const jan4Day = jan4.getDay() === 0 ? 7 : jan4.getDay(); // 1=Lun, 7=Dom
+  const jan4Day = jan4.getDay() === 0 ? 7 : jan4.getDay();
 
-  // Calculamos el lunes de la semana 1
   const lunesSemana1 = new Date(jan4);
   lunesSemana1.setDate(jan4.getDate() - (jan4Day - 1));
 
-  // Lunes de la semana pedida
   const lunes = new Date(lunesSemana1);
   lunes.setDate(lunesSemana1.getDate() + (week - 1) * 7);
 
   const domingo = new Date(lunes);
   domingo.setDate(lunes.getDate() + 6);
 
-  // Formato YYYY-MM-DD para usar en queries SQL
-  const fmt = (d) => d.toISOString().split("T")[0];
-
+  const fmt = (d) => d.toISOString().split('T')[0];
   return { lunes: fmt(lunes), domingo: fmt(domingo) };
 }
 
 // ─── GET /api/planillas/detalle-semanal ───────────────────────────────────────
 /**
  * Devuelve el detalle de cortes de la semana, agrupado por barbero.
- * Cada corte incluye los servicios realizados (concatenados si hay más de uno),
- * monto, propina y forma de pago.
- *
- * Query param: semana (string "YYYY-WNN", default: semana actual)
- * Retorna: [{ barbero_id, barbero_nombre, cortes: [...] }]
+ * req.tenant_id inyectado por verificarToken
+ * @param {string} req.query.semana - Formato "YYYY-WNN"
+ * @returns {Array} [{ barbero_id, barbero_nombre, cortes: [...] }]
  */
 export const getDetalleSemanal = async (req, res) => {
-  console.log("[planillas] GET detalle-semanal — query:", req.query);
+  console.log('[planillas] GET detalle-semanal — query:', req.query, '| tenant:', req.tenant_id);
 
   const semana = req.query.semana;
   if (!semana || !/^\d{4}-W\d{1,2}$/.test(semana)) {
-    return res.status(400).json({ error: "Parámetro semana inválido. Formato esperado: YYYY-WNN" });
+    return res.status(400).json({ error: 'Parámetro semana inválido. Formato esperado: YYYY-WNN' });
   }
 
   const { lunes, domingo } = semanaAFechas(semana);
-  console.log("[planillas] Rango de fechas:", lunes, "→", domingo);
+  console.log('[planillas] Rango de fechas:', lunes, '→', domingo);
 
   try {
-    // Un row por corte (si tiene múltiples servicios, se concatenan con STRING_AGG)
     const result = await query(
       `SELECT
          b.id                                                         AS barbero_id,
@@ -88,10 +75,9 @@ export const getDetalleSemanal = async (req, res) => {
              BETWEEN $2 AND $3
        GROUP BY c.id, b.id, b.nombre, c.timestamp, c.propina, c.forma_pago
        ORDER BY b.nombre, c.timestamp`,
-      [TENANT_ID, lunes, domingo]
+      [req.tenant_id, lunes, domingo]
     );
 
-    // Agrupamos los rows por barbero en JavaScript
     const mapa = new Map();
     for (const row of result.rows) {
       if (!mapa.has(row.barbero_id)) {
@@ -102,47 +88,42 @@ export const getDetalleSemanal = async (req, res) => {
         });
       }
       mapa.get(row.barbero_id).cortes.push({
-        corte_id:       row.corte_id,
-        fecha:          row.fecha,
-        hora:           row.hora,
+        corte_id:        row.corte_id,
+        fecha:           row.fecha,
+        hora:            row.hora,
         servicio_nombre: row.servicio_nombre,
         monto_servicios: Number(row.monto_servicios),
-        propina:        Number(row.propina),
-        forma_pago:     row.forma_pago,
+        propina:         Number(row.propina),
+        forma_pago:      row.forma_pago,
       });
     }
 
     const barberos = Array.from(mapa.values());
-    console.log("[planillas] Detalle semanal — barberos con cortes:", barberos.length);
+    console.log('[planillas] Detalle semanal — barberos con cortes:', barberos.length);
     res.json(barberos);
   } catch (err) {
-    console.error("[planillas] Error en detalle-semanal:", err);
-    res.status(500).json({ error: "Error al obtener el detalle semanal" });
+    console.error('[planillas] Error en detalle-semanal:', err);
+    res.status(500).json({ error: 'Error al obtener el detalle semanal' });
   }
 };
 
 // ─── GET /api/planillas/resumen-semanal ───────────────────────────────────────
 /**
- * Devuelve el resumen consolidado de la semana: una fila por barbero
- * con totales y comisión calculada.
- *
- * La comisión se calcula según el campo comision_tipo del barbero:
- *   - 'porcentaje': total_generado * comision_valor / 100
- *   - 'fijo':       comision_valor * cantidad_cortes
- *
- * Query param: semana (string "YYYY-WNN", default: semana actual)
- * Retorna: { barberos: [...], totales: { ... } }
+ * Devuelve el resumen consolidado de la semana: una fila por barbero con totales y comisión.
+ * req.tenant_id inyectado por verificarToken
+ * @param {string} req.query.semana - Formato "YYYY-WNN"
+ * @returns {{ barberos: Array, totales: Object }}
  */
 export const getResumenSemanal = async (req, res) => {
-  console.log("[planillas] GET resumen-semanal — query:", req.query);
+  console.log('[planillas] GET resumen-semanal — query:', req.query, '| tenant:', req.tenant_id);
 
   const semana = req.query.semana;
   if (!semana || !/^\d{4}-W\d{1,2}$/.test(semana)) {
-    return res.status(400).json({ error: "Parámetro semana inválido. Formato esperado: YYYY-WNN" });
+    return res.status(400).json({ error: 'Parámetro semana inválido. Formato esperado: YYYY-WNN' });
   }
 
   const { lunes, domingo } = semanaAFechas(semana);
-  console.log("[planillas] Rango de fechas:", lunes, "→", domingo);
+  console.log('[planillas] Rango de fechas:', lunes, '→', domingo);
 
   try {
     const result = await query(
@@ -162,21 +143,20 @@ export const getResumenSemanal = async (req, res) => {
              BETWEEN $2 AND $3
        GROUP BY b.id, b.nombre, b.comision_tipo, b.comision_valor
        ORDER BY b.nombre`,
-      [TENANT_ID, lunes, domingo]
+      [req.tenant_id, lunes, domingo]
     );
 
-    // Calculamos total_generado y comisión en JavaScript para cada barbero
     const barberos = result.rows.map((b) => {
-      const cantidadCortes  = Number(b.cantidad_cortes);
-      const montoServicios  = Number(b.monto_servicios);
-      const propinas        = Number(b.propinas);
-      const totalGenerado   = montoServicios + propinas;
-      const comisionValor   = Number(b.comision_valor);
+      const cantidadCortes = Number(b.cantidad_cortes);
+      const montoServicios = Number(b.monto_servicios);
+      const propinas       = Number(b.propinas);
+      const totalGenerado  = montoServicios + propinas;
+      const comisionValor  = Number(b.comision_valor);
 
       const comision =
-        b.comision_tipo === "porcentaje"
+        b.comision_tipo === 'porcentaje'
           ? montoServicios * comisionValor / 100 + propinas
-          : comisionValor * cantidadCortes; // fijo por corte
+          : comisionValor * cantidadCortes;
 
       return {
         barbero_id:      b.barbero_id,
@@ -191,7 +171,6 @@ export const getResumenSemanal = async (req, res) => {
       };
     });
 
-    // Fila de totales generales
     const totales = {
       cantidad_cortes: barberos.reduce((s, b) => s + b.cantidad_cortes, 0),
       monto_servicios: barberos.reduce((s, b) => s + b.monto_servicios, 0),
@@ -200,10 +179,10 @@ export const getResumenSemanal = async (req, res) => {
       comision:        barberos.reduce((s, b) => s + b.comision, 0),
     };
 
-    console.log("[planillas] Resumen semanal — barberos:", barberos.length);
+    console.log('[planillas] Resumen semanal — barberos:', barberos.length);
     res.json({ barberos, totales });
   } catch (err) {
-    console.error("[planillas] Error en resumen-semanal:", err);
-    res.status(500).json({ error: "Error al obtener el resumen semanal" });
+    console.error('[planillas] Error en resumen-semanal:', err);
+    res.status(500).json({ error: 'Error al obtener el resumen semanal' });
   }
 };

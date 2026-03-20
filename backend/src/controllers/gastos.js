@@ -1,22 +1,17 @@
 // /backend/src/controllers/gastos.js
 // Controlador del recurso "gasto".
+//
+// Todas las funciones usan req.tenant_id, inyectado por tenantMiddleware
+// en rutas públicas (desde .env) y por verificarToken en rutas protegidas (desde JWT).
 
 import { query } from '../config/db.js';
-
-const TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001';
 
 /**
  * createGasto
  * Registra un nuevo gasto en la tabla `gasto`.
+ * Ruta pública — req.tenant_id viene del tenantMiddleware (desde .env).
  *
- * @param {Request} req - Body esperado:
- *   {
- *     categoria_id: string (UUID),
- *     descripcion: string,
- *     monto: number,
- *     forma_pago: 'efectivo' | 'mercado_pago',
- *     usuario_registro: string | null
- *   }
+ * @param {Request} req - Body: { categoria_id, descripcion, monto, forma_pago, usuario_registro? }
  * @param {Response} res - Devuelve el gasto creado
  */
 export const createGasto = async (req, res) => {
@@ -34,13 +29,13 @@ export const createGasto = async (req, res) => {
   }
 
   try {
-    console.log('[createGasto] Insertando gasto — categoria_id:', categoria_id, '| monto:', monto, '| forma_pago:', forma_pago);
+    console.log('[createGasto] Insertando gasto — categoria_id:', categoria_id, '| monto:', monto, '| tenant:', req.tenant_id);
 
     const resultado = await query(
       `INSERT INTO gasto (tenant_id, categoria_id, descripcion, monto, forma_pago, usuario_registro)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [TENANT_ID, categoria_id, descripcion, monto, forma_pago, usuario_registro ?? null]
+      [req.tenant_id, categoria_id, descripcion, monto, forma_pago, usuario_registro ?? null]
     );
 
     const gastoCreado = resultado.rows[0];
@@ -57,13 +52,13 @@ export const createGasto = async (req, res) => {
 /**
  * getGastosMensual
  * Devuelve todos los gastos de un mes para el tenant actual.
- * Incluye totales por categoría y total general calculados en el servidor.
+ * Ruta protegida — req.tenant_id inyectado por verificarToken.
  *
- * @param {Request} req - Query param: mes (formato 'YYYY-MM'). Default: mes actual.
+ * @param {Request} req - Query param: mes (YYYY-MM). Default: mes actual.
  * @param {Response} res - Devuelve { gastos, totalesPorCategoria, totalGeneral }
  */
 export const getGastosMensual = async (req, res) => {
-  console.log('[getGastosMensual] Solicitud recibida — query:', req.query);
+  console.log('[getGastosMensual] Solicitud recibida — query:', req.query, '| tenant:', req.tenant_id);
 
   const mes = req.query.mes || new Date().toLocaleDateString('sv-SE', {
     timeZone: 'America/Argentina/Buenos_Aires'
@@ -88,7 +83,7 @@ export const getGastosMensual = async (req, res) => {
        WHERE g.tenant_id = $1
          AND TO_CHAR(g.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires', 'YYYY-MM') = $2
        ORDER BY g.timestamp DESC`,
-      [TENANT_ID, mes]
+      [req.tenant_id, mes]
     );
 
     const resultadoTotales = await query(
@@ -102,7 +97,7 @@ export const getGastosMensual = async (req, res) => {
          AND TO_CHAR(g.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires', 'YYYY-MM') = $2
        GROUP BY cg.nombre
        ORDER BY total DESC`,
-      [TENANT_ID, mes]
+      [req.tenant_id, mes]
     );
 
     const totalGeneral = resultadoTotales.rows.reduce(
@@ -128,13 +123,14 @@ export const getGastosMensual = async (req, res) => {
 /**
  * deleteGasto
  * Elimina un gasto por su ID, verificando que pertenezca al tenant.
+ * Ruta protegida — req.tenant_id inyectado por verificarToken.
  *
  * @param {Request} req - Param: id (UUID del gasto a eliminar)
  * @param {Response} res - 200 con { eliminado: true, id } o error
  */
 export const deleteGasto = async (req, res) => {
   const { id } = req.params;
-  console.log('[deleteGasto] Solicitud recibida — id:', id);
+  console.log('[deleteGasto] Solicitud recibida — id:', id, '| tenant:', req.tenant_id);
 
   if (!id) {
     return res.status(400).json({ error: 'Falta el parámetro id' });
@@ -145,7 +141,7 @@ export const deleteGasto = async (req, res) => {
       `DELETE FROM gasto
        WHERE id = $1 AND tenant_id = $2
        RETURNING id`,
-      [id, TENANT_ID]
+      [id, req.tenant_id]
     );
 
     if (resultado.rows.length === 0) {

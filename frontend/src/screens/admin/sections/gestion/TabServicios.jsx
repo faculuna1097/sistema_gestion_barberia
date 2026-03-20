@@ -4,6 +4,8 @@
 // Los datos se cargan al montar el componente.
 
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../../../../services/api';
+
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -47,7 +49,7 @@ function ModalServicio({ servicio, onGuardar, onCerrar }) {
 
       console.log(`[TabServicios] ${method} servicio —`, body);
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -168,7 +170,7 @@ export default function TabServicios() {
   // ── Carga inicial ──────────────────────────────────────────────────────────
   useEffect(() => {
     console.log('[TabServicios] Cargando servicios...');
-    fetch(`${API_URL}/api/gestion/servicios`)
+    apiFetch(`${API_URL}/api/gestion/servicios`)
       .then(r => r.json())
       .then(data => {
         console.log('[TabServicios] Servicios cargados:', data.length);

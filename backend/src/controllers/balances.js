@@ -1,45 +1,27 @@
 // /backend/src/controllers/balances.js
 // Controller para la sección Balances del panel de administrador.
-// Expone dos endpoints:
-//   - getBalanceMensual: desglose completo de un mes (servicios por barbero,
-//     productos, gastos, propinas). Incluye cálculo de comisiones.
-//   - getBalanceHistorico: resumen de los últimos N meses para la tabla anual.
 
 import { query } from '../config/db.js';
-
-const TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001';
 
 // ─── GET /api/balances/mensual?mes=YYYY-MM ────────────────────────────────────
 /**
  * Devuelve el balance completo de un mes dado.
+ * req.tenant_id inyectado por verificarToken
  * @param {string} req.query.mes - Mes en formato YYYY-MM (default: mes actual)
- * @returns {object} {
- *   serviciosPorBarbero: [{ barbero_id, nombre, cortes, monto_servicios,
- *                           comision_tipo, comision_valor, monto_comision, neto_negocio }],
- *   productos: { total, detalle: [{ nombre, cantidad, total }] },
- *   gastos: { total, porCategoria: [{ categoria, total }] },
- *   propinas: { total },
- *   resumen: { ingresos_brutos, total_comisiones, ingresos_netos, egresos, balance_neto }
- * }
  */
 export const getBalanceMensual = async (req, res) => {
-  const mes = req.query.mes || new Date().toISOString().slice(0, 7); // YYYY-MM
-  console.log('[balances] getBalanceMensual — request recibido:', { mes });
+  const mes = req.query.mes || new Date().toISOString().slice(0, 7);
+  console.log('[balances] getBalanceMensual — request recibido:', { mes }, '| tenant:', req.tenant_id);
 
-  // Validar formato del parámetro
   if (!/^\d{4}-\d{2}$/.test(mes)) {
     return res.status(400).json({ error: 'Formato de mes inválido. Usar YYYY-MM.' });
   }
 
   const fechaInicio = `${mes}-01`;
-  // Primer día del mes siguiente (para filtro < en lugar de BETWEEN)
   const [anio, mesNum] = mes.split('-').map(Number);
   const fechaFin = new Date(anio, mesNum, 1).toISOString().slice(0, 10);
 
   try {
-    // ── Query 1: Servicios agrupados por barbero ──────────────────────────────
-    // Obtiene cortes + precio de servicio + datos de comisión del barbero.
-    // Agrupa por barbero para calcular total de servicios por cada uno.
     const queryServicios = `
       SELECT
         b.id                          AS barbero_id,
@@ -58,8 +40,6 @@ export const getBalanceMensual = async (req, res) => {
       ORDER BY b.nombre
     `;
 
-    // ── Query 2: Propinas totales del mes ─────────────────────────────────────
-    // Suma de propinas — se muestra como dato informativo, no entra al balance.
     const queryPropinas = `
       SELECT COALESCE(SUM(propina), 0) AS total
       FROM corte
@@ -68,7 +48,6 @@ export const getBalanceMensual = async (req, res) => {
         AND timestamp < $3
     `;
 
-    // ── Query 3: Ventas de productos agrupadas ────────────────────────────────
     const queryProductos = `
       SELECT
         p.nombre                                    AS nombre,
@@ -83,7 +62,6 @@ export const getBalanceMensual = async (req, res) => {
       ORDER BY total DESC
     `;
 
-    // ── Query 4: Gastos agrupados por categoría ───────────────────────────────
     const queryGastos = `
       SELECT
         cg.nombre                   AS categoria,
@@ -97,9 +75,8 @@ export const getBalanceMensual = async (req, res) => {
       ORDER BY total DESC
     `;
 
-    const params = [TENANT_ID, fechaInicio, fechaFin];
+    const params = [req.tenant_id, fechaInicio, fechaFin];
 
-    // Ejecutar las 4 queries en paralelo
     const [resServicios, resPropinas, resProductos, resGastos] = await Promise.all([
       query(queryServicios, params),
       query(queryPropinas, params),
@@ -107,44 +84,30 @@ export const getBalanceMensual = async (req, res) => {
       query(queryGastos, params),
     ]);
 
-    // ── Calcular comisiones por barbero ───────────────────────────────────────
     const serviciosPorBarbero = resServicios.rows.map((b) => {
       const montoServicios = Number(b.monto_servicios);
-      const comisionValor = Number(b.comision_valor);
-      // Por ahora solo soportamos tipo 'porcentaje'
-      const montoComision = montoServicios * (comisionValor / 100);
-      const netoNegocio = montoServicios - montoComision;
+      const comisionValor  = Number(b.comision_valor);
+      const montoComision  = montoServicios * (comisionValor / 100);
+      const netoNegocio    = montoServicios - montoComision;
       return {
-        barbero_id: b.barbero_id,
-        nombre: b.nombre,
-        cortes: b.cortes,
+        barbero_id:    b.barbero_id,
+        nombre:        b.nombre,
+        cortes:        b.cortes,
         monto_servicios: montoServicios,
-        comision_tipo: b.comision_tipo,
+        comision_tipo:  b.comision_tipo,
         comision_valor: comisionValor,
         monto_comision: Math.round(montoComision * 100) / 100,
-        neto_negocio: Math.round(netoNegocio * 100) / 100,
+        neto_negocio:   Math.round(netoNegocio * 100) / 100,
       };
     });
 
-    // ── Totales de productos ──────────────────────────────────────────────────
-    const totalProductos = resProductos.rows.reduce(
-      (acc, p) => acc + Number(p.total), 0
-    );
+    const totalProductos = resProductos.rows.reduce((acc, p) => acc + Number(p.total), 0);
+    const totalGastos    = resGastos.rows.reduce((acc, g) => acc + Number(g.total), 0);
 
-    // ── Totales de gastos ─────────────────────────────────────────────────────
-    const totalGastos = resGastos.rows.reduce(
-      (acc, g) => acc + Number(g.total), 0
-    );
-
-    // ── Resumen general ───────────────────────────────────────────────────────
-    const ingresosBrutos =
-      serviciosPorBarbero.reduce((acc, b) => acc + b.monto_servicios, 0) +
-      totalProductos;
-    const totalComisiones = serviciosPorBarbero.reduce(
-      (acc, b) => acc + b.monto_comision, 0
-    );
-    const ingresosNetos = ingresosBrutos - totalComisiones;
-    const balanceNeto = ingresosNetos - totalGastos;
+    const ingresosBrutos  = serviciosPorBarbero.reduce((acc, b) => acc + b.monto_servicios, 0) + totalProductos;
+    const totalComisiones = serviciosPorBarbero.reduce((acc, b) => acc + b.monto_comision, 0);
+    const ingresosNetos   = ingresosBrutos - totalComisiones;
+    const balanceNeto     = ingresosNetos - totalGastos;
 
     const respuesta = {
       mes,
@@ -152,27 +115,25 @@ export const getBalanceMensual = async (req, res) => {
       productos: {
         total: Math.round(totalProductos * 100) / 100,
         detalle: resProductos.rows.map((p) => ({
-          nombre: p.nombre,
+          nombre:   p.nombre,
           cantidad: p.cantidad,
-          total: Number(p.total),
+          total:    Number(p.total),
         })),
       },
       gastos: {
         total: Math.round(totalGastos * 100) / 100,
         porCategoria: resGastos.rows.map((g) => ({
           categoria: g.categoria,
-          total: Number(g.total),
+          total:     Number(g.total),
         })),
       },
-      propinas: {
-        total: Number(resPropinas.rows[0].total),
-      },
+      propinas: { total: Number(resPropinas.rows[0].total) },
       resumen: {
-        ingresos_brutos: Math.round(ingresosBrutos * 100) / 100,
-        total_comisiones: Math.round(totalComisiones * 100) / 100,
-        ingresos_netos: Math.round(ingresosNetos * 100) / 100,
-        egresos: Math.round(totalGastos * 100) / 100,
-        balance_neto: Math.round(balanceNeto * 100) / 100,
+        ingresos_brutos:   Math.round(ingresosBrutos * 100) / 100,
+        total_comisiones:  Math.round(totalComisiones * 100) / 100,
+        ingresos_netos:    Math.round(ingresosNetos * 100) / 100,
+        egresos:           Math.round(totalGastos * 100) / 100,
+        balance_neto:      Math.round(balanceNeto * 100) / 100,
       },
     };
 
@@ -193,21 +154,14 @@ export const getBalanceMensual = async (req, res) => {
 // ─── GET /api/balances/historico?cantidad=12 ──────────────────────────────────
 /**
  * Devuelve el resumen de los últimos N meses para la tabla de histórico anual.
- * @param {number} req.query.cantidad - Cantidad de meses a traer (default: 12)
- * @returns {Array} [{
- *   mes: 'YYYY-MM', label: 'Ene 2026',
- *   ingresos_brutos, total_comisiones, ingresos_netos,
- *   egresos, balance_neto
- * }]
+ * req.tenant_id inyectado por verificarToken
+ * @param {number} req.query.cantidad - Cantidad de meses (default: 12, máx: 24)
  */
 export const getBalanceHistorico = async (req, res) => {
   const cantidad = Math.min(parseInt(req.query.cantidad) || 12, 24);
-  console.log('[balances] getBalanceHistorico — request recibido:', { cantidad });
+  console.log('[balances] getBalanceHistorico — request recibido:', { cantidad }, '| tenant:', req.tenant_id);
 
   try {
-    // ── Servicios + comisiones agrupados por mes ──────────────────────────────
-    // Calcula monto de servicios y comisión de cada corte, agrupa por mes.
-    // Usa subconsulta para poder aplicar la comisión a nivel de fila antes de agrupar.
     const queryServiciosMensuales = `
       SELECT
         TO_CHAR(DATE_TRUNC('month', c.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'), 'YYYY-MM') AS mes,
@@ -223,7 +177,6 @@ export const getBalanceHistorico = async (req, res) => {
       ORDER BY DATE_TRUNC('month', c.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires') DESC
     `;
 
-    // ── Productos agrupados por mes ───────────────────────────────────────────
     const queryProductosMensuales = `
       SELECT
         TO_CHAR(DATE_TRUNC('month', timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'), 'YYYY-MM') AS mes,
@@ -235,7 +188,6 @@ export const getBalanceHistorico = async (req, res) => {
       GROUP BY DATE_TRUNC('month', timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires')
     `;
 
-    // ── Gastos agrupados por mes ──────────────────────────────────────────────
     const queryGastosMensuales = `
       SELECT
         TO_CHAR(DATE_TRUNC('month', timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'), 'YYYY-MM') AS mes,
@@ -248,58 +200,51 @@ export const getBalanceHistorico = async (req, res) => {
     `;
 
     const [resServicios, resProductos, resGastos] = await Promise.all([
-      query(queryServiciosMensuales, [TENANT_ID, cantidad]),
-      query(queryProductosMensuales, [TENANT_ID, cantidad]),
-      query(queryGastosMensuales, [TENANT_ID, cantidad]),
+      query(queryServiciosMensuales, [req.tenant_id, cantidad]),
+      query(queryProductosMensuales, [req.tenant_id, cantidad]),
+      query(queryGastosMensuales,    [req.tenant_id, cantidad]),
     ]);
 
-    // ── Combinar los tres resultados por mes ──────────────────────────────────
-    // Recolectar todos los meses que aparecen en alguna de las tres queries
     const mesesSet = new Set([
       ...resServicios.rows.map((r) => r.mes),
       ...resProductos.rows.map((r) => r.mes),
       ...resGastos.rows.map((r) => r.mes),
     ]);
 
-    // Índices para lookup rápido
     const idxServicios = Object.fromEntries(resServicios.rows.map((r) => [r.mes, r]));
     const idxProductos = Object.fromEntries(resProductos.rows.map((r) => [r.mes, r]));
-    const idxGastos = Object.fromEntries(resGastos.rows.map((r) => [r.mes, r]));
+    const idxGastos    = Object.fromEntries(resGastos.rows.map((r) => [r.mes, r]));
 
-    // Nombres de meses en español para el label
     const nombresMeses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
                           'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
     const historial = Array.from(mesesSet)
-      .sort((a, b) => b.localeCompare(a)) // más reciente primero
-      .map((mes, idx, arr) => {
+      .sort((a, b) => b.localeCompare(a))
+      .map((mes) => {
         const s = idxServicios[mes] || {};
         const p = idxProductos[mes] || {};
-        const g = idxGastos[mes] || {};
+        const g = idxGastos[mes]    || {};
 
-        const ingresosBrutos =
-          Number(s.ingresos_brutos_servicios || 0) + Number(p.total_productos || 0);
+        const ingresosBrutos  = Number(s.ingresos_brutos_servicios || 0) + Number(p.total_productos || 0);
         const totalComisiones = Number(s.total_comisiones || 0);
-        const ingresosNetos = ingresosBrutos - totalComisiones;
-        const egresos = Number(g.total_gastos || 0);
-        const balanceNeto = ingresosNetos - egresos;
+        const ingresosNetos   = ingresosBrutos - totalComisiones;
+        const egresos         = Number(g.total_gastos || 0);
+        const balanceNeto     = ingresosNetos - egresos;
 
-        // Label legible: "Mar 2026"
         const [anio, mesNum] = mes.split('-').map(Number);
         const label = `${nombresMeses[mesNum - 1]} ${anio}`;
 
         return {
           mes,
           label,
-          ingresos_brutos: Math.round(ingresosBrutos * 100) / 100,
+          ingresos_brutos:  Math.round(ingresosBrutos * 100) / 100,
           total_comisiones: Math.round(totalComisiones * 100) / 100,
-          ingresos_netos: Math.round(ingresosNetos * 100) / 100,
-          egresos: Math.round(egresos * 100) / 100,
-          balance_neto: Math.round(balanceNeto * 100) / 100,
+          ingresos_netos:   Math.round(ingresosNetos * 100) / 100,
+          egresos:          Math.round(egresos * 100) / 100,
+          balance_neto:     Math.round(balanceNeto * 100) / 100,
         };
       });
 
-    // Agregar variación vs mes anterior (el siguiente en el array = el anterior en el tiempo)
     const historialConVariacion = historial.map((mes, idx) => {
       const anterior = historial[idx + 1];
       let variacion = null;

@@ -4,6 +4,8 @@
 // Los 3 endpoints se llaman en paralelo con Promise.all al montar el componente.
 
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../../../services/api';
+
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -211,9 +213,9 @@ export default function SeccionInicio() {
   useEffect(() => {
     console.log('[SeccionInicio] Cargando datos...');
     Promise.all([
-      fetch(`${API_URL}/api/inicio/resumen-dia`).then(r => r.json()),
-      fetch(`${API_URL}/api/inicio/comparativo-mes`).then(r => r.json()),
-      fetch(`${API_URL}/api/inicio/stock-bajo`).then(r => r.json()),
+      apiFetch(`${API_URL}/api/inicio/resumen-dia`).then(r => r.json()),
+      apiFetch(`${API_URL}/api/inicio/comparativo-mes`).then(r => r.json()),
+      apiFetch(`${API_URL}/api/inicio/stock-bajo`).then(r => r.json()),
     ])
       .then(([resumenData, comparativoData, stockData]) => {
         console.log('[SeccionInicio] Datos cargados —',

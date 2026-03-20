@@ -3,6 +3,8 @@
 // Los datos se cargan al montar el componente.
 
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../../../../services/api';
+
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -17,7 +19,7 @@ export default function TabNegocio() {
   // ── Carga inicial ──────────────────────────────────────────────────────────
   useEffect(() => {
     console.log('[TabNegocio] Cargando datos del negocio...');
-    fetch(`${API_URL}/api/gestion/negocio`)
+    apiFetch(`${API_URL}/api/gestion/negocio`)
       .then(r => r.json())
       .then(data => {
         console.log('[TabNegocio] Datos cargados:', data.nombre_negocio);
@@ -47,7 +49,7 @@ export default function TabNegocio() {
     console.log('[TabNegocio] Guardando nombre del negocio:', nombreNegocio.trim());
 
     try {
-      const res = await fetch(`${API_URL}/api/gestion/negocio`, {
+      const res = await apiFetch(`${API_URL}/api/gestion/negocio`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nombre_negocio: nombreNegocio.trim() }),

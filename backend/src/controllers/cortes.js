@@ -2,10 +2,9 @@
 // Controlador del recurso "corte".
 // Usa inserts secuenciales con cleanup manual en lugar de transacciones formales,
 // por compatibilidad con Supabase Session Pooler (PgBouncer).
+// req.tenant_id inyectado por tenantMiddleware (desde .env).
 
 import { query } from '../config/db.js';
-
-const TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001';
 
 /**
  * createCorte
@@ -19,24 +18,22 @@ const TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001';
  *     forma_pago: 'efectivo' | 'mercado_pago',
  *     propina: number
  *   }
- * @param {Response} res - Devuelve el corte creado con su id y monto total
+ * @param {Response} res - Devuelve { message, corte_id, monto_total }
  */
 export const createCorte = async (req, res) => {
   console.log('[createCorte] Solicitud recibida — body:', req.body);
 
   const { barbero_id, servicios, forma_pago, propina } = req.body;
 
-  // Validación de campos requeridos
   if (!barbero_id || !servicios || !servicios.length || !forma_pago) {
     console.warn('[createCorte] Validación fallida — campos faltantes:', { barbero_id, servicios, forma_pago });
-    return res.status(400).json({ 
-      error: 'Faltan campos requeridos: barbero_id, servicios, forma_pago' 
+    return res.status(400).json({
+      error: 'Faltan campos requeridos: barbero_id, servicios, forma_pago'
     });
   }
 
-  // Calculamos monto total sumando los precios de todos los servicios
   const monto_total = servicios.reduce((sum, s) => sum + Number(s.precio), 0);
-  console.log('[createCorte] Monto total calculado:', monto_total, '— Servicios:', servicios);
+  console.log('[createCorte] Monto total calculado:', monto_total, '| tenant:', req.tenant_id);
 
   let corteId = null;
 
@@ -47,7 +44,7 @@ export const createCorte = async (req, res) => {
       `INSERT INTO corte (tenant_id, barbero_id, forma_pago, propina, monto_total, usuario_registro)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
-      [TENANT_ID, barbero_id, forma_pago, propina || 0, monto_total, null]
+      [req.tenant_id, barbero_id, forma_pago, propina || 0, monto_total, null]
     );
 
     corteId = corteResult.rows[0].id;

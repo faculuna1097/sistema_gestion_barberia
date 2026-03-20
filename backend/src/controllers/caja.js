@@ -1,21 +1,20 @@
 // backend/src/controllers/caja.js
 import { query } from '../config/db.js';
 
-const TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001';
 const TZ = 'America/Argentina/Buenos_Aires';
 
 /**
  * getMovimientosDia — devuelve todos los movimientos del día solicitado
  * ordenados por timestamp: cortes, ventas y gastos mergeados.
  * Query param: fecha (YYYY-MM-DD, opcional — default: hoy en timezone AR)
+ * req.tenant_id inyectado por verificarToken
  * Retorna: { movimientos: [...] }
  */
 export const getMovimientosDia = async (req, res) => {
-  // Si viene fecha por query param la usamos; si no, calculamos hoy en AR
   const fecha = req.query.fecha
     || new Date().toLocaleDateString('sv-SE', { timeZone: TZ });
 
-  console.log(`[Caja] Request recibido: GET /api/caja/movimientos-dia — fecha: ${fecha}`);
+  console.log(`[Caja] Request recibido: GET /api/caja/movimientos-dia — fecha: ${fecha} | tenant: ${req.tenant_id}`);
 
   try {
     // ── Query 1: Cortes del día ──────────────────────────────────────────────
@@ -42,7 +41,7 @@ export const getMovimientosDia = async (req, res) => {
        WHERE c.tenant_id = $1
          AND DATE(c.timestamp AT TIME ZONE $2) = $3::date
        ORDER BY c.timestamp ASC`,
-      [TENANT_ID, TZ, fecha]
+      [req.tenant_id, TZ, fecha]
     );
 
     // ── Query 2: Ventas del día ──────────────────────────────────────────────
@@ -62,7 +61,7 @@ export const getMovimientosDia = async (req, res) => {
        WHERE v.tenant_id = $1
          AND DATE(v.timestamp AT TIME ZONE $2) = $3::date
        ORDER BY v.timestamp ASC`,
-      [TENANT_ID, TZ, fecha]
+      [req.tenant_id, TZ, fecha]
     );
 
     // ── Query 3: Gastos del día ──────────────────────────────────────────────
@@ -82,7 +81,7 @@ export const getMovimientosDia = async (req, res) => {
        WHERE g.tenant_id = $1
          AND DATE(g.timestamp AT TIME ZONE $2) = $3::date
        ORDER BY g.timestamp ASC`,
-      [TENANT_ID, TZ, fecha]
+      [req.tenant_id, TZ, fecha]
     );
 
     // ── Merge y orden cronológico ────────────────────────────────────────────
@@ -106,22 +105,23 @@ export const getMovimientosDia = async (req, res) => {
  * - corte: borra corte_servicio primero, luego corte
  * - venta: restaura stock_actual del producto, luego borra venta
  * - gasto: borra directo
+ * req.tenant_id inyectado por verificarToken
  * Params: tipo ('corte' | 'venta' | 'gasto'), id (uuid)
  */
 export const eliminarMovimiento = async (req, res) => {
   const { tipo, id } = req.params;
-  console.log(`[Caja] Request recibido: DELETE /api/caja/movimientos/${tipo}/${id}`);
+  console.log(`[Caja] Request recibido: DELETE /api/caja/movimientos/${tipo}/${id} | tenant: ${req.tenant_id}`);
 
   try {
     if (tipo === 'corte') {
       await query('DELETE FROM corte_servicio WHERE corte_id = $1', [id]);
-      await query('DELETE FROM corte WHERE id = $1 AND tenant_id = $2', [id, TENANT_ID]);
+      await query('DELETE FROM corte WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
       console.log('[Caja] Corte eliminado — id:', id);
 
     } else if (tipo === 'venta') {
       const ventaResult = await query(
         'SELECT producto_id, cantidad FROM venta WHERE id = $1 AND tenant_id = $2',
-        [id, TENANT_ID]
+        [id, req.tenant_id]
       );
       if (ventaResult.rows.length === 0) {
         return res.status(404).json({ error: 'Venta no encontrada' });
@@ -132,11 +132,11 @@ export const eliminarMovimiento = async (req, res) => {
         [cantidad, producto_id]
       );
       console.log('[Caja] Stock restaurado — producto_id:', producto_id, '| cantidad:', cantidad);
-      await query('DELETE FROM venta WHERE id = $1 AND tenant_id = $2', [id, TENANT_ID]);
+      await query('DELETE FROM venta WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
       console.log('[Caja] Venta eliminada — id:', id);
 
     } else if (tipo === 'gasto') {
-      await query('DELETE FROM gasto WHERE id = $1 AND tenant_id = $2', [id, TENANT_ID]);
+      await query('DELETE FROM gasto WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
       console.log('[Caja] Gasto eliminado — id:', id);
 
     } else {

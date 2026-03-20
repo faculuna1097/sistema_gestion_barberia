@@ -1,11 +1,12 @@
 // backend/src/controllers/gestion.js
 // Controlador para la sección Gestión del panel admin.
 // Maneja ABM de barberos, servicios, productos, datos del negocio y cambio de PIN admin.
+//
+// Todas las funciones usan req.tenant_id, inyectado por tenantMiddleware
+// en rutas públicas (desde .env) y por verificarToken en rutas protegidas (desde JWT).
 
 import { query } from '../config/db.js';
 import bcrypt from 'bcrypt';
-
-const TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001';
 const SALT_ROUNDS = 10;
 
 // ─── BARBEROS ────────────────────────────────────────────────────────────────
@@ -13,16 +14,17 @@ const SALT_ROUNDS = 10;
 /**
  * getBarberos — devuelve todos los barberos del tenant ordenados por nombre.
  * GET /api/gestion/barberos
+ * req.tenant_id inyectado por verificarToken
  */
 export const getBarberos = async (req, res) => {
-  console.log('[gestion] GET barberos — tenant:', TENANT_ID);
+  console.log('[gestion] GET barberos — tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre, comision_tipo, comision_valor, activo
        FROM barbero
        WHERE tenant_id = $1
        ORDER BY nombre ASC`,
-      [TENANT_ID]
+      [req.tenant_id]
     );
     console.log('[gestion] Barberos obtenidos:', result.rows.length);
     res.json(result.rows);
@@ -35,11 +37,11 @@ export const getBarberos = async (req, res) => {
 /**
  * crearBarbero — crea un nuevo barbero con PIN hasheado.
  * POST /api/gestion/barberos
+ * req.tenant_id inyectado por verificarToken
  * Body: { nombre, pin, comision_valor }
- * comision_tipo siempre es 'porcentaje'.
  */
 export const crearBarbero = async (req, res) => {
-  console.log('[gestion] POST barberos — body:', { ...req.body, pin: '***' });
+  console.log('[gestion] POST barberos — body:', { ...req.body, pin: '***' }, '| tenant:', req.tenant_id);
   const { nombre, pin, comision_valor } = req.body;
 
   if (!nombre || !pin || comision_valor === undefined) {
@@ -55,7 +57,7 @@ export const crearBarbero = async (req, res) => {
       `INSERT INTO barbero (tenant_id, nombre, pin, comision_tipo, comision_valor, activo)
        VALUES ($1, $2, $3, 'porcentaje', $4, true)
        RETURNING id, nombre, comision_tipo, comision_valor, activo`,
-      [TENANT_ID, nombre.trim(), pinHash, Number(comision_valor)]
+      [req.tenant_id, nombre.trim(), pinHash, Number(comision_valor)]
     );
     console.log('[gestion] Barbero creado:', result.rows[0].id, result.rows[0].nombre);
     res.status(201).json(result.rows[0]);
@@ -69,10 +71,11 @@ export const crearBarbero = async (req, res) => {
  * editarBarbero — edita nombre, comision_valor y/o activo de un barbero.
  * Si se envía un nuevo PIN, lo hashea antes de guardar.
  * PUT /api/gestion/barberos/:id
+ * req.tenant_id inyectado por verificarToken
  * Body: { nombre, comision_valor, activo, pin? }
  */
 export const editarBarbero = async (req, res) => {
-  console.log('[gestion] PUT barberos/:id — id:', req.params.id, '| body:', { ...req.body, pin: req.body.pin ? '***' : undefined });
+  console.log('[gestion] PUT barberos/:id — id:', req.params.id, '| body:', { ...req.body, pin: req.body.pin ? '***' : undefined }, '| tenant:', req.tenant_id);
   const { id } = req.params;
   const { nombre, comision_valor, activo, pin } = req.body;
 
@@ -84,7 +87,6 @@ export const editarBarbero = async (req, res) => {
     let result;
 
     if (pin) {
-      // Si se envía PIN nuevo, lo validamos y hasheamos
       if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
         return res.status(400).json({ error: 'El PIN debe ser exactamente 4 dígitos numéricos' });
       }
@@ -94,16 +96,15 @@ export const editarBarbero = async (req, res) => {
          SET nombre = $1, comision_valor = $2, activo = $3, pin = $4
          WHERE id = $5 AND tenant_id = $6
          RETURNING id, nombre, comision_tipo, comision_valor, activo`,
-        [nombre.trim(), Number(comision_valor), activo, pinHash, id, TENANT_ID]
+        [nombre.trim(), Number(comision_valor), activo, pinHash, id, req.tenant_id]
       );
     } else {
-      // Sin cambio de PIN
       result = await query(
         `UPDATE barbero
          SET nombre = $1, comision_valor = $2, activo = $3
          WHERE id = $4 AND tenant_id = $5
          RETURNING id, nombre, comision_tipo, comision_valor, activo`,
-        [nombre.trim(), Number(comision_valor), activo, id, TENANT_ID]
+        [nombre.trim(), Number(comision_valor), activo, id, req.tenant_id]
       );
     }
 
@@ -123,16 +124,17 @@ export const editarBarbero = async (req, res) => {
 /**
  * getServicios — devuelve todos los servicios del tenant ordenados por nombre.
  * GET /api/gestion/servicios
+ * req.tenant_id inyectado por verificarToken
  */
 export const getServicios = async (req, res) => {
-  console.log('[gestion] GET servicios — tenant:', TENANT_ID);
+  console.log('[gestion] GET servicios — tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre, precio, activo
        FROM servicio
        WHERE tenant_id = $1
        ORDER BY nombre ASC`,
-      [TENANT_ID]
+      [req.tenant_id]
     );
     console.log('[gestion] Servicios obtenidos:', result.rows.length);
     res.json(result.rows);
@@ -145,10 +147,11 @@ export const getServicios = async (req, res) => {
 /**
  * crearServicio — crea un nuevo servicio.
  * POST /api/gestion/servicios
+ * req.tenant_id inyectado por verificarToken
  * Body: { nombre, precio }
  */
 export const crearServicio = async (req, res) => {
-  console.log('[gestion] POST servicios — body:', req.body);
+  console.log('[gestion] POST servicios — body:', req.body, '| tenant:', req.tenant_id);
   const { nombre, precio } = req.body;
 
   if (!nombre || precio === undefined) {
@@ -160,7 +163,7 @@ export const crearServicio = async (req, res) => {
       `INSERT INTO servicio (tenant_id, nombre, precio, activo)
        VALUES ($1, $2, $3, true)
        RETURNING id, nombre, precio, activo`,
-      [TENANT_ID, nombre.trim(), Number(precio)]
+      [req.tenant_id, nombre.trim(), Number(precio)]
     );
     console.log('[gestion] Servicio creado:', result.rows[0].id, result.rows[0].nombre);
     res.status(201).json(result.rows[0]);
@@ -173,10 +176,11 @@ export const crearServicio = async (req, res) => {
 /**
  * editarServicio — edita nombre, precio y/o activo de un servicio.
  * PUT /api/gestion/servicios/:id
+ * req.tenant_id inyectado por verificarToken
  * Body: { nombre, precio, activo }
  */
 export const editarServicio = async (req, res) => {
-  console.log('[gestion] PUT servicios/:id — id:', req.params.id, '| body:', req.body);
+  console.log('[gestion] PUT servicios/:id — id:', req.params.id, '| body:', req.body, '| tenant:', req.tenant_id);
   const { id } = req.params;
   const { nombre, precio, activo } = req.body;
 
@@ -190,7 +194,7 @@ export const editarServicio = async (req, res) => {
        SET nombre = $1, precio = $2, activo = $3
        WHERE id = $4 AND tenant_id = $5
        RETURNING id, nombre, precio, activo`,
-      [nombre.trim(), Number(precio), activo, id, TENANT_ID]
+      [nombre.trim(), Number(precio), activo, id, req.tenant_id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Servicio no encontrado' });
@@ -206,19 +210,19 @@ export const editarServicio = async (req, res) => {
 // ─── PRODUCTOS ───────────────────────────────────────────────────────────────
 
 /**
- * getProductos — devuelve todos los productos del tenant ordenados por nombre.
- * Incluye stock_actual (solo lectura) y stock_minimo (editable).
+ * getProductos — devuelve todos los productos del tenant.
  * GET /api/gestion/productos
+ * req.tenant_id inyectado por verificarToken
  */
 export const getProductos = async (req, res) => {
-  console.log('[gestion] GET productos — tenant:', TENANT_ID);
+  console.log('[gestion] GET productos — tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre, precio, stock_actual, stock_minimo, activo
        FROM producto
        WHERE tenant_id = $1
        ORDER BY nombre ASC`,
-      [TENANT_ID]
+      [req.tenant_id]
     );
     console.log('[gestion] Productos obtenidos:', result.rows.length);
     res.json(result.rows);
@@ -229,13 +233,13 @@ export const getProductos = async (req, res) => {
 };
 
 /**
- * crearProducto — crea un nuevo producto.
+ * crearProducto — crea un nuevo producto. stock_actual arranca en 0.
  * POST /api/gestion/productos
+ * req.tenant_id inyectado por verificarToken
  * Body: { nombre, precio, stock_minimo }
- * stock_actual arranca en 0.
  */
 export const crearProducto = async (req, res) => {
-  console.log('[gestion] POST productos — body:', req.body);
+  console.log('[gestion] POST productos — body:', req.body, '| tenant:', req.tenant_id);
   const { nombre, precio, stock_minimo } = req.body;
 
   if (!nombre || precio === undefined) {
@@ -247,7 +251,7 @@ export const crearProducto = async (req, res) => {
       `INSERT INTO producto (tenant_id, nombre, precio, stock_actual, stock_minimo, activo)
        VALUES ($1, $2, $3, 0, $4, true)
        RETURNING id, nombre, precio, stock_actual, stock_minimo, activo`,
-      [TENANT_ID, nombre.trim(), Number(precio), Number(stock_minimo ?? 0)]
+      [req.tenant_id, nombre.trim(), Number(precio), Number(stock_minimo ?? 0)]
     );
     console.log('[gestion] Producto creado:', result.rows[0].id, result.rows[0].nombre);
     res.status(201).json(result.rows[0]);
@@ -258,13 +262,13 @@ export const crearProducto = async (req, res) => {
 };
 
 /**
- * editarProducto — edita nombre, precio, stock_minimo y/o activo de un producto.
- * NO toca stock_actual directamente.
+ * editarProducto — edita nombre, precio, stock_minimo y/o activo. NO toca stock_actual.
  * PUT /api/gestion/productos/:id
+ * req.tenant_id inyectado por verificarToken
  * Body: { nombre, precio, stock_minimo, activo }
  */
 export const editarProducto = async (req, res) => {
-  console.log('[gestion] PUT productos/:id — id:', req.params.id, '| body:', req.body);
+  console.log('[gestion] PUT productos/:id — id:', req.params.id, '| body:', req.body, '| tenant:', req.tenant_id);
   const { id } = req.params;
   const { nombre, precio, stock_minimo, activo } = req.body;
 
@@ -278,7 +282,7 @@ export const editarProducto = async (req, res) => {
        SET nombre = $1, precio = $2, stock_minimo = $3, activo = $4
        WHERE id = $5 AND tenant_id = $6
        RETURNING id, nombre, precio, stock_actual, stock_minimo, activo`,
-      [nombre.trim(), Number(precio), Number(stock_minimo ?? 0), activo, id, TENANT_ID]
+      [nombre.trim(), Number(precio), Number(stock_minimo ?? 0), activo, id, req.tenant_id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
@@ -293,13 +297,12 @@ export const editarProducto = async (req, res) => {
 
 /**
  * agregarStock — suma unidades al stock_actual de un producto.
- * Opción B: el admin no edita el número directamente, sino que indica
- * cuántas unidades ingresaron. El backend hace stock_actual = stock_actual + cantidad.
  * PUT /api/gestion/productos/:id/agregar-stock
+ * req.tenant_id inyectado por verificarToken
  * Body: { cantidad }
  */
 export const agregarStock = async (req, res) => {
-  console.log('[gestion] PUT productos/:id/agregar-stock — id:', req.params.id, '| body:', req.body);
+  console.log('[gestion] PUT productos/:id/agregar-stock — id:', req.params.id, '| body:', req.body, '| tenant:', req.tenant_id);
   const { id } = req.params;
   const { cantidad } = req.body;
 
@@ -313,7 +316,7 @@ export const agregarStock = async (req, res) => {
        SET stock_actual = stock_actual + $1
        WHERE id = $2 AND tenant_id = $3
        RETURNING id, nombre, stock_actual`,
-      [Number(cantidad), id, TENANT_ID]
+      [Number(cantidad), id, req.tenant_id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
@@ -331,13 +334,14 @@ export const agregarStock = async (req, res) => {
 /**
  * getNegocio — devuelve los datos del tenant (nombre_negocio, logo).
  * GET /api/gestion/negocio
+ * Ruta pública — req.tenant_id viene del tenantMiddleware (desde .env).
  */
 export const getNegocio = async (req, res) => {
-  console.log('[gestion] GET negocio — tenant:', TENANT_ID);
+  console.log('[gestion] GET negocio — tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT nombre_negocio, logo FROM tenant WHERE id = $1`,
-      [TENANT_ID]
+      [req.tenant_id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Tenant no encontrado' });
@@ -353,10 +357,11 @@ export const getNegocio = async (req, res) => {
 /**
  * editarNegocio — actualiza el nombre del negocio.
  * PUT /api/gestion/negocio
+ * req.tenant_id inyectado por verificarToken
  * Body: { nombre_negocio }
  */
 export const editarNegocio = async (req, res) => {
-  console.log('[gestion] PUT negocio — body:', req.body);
+  console.log('[gestion] PUT negocio — body:', req.body, '| tenant:', req.tenant_id);
   const { nombre_negocio } = req.body;
 
   if (!nombre_negocio) {
@@ -367,7 +372,7 @@ export const editarNegocio = async (req, res) => {
     const result = await query(
       `UPDATE tenant SET nombre_negocio = $1 WHERE id = $2
        RETURNING nombre_negocio`,
-      [nombre_negocio.trim(), TENANT_ID]
+      [nombre_negocio.trim(), req.tenant_id]
     );
     console.log('[gestion] Nombre del negocio actualizado:', result.rows[0].nombre_negocio);
     res.json(result.rows[0]);
@@ -382,12 +387,11 @@ export const editarNegocio = async (req, res) => {
 /**
  * cambiarPinAdmin — verifica el PIN actual y guarda el nuevo hasheado.
  * PUT /api/gestion/pin-admin
+ * req.tenant_id inyectado por verificarToken
  * Body: { pin_actual, pin_nuevo }
- * El PIN actual se verifica con bcrypt contra el hash guardado en tenant.pin_admin.
  */
 export const cambiarPinAdmin = async (req, res) => {
-  // NUNCA loguear los PINs
-  console.log('[gestion] PUT pin-admin — solicitado cambio de PIN admin');
+  console.log('[gestion] PUT pin-admin — solicitado cambio de PIN admin | tenant:', req.tenant_id);
   const { pin_actual, pin_nuevo } = req.body;
 
   if (!pin_actual || !pin_nuevo) {
@@ -398,10 +402,9 @@ export const cambiarPinAdmin = async (req, res) => {
   }
 
   try {
-    // Obtener el hash del PIN actual
     const tenantResult = await query(
       `SELECT pin_admin FROM tenant WHERE id = $1`,
-      [TENANT_ID]
+      [req.tenant_id]
     );
     if (tenantResult.rows.length === 0) {
       return res.status(404).json({ error: 'Tenant no encontrado' });
@@ -415,11 +418,10 @@ export const cambiarPinAdmin = async (req, res) => {
       return res.status(401).json({ error: 'El PIN actual es incorrecto' });
     }
 
-    // PIN actual correcto — hashear y guardar el nuevo
     const nuevoPinHash = await bcrypt.hash(pin_nuevo, SALT_ROUNDS);
     await query(
       `UPDATE tenant SET pin_admin = $1 WHERE id = $2`,
-      [nuevoPinHash, TENANT_ID]
+      [nuevoPinHash, req.tenant_id]
     );
 
     console.log('[gestion] PIN admin actualizado exitosamente');

@@ -4,6 +4,8 @@
 // El backend verifica el PIN actual con bcrypt antes de aceptar el cambio.
 
 import { useState } from 'react';
+import { apiFetch } from '../../../../services/api';
+
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -41,7 +43,7 @@ export default function TabPinAdmin() {
     console.log('[TabPinAdmin] Solicitando cambio de PIN admin...');
 
     try {
-      const res = await fetch(`${API_URL}/api/gestion/pin-admin`, {
+      const res = await apiFetch(`${API_URL}/api/gestion/pin-admin`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin_actual: pinActual, pin_nuevo: pinNuevo }),

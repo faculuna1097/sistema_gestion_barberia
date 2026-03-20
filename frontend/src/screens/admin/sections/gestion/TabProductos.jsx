@@ -5,6 +5,8 @@
 // No hay eliminación — se usa el campo activo (true/false) para desactivar.
 
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../../../../services/api';
+
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -60,7 +62,7 @@ function ModalProducto({ producto, onGuardar, onCerrar }) {
 
       console.log(`[TabProductos] ${method} producto —`, body);
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -77,7 +79,7 @@ function ModalProducto({ producto, onGuardar, onCerrar }) {
       // Si hay unidades a agregar, llamar a /agregar-stock junto con el guardado
       if (esEdicion && cantidadAgregar && Number(cantidadAgregar) > 0) {
         console.log('[TabProductos] Agregando stock junto al guardado — cantidad:', cantidadAgregar);
-        const resStock = await fetch(
+        const resStock = await apiFetch(
           `${API_URL}/api/gestion/productos/${producto.id}/agregar-stock`,
           {
             method: 'PUT',
@@ -241,7 +243,7 @@ export default function TabProductos() {
   // ── Carga inicial ──────────────────────────────────────────────────────────
   useEffect(() => {
     console.log('[TabProductos] Cargando productos...');
-    fetch(`${API_URL}/api/gestion/productos`)
+    apiFetch(`${API_URL}/api/gestion/productos`)
       .then(r => r.json())
       .then(data => {
         console.log('[TabProductos] Productos cargados:', data.length);

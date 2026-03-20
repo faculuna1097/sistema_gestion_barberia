@@ -5,6 +5,8 @@
 
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { apiFetch } from '../../../services/api';
+
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -125,7 +127,7 @@ export default function SeccionGastos() {
       setCargando(true);
       setError(null);
       try {
-        const res  = await fetch(`${API_BASE}/api/gastos/mensual?mes=${mes}`);
+        const res  = await apiFetch(`${API_BASE}/api/gastos/mensual?mes=${mes}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         setGastos(data.gastos);
@@ -149,7 +151,7 @@ export default function SeccionGastos() {
     const { id } = gastoAEliminar;
     console.log('[SeccionGastos] Eliminando gasto — id:', id);
     try {
-      const res = await fetch(`${API_BASE}/api/gastos/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`${API_BASE}/api/gastos/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Error del servidor');
       setGastos(prev => prev.filter(g => g.id !== id));
       // Recalcular totales después de eliminar

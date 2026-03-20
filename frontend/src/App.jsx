@@ -6,7 +6,14 @@ import FlujoVenta from "./screens/flows/FlujoVenta";
 import FlujoGasto from "./screens/flows/FlujoGasto";
 import PantallaLoginAdmin from "./screens/PantallaLoginAdmin";
 import PanelAdmin from "./screens/admin/PanelAdmin";
-import { getBarberos, getServicios, getProductos, getCategorias } from "./services/api";
+import {
+  getBarberos,
+  getServicios,
+  getProductos,
+  getCategorias,
+  setAuthToken,
+  clearAuthToken,
+} from "./services/api";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
@@ -97,13 +104,12 @@ const stylesEstado = {
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState("main");
-  // TODO: el token queda guardado en memoria por ahora. Cuando implementemos el reemplazo
-  // del TENANT_ID hardcodeado, vamos a leer el tenant_id desde este token con jwt-decode.
+  // El token se guarda en estado para controlar el acceso al panel admin,
+  // y también en el módulo api.js (via setAuthToken) para que apiFetch()
+  // lo incluya automáticamente en los headers de las rutas protegidas.
   const [token, setToken] = useState(null);
 
   // URL del logo del negocio — se carga al arrancar y se reintenta junto a los datos
-  // si la carga inicial falla. No forma parte de precargarDatos porque no cambia
-  // durante el uso normal de la app.
   const [logoUrl, setLogoUrl] = useState(null);
 
   // Datos operativos — se recargan al arrancar y cada vez que algo los modifica
@@ -118,8 +124,7 @@ export default function App() {
 
   /**
    * cargarLogo — obtiene la URL del logo desde la DB.
-   * Definida como useCallback para poder llamarla desde reintentar()
-   * sin incluirla en precargarDatos.
+   * No forma parte de precargarDatos porque no cambia durante el uso normal.
    * Si falla, la app sigue funcionando sin logo (no es bloqueante).
    */
   const cargarLogo = useCallback(async () => {
@@ -140,8 +145,7 @@ export default function App() {
 
   /**
    * precargarDatos — carga barberos, servicios, productos y categorías en paralelo.
-   * Se llama al arrancar la app, al cerrar el panel admin, y al volver de FlujoVenta
-   * (que modifica el stock de productos). El logo NO se recarga aquí.
+   * Se llama al arrancar, al cerrar el panel admin y al volver de FlujoVenta.
    */
   const precargarDatos = useCallback(async () => {
     setDatos(prev => ({ ...prev, cargando: true, error: null }));
@@ -172,8 +176,7 @@ export default function App() {
 
   /**
    * reintentar — llamado por el botón de PantallaError.
-   * Relanza tanto los datos operativos como el logo, ya que ambos
-   * pueden haber fallado si no había conexión al arrancar.
+   * Relanza tanto los datos operativos como el logo.
    */
   const reintentar = useCallback(() => {
     console.log('[App] Reintentando carga — datos + logo');
@@ -187,26 +190,23 @@ export default function App() {
   };
 
   /**
-   * cerrarSesionAdmin — recarga los datos operativos antes de volver a la pantalla
-   * principal, para reflejar cualquier cambio hecho desde Gestión.
+   * cerrarSesionAdmin — limpia el token (estado + módulo api.js) y recarga
+   * los datos operativos para reflejar cambios hechos desde Gestión.
    */
   const cerrarSesionAdmin = () => {
-    console.log('[App] Cerrando sesión admin — recargando datos...');
+    console.log('[App] Cerrando sesión admin — limpiando token y recargando datos...');
+    setToken(null);
+    clearAuthToken(); // elimina el token del módulo api.js
     precargarDatos();
     setCurrentScreen("main");
   };
 
   // ── Pantalla de carga inicial ──────────────────────────────────────────────
-  // Solo se muestra en la carga inicial (cargando: true con listas vacías).
-  // En recargas posteriores (volver de FlujoVenta, cerrar admin), los datos
-  // anteriores siguen en memoria y la app no se bloquea.
   if (datos.cargando && datos.barberos.length === 0) {
     return <PantallaCargando />;
   }
 
   // ── Pantalla de error de conexión ──────────────────────────────────────────
-  // Se muestra si la carga inicial falló. El botón llama a reintentar(),
-  // que relanza precargarDatos + cargarLogo en paralelo.
   if (datos.error && datos.barberos.length === 0) {
     console.error('[App] Estado de error activo — mostrando PantallaError');
     return <PantallaError onReintentar={reintentar} />;
@@ -222,7 +222,6 @@ export default function App() {
     console.log('[App] Renderizando FlujoVenta');
     return <FlujoVenta
       onVolver={() => {
-        // FlujoVenta modifica el stock — hay que recargar productos al volver
         console.log('[App] Volviendo desde FlujoVenta — recargando datos de productos...');
         precargarDatos();
         setCurrentScreen("main");
@@ -241,9 +240,10 @@ export default function App() {
     console.log('[App] Renderizando PantallaLoginAdmin');
     return (
       <PantallaLoginAdmin
-        onAcceso={(token) => {
-          console.log('[App] Acceso admin concedido — token recibido, navegando a panel admin');
-          setToken(token);
+        onAcceso={(tokenRecibido) => {
+          console.log('[App] Acceso admin concedido — guardando token y navegando a panel admin');
+          setToken(tokenRecibido);
+          setAuthToken(tokenRecibido); // registra el token en el módulo api.js para apiFetch()
           setCurrentScreen("admin");
         }}
         onCancelar={volverAlInicio}

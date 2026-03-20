@@ -5,6 +5,8 @@
 
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { apiFetch } from '../../../services/api';
+
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -131,7 +133,7 @@ function TabMovimientos() {
     console.log('[SeccionCaja] Cargando movimientos — fecha:', fecha);
     setCargando(true);
     setError(null);
-    fetch(`${API_URL}/api/caja/movimientos-dia?fecha=${fecha}`)
+    apiFetch(`${API_URL}/api/caja/movimientos-dia?fecha=${fecha}`)
       .then(r => r.json())
       .then(data => {
         console.log('[SeccionCaja] Movimientos cargados:', data.movimientos?.length);
@@ -169,7 +171,7 @@ function TabMovimientos() {
     const { tipo, id } = movimientoAEliminar;
     console.log('[SeccionCaja] Eliminando movimiento — tipo:', tipo, '| id:', id);
     try {
-      const res = await fetch(`${API_URL}/api/caja/movimientos/${tipo}/${id}`, {
+      const res = await apiFetch(`${API_URL}/api/caja/movimientos/${tipo}/${id}`, {
         method: 'DELETE',
       });
       if (!res.ok) throw new Error('Error del servidor');

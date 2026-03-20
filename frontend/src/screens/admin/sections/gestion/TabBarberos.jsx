@@ -5,6 +5,8 @@
 // No hay eliminación — se usa activo (true/false) para desactivar.
 
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../../../../services/api';
+
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -64,7 +66,7 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
       // NUNCA loguear el PIN
       console.log(`[TabBarberos] ${method} barbero —`, { ...body, pin: body.pin ? '***' : undefined });
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -218,7 +220,7 @@ export default function TabBarberos() {
   // ── Carga inicial ──────────────────────────────────────────────────────────
   useEffect(() => {
     console.log('[TabBarberos] Cargando barberos...');
-    fetch(`${API_URL}/api/gestion/barberos`)
+    apiFetch(`${API_URL}/api/gestion/barberos`)
       .then(r => r.json())
       .then(data => {
         console.log('[TabBarberos] Barberos cargados:', data.length);

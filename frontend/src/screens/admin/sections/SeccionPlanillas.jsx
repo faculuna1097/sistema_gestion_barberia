@@ -18,6 +18,8 @@ SeccionPlanillas.jsx
 
 import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
+import { apiFetch } from '../../../services/api';
+
 
 // ─── Helpers de semana ────────────────────────────────────────────────────────
 
@@ -159,8 +161,8 @@ export default function SeccionPlanillas() {
       setError(null);
       try {
         const [resDetalle, resResumen] = await Promise.all([
-          fetch(`${BASE_URL}/api/planillas/detalle-semanal?semana=${semana}`),
-          fetch(`${BASE_URL}/api/planillas/resumen-semanal?semana=${semana}`),
+          apiFetch(`${BASE_URL}/api/planillas/detalle-semanal?semana=${semana}`),
+          apiFetch(`${BASE_URL}/api/planillas/resumen-semanal?semana=${semana}`),
         ]);
         if (!resDetalle.ok || !resResumen.ok) throw new Error("Error en la respuesta del servidor");
         const [detalle, resumen] = await Promise.all([

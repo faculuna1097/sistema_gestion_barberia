@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { apiFetch } from '../../../services/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -112,7 +113,7 @@ export default function SeccionBalances() {
     setErrorMensual(null);
     try {
       console.log('[SeccionBalances] Cargando balance mensual:', mes);
-      const res = await fetch(`${API_URL}/api/balances/mensual?mes=${mes}`);
+      const res = await apiFetch(`${API_URL}/api/balances/mensual?mes=${mes}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const datos = await res.json();
       setDatosMensual(datos);
@@ -132,7 +133,7 @@ export default function SeccionBalances() {
     setErrorHistorico(null);
     try {
       console.log('[SeccionBalances] Cargando histórico anual');
-      const res = await fetch(`${API_URL}/api/balances/historico?cantidad=12`);
+      const res = await apiFetch(`${API_URL}/api/balances/historico?cantidad=12`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const datos = await res.json();
       setDatosHistorico(datos);
