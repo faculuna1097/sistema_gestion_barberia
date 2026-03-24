@@ -30,7 +30,21 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // --- Middlewares globales ---
-app.use(cors());
+// DESPUÉS
+const allowedOrigins = [
+  'http://localhost:5173',                                    // desarrollo local
+  'https://sistema-gestion-barberia.vercel.app',             // frontend en producción
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Permitir requests sin origin (Postman, Railway health checks)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS bloqueado para origin: ${origin}`));
+  },
+  credentials: true,
+}));
 app.use(express.json());
 
 // tenantMiddleware — corre en TODAS las rutas antes que cualquier controller.
