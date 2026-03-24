@@ -1,0 +1,17 @@
+{
+  "name": "Kingsai Studio",
+  "short_name": "Kingsai",
+  "description": "Sistema de gestión para Kingsai Studio",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#ffffff",
+  "theme_color": "#1a7a4a",
+  "icons": [
+    {
+      "src": "/logo_kingsai_graffiti.jpeg",
+      "sizes": "any",
+      "type": "image/jpeg"
+    }
+  ]
+}
