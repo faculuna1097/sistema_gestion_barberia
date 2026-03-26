@@ -43,7 +43,7 @@ const PasoLayout = ({ paso, total, titulo, subtitulo, onVolver, children }) => (
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function FlujoGasto({ onVolver, categorias }) {
-  console.log('[FlujoGasto] Montado — categorías recibidas:', categorias.length);
+  console.log('[flujoGasto] render — categorías:', categorias.length);
 
   const [paso, setPaso] = useState(1);
 
@@ -68,11 +68,11 @@ export default function FlujoGasto({ onVolver, categorias }) {
    */
   const retroceder = () => {
     if (paso === 1) {
-      console.log('[FlujoGasto] Volviendo a pantalla principal desde paso 1');
+      console.log('[flujoGasto] retroceder — volviendo a pantalla principal');
       onVolver();
       return;
     }
-    console.log('[FlujoGasto] Retrocediendo — paso actual:', paso, '→', paso - 1);
+    console.log('[flujoGasto] retroceder — paso:', paso, '→', paso - 1);
     setPaso((p) => p - 1);
   };
 
@@ -94,21 +94,20 @@ export default function FlujoGasto({ onVolver, categorias }) {
       forma_pago: formaPago,
       usuario_registro: null, // auth pendiente para fase futura
     };
-    console.log('[FlujoGasto] Confirmando gasto — payload:', payload);
     setEnviando(true);
     setError(null);
     try {
       const respuesta = await registrarGasto(payload);
-      console.log('[FlujoGasto] Gasto registrado exitosamente — respuesta:', respuesta);
+      console.log('[flujoGasto] confirmarGasto — completado | gasto_id:', respuesta.gasto_id);
       setExito(true);
       // Si la categoría es Productos se da más tiempo para leer el recordatorio de stock
       const demora = categoriaSeleccionada?.nombre === "Productos" ? 4000 : 2000;
       setTimeout(() => {
-        console.log('[FlujoGasto] Redirigiendo a pantalla principal tras éxito');
+        console.log('[flujoGasto] confirmarGasto — redirigiendo a pantalla principal');
         onVolver();
       }, demora);
     } catch (err) {
-      console.error('[FlujoGasto] Error al registrar el gasto:', err);
+      console.error('[flujoGasto] Error en confirmarGasto:', err.message);
       setError("Error al guardar el gasto. Intentá de nuevo.");
     } finally {
       setEnviando(false);
@@ -117,7 +116,7 @@ export default function FlujoGasto({ onVolver, categorias }) {
 
   // ── Pantalla de éxito ────────────────────────────────────────────────────────
   if (exito) {
-    console.log('[FlujoGasto] Mostrando pantalla de éxito — monto:', montoFinal);
+    console.log('[flujoGasto] exito — monto:', montoFinal);
     const esProducto = categoriaSeleccionada?.nombre === "Productos";
     return (
       <div style={styles.pantallaCentrada}>
@@ -149,8 +148,8 @@ export default function FlujoGasto({ onVolver, categorias }) {
                 ...styles.btnOpcion,
                 ...(categoriaSeleccionada?.id === c.id ? styles.btnOpcionActivo : {}),
               }}
-              onClick={() => {
-                console.log('[FlujoGasto] Categoría seleccionada:', c);
+              onPointerDown={() => {
+                console.log('[flujoGasto] paso 1 — categoría seleccionada:', c.nombre);
                 setCategoriaSeleccionada(c);
                 avanzar();
               }}
@@ -187,8 +186,8 @@ export default function FlujoGasto({ onVolver, categorias }) {
               ...styles.btnContinuar,
               ...(descripcion.trim() === "" ? styles.btnDeshabilitado : {}),
             }}
-            onClick={() => {
-              console.log('[FlujoGasto] Descripción confirmada:', descripcion);
+            onPointerDown={() => {
+              console.log('[flujoGasto] paso 2 — descripción confirmada');
               avanzar();
             }}
             disabled={descripcion.trim() === ""}
@@ -222,8 +221,8 @@ export default function FlujoGasto({ onVolver, categorias }) {
               ...styles.btnContinuar,
               ...(monto === "" || Number(monto) <= 0 ? styles.btnDeshabilitado : {}),
             }}
-            onClick={() => {
-              console.log('[FlujoGasto] Monto confirmado:', monto);
+            onPointerDown={() => {
+              console.log('[flujoGasto] paso 3 — monto confirmado:', monto);
               avanzar();
             }}
             disabled={monto === "" || Number(monto) <= 0}
@@ -257,8 +256,8 @@ export default function FlujoGasto({ onVolver, categorias }) {
                 ...styles.btnOpcionGrande,
                 ...(formaPago === op.key ? styles.btnOpcionActivo : {}),
               }}
-              onClick={() => {
-                console.log('[FlujoGasto] Forma de pago seleccionada:', op.key);
+              onPointerDown={() => {
+                console.log('[flujoGasto] paso 4 — forma de pago:', op.key);
                 setFormaPago(op.key);
                 avanzar();
               }}
@@ -274,12 +273,8 @@ export default function FlujoGasto({ onVolver, categorias }) {
 
   // ─── PASO 5 — Resumen y confirmación ─────────────────────────────────────────
   if (paso === 5) {
-    console.log('[FlujoGasto] Mostrando resumen —', {
-      categoria: categoriaSeleccionada?.nombre,
-      descripcion,
-      monto: montoFinal,
-      formaPago,
-    });
+    console.log('[flujoGasto] paso 5 — resumen | categoría:', categoriaSeleccionada?.nombre,
+      '| monto:', montoFinal);
     return (
       <PasoLayout paso={5} total={5} titulo="Confirmá el gasto" onVolver={retroceder}>
         <div style={styles.resumenCard}>
@@ -322,7 +317,7 @@ export default function FlujoGasto({ onVolver, categorias }) {
             ...styles.btnConfirmar,
             ...(enviando ? styles.btnDeshabilitado : {}),
           }}
-          onClick={confirmarGasto}
+          onPointerDown={confirmarGasto}
           disabled={enviando}
         >
           {enviando ? "Guardando..." : "Confirmar Gasto"}

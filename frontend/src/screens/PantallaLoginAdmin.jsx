@@ -7,6 +7,7 @@
 //   pinCorrecto — string con el PIN admin del tenant (recibido desde App.jsx)
 
 import { useState, useEffect } from "react";
+import { verificarPin } from "../services/api";
 
 // ─── Ícono de candado ─────────────────────────────────────────────────────────
 const CandadoIcon = () => (
@@ -29,7 +30,7 @@ const BackspaceIcon = () => (
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {  
-  console.log('[PantallaLoginAdmin] Montada');
+  console.log('[pantallaLoginAdmin] render — montada');
 
   const [pin, setPin] = useState("");
   const [estado, setEstado] = useState("idle"); // "idle" | "error" | "exito"
@@ -40,7 +41,7 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {
     if (pin.length >= 4 || estado === "exito") return;
 
     const nuevo = pin + digito;
-    console.log('[PantallaLoginAdmin] Dígito ingresado — PIN parcial: ' + "*".repeat(nuevo.length));
+    console.log('[pantallaLoginAdmin] agregarDigito — PIN parcial:', '*'.repeat(nuevo.length));
     setEstado("idle");
     setPin(nuevo);
 
@@ -59,35 +60,14 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {
 
   // ── Validar PIN — llama al backend y recibe un JWT ──────────────────────────
 const validarPin = async (pinIngresado) => {
-  console.log('[PantallaLoginAdmin] Validando PIN contra el backend...');
+  console.log('[pantallaLoginAdmin] validarPin — request iniciado');
   try {
-    const respuesta = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/auth/verificar-pin`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin: pinIngresado }),
-    });
-
-    if (!respuesta.ok) {
-      console.log('[PantallaLoginAdmin] PIN incorrecto');
-      setEstado("error");
-      setShake(true);
-      setTimeout(() => {
-        setPin("");
-        setEstado("idle");
-        setShake(false);
-      }, 800);
-      return;
-    }
-
-    const { token } = await respuesta.json();
-    console.log('[PantallaLoginAdmin] PIN correcto — acceso concedido');
+    const { token } = await verificarPin(pinIngresado);
+    console.log('[pantallaLoginAdmin] validarPin — completado | acceso concedido');
     setEstado("exito");
-    setTimeout(() => {
-      onAcceso(token);
-    }, 600);
-
+    setTimeout(() => onAcceso(token), 600);
   } catch (err) {
-    console.error('[PantallaLoginAdmin] Error al contactar el backend:', err);
+    console.error('[pantallaLoginAdmin] Error en validarPin:', err.message);
     setEstado("error");
     setShake(true);
     setTimeout(() => {
@@ -130,7 +110,7 @@ const validarPin = async (pinIngresado) => {
       {/* Botón cancelar */}
       <div style={styles.headerRow}>
         <button style={styles.btnCancelar} onClick={() => {
-          console.log('[PantallaLoginAdmin] Cancelado — volviendo a pantalla principal');
+          console.log('[pantallaLoginAdmin] onCancelar — iniciado');
           onCancelar();
         }}>
           Cancelar
@@ -183,7 +163,7 @@ const validarPin = async (pinIngresado) => {
                   <button
                     key={ti}
                     style={styles.teclaBorrar}
-                    onClick={borrarDigito}
+                    onPointerDown={borrarDigito}
                     aria-label="Borrar"
                   >
                     <BackspaceIcon />
@@ -194,7 +174,7 @@ const validarPin = async (pinIngresado) => {
                 <button
                   key={ti}
                   style={styles.tecla}
-                  onClick={() => agregarDigito(tecla)}
+                  onPointerDown={() => agregarDigito(tecla)}
                   aria-label={`Tecla ${tecla}`}
                 >
                   {tecla}

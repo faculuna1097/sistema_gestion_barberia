@@ -43,7 +43,7 @@ const PasoLayout = ({ paso, total, titulo, subtitulo, onVolver, children }) => (
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function FlujoVenta({ onVolver, productos }) {
-  console.log('[FlujoVenta] Montado — productos recibidos:', productos.length);
+  console.log('[flujoVenta] render — productos:', productos.length);
 
   const [paso, setPaso] = useState(1);
 
@@ -67,11 +67,11 @@ export default function FlujoVenta({ onVolver, productos }) {
    */
   const retroceder = () => {
     if (paso === 1) {
-      console.log('[FlujoVenta] Volviendo a pantalla principal desde paso 1');
+      console.log('[flujoVenta] retroceder — volviendo a pantalla principal');
       onVolver();
       return;
     }
-    console.log('[FlujoVenta] Retrocediendo — paso actual:', paso, '→', paso - 1);
+    console.log('[flujoVenta] retroceder — paso:', paso, '→', paso - 1);
     setPaso((p) => p - 1);
   };
 
@@ -94,19 +94,18 @@ export default function FlujoVenta({ onVolver, productos }) {
       forma_pago: formaPago,
       usuario_registro: null, // auth pendiente para fase futura
     };
-    console.log('[FlujoVenta] Confirmando venta — payload:', payload);
     setEnviando(true);
     setError(null);
     try {
       const respuesta = await registrarVenta(payload);
-      console.log('[FlujoVenta] Venta registrada exitosamente — respuesta:', respuesta);
+      console.log('[flujoVenta] confirmarVenta — completado | venta_id:', respuesta.venta_id);
       setExito(true);
       setTimeout(() => {
-        console.log('[FlujoVenta] Redirigiendo a pantalla principal tras éxito');
+        console.log('[flujoVenta] confirmarVenta — redirigiendo a pantalla principal');
         onVolver();
       }, 2000);
     } catch (err) {
-      console.error('[FlujoVenta] Error al registrar la venta:', err);
+      console.error('[flujoVenta] Error en confirmarVenta:', err.message);
       setError("Error al guardar la venta. Intentá de nuevo.");
     } finally {
       setEnviando(false);
@@ -115,7 +114,7 @@ export default function FlujoVenta({ onVolver, productos }) {
 
   // ── Pantalla de éxito ────────────────────────────────────────────────────────
   if (exito) {
-    console.log('[FlujoVenta] Mostrando pantalla de éxito — monto total:', montoTotal);
+    console.log('[flujoVenta] exito — monto total:', montoTotal);
     return (
       <div style={styles.pantallaCentrada}>
         <div style={styles.lineaSuperior} />
@@ -138,8 +137,8 @@ export default function FlujoVenta({ onVolver, productos }) {
                 ...styles.btnOpcion,
                 ...(productoSeleccionado?.id === p.id ? styles.btnOpcionActivo : {}),
               }}
-              onClick={() => {
-                console.log('[FlujoVenta] Producto seleccionado:', p);
+              onPointerDown={() => {
+                console.log('[flujoVenta] paso 1 — producto seleccionado:', p.nombre);
                 setProductoSeleccionado(p);
                 setCantidad(1); // resetear cantidad al cambiar producto
                 avanzar();
@@ -183,9 +182,8 @@ export default function FlujoVenta({ onVolver, productos }) {
                 ...styles.btnCantidad,
                 ...(cantidad <= 1 ? styles.btnCantidadDeshabilitado : {}),
               }}
-              onClick={() => {
+              onPointerDown={() => {
                 if (cantidad > 1) {
-                  console.log('[FlujoVenta] Cantidad decrementada:', cantidad - 1);
                   setCantidad((c) => c - 1);
                 }
               }}
@@ -200,9 +198,8 @@ export default function FlujoVenta({ onVolver, productos }) {
                 ...styles.btnCantidad,
                 ...(cantidad >= productoSeleccionado?.stock_actual ? styles.btnCantidadDeshabilitado : {}),
               }}
-              onClick={() => {
+              onPointerDown={() => {
                 if (cantidad < productoSeleccionado?.stock_actual) {
-                  console.log('[FlujoVenta] Cantidad incrementada:', cantidad + 1);
                   setCantidad((c) => c + 1);
                 }
               }}
@@ -222,8 +219,8 @@ export default function FlujoVenta({ onVolver, productos }) {
               ...styles.btnContinuar,
               ...(productoSeleccionado?.stock_actual === 0 ? styles.btnDeshabilitado : {}),
             }}
-            onClick={() => {
-              console.log('[FlujoVenta] Cantidad confirmada:', cantidad);
+            onPointerDown={() => {
+              console.log('[flujoVenta] paso 2 — cantidad confirmada:', cantidad);
               avanzar();
             }}
             disabled={productoSeleccionado?.stock_actual === 0}
@@ -257,8 +254,8 @@ export default function FlujoVenta({ onVolver, productos }) {
                 ...styles.btnOpcionGrande,
                 ...(formaPago === op.key ? styles.btnOpcionActivo : {}),
               }}
-              onClick={() => {
-                console.log('[FlujoVenta] Forma de pago seleccionada:', op.key);
+              onPointerDown={() => {
+                console.log('[flujoVenta] paso 3 — forma de pago:', op.key);
                 setFormaPago(op.key);
                 avanzar();
               }}
@@ -274,13 +271,8 @@ export default function FlujoVenta({ onVolver, productos }) {
 
   // ─── PASO 4 — Resumen y confirmación ─────────────────────────────────────────
   if (paso === 4) {
-    console.log('[FlujoVenta] Mostrando resumen —', {
-      producto: productoSeleccionado?.nombre,
-      precio_unitario: productoSeleccionado?.precio,
-      cantidad,
-      formaPago,
-      montoTotal,
-    });
+    console.log('[flujoVenta] paso 4 — resumen | producto:', productoSeleccionado?.nombre,
+      '| cantidad:', cantidad, '| total:', montoTotal);
     return (
       <PasoLayout paso={4} total={4} titulo="Confirmá la venta" onVolver={retroceder}>
         <div style={styles.resumenCard}>
@@ -329,7 +321,7 @@ export default function FlujoVenta({ onVolver, productos }) {
             ...styles.btnConfirmar,
             ...(enviando ? styles.btnDeshabilitado : {}),
           }}
-          onClick={confirmarVenta}
+          onPointerDown={confirmarVenta}
           disabled={enviando}
         >
           {enviando ? "Guardando..." : "Confirmar Venta"}

@@ -27,7 +27,7 @@ export const tenantMiddleware = (req, res, next) => {
   const tenantId = process.env.TENANT_ID;
 
   if (!tenantId) {
-    console.error('[tenantMiddleware] TENANT_ID no está definido en .env — abortando request');
+    console.error('[tenantMiddleware] Error en tenantMiddleware: TENANT_ID no definido en .env');
     return res.status(500).json({ error: 'Configuración de tenant inválida' });
   }
 

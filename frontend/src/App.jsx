@@ -11,11 +11,10 @@ import {
   getServicios,
   getProductos,
   getCategorias,
+  getNegocio,
   setAuthToken,
   clearAuthToken,
 } from "./services/api";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 // ─── Pantalla de carga inicial ────────────────────────────────────────────────
 // Se muestra mientras precargarDatos está en vuelo al arrancar la app.
@@ -129,12 +128,11 @@ export default function App() {
    */
   const cargarLogo = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/gestion/negocio`);
-      const data = await res.json();
+      const data = await getNegocio();
       setLogoUrl(data.logo || null);
-      console.log('[App] Logo del negocio cargado:', data.logo ? 'sí' : 'no');
+      console.log('[app] cargarLogo — completado | logo:', data.logo ? 'sí' : 'no');
     } catch (err) {
-      console.error('[App] Error al cargar logo del negocio:', err);
+      console.error('[app] Error en cargarLogo:', err.message);
     }
   }, []);
 
@@ -156,15 +154,14 @@ export default function App() {
         getProductos(),
         getCategorias(),
       ]);
-      console.log('[App] Datos precargados correctamente —', {
-        barberos: barberos.length,
-        servicios: servicios.length,
-        productos: productos.length,
-        categorias: categorias.length,
-      });
+      console.log('[app] precargarDatos — completado | barberos:', barberos.length,
+        '| servicios:', servicios.length,
+        '| productos:', productos.length,
+        '| categorias:', categorias.length
+      );
       setDatos({ barberos, servicios, productos, categorias, cargando: false, error: null });
     } catch (err) {
-      console.error('[App] Error al precargar datos:', err);
+      console.error('[app] Error en precargarDatos:', err.message);
       setDatos(prev => ({ ...prev, cargando: false, error: "Error al cargar datos" }));
     }
   }, []);
@@ -179,7 +176,7 @@ export default function App() {
    * Relanza tanto los datos operativos como el logo.
    */
   const reintentar = useCallback(() => {
-    console.log('[App] Reintentando carga — datos + logo');
+    console.log('[app] reintentar — iniciado');
     precargarDatos();
     cargarLogo();
   }, [precargarDatos, cargarLogo]);
@@ -194,7 +191,7 @@ export default function App() {
    * los datos operativos para reflejar cambios hechos desde Gestión.
    */
   const cerrarSesionAdmin = () => {
-    console.log('[App] Cerrando sesión admin — limpiando token y recargando datos...');
+    console.log('[app] cerrarSesionAdmin — iniciado');
     setToken(null);
     clearAuthToken(); // elimina el token del módulo api.js
     precargarDatos();
@@ -208,21 +205,21 @@ export default function App() {
 
   // ── Pantalla de error de conexión ──────────────────────────────────────────
   if (datos.error && datos.barberos.length === 0) {
-    console.error('[App] Estado de error activo — mostrando PantallaError');
+    console.error('[app] precargarDatos — mostrando PantallaError');
     return <PantallaError onReintentar={reintentar} />;
   }
 
   if (currentScreen === "nuevoCorte") {
-    console.log('[App] Renderizando FlujoCorte');
+    console.log('[app] Renderizando FlujoCorte');
     return <FlujoCorte onVolver={volverAlInicio}
       barberos={datos.barberos} servicios={datos.servicios} />;
   }
 
   if (currentScreen === "nuevaVenta") {
-    console.log('[App] Renderizando FlujoVenta');
+    console.log('[app] Renderizando FlujoVenta');
     return <FlujoVenta
       onVolver={() => {
-        console.log('[App] Volviendo desde FlujoVenta — recargando datos de productos...');
+        console.log('[app] Volviendo desde FlujoVenta — recargando datos de productos...');
         precargarDatos();
         setCurrentScreen("main");
       }}
@@ -231,17 +228,17 @@ export default function App() {
   }
 
   if (currentScreen === "nuevoGasto") {
-    console.log('[App] Renderizando FlujoGasto');
+    console.log('[app] Renderizando FlujoGasto');
     return <FlujoGasto onVolver={volverAlInicio}
       categorias={datos.categorias} />;
   }
 
   if (currentScreen === "loginAdmin") {
-    console.log('[App] Renderizando PantallaLoginAdmin');
+    console.log('[app] Renderizando PantallaLoginAdmin');
     return (
       <PantallaLoginAdmin
         onAcceso={(tokenRecibido) => {
-          console.log('[App] Acceso admin concedido — guardando token y navegando a panel admin');
+          console.log('[app] Acceso admin concedido — guardando token y navegando a panel admin');
           setToken(tokenRecibido);
           setAuthToken(tokenRecibido); // registra el token en el módulo api.js para apiFetch()
           setCurrentScreen("admin");
@@ -252,30 +249,30 @@ export default function App() {
   }
 
   if (currentScreen === "admin") {
-    console.log('[App] Renderizando PanelAdmin');
+    console.log('[app] Renderizando PanelAdmin');
     return <PanelAdmin onCerrarSesion={cerrarSesionAdmin} />;
   }
 
   return (
     <MainScreen
       onNuevoCorte={() => {
-        console.log('[App] Navegando a → nuevoCorte');
+        console.log('[app] Navegando a → nuevoCorte');
         setCurrentScreen("nuevoCorte");
       }}
       onNuevaVenta={() => {
-        console.log('[App] Navegando a → nuevaVenta');
+        console.log('[app] Navegando a → nuevaVenta');
         setCurrentScreen("nuevaVenta");
       }}
       onNuevoGasto={() => {
-        console.log('[App] Navegando a → nuevoGasto');
+        console.log('[app] Navegando a → nuevoGasto');
         setCurrentScreen("nuevoGasto");
       }}
       onAdminAccess={() => {
-        console.log('[App] Navegando a → loginAdmin');
+        console.log('[app] Navegando a → loginAdmin');
         setCurrentScreen("loginAdmin");
       }}
       onSpotify={() => {
-        console.log('[App] Abriendo Spotify');
+        console.log('[app] Abriendo Spotify');
         window.open("https://open.spotify.com", "_blank");
       }}
       logoUrl={logoUrl}

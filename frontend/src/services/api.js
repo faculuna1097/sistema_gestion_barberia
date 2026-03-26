@@ -22,7 +22,7 @@ let authToken = null;
  */
 export const setAuthToken = (token) => {
   authToken = token;
-  console.log('[api] Token de autenticación guardado en módulo');
+  console.log('[api] setAuthToken — completado');
 };
 
 /**
@@ -31,7 +31,7 @@ export const setAuthToken = (token) => {
  */
 export const clearAuthToken = () => {
   authToken = null;
-  console.log('[api] Token de autenticación eliminado del módulo');
+  console.log('[api] clearAuthToken — completado');
 };
 
 /**
@@ -150,5 +150,32 @@ export const registrarGasto = async (datos) => {
     body: JSON.stringify(datos),
   });
   if (!response.ok) throw new Error('Error al registrar el gasto');
+  return response.json();
+};
+
+/**
+ * getNegocio
+ * Obtiene los datos del negocio (nombre, logo) del tenant.
+ * @returns {Promise<Object>} { nombre_negocio, logo }
+ */
+export const getNegocio = async () => {
+  const response = await fetch(`${BASE_URL}/gestion/negocio`);
+  if (!response.ok) throw new Error('Error al obtener datos del negocio');
+  return response.json();
+};
+
+/**
+ * verificarPin
+ * Envía el PIN al backend para autenticación. Devuelve un JWT si es correcto.
+ * @param {string} pin - PIN de 4 dígitos ingresado por el usuario
+ * @returns {Promise<Object>} { token }
+ */
+export const verificarPin = async (pin) => {
+  const response = await fetch(`${BASE_URL}/auth/verificar-pin`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin }),
+  });
+  if (!response.ok) throw new Error('PIN incorrecto');
   return response.json();
 };

@@ -44,11 +44,10 @@ const Card = ({ children }) => (
 
 // ─── Card 1 — Actividad del día ───────────────────────────────────────────────
 /**
- * CardDia — muestra clientes y facturación de hoy con comparativa vs ayer.
- * Emoji a la izquierda del número, en la misma fila.
+ * CardDia — muestra clientes y facturación de hoy 
  */
 function CardDia({ data }) {
-  const { clientes_dia, monto_dia, diferencia_pct_dia } = data;
+  const { clientes_dia, monto_dia,} = data;
 
   return (
     <Card>
@@ -81,12 +80,6 @@ function CardDia({ data }) {
         </div>
 
       </div>
-
-      {/* Badge comparativa */}
-      {/* <div style={styles.badgeRow}>
-        <BadgeVariacion pct={diferencia_pct_dia} sinDatosLabel="Sin datos de ayer" />
-        <span style={styles.badgeSubLabel}>vs ayer a esta hora</span>
-      </div> */}
       
     </Card>
   );
@@ -211,17 +204,15 @@ export default function SeccionInicio() {
   const [error,       setError]       = useState(null);
 
   useEffect(() => {
-    console.log('[SeccionInicio] Cargando datos...');
+    console.log('[SeccionInicio] useEffect — request iniciado');
     Promise.all([
       apiFetch(`${API_URL}/api/inicio/resumen-dia`).then(r => r.json()),
       apiFetch(`${API_URL}/api/inicio/comparativo-mes`).then(r => r.json()),
       apiFetch(`${API_URL}/api/inicio/stock-bajo`).then(r => r.json()),
     ])
       .then(([resumenData, comparativoData, stockData]) => {
-        console.log('[SeccionInicio] Datos cargados —',
-          'monto_dia:', resumenData.monto_dia,
+        console.log('[SeccionInicio] useEffect — completado | monto_dia:', resumenData.monto_dia,
           '| clientes_dia:', resumenData.clientes_dia,
-          '| dif_dia:', resumenData.diferencia_pct_dia,
           '| dif_mes:', comparativoData.diferencia_pct,
           '| stock_bajo:', stockData.productos?.length
         );
@@ -231,7 +222,7 @@ export default function SeccionInicio() {
         setCargando(false);
       })
       .catch(err => {
-        console.error('[SeccionInicio] Error al cargar datos:', err);
+        console.error('[SeccionInicio] Error en useEffect:', err.message);
         setError('No se pudieron cargar los datos. Intentá recargar la página.');
         setCargando(false);
       });

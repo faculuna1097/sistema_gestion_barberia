@@ -17,13 +17,13 @@ import jwt from 'jsonwebtoken';
  * @param {Function} next - Pasa al siguiente middleware o controller si todo es correcto.
  */
 export const verificarToken = (req, res, next) => {
-  console.log('[authMiddleware] Verificando token para:', req.method, req.url);
+  console.log('[authMiddleware] verificarToken — request recibido | ruta:', req.method, req.url);
 
   const authHeader = req.headers['authorization'];
 
   // Verificar que el header exista y tenga el formato "Bearer <token>"
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.error('[authMiddleware] Header Authorization ausente o con formato incorrecto');
+    console.error('[authMiddleware] Error en verificarToken: header Authorization ausente o con formato incorrecto');
     return res.status(401).json({ error: 'Acceso no autorizado — token requerido' });
   }
 
@@ -35,12 +35,11 @@ export const verificarToken = (req, res, next) => {
 
     // Inyectar el tenant_id en el request para que los controllers lo usen
     req.tenant_id = payload.tenant_id;
-
-    console.log('[authMiddleware] Token válido — tenant_id:', req.tenant_id);
+    console.log('[authMiddleware] verificarToken — completado | tenant_id:', req.tenant_id);
     next();
   } catch (err) {
     // jwt.verify lanza error si el token está vencido, manipulado o con firma inválida
-    console.error('[authMiddleware] Token inválido:', err.message);
+    console.error('[authMiddleware] Error en verificarToken:', err.message);
     return res.status(401).json({ error: 'Token inválido o expirado' });
   }
 };

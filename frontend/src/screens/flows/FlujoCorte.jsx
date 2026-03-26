@@ -43,8 +43,7 @@ const PasoLayout = ({ paso, total, titulo, subtitulo, onVolver, children }) => (
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function FlujoCorte({ onVolver, barberos, servicios }) {
-  console.log('[FlujoCorte] Montado — barberos recibidos:', barberos.length, '| servicios recibidos:', servicios.length);
-
+  console.log('[flujoCorte] render — barberos:', barberos.length, '| servicios:', servicios.length);
   const [paso, setPaso] = useState(1);
 
   const [barberoSeleccionado, setBarberoSeleccionado] = useState(null);
@@ -60,7 +59,6 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
   // ── Navegación ──────────────────────────────────────────────────────────────
 
   const avanzar = () => {
-    //console.log('[FlujoCorte] Avanzando — paso actual:', paso, '→', paso + 1);
     setPaso((p) => p + 1);
   };
 
@@ -69,16 +67,15 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
    */
   const retroceder = () => {
     if (paso === 1) {
-      //console.log('[FlujoCorte] Volviendo a pantalla principal desde paso 1');
       onVolver();
       return;
     }
     if (paso === 5) {
-      console.log('[FlujoCorte] Retrocediendo desde resumen — reseteando propina');
+      console.log('[flujoCorte] retroceder — reseteando propina');
       setTienePropina(null);
       setMontoPropina("");
     }
-    console.log('[FlujoCorte] Retrocediendo — paso actual:', paso, '→', paso - 1);
+    console.log('[flujoCorte] retroceder — paso:', paso, '→', paso - 1);
     setPaso((p) => p - 1);
   };
 
@@ -94,19 +91,18 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
       forma_pago: formaPago,
       propina: propinaFinal,
     };
-    //console.log('[FlujoCorte] Confirmando corte — payload:', payload);
     setEnviando(true);
     setError(null);
     try {
       const respuesta = await registrarCorte(payload);
-      console.log('[FlujoCorte] Corte registrado exitosamente — respuesta:', respuesta);
+      console.log('[flujoCorte] confirmarCorte — completado | corte_id:', respuesta.corte_id);
       setExito(true);
       setTimeout(() => {
-        console.log('[FlujoCorte] Redirigiendo a pantalla principal tras éxito');
+        console.log('[flujoCorte] confirmarCorte — redirigiendo a pantalla principal');
         onVolver();
       }, 2000);
     } catch (err) {
-      console.error('[FlujoCorte] Error al registrar el corte:', err);
+      console.error('[flujoCorte] Error en confirmarCorte:', err.message);
       setError("Error al guardar el corte. Intentá de nuevo.");
     } finally {
       setEnviando(false);
@@ -115,7 +111,7 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
 
   // ── Pantalla de éxito ────────────────────────────────────────────────────────
   if (exito) {
-    console.log('[FlujoCorte] Mostrando pantalla de éxito — monto total:', montoTotal);
+    console.log('[flujoCorte] exito — monto total:', montoTotal);
     return (
       <div style={styles.pantallaCentrada}>
         <div style={styles.lineaSuperior} />
@@ -138,8 +134,8 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
                 ...styles.btnOpcion,
                 ...(barberoSeleccionado?.id === b.id ? styles.btnOpcionActivo : {}),
               }}
-              onClick={() => {
-                console.log('[FlujoCorte] Barbero seleccionado:', b);
+              onPointerDown={() => {
+                console.log('[flujoCorte] paso 1 — barbero seleccionado:', b.nombre);
                 setBarberoSeleccionado(b);
                 avanzar();
               }}
@@ -164,8 +160,8 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
                 ...styles.btnOpcion,
                 ...(servicioSeleccionado?.id === s.id ? styles.btnOpcionActivo : {}),
               }}
-              onClick={() => {
-                console.log('[FlujoCorte] Servicio seleccionado:', s);
+              onPointerDown={() => {
+                console.log('[flujoCorte] paso 2 — servicio seleccionado:', s.nombre);
                 setServicioSeleccionado(s);
                 avanzar();
               }}
@@ -205,8 +201,8 @@ if (paso === 3) {
               ...styles.btnOpcionGrande,
               ...(formaPago === op.key ? styles.btnOpcionActivo : {}),
             }}
-            onClick={() => {
-              console.log('[FlujoCorte] Forma de pago seleccionada:', op.key);
+            onPointerDown={() => {
+              console.log('[flujoCorte] paso 3 — forma de pago:', op.key);
               setFormaPago(op.key);
               avanzar();
             }}
@@ -227,16 +223,16 @@ if (paso === 3) {
         {tienePropina === null ? (
           <div style={styles.gridDos}>
             <button style={styles.btnOpcionGrande}
-              onClick={() => {
-                console.log('[FlujoCorte] Propina: SÍ');
+              onPointerDown={() => {
+                console.log('[flujoCorte] paso 4 — propina: sí');
                 setTienePropina(true);
               }}>
               <span style={styles.emoji}>✅</span>
               <span>Sí</span>
             </button>
             <button style={styles.btnOpcionGrande}
-              onClick={() => {
-                console.log('[FlujoCorte] Propina: NO — avanzando a resumen');
+              onPointerDown={() => {
+                console.log('[flujoCorte] paso 4 — propina: no');
                 setTienePropina(false);
                 avanzar();
               }}>
@@ -254,7 +250,6 @@ if (paso === 3) {
                 min="0"
                 value={montoPropina}
                 onChange={(e) => {
-                  console.log('[FlujoCorte] Monto propina ingresado:', e.target.value);
                   setMontoPropina(e.target.value);
                 }}
                 placeholder="0"
@@ -267,8 +262,8 @@ if (paso === 3) {
                 ...styles.btnContinuar,
                 ...(montoPropina === "" ? styles.btnDeshabilitado : {}),
               }}
-              onClick={() => {
-                console.log('[FlujoCorte] Propina confirmada — monto:', montoPropina);
+              onPointerDown={() => {
+                console.log('[flujoCorte] paso 4 — propina confirmada | monto:', montoPropina);
                 avanzar();
               }}
               disabled={montoPropina === ""}
@@ -283,14 +278,8 @@ if (paso === 3) {
 
   // ─── PASO 5 — Resumen y confirmación ─────────────────────────────────────────
   if (paso === 5) {
-    console.log('[FlujoCorte] Mostrando resumen —', {
-      barbero: barberoSeleccionado?.nombre,
-      servicio: servicioSeleccionado?.nombre,
-      precio: servicioSeleccionado?.precio,
-      formaPago,
-      propina: propinaFinal,
-      montoTotal,
-    });
+    console.log('[flujoCorte] paso 5 — resumen | barbero:', barberoSeleccionado?.nombre,
+     '| servicio:', servicioSeleccionado?.nombre, '| total:', montoTotal);
     return (
       <PasoLayout paso={5} total={5} titulo="Confirmá el corte" onVolver={retroceder}>
         <div style={styles.resumenCard}>
@@ -351,7 +340,7 @@ if (paso === 3) {
             ...styles.btnConfirmar,
             ...(enviando ? styles.btnDeshabilitado : {}),
           }}
-          onClick={confirmarCorte}
+          onPointerDown={confirmarCorte}
           disabled={enviando}
         >
           {enviando ? "Guardando..." : "Confirmar Corte"}
