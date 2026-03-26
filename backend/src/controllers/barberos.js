@@ -4,30 +4,27 @@
 
 import { query } from '../config/db.js';
 
-// TODO: En producción, el tenant_id debería obtenerse del token JWT del usuario autenticado.
-const TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001';
-
 /**
  * getBarberos
- * Devuelve la lista de barberos activos del tenant.
- * @param {Request} req - Request HTTP (no se usa por ahora)
- * @param {Response} res - Response HTTP
+ * Devuelve la lista de barberos activos del tenant, ordenada alfabéticamente.
+ * "Teton" se mueve al final por convención del negocio.
+ * @param {string} req.tenant_id - Inyectado por tenantMiddleware
  * @returns {JSON} Array de barberos con id y nombre
  */
 export const getBarberos = async (req, res) => {
-  console.log('[getBarberos] Solicitud recibida — tenant_id:', TENANT_ID);
+  console.log('[barberos] getBarberos — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
-      `SELECT id, nombre 
-       FROM barbero 
-       WHERE tenant_id = $1 AND activo = true 
+      `SELECT id, nombre
+       FROM barbero
+       WHERE tenant_id = $1 AND activo = true
        ORDER BY (nombre = 'Teton') ASC, nombre ASC`,
-      [TENANT_ID]
+      [req.tenant_id]
     );
-    console.log('[getBarberos] Barberos encontrados:', result.rows.length, result.rows);
+    console.log('[barberos] getBarberos — completado:', result.rows.length, 'barberos encontrados');
     res.json(result.rows);
-  } catch (error) {
-    console.error('[getBarberos] Error al consultar la base de datos:', error);
+  } catch (err) {
+    console.error('[barberos] Error en getBarberos:', err.message);
     res.status(500).json({ error: 'Error al obtener barberos' });
   }
 };

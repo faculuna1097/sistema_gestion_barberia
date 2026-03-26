@@ -1,20 +1,20 @@
-// backend/src/controllers/caja.js
+// /backend/src/controllers/caja.js
 import { query } from '../config/db.js';
 
 const TZ = 'America/Argentina/Buenos_Aires';
 
 /**
- * getMovimientosDia — devuelve todos los movimientos del día solicitado
- * ordenados por timestamp: cortes, ventas y gastos mergeados.
- * Query param: fecha (YYYY-MM-DD, opcional — default: hoy en timezone AR)
- * req.tenant_id inyectado por verificarToken
- * Retorna: { movimientos: [...] }
+ * getMovimientosDia
+ * Devuelve todos los movimientos del día (cortes, ventas y gastos) ordenados por timestamp.
+ * @param {string} req.query.fecha - Fecha en formato YYYY-MM-DD (default: hoy en timezone AR)
+ * @param {string} req.tenant_id - Inyectado por verificarToken
+ * @returns {JSON} { movimientos: [...] }
  */
 export const getMovimientosDia = async (req, res) => {
   const fecha = req.query.fecha
     || new Date().toLocaleDateString('sv-SE', { timeZone: TZ });
 
-  console.log(`[Caja] Request recibido: GET /api/caja/movimientos-dia — fecha: ${fecha} | tenant: ${req.tenant_id}`);
+  console.log(`[caja] getMovimientosDia — request recibido | fecha: ${fecha} | tenant: ${req.tenant_id}`);
 
   try {
     // ── Query 1: Cortes del día ──────────────────────────────────────────────
@@ -91,32 +91,34 @@ export const getMovimientosDia = async (req, res) => {
       ...gastosResult.rows,
     ].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    console.log('[Caja] Movimientos obtenidos:', movimientos.length, '| fecha:', fecha);
+    console.log('[caja] getMovimientosDia — completado:', movimientos.length, 'movimientos | fecha:', fecha);
     res.json({ movimientos });
 
   } catch (err) {
-    console.error('[Caja] Error al obtener movimientos:', err);
+    console.error('[caja] Error en getMovimientosDia:', err.message);
     res.status(500).json({ error: 'Error al obtener movimientos del día' });
   }
 };
 
 /**
- * eliminarMovimiento — elimina un registro del día por tipo e id.
+ * eliminarMovimiento
+ * Elimina un registro del día por tipo e id.
  * - corte: borra corte_servicio primero, luego corte
  * - venta: restaura stock_actual del producto, luego borra venta
  * - gasto: borra directo
- * req.tenant_id inyectado por verificarToken
- * Params: tipo ('corte' | 'venta' | 'gasto'), id (uuid)
+ * @param {string} req.params.tipo - 'corte' | 'venta' | 'gasto'
+ * @param {string} req.params.id - UUID del registro
+ * @param {string} req.tenant_id - Inyectado por verificarToken
  */
 export const eliminarMovimiento = async (req, res) => {
   const { tipo, id } = req.params;
-  console.log(`[Caja] Request recibido: DELETE /api/caja/movimientos/${tipo}/${id} | tenant: ${req.tenant_id}`);
+  console.log(`[caja] eliminarMovimiento — request recibido | tipo: ${tipo} | id: ${id} | tenant: ${req.tenant_id}`);
 
   try {
     if (tipo === 'corte') {
       await query('DELETE FROM corte_servicio WHERE corte_id = $1', [id]);
       await query('DELETE FROM corte WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
-      console.log('[Caja] Corte eliminado — id:', id);
+      console.log('[caja] eliminarMovimiento — corte eliminado | id:', id);
 
     } else if (tipo === 'venta') {
       const ventaResult = await query(
@@ -131,13 +133,13 @@ export const eliminarMovimiento = async (req, res) => {
         'UPDATE producto SET stock_actual = stock_actual + $1 WHERE id = $2',
         [cantidad, producto_id]
       );
-      console.log('[Caja] Stock restaurado — producto_id:', producto_id, '| cantidad:', cantidad);
+      console.log('[caja] eliminarMovimiento — stock restaurado | producto_id:', producto_id, '| cantidad:', cantidad);
       await query('DELETE FROM venta WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
-      console.log('[Caja] Venta eliminada — id:', id);
+      console.log('[caja] eliminarMovimiento — venta eliminada | id:', id);
 
     } else if (tipo === 'gasto') {
       await query('DELETE FROM gasto WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
-      console.log('[Caja] Gasto eliminado — id:', id);
+      console.log('[caja] eliminarMovimiento — gasto eliminado | id:', id);
 
     } else {
       return res.status(400).json({ error: 'Tipo inválido' });
@@ -146,7 +148,7 @@ export const eliminarMovimiento = async (req, res) => {
     res.json({ ok: true });
 
   } catch (err) {
-    console.error(`[Caja] Error al eliminar ${tipo}:`, err);
+    console.error(`[caja] Error en eliminarMovimiento (${tipo}):`, err.message);
     res.status(500).json({ error: `Error al eliminar ${tipo}` });
   }
 };

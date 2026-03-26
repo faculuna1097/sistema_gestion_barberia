@@ -3,15 +3,26 @@
 
 import { query } from '../config/db.js';
 
+const TZ = 'America/Argentina/Buenos_Aires';
+
+/**
+ * redondear2
+ * Redondea un número a 2 decimales.
+ * @param {number} n
+ * @returns {number}
+ */
+const redondear2 = (n) => Math.round(n * 100) / 100;
+
 // ─── GET /api/balances/mensual?mes=YYYY-MM ────────────────────────────────────
 /**
+ * getBalanceMensual
  * Devuelve el balance completo de un mes dado.
- * req.tenant_id inyectado por verificarToken
  * @param {string} req.query.mes - Mes en formato YYYY-MM (default: mes actual)
+ * @param {string} req.tenant_id - Inyectado por verificarToken
  */
 export const getBalanceMensual = async (req, res) => {
   const mes = req.query.mes || new Date().toISOString().slice(0, 7);
-  console.log('[balances] getBalanceMensual — request recibido:', { mes }, '| tenant:', req.tenant_id);
+  console.log('[balances] getBalanceMensual — request recibido:', { mes, tenant: req.tenant_id });
 
   if (!/^\d{4}-\d{2}$/.test(mes)) {
     return res.status(400).json({ error: 'Formato de mes inválido. Usar YYYY-MM.' });
@@ -20,6 +31,7 @@ export const getBalanceMensual = async (req, res) => {
   const fechaInicio = `${mes}-01`;
   const [anio, mesNum] = mes.split('-').map(Number);
   const fechaFin = new Date(anio, mesNum, 1).toISOString().slice(0, 10);
+  const params = [req.tenant_id, fechaInicio, fechaFin];
 
   try {
     const queryServicios = `
@@ -50,8 +62,8 @@ export const getBalanceMensual = async (req, res) => {
 
     const queryProductos = `
       SELECT
-        p.nombre                                    AS nombre,
-        SUM(v.cantidad)::int                        AS cantidad,
+        p.nombre                                         AS nombre,
+        SUM(v.cantidad)::int                             AS cantidad,
         COALESCE(SUM(v.cantidad * v.precio_unitario), 0) AS total
       FROM venta v
       JOIN producto p ON p.id = v.producto_id
@@ -75,8 +87,6 @@ export const getBalanceMensual = async (req, res) => {
       ORDER BY total DESC
     `;
 
-    const params = [req.tenant_id, fechaInicio, fechaFin];
-
     const [resServicios, resPropinas, resProductos, resGastos] = await Promise.all([
       query(queryServicios, params),
       query(queryPropinas, params),
@@ -90,20 +100,19 @@ export const getBalanceMensual = async (req, res) => {
       const montoComision  = montoServicios * (comisionValor / 100);
       const netoNegocio    = montoServicios - montoComision;
       return {
-        barbero_id:    b.barbero_id,
-        nombre:        b.nombre,
-        cortes:        b.cortes,
+        barbero_id:      b.barbero_id,
+        nombre:          b.nombre,
+        cortes:          b.cortes,
         monto_servicios: montoServicios,
-        comision_tipo:  b.comision_tipo,
-        comision_valor: comisionValor,
-        monto_comision: Math.round(montoComision * 100) / 100,
-        neto_negocio:   Math.round(netoNegocio * 100) / 100,
+        comision_tipo:   b.comision_tipo,
+        comision_valor:  comisionValor,
+        monto_comision:  redondear2(montoComision),
+        neto_negocio:    redondear2(netoNegocio),
       };
     });
 
-    const totalProductos = resProductos.rows.reduce((acc, p) => acc + Number(p.total), 0);
-    const totalGastos    = resGastos.rows.reduce((acc, g) => acc + Number(g.total), 0);
-
+    const totalProductos  = resProductos.rows.reduce((acc, p) => acc + Number(p.total), 0);
+    const totalGastos     = resGastos.rows.reduce((acc, g) => acc + Number(g.total), 0);
     const ingresosBrutos  = serviciosPorBarbero.reduce((acc, b) => acc + b.monto_servicios, 0) + totalProductos;
     const totalComisiones = serviciosPorBarbero.reduce((acc, b) => acc + b.monto_comision, 0);
     const ingresosNetos   = ingresosBrutos - totalComisiones;
@@ -113,7 +122,7 @@ export const getBalanceMensual = async (req, res) => {
       mes,
       serviciosPorBarbero,
       productos: {
-        total: Math.round(totalProductos * 100) / 100,
+        total:   redondear2(totalProductos),
         detalle: resProductos.rows.map((p) => ({
           nombre:   p.nombre,
           cantidad: p.cantidad,
@@ -121,7 +130,7 @@ export const getBalanceMensual = async (req, res) => {
         })),
       },
       gastos: {
-        total: Math.round(totalGastos * 100) / 100,
+        total:        redondear2(totalGastos),
         porCategoria: resGastos.rows.map((g) => ({
           categoria: g.categoria,
           total:     Number(g.total),
@@ -129,11 +138,11 @@ export const getBalanceMensual = async (req, res) => {
       },
       propinas: { total: Number(resPropinas.rows[0].total) },
       resumen: {
-        ingresos_brutos:   Math.round(ingresosBrutos * 100) / 100,
-        total_comisiones:  Math.round(totalComisiones * 100) / 100,
-        ingresos_netos:    Math.round(ingresosNetos * 100) / 100,
-        egresos:           Math.round(totalGastos * 100) / 100,
-        balance_neto:      Math.round(balanceNeto * 100) / 100,
+        ingresos_brutos:  redondear2(ingresosBrutos),
+        total_comisiones: redondear2(totalComisiones),
+        ingresos_netos:   redondear2(ingresosNetos),
+        egresos:          redondear2(totalGastos),
+        balance_neto:     redondear2(balanceNeto),
       },
     };
 
@@ -146,57 +155,55 @@ export const getBalanceMensual = async (req, res) => {
 
     res.json(respuesta);
   } catch (err) {
-    console.error('[balances] Error en getBalanceMensual:', err);
+    console.error('[balances] Error en getBalanceMensual:', err.message);
     res.status(500).json({ error: 'Error al obtener el balance mensual.' });
   }
 };
 
 // ─── GET /api/balances/historico?cantidad=12 ──────────────────────────────────
 /**
+ * getBalanceHistorico
  * Devuelve el resumen de los últimos N meses para la tabla de histórico anual.
- * req.tenant_id inyectado por verificarToken
  * @param {number} req.query.cantidad - Cantidad de meses (default: 12, máx: 24)
+ * @param {string} req.tenant_id - Inyectado por verificarToken
  */
 export const getBalanceHistorico = async (req, res) => {
   const cantidad = Math.min(parseInt(req.query.cantidad) || 12, 24);
-  console.log('[balances] getBalanceHistorico — request recibido:', { cantidad }, '| tenant:', req.tenant_id);
+  console.log('[balances] getBalanceHistorico — request recibido:', { cantidad, tenant: req.tenant_id });
 
   try {
     const queryServiciosMensuales = `
       SELECT
-        TO_CHAR(DATE_TRUNC('month', c.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'), 'YYYY-MM') AS mes,
-        COALESCE(SUM(cs.precio), 0) AS ingresos_brutos_servicios,
-        COALESCE(SUM(cs.precio * b.comision_valor / 100.0), 0) AS total_comisiones
+        TO_CHAR(DATE_TRUNC('month', c.timestamp AT TIME ZONE '${TZ}'), 'YYYY-MM') AS mes,
+        COALESCE(SUM(cs.precio), 0)                                                AS ingresos_brutos_servicios,
+        COALESCE(SUM(cs.precio * b.comision_valor / 100.0), 0)                     AS total_comisiones
       FROM corte c
       JOIN barbero b ON b.id = c.barbero_id
       JOIN corte_servicio cs ON cs.corte_id = c.id
       WHERE c.tenant_id = $1
-        AND c.timestamp >= NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires'
-                            - INTERVAL '1 month' * $2
-      GROUP BY DATE_TRUNC('month', c.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires')
-      ORDER BY DATE_TRUNC('month', c.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires') DESC
+        AND c.timestamp >= NOW() AT TIME ZONE '${TZ}' - INTERVAL '1 month' * $2
+      GROUP BY DATE_TRUNC('month', c.timestamp AT TIME ZONE '${TZ}')
+      ORDER BY DATE_TRUNC('month', c.timestamp AT TIME ZONE '${TZ}') DESC
     `;
 
     const queryProductosMensuales = `
       SELECT
-        TO_CHAR(DATE_TRUNC('month', timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'), 'YYYY-MM') AS mes,
-        COALESCE(SUM(cantidad * precio_unitario), 0) AS total_productos
+        TO_CHAR(DATE_TRUNC('month', timestamp AT TIME ZONE '${TZ}'), 'YYYY-MM') AS mes,
+        COALESCE(SUM(cantidad * precio_unitario), 0)                             AS total_productos
       FROM venta
       WHERE tenant_id = $1
-        AND timestamp >= NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires'
-                          - INTERVAL '1 month' * $2
-      GROUP BY DATE_TRUNC('month', timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires')
+        AND timestamp >= NOW() AT TIME ZONE '${TZ}' - INTERVAL '1 month' * $2
+      GROUP BY DATE_TRUNC('month', timestamp AT TIME ZONE '${TZ}')
     `;
 
     const queryGastosMensuales = `
       SELECT
-        TO_CHAR(DATE_TRUNC('month', timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires'), 'YYYY-MM') AS mes,
-        COALESCE(SUM(monto), 0) AS total_gastos
+        TO_CHAR(DATE_TRUNC('month', timestamp AT TIME ZONE '${TZ}'), 'YYYY-MM') AS mes,
+        COALESCE(SUM(monto), 0)                                                  AS total_gastos
       FROM gasto
       WHERE tenant_id = $1
-        AND timestamp >= NOW() AT TIME ZONE 'America/Argentina/Buenos_Aires'
-                          - INTERVAL '1 month' * $2
-      GROUP BY DATE_TRUNC('month', timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires')
+        AND timestamp >= NOW() AT TIME ZONE '${TZ}' - INTERVAL '1 month' * $2
+      GROUP BY DATE_TRUNC('month', timestamp AT TIME ZONE '${TZ}')
     `;
 
     const [resServicios, resProductos, resGastos] = await Promise.all([
@@ -237,11 +244,11 @@ export const getBalanceHistorico = async (req, res) => {
         return {
           mes,
           label,
-          ingresos_brutos:  Math.round(ingresosBrutos * 100) / 100,
-          total_comisiones: Math.round(totalComisiones * 100) / 100,
-          ingresos_netos:   Math.round(ingresosNetos * 100) / 100,
-          egresos:          Math.round(egresos * 100) / 100,
-          balance_neto:     Math.round(balanceNeto * 100) / 100,
+          ingresos_brutos:  redondear2(ingresosBrutos),
+          total_comisiones: redondear2(totalComisiones),
+          ingresos_netos:   redondear2(ingresosNetos),
+          egresos:          redondear2(egresos),
+          balance_neto:     redondear2(balanceNeto),
         };
       });
 
@@ -262,7 +269,7 @@ export const getBalanceHistorico = async (req, res) => {
 
     res.json(historialConVariacion);
   } catch (err) {
-    console.error('[balances] Error en getBalanceHistorico:', err);
+    console.error('[balances] Error en getBalanceHistorico:', err.message);
     res.status(500).json({ error: 'Error al obtener el histórico de balances.' });
   }
 };

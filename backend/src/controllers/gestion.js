@@ -1,23 +1,24 @@
-// backend/src/controllers/gestion.js
+// /backend/src/controllers/gestion.js
 // Controlador para la sección Gestión del panel admin.
 // Maneja ABM de barberos, servicios, productos, datos del negocio y cambio de PIN admin.
-//
 // Todas las funciones usan req.tenant_id, inyectado por tenantMiddleware
 // en rutas públicas (desde .env) y por verificarToken en rutas protegidas (desde JWT).
 
 import { query } from '../config/db.js';
 import bcrypt from 'bcrypt';
+
 const SALT_ROUNDS = 10;
 
 // ─── BARBEROS ────────────────────────────────────────────────────────────────
 
 /**
- * getBarberos — devuelve todos los barberos del tenant ordenados por nombre.
- * GET /api/gestion/barberos
- * req.tenant_id inyectado por verificarToken
+ * getBarberos
+ * Devuelve todos los barberos del tenant ordenados por nombre.
+ * @param {string} req.tenant_id - Inyectado por verificarToken
+ * @returns {JSON} Array de barberos con id, nombre, comision_tipo, comision_valor, activo
  */
 export const getBarberos = async (req, res) => {
-  console.log('[gestion] GET barberos — tenant:', req.tenant_id);
+  console.log('[gestion] getBarberos — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre, comision_tipo, comision_valor, activo
@@ -26,28 +27,31 @@ export const getBarberos = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    console.log('[gestion] Barberos obtenidos:', result.rows.length);
+    console.log('[gestion] getBarberos — completado:', result.rows.length, 'barberos');
     res.json(result.rows);
   } catch (err) {
-    console.error('[gestion] Error al obtener barberos:', err);
+    console.error('[gestion] Error en getBarberos:', err.message);
     res.status(500).json({ error: 'Error al obtener barberos' });
   }
 };
 
 /**
- * crearBarbero — crea un nuevo barbero con PIN hasheado.
- * POST /api/gestion/barberos
- * req.tenant_id inyectado por verificarToken
- * Body: { nombre, pin, comision_valor }
+ * crearBarbero
+ * Crea un nuevo barbero con PIN hasheado con bcrypt.
+ * @param {string} req.tenant_id          - Inyectado por verificarToken
+ * @param {string} req.body.nombre        - Nombre del barbero
+ * @param {string} req.body.pin           - PIN de 4 dígitos (se hashea antes de guardar)
+ * @param {number} req.body.comision_valor - Porcentaje de comisión (0-100)
+ * @returns {JSON} Barbero creado sin PIN
  */
 export const crearBarbero = async (req, res) => {
-  console.log('[gestion] POST barberos — body:', { ...req.body, pin: '***' }, '| tenant:', req.tenant_id);
+  console.log('[gestion] crearBarbero — request recibido | body:', { ...req.body, pin: '***' }, '| tenant:', req.tenant_id);
   const { nombre, pin, comision_valor } = req.body;
 
   if (!nombre || !pin || comision_valor === undefined) {
     return res.status(400).json({ error: 'nombre, pin y comision_valor son requeridos' });
   }
-  if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+  if (!/^\d{4}$/.test(pin)) {
     return res.status(400).json({ error: 'El PIN debe ser exactamente 4 dígitos numéricos' });
   }
 
@@ -59,24 +63,29 @@ export const crearBarbero = async (req, res) => {
        RETURNING id, nombre, comision_tipo, comision_valor, activo`,
       [req.tenant_id, nombre.trim(), pinHash, Number(comision_valor)]
     );
-    console.log('[gestion] Barbero creado:', result.rows[0].id, result.rows[0].nombre);
+    console.log('[gestion] crearBarbero — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error al crear barbero:', err);
+    console.error('[gestion] Error en crearBarbero:', err.message);
     res.status(500).json({ error: 'Error al crear barbero' });
   }
 };
 
 /**
- * editarBarbero — edita nombre, comision_valor y/o activo de un barbero.
+ * editarBarbero
+ * Edita nombre, comision_valor y/o activo de un barbero.
  * Si se envía un nuevo PIN, lo hashea antes de guardar.
- * PUT /api/gestion/barberos/:id
- * req.tenant_id inyectado por verificarToken
- * Body: { nombre, comision_valor, activo, pin? }
+ * @param {string}  req.params.id          - UUID del barbero
+ * @param {string}  req.tenant_id          - Inyectado por verificarToken
+ * @param {string}  req.body.nombre        - Nombre del barbero
+ * @param {number}  req.body.comision_valor - Porcentaje de comisión
+ * @param {boolean} req.body.activo        - Estado activo/inactivo
+ * @param {string}  req.body.pin           - Nuevo PIN opcional (4 dígitos)
+ * @returns {JSON} Barbero actualizado sin PIN
  */
 export const editarBarbero = async (req, res) => {
-  console.log('[gestion] PUT barberos/:id — id:', req.params.id, '| body:', { ...req.body, pin: req.body.pin ? '***' : undefined }, '| tenant:', req.tenant_id);
   const { id } = req.params;
+  console.log('[gestion] editarBarbero — request recibido | id:', id, '| body:', { ...req.body, pin: req.body.pin ? '***' : undefined }, '| tenant:', req.tenant_id);
   const { nombre, comision_valor, activo, pin } = req.body;
 
   if (!nombre || comision_valor === undefined || activo === undefined) {
@@ -87,7 +96,7 @@ export const editarBarbero = async (req, res) => {
     let result;
 
     if (pin) {
-      if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+      if (!/^\d{4}$/.test(pin)) {
         return res.status(400).json({ error: 'El PIN debe ser exactamente 4 dígitos numéricos' });
       }
       const pinHash = await bcrypt.hash(pin, SALT_ROUNDS);
@@ -111,10 +120,10 @@ export const editarBarbero = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Barbero no encontrado' });
     }
-    console.log('[gestion] Barbero editado:', result.rows[0].id, result.rows[0].nombre);
+    console.log('[gestion] editarBarbero — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error al editar barbero:', err);
+    console.error('[gestion] Error en editarBarbero:', err.message);
     res.status(500).json({ error: 'Error al editar barbero' });
   }
 };
@@ -122,12 +131,13 @@ export const editarBarbero = async (req, res) => {
 // ─── SERVICIOS ───────────────────────────────────────────────────────────────
 
 /**
- * getServicios — devuelve todos los servicios del tenant ordenados por nombre.
- * GET /api/gestion/servicios
- * req.tenant_id inyectado por verificarToken
+ * getServicios
+ * Devuelve todos los servicios del tenant ordenados por nombre.
+ * @param {string} req.tenant_id - Inyectado por verificarToken
+ * @returns {JSON} Array de servicios con id, nombre, precio, activo
  */
 export const getServicios = async (req, res) => {
-  console.log('[gestion] GET servicios — tenant:', req.tenant_id);
+  console.log('[gestion] getServicios — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre, precio, activo
@@ -136,22 +146,24 @@ export const getServicios = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    console.log('[gestion] Servicios obtenidos:', result.rows.length);
+    console.log('[gestion] getServicios — completado:', result.rows.length, 'servicios');
     res.json(result.rows);
   } catch (err) {
-    console.error('[gestion] Error al obtener servicios:', err);
+    console.error('[gestion] Error en getServicios:', err.message);
     res.status(500).json({ error: 'Error al obtener servicios' });
   }
 };
 
 /**
- * crearServicio — crea un nuevo servicio.
- * POST /api/gestion/servicios
- * req.tenant_id inyectado por verificarToken
- * Body: { nombre, precio }
+ * crearServicio
+ * Crea un nuevo servicio para el tenant.
+ * @param {string} req.tenant_id    - Inyectado por verificarToken
+ * @param {string} req.body.nombre  - Nombre del servicio
+ * @param {number} req.body.precio  - Precio del servicio
+ * @returns {JSON} Servicio creado
  */
 export const crearServicio = async (req, res) => {
-  console.log('[gestion] POST servicios — body:', req.body, '| tenant:', req.tenant_id);
+  console.log('[gestion] crearServicio — request recibido | body:', req.body, '| tenant:', req.tenant_id);
   const { nombre, precio } = req.body;
 
   if (!nombre || precio === undefined) {
@@ -165,23 +177,27 @@ export const crearServicio = async (req, res) => {
        RETURNING id, nombre, precio, activo`,
       [req.tenant_id, nombre.trim(), Number(precio)]
     );
-    console.log('[gestion] Servicio creado:', result.rows[0].id, result.rows[0].nombre);
+    console.log('[gestion] crearServicio — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error al crear servicio:', err);
+    console.error('[gestion] Error en crearServicio:', err.message);
     res.status(500).json({ error: 'Error al crear servicio' });
   }
 };
 
 /**
- * editarServicio — edita nombre, precio y/o activo de un servicio.
- * PUT /api/gestion/servicios/:id
- * req.tenant_id inyectado por verificarToken
- * Body: { nombre, precio, activo }
+ * editarServicio
+ * Edita nombre, precio y/o activo de un servicio.
+ * @param {string}  req.params.id    - UUID del servicio
+ * @param {string}  req.tenant_id    - Inyectado por verificarToken
+ * @param {string}  req.body.nombre  - Nombre del servicio
+ * @param {number}  req.body.precio  - Precio del servicio
+ * @param {boolean} req.body.activo  - Estado activo/inactivo
+ * @returns {JSON} Servicio actualizado
  */
 export const editarServicio = async (req, res) => {
-  console.log('[gestion] PUT servicios/:id — id:', req.params.id, '| body:', req.body, '| tenant:', req.tenant_id);
   const { id } = req.params;
+  console.log('[gestion] editarServicio — request recibido | id:', id, '| body:', req.body, '| tenant:', req.tenant_id);
   const { nombre, precio, activo } = req.body;
 
   if (!nombre || precio === undefined || activo === undefined) {
@@ -199,10 +215,10 @@ export const editarServicio = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Servicio no encontrado' });
     }
-    console.log('[gestion] Servicio editado:', result.rows[0].id, result.rows[0].nombre);
+    console.log('[gestion] editarServicio — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error al editar servicio:', err);
+    console.error('[gestion] Error en editarServicio:', err.message);
     res.status(500).json({ error: 'Error al editar servicio' });
   }
 };
@@ -210,12 +226,13 @@ export const editarServicio = async (req, res) => {
 // ─── PRODUCTOS ───────────────────────────────────────────────────────────────
 
 /**
- * getProductos — devuelve todos los productos del tenant.
- * GET /api/gestion/productos
- * req.tenant_id inyectado por verificarToken
+ * getProductos
+ * Devuelve todos los productos del tenant ordenados por nombre.
+ * @param {string} req.tenant_id - Inyectado por verificarToken
+ * @returns {JSON} Array de productos con id, nombre, precio, stock_actual, stock_minimo, activo
  */
 export const getProductos = async (req, res) => {
-  console.log('[gestion] GET productos — tenant:', req.tenant_id);
+  console.log('[gestion] getProductos — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre, precio, stock_actual, stock_minimo, activo
@@ -224,22 +241,25 @@ export const getProductos = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    console.log('[gestion] Productos obtenidos:', result.rows.length);
+    console.log('[gestion] getProductos — completado:', result.rows.length, 'productos');
     res.json(result.rows);
   } catch (err) {
-    console.error('[gestion] Error al obtener productos:', err);
+    console.error('[gestion] Error en getProductos:', err.message);
     res.status(500).json({ error: 'Error al obtener productos' });
   }
 };
 
 /**
- * crearProducto — crea un nuevo producto. stock_actual arranca en 0.
- * POST /api/gestion/productos
- * req.tenant_id inyectado por verificarToken
- * Body: { nombre, precio, stock_minimo }
+ * crearProducto
+ * Crea un nuevo producto. stock_actual arranca en 0.
+ * @param {string} req.tenant_id          - Inyectado por verificarToken
+ * @param {string} req.body.nombre        - Nombre del producto
+ * @param {number} req.body.precio        - Precio del producto
+ * @param {number} req.body.stock_minimo  - Stock mínimo para alertas (default: 0)
+ * @returns {JSON} Producto creado
  */
 export const crearProducto = async (req, res) => {
-  console.log('[gestion] POST productos — body:', req.body, '| tenant:', req.tenant_id);
+  console.log('[gestion] crearProducto — request recibido | body:', req.body, '| tenant:', req.tenant_id);
   const { nombre, precio, stock_minimo } = req.body;
 
   if (!nombre || precio === undefined) {
@@ -253,23 +273,28 @@ export const crearProducto = async (req, res) => {
        RETURNING id, nombre, precio, stock_actual, stock_minimo, activo`,
       [req.tenant_id, nombre.trim(), Number(precio), Number(stock_minimo ?? 0)]
     );
-    console.log('[gestion] Producto creado:', result.rows[0].id, result.rows[0].nombre);
+    console.log('[gestion] crearProducto — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error al crear producto:', err);
+    console.error('[gestion] Error en crearProducto:', err.message);
     res.status(500).json({ error: 'Error al crear producto' });
   }
 };
 
 /**
- * editarProducto — edita nombre, precio, stock_minimo y/o activo. NO toca stock_actual.
- * PUT /api/gestion/productos/:id
- * req.tenant_id inyectado por verificarToken
- * Body: { nombre, precio, stock_minimo, activo }
+ * editarProducto
+ * Edita nombre, precio, stock_minimo y/o activo. NO modifica stock_actual.
+ * @param {string}  req.params.id          - UUID del producto
+ * @param {string}  req.tenant_id          - Inyectado por verificarToken
+ * @param {string}  req.body.nombre        - Nombre del producto
+ * @param {number}  req.body.precio        - Precio del producto
+ * @param {number}  req.body.stock_minimo  - Stock mínimo para alertas
+ * @param {boolean} req.body.activo        - Estado activo/inactivo
+ * @returns {JSON} Producto actualizado
  */
 export const editarProducto = async (req, res) => {
-  console.log('[gestion] PUT productos/:id — id:', req.params.id, '| body:', req.body, '| tenant:', req.tenant_id);
   const { id } = req.params;
+  console.log('[gestion] editarProducto — request recibido | id:', id, '| body:', req.body, '| tenant:', req.tenant_id);
   const { nombre, precio, stock_minimo, activo } = req.body;
 
   if (!nombre || precio === undefined || activo === undefined) {
@@ -287,23 +312,25 @@ export const editarProducto = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
-    console.log('[gestion] Producto editado:', result.rows[0].id, result.rows[0].nombre);
+    console.log('[gestion] editarProducto — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error al editar producto:', err);
+    console.error('[gestion] Error en editarProducto:', err.message);
     res.status(500).json({ error: 'Error al editar producto' });
   }
 };
 
 /**
- * agregarStock — suma unidades al stock_actual de un producto.
- * PUT /api/gestion/productos/:id/agregar-stock
- * req.tenant_id inyectado por verificarToken
- * Body: { cantidad }
+ * agregarStock
+ * Suma unidades al stock_actual de un producto (operación aditiva, nunca directa).
+ * @param {string} req.params.id      - UUID del producto
+ * @param {string} req.tenant_id      - Inyectado por verificarToken
+ * @param {number} req.body.cantidad  - Unidades a agregar (debe ser > 0)
+ * @returns {JSON} { id, nombre, stock_actual }
  */
 export const agregarStock = async (req, res) => {
-  console.log('[gestion] PUT productos/:id/agregar-stock — id:', req.params.id, '| body:', req.body, '| tenant:', req.tenant_id);
   const { id } = req.params;
+  console.log('[gestion] agregarStock — request recibido | id:', id, '| cantidad:', req.body.cantidad, '| tenant:', req.tenant_id);
   const { cantidad } = req.body;
 
   if (!cantidad || Number(cantidad) <= 0) {
@@ -321,10 +348,10 @@ export const agregarStock = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
-    console.log('[gestion] Stock actualizado:', result.rows[0].nombre, '— nuevo stock:', result.rows[0].stock_actual);
+    console.log('[gestion] agregarStock — completado | nombre:', result.rows[0].nombre, '| nuevo stock:', result.rows[0].stock_actual);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error al agregar stock:', err);
+    console.error('[gestion] Error en agregarStock:', err.message);
     res.status(500).json({ error: 'Error al agregar stock' });
   }
 };
@@ -332,12 +359,14 @@ export const agregarStock = async (req, res) => {
 // ─── DATOS DEL NEGOCIO ────────────────────────────────────────────────────────
 
 /**
- * getNegocio — devuelve los datos del tenant (nombre_negocio, logo).
- * GET /api/gestion/negocio
+ * getNegocio
+ * Devuelve los datos del tenant (nombre_negocio, logo).
  * Ruta pública — req.tenant_id viene del tenantMiddleware (desde .env).
+ * @param {string} req.tenant_id - Inyectado por tenantMiddleware
+ * @returns {JSON} { nombre_negocio, logo }
  */
 export const getNegocio = async (req, res) => {
-  console.log('[gestion] GET negocio — tenant:', req.tenant_id);
+  console.log('[gestion] getNegocio — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT nombre_negocio, logo FROM tenant WHERE id = $1`,
@@ -346,22 +375,23 @@ export const getNegocio = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Tenant no encontrado' });
     }
-    console.log('[gestion] Datos del negocio obtenidos:', result.rows[0].nombre_negocio);
+    console.log('[gestion] getNegocio — completado | nombre:', result.rows[0].nombre_negocio);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error al obtener datos del negocio:', err);
+    console.error('[gestion] Error en getNegocio:', err.message);
     res.status(500).json({ error: 'Error al obtener datos del negocio' });
   }
 };
 
 /**
- * editarNegocio — actualiza el nombre del negocio.
- * PUT /api/gestion/negocio
- * req.tenant_id inyectado por verificarToken
- * Body: { nombre_negocio }
+ * editarNegocio
+ * Actualiza el nombre del negocio del tenant.
+ * @param {string} req.tenant_id             - Inyectado por verificarToken
+ * @param {string} req.body.nombre_negocio   - Nuevo nombre del negocio
+ * @returns {JSON} { nombre_negocio }
  */
 export const editarNegocio = async (req, res) => {
-  console.log('[gestion] PUT negocio — body:', req.body, '| tenant:', req.tenant_id);
+  console.log('[gestion] editarNegocio — request recibido | body:', req.body, '| tenant:', req.tenant_id);
   const { nombre_negocio } = req.body;
 
   if (!nombre_negocio) {
@@ -370,14 +400,13 @@ export const editarNegocio = async (req, res) => {
 
   try {
     const result = await query(
-      `UPDATE tenant SET nombre_negocio = $1 WHERE id = $2
-       RETURNING nombre_negocio`,
+      `UPDATE tenant SET nombre_negocio = $1 WHERE id = $2 RETURNING nombre_negocio`,
       [nombre_negocio.trim(), req.tenant_id]
     );
-    console.log('[gestion] Nombre del negocio actualizado:', result.rows[0].nombre_negocio);
+    console.log('[gestion] editarNegocio — completado | nombre:', result.rows[0].nombre_negocio);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error al editar negocio:', err);
+    console.error('[gestion] Error en editarNegocio:', err.message);
     res.status(500).json({ error: 'Error al editar negocio' });
   }
 };
@@ -385,19 +414,21 @@ export const editarNegocio = async (req, res) => {
 // ─── PIN ADMIN ────────────────────────────────────────────────────────────────
 
 /**
- * cambiarPinAdmin — verifica el PIN actual y guarda el nuevo hasheado.
- * PUT /api/gestion/pin-admin
- * req.tenant_id inyectado por verificarToken
- * Body: { pin_actual, pin_nuevo }
+ * cambiarPinAdmin
+ * Verifica el PIN actual con bcrypt y guarda el nuevo PIN hasheado.
+ * @param {string} req.tenant_id        - Inyectado por verificarToken
+ * @param {string} req.body.pin_actual  - PIN actual para verificación
+ * @param {string} req.body.pin_nuevo   - Nuevo PIN de 4 dígitos
+ * @returns {JSON} { ok: true }
  */
 export const cambiarPinAdmin = async (req, res) => {
-  console.log('[gestion] PUT pin-admin — solicitado cambio de PIN admin | tenant:', req.tenant_id);
+  console.log('[gestion] cambiarPinAdmin — request recibido | tenant:', req.tenant_id);
   const { pin_actual, pin_nuevo } = req.body;
 
   if (!pin_actual || !pin_nuevo) {
     return res.status(400).json({ error: 'pin_actual y pin_nuevo son requeridos' });
   }
-  if (pin_nuevo.length !== 4 || !/^\d{4}$/.test(pin_nuevo)) {
+  if (!/^\d{4}$/.test(pin_nuevo)) {
     return res.status(400).json({ error: 'El nuevo PIN debe ser exactamente 4 dígitos numéricos' });
   }
 
@@ -410,11 +441,9 @@ export const cambiarPinAdmin = async (req, res) => {
       return res.status(404).json({ error: 'Tenant no encontrado' });
     }
 
-    const pinHash = tenantResult.rows[0].pin_admin;
-    const pinCorrecto = await bcrypt.compare(pin_actual, pinHash);
-
+    const pinCorrecto = await bcrypt.compare(pin_actual, tenantResult.rows[0].pin_admin);
     if (!pinCorrecto) {
-      console.log('[gestion] PIN actual incorrecto — cambio rechazado');
+      console.log('[gestion] cambiarPinAdmin — PIN actual incorrecto | cambio rechazado');
       return res.status(401).json({ error: 'El PIN actual es incorrecto' });
     }
 
@@ -424,10 +453,10 @@ export const cambiarPinAdmin = async (req, res) => {
       [nuevoPinHash, req.tenant_id]
     );
 
-    console.log('[gestion] PIN admin actualizado exitosamente');
+    console.log('[gestion] cambiarPinAdmin — completado | PIN actualizado');
     res.json({ ok: true });
   } catch (err) {
-    console.error('[gestion] Error al cambiar PIN admin:', err);
+    console.error('[gestion] Error en cambiarPinAdmin:', err.message);
     res.status(500).json({ error: 'Error al cambiar el PIN' });
   }
 };

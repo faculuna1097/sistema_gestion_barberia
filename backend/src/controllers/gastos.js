@@ -1,26 +1,30 @@
 // /backend/src/controllers/gastos.js
 // Controlador del recurso "gasto".
-//
 // Todas las funciones usan req.tenant_id, inyectado por tenantMiddleware
 // en rutas públicas (desde .env) y por verificarToken en rutas protegidas (desde JWT).
 
 import { query } from '../config/db.js';
 
+const TZ = 'America/Argentina/Buenos_Aires';
+
 /**
  * createGasto
  * Registra un nuevo gasto en la tabla `gasto`.
  * Ruta pública — req.tenant_id viene del tenantMiddleware (desde .env).
- *
- * @param {Request} req - Body: { categoria_id, descripcion, monto, forma_pago, usuario_registro? }
- * @param {Response} res - Devuelve el gasto creado
+ * @param {string} req.tenant_id            - Inyectado por tenantMiddleware
+ * @param {string} req.body.categoria_id    - UUID de la categoría
+ * @param {string} req.body.descripcion     - Descripción del gasto
+ * @param {number} req.body.monto           - Monto del gasto
+ * @param {string} req.body.forma_pago      - 'efectivo' | 'mercado_pago'
+ * @returns {JSON} El gasto creado
  */
 export const createGasto = async (req, res) => {
-  console.log('[createGasto] Solicitud recibida — body:', req.body);
+  console.log('[gastos] createGasto — request recibido | tenant:', req.tenant_id);
 
   const { categoria_id, descripcion, monto, forma_pago, usuario_registro } = req.body;
 
   if (!categoria_id || !descripcion || !monto || !forma_pago) {
-    console.warn('[createGasto] Validación fallida — campos faltantes:', { categoria_id, descripcion, monto, forma_pago });
+    console.warn('[gastos] createGasto — validación fallida | campos faltantes:', { categoria_id, descripcion, monto, forma_pago });
     return res.status(400).json({ error: 'Faltan campos requeridos: categoria_id, descripcion, monto, forma_pago' });
   }
 
@@ -29,8 +33,6 @@ export const createGasto = async (req, res) => {
   }
 
   try {
-    console.log('[createGasto] Insertando gasto — categoria_id:', categoria_id, '| monto:', monto, '| tenant:', req.tenant_id);
-
     const resultado = await query(
       `INSERT INTO gasto (tenant_id, categoria_id, descripcion, monto, forma_pago, usuario_registro)
        VALUES ($1, $2, $3, $4, $5, $6)
@@ -39,12 +41,11 @@ export const createGasto = async (req, res) => {
     );
 
     const gastoCreado = resultado.rows[0];
-    console.log('[createGasto] Gasto registrado correctamente — gasto_id:', gastoCreado.id);
-
+    console.log('[gastos] createGasto — completado | gasto_id:', gastoCreado.id, '| monto:', monto);
     return res.status(201).json(gastoCreado);
 
   } catch (err) {
-    console.error('[createGasto] Error al insertar gasto:', err);
+    console.error('[gastos] Error en createGasto:', err.message);
     return res.status(500).json({ error: 'Error interno al registrar el gasto' });
   }
 };
@@ -53,16 +54,13 @@ export const createGasto = async (req, res) => {
  * getGastosMensual
  * Devuelve todos los gastos de un mes para el tenant actual.
  * Ruta protegida — req.tenant_id inyectado por verificarToken.
- *
- * @param {Request} req - Query param: mes (YYYY-MM). Default: mes actual.
- * @param {Response} res - Devuelve { gastos, totalesPorCategoria, totalGeneral }
+ * @param {string} req.query.mes  - Mes en formato YYYY-MM (default: mes actual)
+ * @param {string} req.tenant_id  - Inyectado por verificarToken
+ * @returns {JSON} { gastos, totalesPorCategoria, totalGeneral }
  */
 export const getGastosMensual = async (req, res) => {
-  console.log('[getGastosMensual] Solicitud recibida — query:', req.query, '| tenant:', req.tenant_id);
-
-  const mes = req.query.mes || new Date().toLocaleDateString('sv-SE', {
-    timeZone: 'America/Argentina/Buenos_Aires'
-  }).slice(0, 7);
+  const mes = req.query.mes || new Date().toLocaleDateString('sv-SE', { timeZone: TZ }).slice(0, 7);
+  console.log('[gastos] getGastosMensual — request recibido | mes:', mes, '| tenant:', req.tenant_id);
 
   if (!/^\d{4}-\d{2}$/.test(mes)) {
     return res.status(400).json({ error: "El parámetro 'mes' debe tener formato YYYY-MM" });
@@ -72,8 +70,8 @@ export const getGastosMensual = async (req, res) => {
     const resultadoGastos = await query(
       `SELECT
          g.id,
-         TO_CHAR(g.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires', 'DD/MM/YYYY') AS fecha,
-         TO_CHAR(g.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires', 'HH24:MI')    AS hora,
+         TO_CHAR(g.timestamp AT TIME ZONE $3, 'DD/MM/YYYY') AS fecha,
+         TO_CHAR(g.timestamp AT TIME ZONE $3, 'HH24:MI')    AS hora,
          COALESCE(cg.nombre, 'Sin categoría') AS categoria_nombre,
          g.descripcion,
          g.monto,
@@ -81,9 +79,9 @@ export const getGastosMensual = async (req, res) => {
        FROM gasto g
        LEFT JOIN categoria_gasto cg ON g.categoria_id = cg.id
        WHERE g.tenant_id = $1
-         AND TO_CHAR(g.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires', 'YYYY-MM') = $2
+         AND TO_CHAR(g.timestamp AT TIME ZONE $3, 'YYYY-MM') = $2
        ORDER BY g.timestamp DESC`,
-      [req.tenant_id, mes]
+      [req.tenant_id, mes, TZ]
     );
 
     const resultadoTotales = await query(
@@ -94,20 +92,15 @@ export const getGastosMensual = async (req, res) => {
        FROM gasto g
        LEFT JOIN categoria_gasto cg ON g.categoria_id = cg.id
        WHERE g.tenant_id = $1
-         AND TO_CHAR(g.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires', 'YYYY-MM') = $2
+         AND TO_CHAR(g.timestamp AT TIME ZONE $3, 'YYYY-MM') = $2
        GROUP BY cg.nombre
        ORDER BY total DESC`,
-      [req.tenant_id, mes]
+      [req.tenant_id, mes, TZ]
     );
 
-    const totalGeneral = resultadoTotales.rows.reduce(
-      (acc, row) => acc + parseFloat(row.total), 0
-    );
+    const totalGeneral = resultadoTotales.rows.reduce((acc, row) => acc + parseFloat(row.total), 0);
 
-    console.log('[getGastosMensual] Consulta completada — mes:', mes,
-      '| registros:', resultadoGastos.rows.length,
-      '| total general:', totalGeneral);
-
+    console.log('[gastos] getGastosMensual — completado | mes:', mes, '| registros:', resultadoGastos.rows.length, '| total:', totalGeneral);
     return res.status(200).json({
       gastos: resultadoGastos.rows,
       totalesPorCategoria: resultadoTotales.rows,
@@ -115,7 +108,7 @@ export const getGastosMensual = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('[getGastosMensual] Error al consultar gastos mensuales:', err);
+    console.error('[gastos] Error en getGastosMensual:', err.message);
     return res.status(500).json({ error: 'Error interno al obtener los gastos del mes' });
   }
 };
@@ -124,13 +117,13 @@ export const getGastosMensual = async (req, res) => {
  * deleteGasto
  * Elimina un gasto por su ID, verificando que pertenezca al tenant.
  * Ruta protegida — req.tenant_id inyectado por verificarToken.
- *
- * @param {Request} req - Param: id (UUID del gasto a eliminar)
- * @param {Response} res - 200 con { eliminado: true, id } o error
+ * @param {string} req.params.id  - UUID del gasto a eliminar
+ * @param {string} req.tenant_id  - Inyectado por verificarToken
+ * @returns {JSON} { eliminado: true, id } o error
  */
 export const deleteGasto = async (req, res) => {
   const { id } = req.params;
-  console.log('[deleteGasto] Solicitud recibida — id:', id, '| tenant:', req.tenant_id);
+  console.log('[gastos] deleteGasto — request recibido | id:', id, '| tenant:', req.tenant_id);
 
   if (!id) {
     return res.status(400).json({ error: 'Falta el parámetro id' });
@@ -138,22 +131,20 @@ export const deleteGasto = async (req, res) => {
 
   try {
     const resultado = await query(
-      `DELETE FROM gasto
-       WHERE id = $1 AND tenant_id = $2
-       RETURNING id`,
+      `DELETE FROM gasto WHERE id = $1 AND tenant_id = $2 RETURNING id`,
       [id, req.tenant_id]
     );
 
     if (resultado.rows.length === 0) {
-      console.warn('[deleteGasto] Gasto no encontrado o no pertenece al tenant — id:', id);
+      console.warn('[gastos] deleteGasto — gasto no encontrado | id:', id);
       return res.status(404).json({ error: 'Gasto no encontrado' });
     }
 
-    console.log('[deleteGasto] Gasto eliminado correctamente — id:', id);
+    console.log('[gastos] deleteGasto — completado | gasto_id:', id);
     return res.status(200).json({ eliminado: true, id });
 
   } catch (err) {
-    console.error('[deleteGasto] Error al eliminar gasto:', err);
+    console.error('[gastos] Error en deleteGasto:', err.message);
     return res.status(500).json({ error: 'Error interno al eliminar el gasto' });
   }
 };

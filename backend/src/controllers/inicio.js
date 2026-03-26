@@ -1,4 +1,4 @@
-// backend/src/controllers/inicio.js
+// /backend/src/controllers/inicio.js
 // Endpoints para la SeccionInicio del panel de administrador.
 
 import { query } from '../config/db.js';
@@ -7,11 +7,12 @@ const TZ = 'America/Argentina/Buenos_Aires';
 
 // ─── GET /api/inicio/resumen-dia ──────────────────────────────────────────────
 /**
- * Devuelve la actividad del día actual comparada con ayer a la misma hora.
- * req.tenant_id inyectado por verificarToken
+ * getResumenDia
+ * Devuelve la actividad del día actual, semana y mes en curso.
+ * @param {string} req.tenant_id - Inyectado por verificarToken
  */
 export const getResumenDia = async (req, res) => {
-  console.log('[Inicio] getResumenDia — request recibido | tenant:', req.tenant_id);
+  console.log('[inicio] getResumenDia — request recibido | tenant:', req.tenant_id);
   try {
 
     // ── Hoy ───────────────────────────────────────────────────────────────────
@@ -32,30 +33,6 @@ export const getResumenDia = async (req, res) => {
          FROM venta
          WHERE tenant_id = $1
            AND DATE(timestamp AT TIME ZONE $2) = (NOW() AT TIME ZONE $2)::date`,
-        [req.tenant_id, TZ]
-      ),
-    ]);
-
-    // ── Ayer hasta la misma hora ──────────────────────────────────────────────
-    const [cortesAyer, ventasAyer] = await Promise.all([
-      query(
-        `SELECT
-           COALESCE(SUM(monto_total), 0) AS monto,
-           COUNT(id)                     AS clientes
-         FROM corte
-         WHERE tenant_id = $1
-           AND DATE(timestamp AT TIME ZONE $2) = (NOW() AT TIME ZONE $2)::date - INTERVAL '1 day'
-           AND (timestamp AT TIME ZONE $2)::time <= (NOW() AT TIME ZONE $2)::time`,
-        [req.tenant_id, TZ]
-      ),
-      query(
-        `SELECT
-           COALESCE(SUM(precio_unitario * cantidad), 0) AS monto,
-           COALESCE(SUM(cantidad), 0)                   AS unidades
-         FROM venta
-         WHERE tenant_id = $1
-           AND DATE(timestamp AT TIME ZONE $2) = (NOW() AT TIME ZONE $2)::date - INTERVAL '1 day'
-           AND (timestamp AT TIME ZONE $2)::time <= (NOW() AT TIME ZONE $2)::time`,
         [req.tenant_id, TZ]
       ),
     ]);
@@ -98,40 +75,31 @@ export const getResumenDia = async (req, res) => {
       ),
     ]);
 
-    const montoDia  = Number(cortesHoy.rows[0].monto)  + Number(ventasHoy.rows[0].monto);
-    const montoAyer = Number(cortesAyer.rows[0].monto) + Number(ventasAyer.rows[0].monto);
-
-    const diferenciaPctDia = montoAyer === 0
-      ? null
-      : Math.round(((montoDia - montoAyer) / montoAyer) * 100);
-
     const resultado = {
-      monto_dia:          montoDia,
-      clientes_dia:       Number(cortesHoy.rows[0].clientes),
-      productos_dia:      Number(ventasHoy.rows[0].unidades),
-      monto_ayer:         montoAyer,
-      clientes_ayer:      Number(cortesAyer.rows[0].clientes),
-      diferencia_pct_dia: diferenciaPctDia,
-      monto_semana:       Number(cortesSemana.rows[0].monto) + Number(ventasSemana.rows[0].monto),
-      monto_mes:          Number(cortesMes.rows[0].monto)    + Number(ventasMes.rows[0].monto),
-      clientes_mes:       Number(cortesMes.rows[0].clientes),
+      monto_dia:     Number(cortesHoy.rows[0].monto)    + Number(ventasHoy.rows[0].monto),
+      clientes_dia:  Number(cortesHoy.rows[0].clientes),
+      productos_dia: Number(ventasHoy.rows[0].unidades),
+      monto_semana:  Number(cortesSemana.rows[0].monto) + Number(ventasSemana.rows[0].monto),
+      monto_mes:     Number(cortesMes.rows[0].monto)    + Number(ventasMes.rows[0].monto),
+      clientes_mes:  Number(cortesMes.rows[0].clientes),
     };
 
-    console.log('[Inicio] getResumenDia — completado:', resultado);
+    console.log('[inicio] getResumenDia — completado | monto_dia:', resultado.monto_dia, '| clientes_dia:', resultado.clientes_dia);
     res.json(resultado);
   } catch (err) {
-    console.error('[Inicio] getResumenDia — error:', err);
+    console.error('[inicio] Error en getResumenDia:', err.message);
     res.status(500).json({ error: 'Error al obtener resumen del día' });
   }
 };
 
 // ─── GET /api/inicio/comparativo-mes ─────────────────────────────────────────
 /**
+ * getComparativoMes
  * Compara la facturación del mes actual hasta hoy con el mismo período del mes anterior.
- * req.tenant_id inyectado por verificarToken
+ * @param {string} req.tenant_id - Inyectado por verificarToken
  */
 export const getComparativoMes = async (req, res) => {
-  console.log('[Inicio] getComparativoMes — request recibido | tenant:', req.tenant_id);
+  console.log('[inicio] getComparativoMes — request recibido | tenant:', req.tenant_id);
   try {
     const [cortesActual, ventasActual] = await Promise.all([
       query(
@@ -191,26 +159,27 @@ export const getComparativoMes = async (req, res) => {
       monto_anterior:  montoAnterior,
       diferencia_pct:  diferenciaPct,
       dia_corte:       ahora.getDate(),
-      mes_actual:      mesActualNombre.charAt(0).toUpperCase() + mesActualNombre.slice(1),
+      mes_actual:      mesActualNombre.charAt(0).toUpperCase()   + mesActualNombre.slice(1),
       mes_anterior:    mesAnteriorNombre.charAt(0).toUpperCase() + mesAnteriorNombre.slice(1),
     };
 
-    console.log('[Inicio] getComparativoMes — completado:', resultado);
+    console.log('[inicio] getComparativoMes — completado | monto_actual:', resultado.monto_actual, '| diferencia_pct:', resultado.diferencia_pct);
     res.json(resultado);
   } catch (err) {
-    console.error('[Inicio] getComparativoMes — error:', err);
+    console.error('[inicio] Error en getComparativoMes:', err.message);
     res.status(500).json({ error: 'Error al obtener comparativo mensual' });
   }
 };
 
 // ─── GET /api/inicio/stock-bajo ───────────────────────────────────────────────
 /**
+ * getStockBajo
  * Devuelve los productos activos cuyo stock_actual es menor o igual a su stock_minimo.
- * req.tenant_id inyectado por verificarToken
- * @returns {{ productos: Array }}
+ * @param {string} req.tenant_id - Inyectado por verificarToken
+ * @returns {JSON} { productos: Array }
  */
 export const getStockBajo = async (req, res) => {
-  console.log('[Inicio] getStockBajo — request recibido | tenant:', req.tenant_id);
+  console.log('[inicio] getStockBajo — request recibido | tenant:', req.tenant_id);
   try {
     const resultado = await query(
       `SELECT id, nombre, stock_actual, stock_minimo
@@ -222,10 +191,10 @@ export const getStockBajo = async (req, res) => {
       [req.tenant_id]
     );
 
-    console.log('[Inicio] getStockBajo — productos con stock bajo:', resultado.rows.length);
+    console.log('[inicio] getStockBajo — completado | productos con stock bajo:', resultado.rows.length);
     res.json({ productos: resultado.rows });
   } catch (err) {
-    console.error('[Inicio] getStockBajo — error:', err);
+    console.error('[inicio] Error en getStockBajo:', err.message);
     res.status(500).json({ error: 'Error al obtener alertas de stock' });
   }
 };

@@ -1,25 +1,23 @@
+// /backend/src/controllers/categorias.js
 import { query } from '../config/db.js';
-
-const TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001';
 
 /**
  * getCategorias
- * Devuelve las categorías de gasto activas del tenant.
- * @param {Request} req
- * @param {Response} res
+ * Devuelve las categorías de gasto activas del tenant, ordenadas alfabéticamente.
+ * @param {string} req.tenant_id - Inyectado por tenantMiddleware
  * @returns {JSON} Array de categorías con id y nombre
  */
 export const getCategorias = async (req, res) => {
-  console.log('[getCategorias] Solicitud recibida — tenant_id:', TENANT_ID);
+  console.log('[categorias] getCategorias — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre FROM categoria_gasto WHERE tenant_id = $1 ORDER BY nombre ASC`,
-      [TENANT_ID]
+      [req.tenant_id]
     );
-    console.log('[getCategorias] Categorías encontradas:', result.rows.length, result.rows);
+    console.log('[categorias] getCategorias — completado:', result.rows.length, 'categorías encontradas');
     res.json(result.rows);
-  } catch (error) {
-    console.error('[getCategorias] Error al consultar la base de datos:', error);
+  } catch (err) {
+    console.error('[categorias] Error en getCategorias:', err.message);
     res.status(500).json({ error: 'Error al obtener categorías' });
   }
 };
