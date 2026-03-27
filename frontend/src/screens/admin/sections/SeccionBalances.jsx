@@ -8,8 +8,6 @@ import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { apiFetch } from '../../../services/api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Formatea un número como moneda argentina */
@@ -31,13 +29,6 @@ const mesActual = () =>
 const labelMes = (mes) => {
   const [anio, m] = mes.split('-').map(Number);
   return `${MESES[m - 1]} ${anio}`;
-};
-
-/** Versión corta para la tabla histórica → "Mar 2026" */
-const labelMesCorto = (mes) => {
-  const nombres = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const [anio, m] = mes.split('-').map(Number);
-  return `${nombres[m - 1]} ${anio}`;
 };
 
 /** Avanza o retrocede un mes desde un string YYYY-MM */
@@ -91,35 +82,35 @@ const ExcelIcon = () => (
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function SeccionBalances() {
-  const [tabActivo, setTabActivo] = useState('mensual');
+  const [tabActivo, setTabActivo]             = useState('mensual');
   const [mesSeleccionado, setMesSeleccionado] = useState(mesActual());
   const [mostrarComisiones, setMostrarComisiones] = useState(true);
 
   // Estado Tab 1
-  const [datosMensual, setDatosMensual] = useState(null);
+  const [datosMensual, setDatosMensual]       = useState(null);
   const [cargandoMensual, setCargandoMensual] = useState(false);
-  const [errorMensual, setErrorMensual] = useState(null);
+  const [errorMensual, setErrorMensual]       = useState(null);
 
   // Estado Tab 2
-  const [datosHistorico, setDatosHistorico] = useState(null);
+  const [datosHistorico, setDatosHistorico]       = useState(null);
   const [cargandoHistorico, setCargandoHistorico] = useState(false);
-  const [errorHistorico, setErrorHistorico] = useState(null);
+  const [errorHistorico, setErrorHistorico]       = useState(null);
 
-  // ── Carga de datos ──────────────────────────────────────────────────────────
+  // ── Carga de datos ────────────────────────────────────────────────────────
 
   /** Carga el balance del mes seleccionado */
   const cargarMensual = async (mes) => {
+    console.log('[seccionBalances] cargarMensual — request recibido | mes:', mes);
     setCargandoMensual(true);
     setErrorMensual(null);
     try {
-      console.log('[SeccionBalances] Cargando balance mensual:', mes);
-      const res = await apiFetch(`${API_URL}/api/balances/mensual?mes=${mes}`);
+      const res = await apiFetch(`/balances/mensual?mes=${mes}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const datos = await res.json();
       setDatosMensual(datos);
-      console.log('[SeccionBalances] Balance mensual cargado — resumen:', datos.resumen);
+      console.log('[seccionBalances] cargarMensual — completado | ingresos_brutos:', datos.resumen?.ingresos_brutos);
     } catch (err) {
-      console.error('[SeccionBalances] Error al cargar balance mensual:', err);
+      console.error('[seccionBalances] Error en cargarMensual:', err.message);
       setErrorMensual('No se pudo cargar el balance. Intentá de nuevo.');
     } finally {
       setCargandoMensual(false);
@@ -129,17 +120,17 @@ export default function SeccionBalances() {
   /** Carga el histórico anual (solo la primera vez que se abre el tab) */
   const cargarHistorico = async () => {
     if (datosHistorico) return; // Ya cargado
+    console.log('[seccionBalances] cargarHistorico — request recibido');
     setCargandoHistorico(true);
     setErrorHistorico(null);
     try {
-      console.log('[SeccionBalances] Cargando histórico anual');
-      const res = await apiFetch(`${API_URL}/api/balances/historico?cantidad=12`);
+      const res = await apiFetch('/balances/historico?cantidad=12');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const datos = await res.json();
       setDatosHistorico(datos);
-      console.log('[SeccionBalances] Histórico cargado — meses:', datos.length);
+      console.log('[seccionBalances] cargarHistorico — completado | meses:', datos.length);
     } catch (err) {
-      console.error('[SeccionBalances] Error al cargar histórico:', err);
+      console.error('[seccionBalances] Error en cargarHistorico:', err.message);
       setErrorHistorico('No se pudo cargar el histórico. Intentá de nuevo.');
     } finally {
       setCargandoHistorico(false);
@@ -156,7 +147,7 @@ export default function SeccionBalances() {
     if (tabActivo === 'historico') cargarHistorico();
   }, [tabActivo]);
 
-  // ── Navegación de mes ───────────────────────────────────────────────────────
+  // ── Navegación de mes ─────────────────────────────────────────────────────
   const irMesAnterior = () => setMesSeleccionado((m) => moverMes(m, -1));
   const irMesSiguiente = () => {
     const siguiente = moverMes(mesSeleccionado, 1);
@@ -164,19 +155,16 @@ export default function SeccionBalances() {
   };
   const esMesActual = mesSeleccionado >= mesActual();
 
-  // ── Exportar Excel ──────────────────────────────────────────────────────────
-
+  // ── Exportar Excel ────────────────────────────────────────────────────────
   /**
    * exportarExcel — exporta los datos del tab activo.
-   * Tab mensual: hoja "Barberos" + hoja "Egresos".
+   * Tab mensual: hoja "Ingresos" + hoja "Egresos".
    * Tab histórico: hoja "Histórico" con los últimos 12 meses.
    */
   const exportarExcel = () => {
     const wb = XLSX.utils.book_new();
 
     if (tabActivo === 'mensual' && datosMensual) {
-      console.log('[SeccionBalances] Exportando Excel mensual — mes:', mesSeleccionado);
-      // Hoja 1: Ingresos por barbero
       const filasBarberos = datosMensual.serviciosPorBarbero.map((b) => ({
         Barbero:           b.nombre,
         Cortes:            b.cortes,
@@ -205,7 +193,6 @@ export default function SeccionBalances() {
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasBarberos), 'Ingresos');
 
-      // Hoja 2: Egresos por categoría
       const filasEgresos = datosMensual.gastos.porCategoria.map((g) => ({
         Categoría: g.categoria,
         Total:     g.total,
@@ -214,45 +201,43 @@ export default function SeccionBalances() {
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasEgresos), 'Egresos');
 
       XLSX.writeFile(wb, `Balance_${mesSeleccionado}.xlsx`);
-      console.log('[SeccionBalances] Excel mensual generado: Balance_' + mesSeleccionado + '.xlsx');
+      console.log('[seccionBalances] exportarExcel — completado | mes:', mesSeleccionado);
     }
 
     if (tabActivo === 'historico' && datosHistorico) {
-      console.log('[SeccionBalances] Exportando Excel histórico');
       const filas = datosHistorico.map((f) => ({
-        Mes:               f.label,
-        'Ingresos brutos': f.ingresos_brutos,
-        'Comisiones':      f.total_comisiones,
-        'Ingresos netos':  f.ingresos_netos,
-        'Egresos':         f.egresos,
-        'Balance neto':    f.balance_neto,
+        Mes:                f.label,
+        'Ingresos brutos':  f.ingresos_brutos,
+        Comisiones:         f.total_comisiones,
+        'Ingresos netos':   f.ingresos_netos,
+        Egresos:            f.egresos,
+        'Balance neto':     f.balance_neto,
         'Var. vs anterior': f.variacion_vs_anterior !== null ? `${f.variacion_vs_anterior}%` : '—',
       }));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Histórico');
-      XLSX.writeFile(wb, `Balances_historico.xlsx`);
-      console.log('[SeccionBalances] Excel histórico generado');
+      XLSX.writeFile(wb, 'Balances_historico.xlsx');
+      console.log('[seccionBalances] exportarExcel — completado | histórico');
     }
   };
 
   // Determina si hay datos para habilitar el botón exportar
   const puedeExportar =
-    (tabActivo === 'mensual' && datosMensual !== null) ||
+    (tabActivo === 'mensual'   && datosMensual !== null) ||
     (tabActivo === 'historico' && datosHistorico !== null && datosHistorico.length > 0);
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
+  // ─── Render ──────────────────────────────────────────────────────────────
   return (
     <div style={styles.contenedor}>
 
-      {/* ── Encabezado ──────────────────────────────────────────────────────── */}
+      {/* ── Encabezado ────────────────────────────────────────────────────── */}
       <div style={styles.encabezado}>
         <div>
           <h2 style={styles.titulo}>Balances</h2>
-          <p style={styles.subtitulo}>Visualizacion mensual de la economia del negocio</p>
+          <p style={styles.subtitulo}>Visualización mensual de la economía del negocio</p>
         </div>
-        {/* Tabs */}
         <div style={styles.tabsContainer}>
           {[
-            { key: 'mensual', label: 'Balance mensual' },
+            { key: 'mensual',   label: 'Balance mensual' },
             { key: 'historico', label: 'Histórico anual' },
           ].map((tab) => (
             <button
@@ -277,8 +262,6 @@ export default function SeccionBalances() {
 
           {/* Controles: toggle comisiones | selector de mes | exportar Excel */}
           <div style={styles.controlesRow}>
-
-            {/* Izquierda — toggle comisiones */}
             <div>
               <TogglePill
                 activo={mostrarComisiones}
@@ -288,7 +271,6 @@ export default function SeccionBalances() {
               />
             </div>
 
-            {/* Centro — selector de mes */}
             <div style={styles.selectorMes}>
               <button onPointerDown={irMesAnterior} style={styles.btnMes}>‹</button>
               <span style={styles.labelMes}>{labelMes(mesSeleccionado)}</span>
@@ -299,7 +281,6 @@ export default function SeccionBalances() {
               >›</button>
             </div>
 
-            {/* Derecha — exportar Excel */}
             <div style={{ justifySelf: 'end' }}>
               <button
                 style={{
@@ -314,13 +295,12 @@ export default function SeccionBalances() {
             </div>
           </div>
 
-          {/* Estado de carga / error */}
           {cargandoMensual && <p style={styles.estadoTexto}>Cargando...</p>}
-          {errorMensual && <p style={styles.errorTexto}>{errorMensual}</p>}
+          {errorMensual    && <p style={styles.errorTexto}>{errorMensual}</p>}
 
           {datosMensual && !cargandoMensual && (
             <>
-              {/* ── Cards KPI ────────────────────────────────────────────── */}
+              {/* ── Cards KPI ──────────────────────────────────────────── */}
               <div style={styles.kpiGrid}>
                 <KpiCard
                   titulo="Ingresos del negocio"
@@ -351,7 +331,7 @@ export default function SeccionBalances() {
                 />
               </div>
 
-              {/* ── Desglose por barbero ──────────────────────────────────── */}
+              {/* ── Desglose por barbero ────────────────────────────────── */}
               <div style={styles.bloque}>
                 <h3 style={styles.bloqueTitulo}>Ingresos por barbero</h3>
                 <table style={styles.tabla}>
@@ -407,7 +387,7 @@ export default function SeccionBalances() {
 
                     {/* Fila total */}
                     <tr style={styles.trTotal}>
-                      <td style={{ ...styles.tdTotal }}>Total</td>
+                      <td style={styles.tdTotal}>Total</td>
                       <td style={{ ...styles.tdTotal, textAlign: 'right' }}>
                         {datosMensual.serviciosPorBarbero.reduce((a, b) => a + b.cortes, 0)}
                       </td>
@@ -435,7 +415,7 @@ export default function SeccionBalances() {
                 )}
               </div>
 
-              {/* ── Desglose de egresos ──────────────────────────────────── */}
+              {/* ── Desglose de egresos ─────────────────────────────────── */}
               {datosMensual.gastos.porCategoria.length > 0 && (
                 <div style={styles.bloque}>
                   <h3 style={styles.bloqueTitulo}>Egresos por categoría</h3>
@@ -466,7 +446,6 @@ export default function SeccionBalances() {
                 </div>
               )}
 
-              {/* Sin datos */}
               {datosMensual.serviciosPorBarbero.length === 0 &&
                datosMensual.gastos.porCategoria.length === 0 && (
                 <p style={styles.estadoTexto}>Sin movimientos en {labelMes(mesSeleccionado)}.</p>
@@ -482,10 +461,7 @@ export default function SeccionBalances() {
       {tabActivo === 'historico' && (
         <div style={styles.tabContenido}>
 
-          {/* Controles: toggle comisiones | label | exportar Excel */}
           <div style={styles.controlesRow}>
-
-            {/* Izquierda — toggle comisiones */}
             <div>
               <TogglePill
                 activo={mostrarComisiones}
@@ -495,10 +471,8 @@ export default function SeccionBalances() {
               />
             </div>
 
-            {/* Centro — label */}
             <span style={styles.labelSecundario}>Últimos 12 meses</span>
 
-            {/* Derecha — exportar Excel */}
             <div style={{ justifySelf: 'end' }}>
               <button
                 style={{
@@ -514,7 +488,7 @@ export default function SeccionBalances() {
           </div>
 
           {cargandoHistorico && <p style={styles.estadoTexto}>Cargando...</p>}
-          {errorHistorico && <p style={styles.errorTexto}>{errorHistorico}</p>}
+          {errorHistorico    && <p style={styles.errorTexto}>{errorHistorico}</p>}
 
           {datosHistorico && !cargandoHistorico && (
             <div style={styles.bloque}>
@@ -537,9 +511,6 @@ export default function SeccionBalances() {
                     const balance = mostrarComisiones
                       ? fila.balance_neto
                       : fila.ingresos_brutos - fila.egresos;
-                    const ingresos = mostrarComisiones
-                      ? fila.ingresos_netos
-                      : fila.ingresos_brutos;
                     const esMesActualFila = fila.mes === mesActual();
 
                     return (

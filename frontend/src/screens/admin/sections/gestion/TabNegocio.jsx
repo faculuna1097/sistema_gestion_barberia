@@ -1,44 +1,43 @@
-// frontend/src/screens/admin/sections/gestion/TabNegocio.jsx
+// /frontend/src/screens/admin/sections/gestion/TabNegocio.jsx
 // Permite ver y editar el nombre del negocio (tabla tenant).
 // Los datos se cargan al montar el componente.
 
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../../../../services/api';
 
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
 export default function TabNegocio() {
-  const [nombreNegocio, setNombreNegocio] = useState('');
+  const [nombreNegocio, setNombreNegocio]   = useState('');
   const [nombreOriginal, setNombreOriginal] = useState('');
-  const [cargando, setCargando]   = useState(true);
-  const [guardando, setGuardando] = useState(false);
-  const [error, setError]         = useState(null);
-  const [exito, setExito]         = useState(false);
+  const [cargando, setCargando]             = useState(true);
+  const [guardando, setGuardando]           = useState(false);
+  const [error, setError]                   = useState(null);
+  const [exito, setExito]                   = useState(false);
 
-  // ── Carga inicial ──────────────────────────────────────────────────────────
+  // ── Carga inicial ─────────────────────────────────────────────────────────
   useEffect(() => {
-    console.log('[TabNegocio] Cargando datos del negocio...');
-    apiFetch(`${API_URL}/api/gestion/negocio`)
-      .then(r => r.json())
-      .then(data => {
-        console.log('[TabNegocio] Datos cargados:', data.nombre_negocio);
+    const cargarNegocio = async () => {
+      console.log('[tabNegocio] cargarNegocio — request recibido');
+      try {
+        const res  = await apiFetch('/gestion/negocio');
+        const data = await res.json();
+        console.log('[tabNegocio] cargarNegocio — completado | nombre:', data.nombre_negocio);
         setNombreNegocio(data.nombre_negocio);
         setNombreOriginal(data.nombre_negocio);
-        setCargando(false);
-      })
-      .catch(err => {
-        console.error('[TabNegocio] Error al cargar datos del negocio:', err);
+      } catch (err) {
+        console.error('[tabNegocio] Error en cargarNegocio:', err.message);
         setError('No se pudieron cargar los datos del negocio.');
+      } finally {
         setCargando(false);
-      });
+      }
+    };
+    cargarNegocio();
   }, []);
 
-  const hubocambios  = nombreNegocio.trim() !== nombreOriginal;
-  const puedeGuardar = nombreNegocio.trim() !== '' && hubocambios;
+  const huboCambios  = nombreNegocio.trim() !== nombreOriginal;
+  const puedeGuardar = nombreNegocio.trim() !== '' && huboCambios;
 
   /**
-   * handleGuardar — envía PUT /api/gestion/negocio con el nuevo nombre.
+   * handleGuardar — envía PUT /gestion/negocio con el nuevo nombre.
    */
   const handleGuardar = async () => {
     if (!puedeGuardar) return;
@@ -46,12 +45,11 @@ export default function TabNegocio() {
     setError(null);
     setExito(false);
 
-    console.log('[TabNegocio] Guardando nombre del negocio:', nombreNegocio.trim());
+    console.log('[tabNegocio] handleGuardar — request recibido | nombre:', nombreNegocio.trim());
 
     try {
-      const res = await apiFetch(`${API_URL}/api/gestion/negocio`, {
+      const res = await apiFetch('/gestion/negocio', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nombre_negocio: nombreNegocio.trim() }),
       });
 
@@ -61,12 +59,12 @@ export default function TabNegocio() {
       }
 
       const data = await res.json();
-      console.log('[TabNegocio] Nombre actualizado:', data.nombre_negocio);
+      console.log('[tabNegocio] handleGuardar — completado | nombre:', data.nombre_negocio);
       setNombreOriginal(data.nombre_negocio);
       setExito(true);
       setTimeout(() => setExito(false), 3000);
     } catch (err) {
-      console.error('[TabNegocio] Error al guardar:', err);
+      console.error('[tabNegocio] Error en handleGuardar:', err.message);
       setError(err.message || 'No se pudo guardar. Intentá de nuevo.');
     } finally {
       setGuardando(false);
@@ -120,6 +118,7 @@ export default function TabNegocio() {
     </div>
   );
 }
+
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 const styles = {

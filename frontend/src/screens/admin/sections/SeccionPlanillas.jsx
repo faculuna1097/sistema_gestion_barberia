@@ -1,4 +1,3 @@
-SeccionPlanillas.jsx
 // /frontend/src/screens/admin/sections/SeccionPlanillas.jsx
 // Sección de planillas semanales del panel de administrador.
 //
@@ -19,7 +18,6 @@ SeccionPlanillas.jsx
 import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { apiFetch } from '../../../services/api';
-
 
 // ─── Helpers de semana ────────────────────────────────────────────────────────
 
@@ -111,9 +109,6 @@ function calcularComisionDia(montoServicios, tipo, valor, cantidadCortes) {
 const ars = (n) => `$ ${Number(n).toLocaleString("es-AR")}`;
 const fmtPago = (p) => (p === "efectivo" ? "Efectivo" : "Mercado Pago");
 
-// ─── Constantes ───────────────────────────────────────────────────────────────
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
-
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
 
 const TogglePill = ({ activo, onToggle, labelOn, labelOff }) => (
@@ -153,28 +148,28 @@ export default function SeccionPlanillas() {
   const [loading, setLoading]             = useState(false);
   const [error, setError]                 = useState(null);
 
-  // ── Carga de datos ───────────────────────────────────────────────────────────
+  // ── Carga de datos ────────────────────────────────────────────────────────
   useEffect(() => {
     const cargarDatos = async () => {
-      console.log("[SeccionPlanillas] Cargando datos — semana:", semana);
+      console.log("[seccionPlanillas] cargarDatos — request recibido | semana:", semana);
       setLoading(true);
       setError(null);
       try {
         const [resDetalle, resResumen] = await Promise.all([
-          apiFetch(`${BASE_URL}/api/planillas/detalle-semanal?semana=${semana}`),
-          apiFetch(`${BASE_URL}/api/planillas/resumen-semanal?semana=${semana}`),
+          apiFetch(`/planillas/detalle-semanal?semana=${semana}`),
+          apiFetch(`/planillas/resumen-semanal?semana=${semana}`),
         ]);
         if (!resDetalle.ok || !resResumen.ok) throw new Error("Error en la respuesta del servidor");
         const [detalle, resumen] = await Promise.all([
           resDetalle.json(),
           resResumen.json(),
         ]);
-        console.log("[SeccionPlanillas] Datos cargados — barberos:", detalle.length);
+        console.log("[seccionPlanillas] cargarDatos — completado | barberos:", detalle.length);
         setDetalleData(detalle);
         setResumenData(resumen);
         if (detalle.length > 0) setBarberoActivo(detalle[0].barbero_id);
       } catch (err) {
-        console.error("[SeccionPlanillas] Error al cargar datos:", err);
+        console.error("[seccionPlanillas] Error en cargarDatos:", err.message);
         setError("No se pudieron cargar los datos. Revisá la conexión.");
       } finally {
         setLoading(false);
@@ -183,13 +178,12 @@ export default function SeccionPlanillas() {
     cargarDatos();
   }, [semana]);
 
-  // ── Exportación Excel — Detalle ───────────────────────────────────────────────
+  // ── Exportación Excel — Detalle ───────────────────────────────────────────
   const exportarDetalle = () => {
     if (!detalleData.length) return;
-    console.log("[SeccionPlanillas] Exportando detalle a Excel — semana:", semana);
+    console.log("[seccionPlanillas] exportarDetalle — completado | semana:", semana);
     const filas = [];
     detalleData.forEach((barbero) => {
-      // Obtener datos de comisión del barbero desde resumenData
       const infoComision = resumenData?.barberos.find((b) => b.barbero_id === barbero.barbero_id);
       filas.push({
         Barbero: `── ${barbero.barbero_nombre} ──`,
@@ -234,10 +228,10 @@ export default function SeccionPlanillas() {
     XLSX.writeFile(wb, `detalle-semanal-${semana}.xlsx`);
   };
 
-  // ── Exportación Excel — Resumen ───────────────────────────────────────────────
+  // ── Exportación Excel — Resumen ───────────────────────────────────────────
   const exportarResumen = () => {
     if (!resumenData?.barberos.length) return;
-    console.log("[SeccionPlanillas] Exportando resumen a Excel — semana:", semana);
+    console.log("[seccionPlanillas] exportarResumen — completado | semana:", semana);
     const filas = resumenData.barberos.map((b) => ({
       Barbero: b.barbero_nombre, Cortes: b.cantidad_cortes,
       "Monto servicios ($)": b.monto_servicios, "Propinas ($)": b.propinas,
@@ -256,19 +250,18 @@ export default function SeccionPlanillas() {
     XLSX.writeFile(wb, `resumen-semanal-${semana}.xlsx`);
   };
 
-  // ── Datos derivados ───────────────────────────────────────────────────────────
+  // ── Datos derivados ───────────────────────────────────────────────────────
   const esSemanaActual      = semana === getSemanaActual();
   const hoy                 = getFechaHoy();
   const barberoSeleccionado = detalleData.find((b) => b.barbero_id === barberoActivo);
   const diasDelBarbero      = barberoSeleccionado ? agruparPorDia(barberoSeleccionado.cortes) : [];
-  // Datos de comisión del barbero seleccionado (viene de resumenData)
   const infoComisionActiva  = resumenData?.barberos.find((b) => b.barbero_id === barberoActivo);
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={styles.contenedor}>
 
-      {/* ── FILA 1: título | tabs principales ─────────────────────────── */}
+      {/* ── FILA 1: título | tabs principales ────────────────────────── */}
       <div style={styles.fila1}>
         <div>
           <h2 style={styles.titulo}>Planillas</h2>
@@ -292,7 +285,6 @@ export default function SeccionPlanillas() {
 
       {/* ── FILA 2: toggle comisiones | selector semana | exportar Excel ─ */}
       <div style={styles.fila2}>
-        {/* Toggle comisiones */}
         <div style={{ justifySelf: "start" }}>
           <TogglePill
             activo={mostrarComisiones}
@@ -302,7 +294,6 @@ export default function SeccionPlanillas() {
           />
         </div>
 
-        {/* Selector de semana — centrado */}
         <div style={styles.selectorSemana}>
           <button
             style={styles.btnSemana}
@@ -326,7 +317,6 @@ export default function SeccionPlanillas() {
           </button>
         </div>
 
-        {/* Exportar Excel */}
         <div style={{ justifySelf: "end" }}>
           <button
             style={styles.btnExportar}
@@ -337,7 +327,7 @@ export default function SeccionPlanillas() {
         </div>
       </div>
 
-      {/* ── CONTENIDO ─────────────────────────────────────────────────────── */}
+      {/* ── CONTENIDO ────────────────────────────────────────────────────── */}
       <div style={styles.tabContenido}>
 
         {loading && <p style={styles.estadoTexto}>Cargando...</p>}
@@ -359,10 +349,7 @@ export default function SeccionPlanillas() {
                       <button
                         key={b.barbero_id}
                         style={{ ...styles.tabBtn, ...(barberoActivo === b.barbero_id ? styles.tabBtnActivo : {}) }}
-                        onPointerDown={() => {
-                          console.log("[SeccionPlanillas] Barbero seleccionado:", b.barbero_nombre);
-                          setBarberoActivo(b.barbero_id);
-                        }}
+                        onPointerDown={() => setBarberoActivo(b.barbero_id)}
                       >
                         {b.barbero_nombre}
                       </button>
@@ -385,7 +372,6 @@ export default function SeccionPlanillas() {
 
                   return (
                     <div key={fecha} style={styles.bloque}>
-                      {/* Encabezado del día */}
                       <div style={{ ...styles.bloqueTituloRow, backgroundColor: esHoy ? "#f0faf5" : "#fafafa" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                           <span style={styles.bloqueTituloTexto}>{formatFecha(fecha)}</span>
@@ -427,7 +413,6 @@ export default function SeccionPlanillas() {
                             </tr>
                           ))}
                         </tbody>
-                        {/* Subtotal del día — con columna de comisión si toggle ON */}
                         <tfoot>
                           <tr style={styles.trTotal}>
                             <td style={styles.tdTotal} colSpan={2}>
@@ -523,6 +508,7 @@ export default function SeccionPlanillas() {
     </div>
   );
 }
+
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 const styles = {

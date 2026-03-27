@@ -36,19 +36,21 @@ export const clearAuthToken = () => {
 
 /**
  * apiFetch
- * Wrapper sobre fetch() que agrega automáticamente el header Authorization
- * cuando hay un token disponible. Usar en todos los componentes del panel admin
- * en reemplazo del fetch() directo.
+ * Wrapper sobre fetch() que construye la URL completa a partir del path
+ * y agrega automáticamente el header Authorization cuando hay un token disponible.
+ * Usar en todos los componentes del panel admin en reemplazo del fetch() directo.
  *
- * Uso idéntico a fetch():
- *   apiFetch(`${API_URL}/api/caja/movimientos-dia`)
- *   apiFetch(`${API_URL}/api/gastos/${id}`, { method: 'DELETE' })
- *
- * @param {string} url     - URL completa del endpoint
+ * @param {string} path    - Path del endpoint sin BASE_URL (ej: '/caja/movimientos-dia')
  * @param {Object} options - Opciones de fetch (method, body, etc.) — opcional
  * @returns {Promise<Response>} La misma Response que devuelve fetch()
+ *
+ * Ejemplos de uso:
+ *   apiFetch('/caja/movimientos-dia?fecha=2026-03-27')
+ *   apiFetch(`/caja/movimientos/corte/${id}`, { method: 'DELETE' })
+ *   apiFetch('/gestion/barberos', { method: 'POST', body: JSON.stringify(datos) })
  */
-export const apiFetch = (url, options = {}) => {
+export const apiFetch = (path, options = {}) => {
+  const url = `${BASE_URL}${path}`;
   const headers = {
     'Content-Type': 'application/json',
     ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),

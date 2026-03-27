@@ -7,9 +7,6 @@ import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { apiFetch } from '../../../services/api';
 
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
 // ─── Helpers de fecha ─────────────────────────────────────────────────────────
 
 const MESES = [
@@ -18,32 +15,21 @@ const MESES = [
 ];
 const DIAS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 
-/**
- * getFechaHoy — devuelve hoy en formato 'YYYY-MM-DD' en timezone AR
- */
 const getFechaHoy = () =>
   new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
 
-/**
- * desplazarDia — suma o resta días a un string 'YYYY-MM-DD'
- */
 const desplazarDia = (fechaStr, delta) => {
   const [anio, mes, dia] = fechaStr.split('-').map(Number);
   const fecha = new Date(anio, mes - 1, dia + delta);
   return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
 };
 
-/**
- * fechaALabel — convierte 'YYYY-MM-DD' en label legible
- * ej: "Miércoles 18 de Marzo de 2026"
- */
 const fechaALabel = (fechaStr) => {
   const [anio, mes, dia] = fechaStr.split('-').map(Number);
   const fecha = new Date(anio, mes - 1, dia);
   return `${DIAS[fecha.getDay()]} ${dia} de ${MESES[mes - 1]} de ${anio}`;
 };
 
-// ─── Ícono Excel (inline SVG) ─────────────────────────────────────────────────
 const ExcelIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -55,7 +41,6 @@ const ExcelIcon = () => (
   </svg>
 );
 
-// ─── Badge forma de pago ──────────────────────────────────────────────────────
 const BadgeFormaPago = ({ forma }) => {
   const estilos = forma === 'efectivo'
     ? { backgroundColor: '#e8f5e9', color: '#2e7d32' }
@@ -67,14 +52,12 @@ const BadgeFormaPago = ({ forma }) => {
   );
 };
 
-// ─── Modal de confirmación de eliminación ─────────────────────────────────────
 function ModalConfirmarEliminar({ movimiento, onConfirmar, onCancelar }) {
   return (
     <div style={styles.modalOverlay}>
       <div style={styles.modalCard}>
-        <p style={styles.modalTitulo}>¿Eliminar este registro?</p>
+        <p style={styles.modalTitulo}>Eliminar este registro?</p>
         <p style={styles.modalAdvertencia}>Esta acción no se puede deshacer.</p>
-
         <div style={styles.modalDetalle}>
           <div style={styles.modalFila}>
             <span style={styles.modalLabel}>Hora</span>
@@ -102,21 +85,15 @@ function ModalConfirmarEliminar({ movimiento, onConfirmar, onCancelar }) {
             </span>
           </div>
         </div>
-
         <div style={styles.modalBotones}>
-          <button style={styles.btnCancelar} onPointerDown={onCancelar}>
-            Cancelar
-          </button>
-          <button style={styles.btnEliminarConfirm} onPointerDown={onConfirmar}>
-            Sí, eliminar
-          </button>
+          <button style={styles.btnCancelar} onPointerDown={onCancelar}>Cancelar</button>
+          <button style={styles.btnEliminarConfirm} onPointerDown={onConfirmar}>Si, eliminar</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Tab 1: Movimientos del día ───────────────────────────────────────────────
 function TabMovimientos() {
   const [fecha, setFecha]             = useState(getFechaHoy);
   const [movimientos, setMovimientos] = useState([]);
@@ -128,33 +105,30 @@ function TabMovimientos() {
 
   const esHoy = fecha === getFechaHoy();
 
-  // ── Carga al cambiar de fecha ─────────────────────────────────────────────
   useEffect(() => {
-    console.log('[SeccionCaja] Cargando movimientos — fecha:', fecha);
-    setCargando(true);
-    setError(null);
-    apiFetch(`${API_URL}/api/caja/movimientos-dia?fecha=${fecha}`)
-      .then(r => r.json())
-      .then(data => {
-        console.log('[SeccionCaja] Movimientos cargados:', data.movimientos?.length);
+    const cargarMovimientos = async () => {
+      console.log('[seccionCaja] cargarMovimientos — request recibido | fecha:', fecha);
+      setCargando(true);
+      setError(null);
+      try {
+        const res  = await apiFetch(`/caja/movimientos-dia?fecha=${fecha}`);
+        const data = await res.json();
+        console.log('[seccionCaja] cargarMovimientos — completado | movimientos:', data.movimientos?.length);
         setMovimientos(data.movimientos || []);
-        setCargando(false);
-      })
-      .catch(err => {
-        console.error('[SeccionCaja] Error al cargar movimientos:', err);
+      } catch (err) {
+        console.error('[seccionCaja] Error en cargarMovimientos:', err.message);
         setError('No se pudieron cargar los movimientos.');
+      } finally {
         setCargando(false);
-      });
+      }
+    };
+    cargarMovimientos();
   }, [fecha]);
 
-  // ── Lista filtrada ────────────────────────────────────────────────────────
-  // Cuando el toggle está activo, oculta cortes de barberos con 100% de comisión.
-  // Ventas y gastos siempre se muestran.
   const movimientosFiltrados = soloNegocio
     ? movimientos.filter(m => m.tipo !== 'corte' || Number(m.comision_valor) < 100)
     : movimientos;
 
-  // ── Totales neto por canal ────────────────────────────────────────────────
   const efectivoNeto = movimientosFiltrados.reduce((acc, m) => {
     if (m.forma_pago !== 'efectivo') return acc;
     return m.tipo === 'gasto' ? acc - Number(m.monto) : acc + Number(m.monto);
@@ -165,42 +139,38 @@ function TabMovimientos() {
     return m.tipo === 'gasto' ? acc - Number(m.monto) : acc + Number(m.monto);
   }, 0);
 
-  // ── Eliminar ──────────────────────────────────────────────────────────────
   const confirmarEliminar = async () => {
-    setEliminando(true);
     const { tipo, id } = movimientoAEliminar;
-    console.log('[SeccionCaja] Eliminando movimiento — tipo:', tipo, '| id:', id);
+    console.log('[seccionCaja] confirmarEliminar — request recibido | tipo:', tipo, '| id:', id);
+    setEliminando(true);
     try {
-      const res = await apiFetch(`${API_URL}/api/caja/movimientos/${tipo}/${id}`, {
-        method: 'DELETE',
-      });
+      const res = await apiFetch(`/caja/movimientos/${tipo}/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Error del servidor');
       setMovimientos(prev => prev.filter(m => m.id !== id));
-      console.log('[SeccionCaja] Movimiento eliminado correctamente — id:', id);
+      console.log('[seccionCaja] confirmarEliminar — completado | id:', id);
     } catch (err) {
-      console.error('[SeccionCaja] Error al eliminar movimiento:', err);
-      alert('No se pudo eliminar el registro. Intentá de nuevo.');
+      console.error('[seccionCaja] Error en confirmarEliminar:', err.message);
+      alert('No se pudo eliminar el registro. Intentalo de nuevo.');
     } finally {
       setEliminando(false);
       setMovimientoAEliminar(null);
     }
   };
 
-  // ── Exportar Excel ────────────────────────────────────────────────────────
   const exportarExcel = () => {
     const datos = movimientos.map(m => ({
       Hora:            m.hora,
       Tipo:            m.tipo === 'corte' ? 'Corte' : m.tipo === 'venta' ? 'Venta' : 'Gasto',
-      Barbero:         m.barbero_nombre || '—',
+      Barbero:         m.barbero_nombre || '-',
       Detalle:         m.detalle,
       Monto:           m.tipo === 'gasto' ? -Number(m.monto) : Number(m.monto),
       'Forma de pago': m.forma_pago === 'efectivo' ? 'Efectivo' : 'Mercado Pago',
     }));
     const ws = XLSX.utils.json_to_sheet(datos);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Movimientos del día');
+    XLSX.utils.book_append_sheet(wb, ws, 'Movimientos del dia');
     XLSX.writeFile(wb, `movimientos-${fecha}.xlsx`);
-    console.log('[SeccionCaja] Exportación Excel completada — fecha:', fecha);
+    console.log('[seccionCaja] exportarExcel — completado | fecha:', fecha);
   };
 
   if (cargando) return (
@@ -222,7 +192,6 @@ function TabMovimientos() {
         />
       )}
 
-      {/* ── Cards de totales neto ─────────────────────────────────────────── */}
       <div style={styles.totalesRow}>
         <div style={styles.totalCard}>
           <span style={styles.totalEmoji}>💵</span>
@@ -233,7 +202,6 @@ function TabMovimientos() {
             </p>
           </div>
         </div>
-
         <div style={styles.totalCard}>
           <img
             src="/mercadopago.png"
@@ -250,32 +218,19 @@ function TabMovimientos() {
         </div>
       </div>
 
-      {/* ── Fila acciones: toggle izq | selector fecha centro | exportar der ─ */}
       <div style={styles.accionesRow}>
-
-        {/* Toggle Solo Barberos */}
         <div>
           <button
-            style={{
-              ...styles.btnToggle,
-              ...(soloNegocio ? styles.btnToggleActivo : {}),
-            }}
+            style={{ ...styles.btnToggle, ...(soloNegocio ? styles.btnToggleActivo : {}) }}
             onPointerDown={() => setSoloNegocio(v => !v)}
           >
-            <span style={{
-              ...styles.togglePunto,
-              backgroundColor: soloNegocio ? '#2e7d32' : '#aaaaaa',
-            }} />
+            <span style={{ ...styles.togglePunto, backgroundColor: soloNegocio ? '#2e7d32' : '#aaaaaa' }} />
             Solo Barberos
           </button>
         </div>
 
-        {/* Selector de fecha */}
         <div style={styles.selectorFecha}>
-          <button
-            style={styles.btnDia}
-            onPointerDown={() => setFecha(d => desplazarDia(d, -1))}
-          >
+          <button style={styles.btnDia} onPointerDown={() => setFecha(d => desplazarDia(d, -1))}>
             ‹
           </button>
           <div style={styles.labelFechaContenedor}>
@@ -283,10 +238,7 @@ function TabMovimientos() {
             {esHoy && <span style={styles.badgeHoy}>HOY</span>}
           </div>
           <button
-            style={{
-              ...styles.btnDia,
-              ...(esHoy ? styles.btnDiaDeshabilitado : {}),
-            }}
+            style={{ ...styles.btnDia, ...(esHoy ? styles.btnDiaDeshabilitado : {}) }}
             onPointerDown={() => { if (!esHoy) setFecha(d => desplazarDia(d, +1)); }}
             disabled={esHoy}
           >
@@ -294,7 +246,6 @@ function TabMovimientos() {
           </button>
         </div>
 
-        {/* Exportar */}
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button
             style={movimientos.length === 0
@@ -309,10 +260,9 @@ function TabMovimientos() {
         </div>
       </div>
 
-      {/* ── Tabla ────────────────────────────────────────────────────────── */}
       {movimientosFiltrados.length === 0 ? (
         <div style={styles.estadoCentrado}>
-          <p style={styles.estadoTexto}>No hay movimientos registrados este día.</p>
+          <p style={styles.estadoTexto}>No hay movimientos registrados este dia.</p>
         </div>
       ) : (
         <div style={styles.tablaWrapper}>
@@ -330,46 +280,27 @@ function TabMovimientos() {
                   key={m.id || i}
                   style={m.tipo === 'gasto'
                     ? { backgroundColor: '#fff8f8' }
-                    : i % 2 === 0 ? styles.filaImpar : styles.filaPar
-                  }
+                    : i % 2 === 0 ? styles.filaImpar : styles.filaPar}
                 >
                   <td style={styles.td}>{m.hora}</td>
                   <td style={styles.td}>
                     <span style={{
                       ...styles.badge,
-                      backgroundColor:
-                        m.tipo === 'corte' ? '#e8f5ee'
-                        : m.tipo === 'venta' ? '#eef2ff'
-                        : '#fdecea',
-                      color:
-                        m.tipo === 'corte' ? '#1a7a4a'
-                        : m.tipo === 'venta' ? '#4338ca'
-                        : '#c0392b',
+                      backgroundColor: m.tipo === 'corte' ? '#e8f5ee' : m.tipo === 'venta' ? '#eef2ff' : '#fdecea',
+                      color:           m.tipo === 'corte' ? '#1a7a4a' : m.tipo === 'venta' ? '#4338ca' : '#c0392b',
                     }}>
                       {m.tipo === 'corte' ? 'Corte' : m.tipo === 'venta' ? 'Venta' : 'Gasto'}
                     </span>
                   </td>
-                  <td style={{ ...styles.td, color: '#888888' }}>
-                    {m.barbero_nombre || '—'}
-                  </td>
+                  <td style={{ ...styles.td, color: '#888888' }}>{m.barbero_nombre || '-'}</td>
                   <td style={styles.td}>{m.detalle}</td>
-                  <td style={{
-                    ...styles.td, fontWeight: '600',
-                    color: m.tipo === 'gasto' ? '#c0392b' : '#111111',
-                  }}>
-                    {m.tipo === 'gasto' ? '− ' : ''}
-                    $ {Number(m.monto).toLocaleString('es-AR')}
+                  <td style={{ ...styles.td, fontWeight: '600', color: m.tipo === 'gasto' ? '#c0392b' : '#111111' }}>
+                    {m.tipo === 'gasto' ? '- ' : ''}$ {Number(m.monto).toLocaleString('es-AR')}
                   </td>
-                  <td style={styles.td}>
-                    <BadgeFormaPago forma={m.forma_pago} />
-                  </td>
+                  <td style={styles.td}><BadgeFormaPago forma={m.forma_pago} /></td>
                   <td style={styles.tdAccion}>
-                    <button
-                      style={styles.btnX}
-                      onPointerDown={() => setMovimientoAEliminar(m)}
-                      aria-label="Eliminar registro"
-                    >
-                      ✕
+                    <button style={styles.btnX} onPointerDown={() => setMovimientoAEliminar(m)} aria-label="Eliminar registro">
+                      x
                     </button>
                   </td>
                 </tr>
@@ -382,52 +313,43 @@ function TabMovimientos() {
   );
 }
 
-// ─── Tab 2: Cierre de caja (placeholder) ──────────────────────────────────────
 function TabCierre() {
   return (
     <div style={styles.estadoCentrado}>
-      <p style={styles.estadoTexto}>Cierre de caja — próximamente.</p>
+      <p style={styles.estadoTexto}>Cierre de caja — proximamente.</p>
     </div>
   );
 }
 
-// ─── Tab 3: Historial de cierres (placeholder) ────────────────────────────────
 function TabHistorial() {
   return (
     <div style={styles.estadoCentrado}>
-      <p style={styles.estadoTexto}>Historial de cierres — próximamente.</p>
+      <p style={styles.estadoTexto}>Historial de cierres — proximamente.</p>
     </div>
   );
 }
 
-// ─── Componente principal ─────────────────────────────────────────────────────
 export default function SeccionCaja() {
   const [tabActivo, setTabActivo] = useState('movimientos');
 
   const tabs = [
-    { key: 'movimientos', label: 'Movimientos del día' },
+    { key: 'movimientos', label: 'Movimientos del dia' },
     { key: 'cierre',      label: 'Cierre de caja' },
     { key: 'historial',   label: 'Historial de cierres' },
   ];
 
   return (
     <div style={styles.contenedor}>
-
-      {/* ── Encabezado: título izq + tabs pill der ───────────────────────── */}
       <div style={styles.encabezado}>
         <div>
           <h2 style={styles.titulo}>Caja</h2>
-          <p style={styles.subtitulo}>Movimientos por día</p>
+          <p style={styles.subtitulo}>Movimientos por dia</p>
         </div>
-
         <div style={styles.tabPillContenedor}>
           {tabs.map(t => (
             <button
               key={t.key}
-              style={{
-                ...styles.tabPill,
-                ...(tabActivo === t.key ? styles.tabPillActivo : {}),
-              }}
+              style={{ ...styles.tabPill, ...(tabActivo === t.key ? styles.tabPillActivo : {}) }}
               onPointerDown={() => setTabActivo(t.key)}
             >
               {t.label}
@@ -436,14 +358,15 @@ export default function SeccionCaja() {
         </div>
       </div>
 
-      {/* ── Contenido activo ─────────────────────────────────────────────── */}
       {tabActivo === 'movimientos' && <TabMovimientos />}
       {tabActivo === 'cierre'      && <TabCierre />}
       {tabActivo === 'historial'   && <TabHistorial />}
-
     </div>
   );
 }
+
+// SIN CAMBIOS en styles — mantener el objeto existente en tu archivo
+
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 const styles = {

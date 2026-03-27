@@ -1,4 +1,4 @@
-// frontend/src/screens/admin/sections/gestion/TabBarberos.jsx
+// /frontend/src/screens/admin/sections/gestion/TabBarberos.jsx
 // ABM de barberos. Permite listar, crear y editar barberos.
 // Comisión siempre en porcentaje (0-100).
 // PIN: requerido al crear, opcional al editar (vacío = no cambia).
@@ -7,36 +7,33 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../../../../services/api';
 
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
 // ─── Modal crear / editar barbero ─────────────────────────────────────────────
 /**
  * ModalBarbero — formulario para crear o editar un barbero.
- * @param {object|null} barbero  - null = modo crear, objeto = modo editar
+ * @param {object|null} barbero   - null = modo crear, objeto = modo editar
  * @param {function}    onGuardar - callback al guardar exitosamente
  * @param {function}    onCerrar  - callback al cancelar o cerrar
  */
 function ModalBarbero({ barbero, onGuardar, onCerrar }) {
   const esEdicion = barbero !== null;
 
-  const [nombre, setNombre]       = useState(barbero?.nombre          ?? '');
+  const [nombre, setNombre]       = useState(barbero?.nombre         ?? '');
   const [pin, setPin]             = useState('');
-  const [comision, setComision]   = useState(barbero?.comision_valor  ?? '');
-  const [activo, setActivo]       = useState(barbero?.activo          ?? true);
+  const [comision, setComision]   = useState(barbero?.comision_valor ?? '');
+  const [activo, setActivo]       = useState(barbero?.activo         ?? true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState(null);
 
-  // ── Validaciones ────────────────────────────────────────────────────────
-  const pinValido = pin === '' || (pin.length === 4 && /^\d{4}$/.test(pin));
+  // ── Validaciones ──────────────────────────────────────────────────────────
+  const pinValido    = pin === '' || (pin.length === 4 && /^\d{4}$/.test(pin));
   const pinRequerido = !esEdicion && pin.length !== 4;
 
   const puedeGuardar =
-    nombre.trim() !== ''        &&
-    comision !== ''             &&
-    Number(comision) >= 0       &&
-    Number(comision) <= 100     &&
-    pinValido                   &&
+    nombre.trim() !== ''    &&
+    comision !== ''         &&
+    Number(comision) >= 0   &&
+    Number(comision) <= 100 &&
+    pinValido               &&
     !pinRequerido;
 
   /**
@@ -57,18 +54,15 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
     // PIN: siempre requerido al crear; en edición solo si se completó
     if (pin !== '') body.pin = pin;
 
+    const method = esEdicion ? 'PUT' : 'POST';
+    const path   = esEdicion ? `/gestion/barberos/${barbero.id}` : '/gestion/barberos';
+
+    // NUNCA loguear el PIN
+    console.log(`[tabBarberos] handleGuardar — request recibido | method: ${method} | nombre: ${body.nombre}`);
+
     try {
-      const url    = esEdicion
-        ? `${API_URL}/api/gestion/barberos/${barbero.id}`
-        : `${API_URL}/api/gestion/barberos`;
-      const method = esEdicion ? 'PUT' : 'POST';
-
-      // NUNCA loguear el PIN
-      console.log(`[TabBarberos] ${method} barbero —`, { ...body, pin: body.pin ? '***' : undefined });
-
-      const res = await apiFetch(url, {
+      const res = await apiFetch(path, {
         method,
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
 
@@ -78,10 +72,10 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
       }
 
       const barberoGuardado = await res.json();
-      console.log('[TabBarberos] Barbero guardado:', barberoGuardado.id, barberoGuardado.nombre);
+      console.log('[tabBarberos] handleGuardar — completado | id:', barberoGuardado.id);
       onGuardar(barberoGuardado, esEdicion);
     } catch (err) {
-      console.error('[TabBarberos] Error al guardar barbero:', err);
+      console.error('[tabBarberos] Error en handleGuardar:', err.message);
       setError(err.message || 'No se pudo guardar el barbero. Intentá de nuevo.');
     } finally {
       setGuardando(false);
@@ -123,7 +117,6 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
               maxLength={4}
               value={pin}
               onChange={e => {
-                // Solo permite dígitos
                 const val = e.target.value.replace(/\D/g, '');
                 setPin(val);
               }}
@@ -211,48 +204,37 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function TabBarberos() {
-  const [barberos, setBarberos]             = useState([]);
-  const [cargando, setCargando]             = useState(true);
-  const [error, setError]                   = useState(null);
-  const [modalAbierto, setModalAbierto]     = useState(false);
+  const [barberos, setBarberos]               = useState([]);
+  const [cargando, setCargando]               = useState(true);
+  const [error, setError]                     = useState(null);
+  const [modalAbierto, setModalAbierto]       = useState(false);
   const [barberoEditando, setBarberoEditando] = useState(null);
 
-  // ── Carga inicial ──────────────────────────────────────────────────────────
+  // ── Carga inicial ─────────────────────────────────────────────────────────
   useEffect(() => {
-    console.log('[TabBarberos] Cargando barberos...');
-    apiFetch(`${API_URL}/api/gestion/barberos`)
-      .then(r => r.json())
-      .then(data => {
-        console.log('[TabBarberos] Barberos cargados:', data.length);
+    const cargarBarberos = async () => {
+      console.log('[tabBarberos] cargarBarberos — request recibido');
+      try {
+        const res  = await apiFetch('/gestion/barberos');
+        const data = await res.json();
+        console.log('[tabBarberos] cargarBarberos — completado | barberos:', data.length);
         setBarberos(data);
-        setCargando(false);
-      })
-      .catch(err => {
-        console.error('[TabBarberos] Error al cargar barberos:', err);
+      } catch (err) {
+        console.error('[tabBarberos] Error en cargarBarberos:', err.message);
         setError('No se pudieron cargar los barberos.');
+      } finally {
         setCargando(false);
-      });
+      }
+    };
+    cargarBarberos();
   }, []);
 
-  // ── Abrir modal ────────────────────────────────────────────────────────────
-  const abrirCrear = () => {
-    console.log('[TabBarberos] Abriendo modal — modo crear');
-    setBarberoEditando(null);
-    setModalAbierto(true);
-  };
+  // ── Control del modal ─────────────────────────────────────────────────────
+  const abrirCrear  = ()        => { setBarberoEditando(null);    setModalAbierto(true); };
+  const abrirEditar = (barbero) => { setBarberoEditando(barbero); setModalAbierto(true); };
+  const cerrarModal = ()        => { setModalAbierto(false); setBarberoEditando(null); };
 
-  const abrirEditar = (barbero) => {
-    console.log('[TabBarberos] Abriendo modal — modo editar:', barbero.id, barbero.nombre);
-    setBarberoEditando(barbero);
-    setModalAbierto(true);
-  };
-
-  const cerrarModal = () => {
-    setModalAbierto(false);
-    setBarberoEditando(null);
-  };
-
-  // ── Callback al guardar ────────────────────────────────────────────────────
+  // ── Callback al guardar ───────────────────────────────────────────────────
   /**
    * handleGuardado — actualiza la lista local sin refetch.
    * @param {object}  barberoGuardado - objeto devuelto por el backend
@@ -260,16 +242,14 @@ export default function TabBarberos() {
    */
   const handleGuardado = (barberoGuardado, esEdicion) => {
     if (esEdicion) {
-      setBarberos(prev =>
-        prev.map(b => b.id === barberoGuardado.id ? barberoGuardado : b)
-      );
+      setBarberos(prev => prev.map(b => b.id === barberoGuardado.id ? barberoGuardado : b));
     } else {
       setBarberos(prev => [...prev, barberoGuardado]);
     }
     cerrarModal();
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   if (cargando) return <p style={styles.estadoTexto}>Cargando barberos...</p>;
   if (error)    return <p style={styles.errorTexto}>{error}</p>;
 
@@ -315,9 +295,7 @@ export default function TabBarberos() {
                   style={{ backgroundColor: i % 2 === 0 ? '#ffffff' : '#fafafa' }}
                 >
                   <td style={styles.td}>{b.nombre}</td>
-                  <td style={styles.td}>
-                    {Number(b.comision_valor)}%
-                  </td>
+                  <td style={styles.td}>{Number(b.comision_valor)}%</td>
                   <td style={styles.td}>
                     <span style={{
                       ...styles.badge,

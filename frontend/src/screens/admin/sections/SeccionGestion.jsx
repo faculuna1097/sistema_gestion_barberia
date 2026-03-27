@@ -1,16 +1,16 @@
-// frontend/src/screens/admin/sections/SeccionGestion.jsx
+// /frontend/src/screens/admin/sections/SeccionGestion.jsx
 // Sección Gestión del panel admin.
 // Contiene 5 sub-secciones (tabs internos): Barberos, Servicios, Productos,
 // Datos del negocio y Cambio de PIN admin.
 // Cada tab carga sus propios datos al activarse — no hay precarga global.
 // Estilo visual idéntico a SeccionBalances.
 
-import { useState } from 'react';
-import TabBarberos from './gestion/TabBarberos.jsx';
+import { useState, useEffect } from 'react';
+import TabBarberos  from './gestion/TabBarberos.jsx';
 import TabServicios from './gestion/TabServicios.jsx';
 import TabProductos from './gestion/TabProductos.jsx';
-import TabNegocio from './gestion/TabNegocio.jsx';
-import TabPinAdmin from './gestion/TabPinAdmin.jsx';
+import TabNegocio   from './gestion/TabNegocio.jsx';
+import TabPinAdmin  from './gestion/TabPinAdmin.jsx';
 
 // ─── Tabs disponibles ─────────────────────────────────────────────────────────
 const TABS = [
@@ -22,9 +22,11 @@ const TABS = [
 ];
 
 export default function SeccionGestion() {
-  console.log('[SeccionGestion] Montada');
-
   const [tabActiva, setTabActiva] = useState('barberos');
+
+  useEffect(() => {
+    console.log('[seccionGestion] Montada');
+  }, []);
 
   return (
     <div style={styles.contenedor}>
@@ -43,10 +45,7 @@ export default function SeccionGestion() {
                 ...styles.tabBtn,
                 ...(tabActiva === tab.key ? styles.tabBtnActivo : {}),
               }}
-              onPointerDown={() => {
-                console.log('[SeccionGestion] Tab seleccionada:', tab.key);
-                setTabActiva(tab.key);
-              }}
+              onPointerDown={() => setTabActiva(tab.key)}
             >
               {tab.label}
             </button>

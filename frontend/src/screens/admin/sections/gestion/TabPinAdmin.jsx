@@ -1,13 +1,10 @@
-// frontend/src/screens/admin/sections/gestion/TabPinAdmin.jsx
+// /frontend/src/screens/admin/sections/gestion/TabPinAdmin.jsx
 // Permite cambiar el PIN del administrador.
 // Flujo: PIN actual → nuevo PIN → confirmar nuevo PIN → guardar.
 // El backend verifica el PIN actual con bcrypt antes de aceptar el cambio.
 
 import { useState } from 'react';
 import { apiFetch } from '../../../../services/api';
-
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export default function TabPinAdmin() {
   const [pinActual, setPinActual]       = useState('');
@@ -18,10 +15,10 @@ export default function TabPinAdmin() {
   const [exito, setExito]               = useState(false);
 
   // ── Validaciones ──────────────────────────────────────────────────────────
-  const pinActualValido   = pinActual.length === 4;
-  const pinNuevoValido    = pinNuevo.length === 4;
+  const pinActualValido    = pinActual.length === 4;
+  const pinNuevoValido     = pinNuevo.length === 4;
   const pinConfirmarValido = pinConfirmar.length === 4;
-  const pinsCoinciden     = pinNuevo === pinConfirmar;
+  const pinsCoinciden      = pinNuevo === pinConfirmar;
 
   const puedeGuardar =
     pinActualValido    &&
@@ -30,7 +27,7 @@ export default function TabPinAdmin() {
     pinsCoinciden;
 
   /**
-   * handleCambiarPin — envía PUT /api/gestion/pin-admin con pin_actual y pin_nuevo.
+   * handleCambiarPin — envía PUT /gestion/pin-admin con pin_actual y pin_nuevo.
    * El backend verifica el pin_actual con bcrypt y hashea el nuevo antes de guardarlo.
    */
   const handleCambiarPin = async () => {
@@ -40,12 +37,11 @@ export default function TabPinAdmin() {
     setExito(false);
 
     // NUNCA loguear PINs
-    console.log('[TabPinAdmin] Solicitando cambio de PIN admin...');
+    console.log('[tabPinAdmin] handleCambiarPin — request recibido');
 
     try {
-      const res = await apiFetch(`${API_URL}/api/gestion/pin-admin`, {
+      const res = await apiFetch('/gestion/pin-admin', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin_actual: pinActual, pin_nuevo: pinNuevo }),
       });
 
@@ -54,14 +50,14 @@ export default function TabPinAdmin() {
         throw new Error(data.error || 'Error del servidor');
       }
 
-      console.log('[TabPinAdmin] PIN admin cambiado exitosamente');
+      console.log('[tabPinAdmin] handleCambiarPin — completado');
       setPinActual('');
       setPinNuevo('');
       setPinConfirmar('');
       setExito(true);
       setTimeout(() => setExito(false), 4000);
     } catch (err) {
-      console.error('[TabPinAdmin] Error al cambiar PIN:', err);
+      console.error('[tabPinAdmin] Error en handleCambiarPin:', err.message);
       setError(err.message || 'No se pudo cambiar el PIN. Intentá de nuevo.');
     } finally {
       setGuardando(false);

@@ -7,9 +7,6 @@ import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { apiFetch } from '../../../services/api';
 
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const MESES = [
@@ -49,6 +46,30 @@ const desplazarMes = (mesStr, delta) => {
  */
 const formatMonto = (valor) =>
   `$ ${Number(valor).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+// ─── Ícono Excel (inline SVG) ─────────────────────────────────────────────────
+const ExcelIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    style={{ marginRight: '6px' }}>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="8" y1="13" x2="16" y2="13" />
+    <line x1="8" y1="17" x2="16" y2="17" />
+  </svg>
+);
+
+// ─── Badge forma de pago ──────────────────────────────────────────────────────
+const BadgeFormaPago = ({ forma }) => {
+  const estilos = forma === 'efectivo'
+    ? { backgroundColor: '#e8f5e9', color: '#2e7d32' }
+    : { backgroundColor: '#e3f2fd', color: '#1565c0' };
+  return (
+    <span style={{ ...styles.badge, ...estilos }}>
+      {forma === 'efectivo' ? 'Efectivo' : 'Mercado Pago'}
+    </span>
+  );
+};
 
 // ─── Modal de confirmación de eliminación ─────────────────────────────────────
 function ModalConfirmarEliminar({ venta, onConfirmar, onCancelar }) {
@@ -95,46 +116,33 @@ function ModalConfirmarEliminar({ venta, onConfirmar, onCancelar }) {
   );
 }
 
-// ─── Sub-componente: badge forma de pago ──────────────────────────────────────
-const BadgeFormaPago = ({ forma }) => {
-  const estilos = forma === 'efectivo'
-    ? { backgroundColor: '#e8f5e9', color: '#2e7d32' }
-    : { backgroundColor: '#e3f2fd', color: '#1565c0' };
-  return (
-    <span style={{ ...styles.badge, ...estilos }}>
-      {forma === 'efectivo' ? 'Efectivo' : 'Mercado Pago'}
-    </span>
-  );
-};
-
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function SeccionVentas() {
-  const [mes, setMes]                             = useState(getMesActual);
-  const [ventas, setVentas]                       = useState([]);
-  const [totalesPorProducto, setTotalesPorProd]   = useState([]);
-  const [totalGeneral, setTotalGeneral]           = useState(0);
-  const [cargando, setCargando]                   = useState(false);
-  const [error, setError]                         = useState(null);
-  const [ventaAEliminar, setVentaAEliminar]       = useState(null);
-  const [eliminando, setEliminando]               = useState(false);
+  const [mes, setMes]                           = useState(getMesActual);
+  const [ventas, setVentas]                     = useState([]);
+  const [totalesPorProducto, setTotalesPorProd] = useState([]);
+  const [totalGeneral, setTotalGeneral]         = useState(0);
+  const [cargando, setCargando]                 = useState(false);
+  const [error, setError]                       = useState(null);
+  const [ventaAEliminar, setVentaAEliminar]     = useState(null);
+  const [eliminando, setEliminando]             = useState(false);
 
-  // ── Carga de datos al cambiar de mes ───────────────────────────────────────
+  // ── Carga de datos al cambiar de mes ──────────────────────────────────────
   useEffect(() => {
     const cargarVentas = async () => {
-      console.log('[SeccionVentas] Cargando ventas — mes:', mes);
+      console.log('[seccionVentas] cargarVentas — request recibido | mes:', mes);
       setCargando(true);
       setError(null);
       try {
-        const res  = await apiFetch(`${API_BASE}/api/ventas/mensual?mes=${mes}`);
+        const res  = await apiFetch(`/ventas/mensual?mes=${mes}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         setVentas(data.ventas);
         setTotalesPorProd(data.totalesPorProducto);
         setTotalGeneral(data.totalGeneral);
-        console.log('[SeccionVentas] Datos cargados — registros:', data.ventas.length,
-          '| total general:', data.totalGeneral);
+        console.log('[seccionVentas] cargarVentas — completado | registros:', data.ventas.length);
       } catch (err) {
-        console.error('[SeccionVentas] Error al cargar ventas:', err);
+        console.error('[seccionVentas] Error en cargarVentas:', err.message);
         setError('No se pudieron cargar las ventas. Intentá de nuevo.');
       } finally {
         setCargando(false);
@@ -143,27 +151,22 @@ export default function SeccionVentas() {
     cargarVentas();
   }, [mes]);
 
-  // ── Eliminar venta ─────────────────────────────────────────────────────────
+  // ── Eliminar venta ────────────────────────────────────────────────────────
   const confirmarEliminar = async () => {
-    setEliminando(true);
     const { id } = ventaAEliminar;
-    console.log('[SeccionVentas] Eliminando venta — id:', id);
+    console.log('[seccionVentas] confirmarEliminar — request recibido | id:', id);
+    setEliminando(true);
     try {
-      const res = await apiFetch(`${API_BASE}/api/ventas/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/ventas/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Error del servidor');
-
-      // Actualizar lista y recalcular totales localmente
       const nuevasVentas = ventas.filter(v => v.id !== id);
       setVentas(nuevasVentas);
-
+      // Recalcular totales localmente tras eliminar
       const nuevoTotal = nuevasVentas.reduce((acc, v) => acc + Number(v.total), 0);
       setTotalGeneral(nuevoTotal);
-
       const totalesMap = {};
       nuevasVentas.forEach(v => {
-        if (!totalesMap[v.producto_nombre]) {
-          totalesMap[v.producto_nombre] = { cantidad_total: 0, monto_total: 0 };
-        }
+        if (!totalesMap[v.producto_nombre]) totalesMap[v.producto_nombre] = { cantidad_total: 0, monto_total: 0 };
         totalesMap[v.producto_nombre].cantidad_total += Number(v.cantidad);
         totalesMap[v.producto_nombre].monto_total    += Number(v.total);
       });
@@ -171,10 +174,9 @@ export default function SeccionVentas() {
         .map(([nombre, vals]) => ({ producto_nombre: nombre, ...vals }))
         .sort((a, b) => b.monto_total - a.monto_total);
       setTotalesPorProd(nuevosTotales);
-
-      console.log('[SeccionVentas] Venta eliminada correctamente — id:', id);
+      console.log('[seccionVentas] confirmarEliminar — completado | id:', id);
     } catch (err) {
-      console.error('[SeccionVentas] Error al eliminar venta:', err);
+      console.error('[seccionVentas] Error en confirmarEliminar:', err.message);
       alert('No se pudo eliminar la venta. Intentá de nuevo.');
     } finally {
       setEliminando(false);
@@ -182,16 +184,14 @@ export default function SeccionVentas() {
     }
   };
 
-  // ── Exportar Excel ─────────────────────────────────────────────────────────
+  // ── Exportar Excel ────────────────────────────────────────────────────────
   /**
    * exportarExcel — genera un .xlsx con dos hojas:
    *   "Ventas": tabla de movimientos del mes
    *   "Totales": resumen por producto
    */
   const exportarExcel = () => {
-    console.log('[SeccionVentas] Exportando Excel — mes:', mes, '| registros:', ventas.length);
     const wb = XLSX.utils.book_new();
-
     const filas = ventas.map(v => ({
       Fecha:             v.fecha,
       Producto:          v.producto_nombre,
@@ -201,24 +201,22 @@ export default function SeccionVentas() {
       'Forma de pago':   v.forma_pago === 'efectivo' ? 'Efectivo' : 'Mercado Pago',
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Ventas');
-
     const filasTotales = totalesPorProducto.map(t => ({
-      Producto:          t.producto_nombre,
-      'Unidades vendidas': Number(t.cantidad_total),
-      Total:             Number(t.monto_total),
+      Producto:              t.producto_nombre,
+      'Unidades vendidas':   Number(t.cantidad_total),
+      Total:                 Number(t.monto_total),
     }));
     filasTotales.push({
-      Producto: 'TOTAL GENERAL',
+      Producto:            'TOTAL GENERAL',
       'Unidades vendidas': ventas.reduce((acc, v) => acc + Number(v.cantidad), 0),
-      Total: totalGeneral,
+      Total:               totalGeneral,
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasTotales), 'Totales');
-
     XLSX.writeFile(wb, `Ventas_${mes}.xlsx`);
-    console.log('[SeccionVentas] Archivo Excel generado: Ventas_' + mes + '.xlsx');
+    console.log('[seccionVentas] exportarExcel — completado | mes:', mes);
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={styles.contenedor}>
 
@@ -242,16 +240,16 @@ export default function SeccionVentas() {
             ...styles.btnExportar,
             ...(ventas.length === 0 ? styles.btnExportarDeshabilitado : {}),
           }}
-          onClick={exportarExcel}
+          onPointerDown={exportarExcel}
           disabled={ventas.length === 0}
         >
           <ExcelIcon /> Exportar Excel
         </button>
       </div>
 
-      {/* ── Selector de mes (centrado) ── */}
+      {/* ── Selector de mes ── */}
       <div style={styles.selectorMes}>
-        <button style={styles.btnMes} onClick={() => setMes(m => desplazarMes(m, -1))}>
+        <button style={styles.btnMes} onPointerDown={() => setMes(m => desplazarMes(m, -1))}>
           ‹
         </button>
         <span style={styles.labelMes}>{mesALabel(mes)}</span>
@@ -260,7 +258,7 @@ export default function SeccionVentas() {
             ...styles.btnMes,
             ...(mes >= getMesActual() ? styles.btnMesDeshabilitado : {}),
           }}
-          onClick={() => setMes(m => desplazarMes(m, +1))}
+          onPointerDown={() => setMes(m => desplazarMes(m, +1))}
           disabled={mes >= getMesActual()}
         >
           ›
@@ -380,18 +378,6 @@ export default function SeccionVentas() {
     </div>
   );
 }
-
-// ─── Ícono Excel (inline SVG) ─────────────────────────────────────────────────
-const ExcelIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    style={{ marginRight: '6px' }}>
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-    <polyline points="14 2 14 8 20 8" />
-    <line x1="8" y1="13" x2="16" y2="13" />
-    <line x1="8" y1="17" x2="16" y2="17" />
-  </svg>
-);
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 const styles = {

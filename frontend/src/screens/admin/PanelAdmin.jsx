@@ -7,10 +7,7 @@
 //   onCerrarSesion — callback para volver a la pantalla principal
 
 import { useState, useEffect } from "react";
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
-
+import { getNegocio } from "../../services/api";
 
 import SeccionInicio     from "./sections/SeccionInicio";
 import SeccionCaja       from "./sections/SeccionCaja";
@@ -18,52 +15,55 @@ import SeccionPlanillas  from "./sections/SeccionPlanillas";
 import SeccionGastos     from "./sections/SeccionGastos";
 import SeccionVentas     from "./sections/SeccionVentas";
 import SeccionGestion    from "./sections/SeccionGestion";
-import SeccionBalances from './sections/SeccionBalances.jsx';
+import SeccionBalances   from './sections/SeccionBalances.jsx';
 
 // ─── Items del sidebar ────────────────────────────────────────────────────────
 // Cada ítem tiene: id, emoji, label, componente a renderizar
 const SECCIONES = [
-  { id: "inicio",     emoji: "🏠", label: "Inicio",    componente: SeccionInicio    },
-  { id: "caja",       emoji: "💰", label: "Caja",      componente: SeccionCaja      },
-  { id: "planillas",  emoji: "📋", label: "Planillas", componente: SeccionPlanillas },
-  { id: "balances",   emoji: "📊", label: "Balances",  componente: SeccionBalances  },
-  { id: "gastos",     emoji: "💸", label: "Gastos",    componente: SeccionGastos    },
-  { id: "ventas",     emoji: "🛍️", label: "Ventas",    componente: SeccionVentas    },
-  { id: "gestion",    emoji: "⚙️", label: "Gestión",   componente: SeccionGestion   },
+  { id: "inicio",    emoji: "🏠", label: "Inicio",    componente: SeccionInicio    },
+  { id: "caja",      emoji: "💰", label: "Caja",      componente: SeccionCaja      },
+  { id: "planillas", emoji: "📋", label: "Planillas", componente: SeccionPlanillas },
+  { id: "balances",  emoji: "📊", label: "Balances",  componente: SeccionBalances  },
+  { id: "gastos",    emoji: "💸", label: "Gastos",    componente: SeccionGastos    },
+  { id: "ventas",    emoji: "🛍️", label: "Ventas",    componente: SeccionVentas    },
+  { id: "gestion",   emoji: "⚙️", label: "Gestión",   componente: SeccionGestion   },
 ];
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function PanelAdmin({ onCerrarSesion }) {
-  console.log("[PanelAdmin] Montado");
+  const [seccionActiva, setSeccionActiva]   = useState("inicio");
+  const [nombreNegocio, setNombreNegocio]   = useState('');
 
-  const [nombreNegocio, setNombreNegocio] = useState('');
-
+  // Log de montado — solo una vez al montar el componente
   useEffect(() => {
-    console.log('[PanelAdmin] Cargando nombre del negocio...');
-    fetch(`${API_URL}/api/gestion/negocio`)
-      .then(r => r.json())
-      .then(data => {
-        console.log('[PanelAdmin] Nombre del negocio cargado:', data.nombre_negocio);
-        setNombreNegocio(data.nombre_negocio);
-      })
-      .catch(err => {
-        console.error('[PanelAdmin] Error al cargar nombre del negocio:', err);
-      });
+    console.log("[panelAdmin] Montado");
   }, []);
 
-  // seccionActiva controla qué sección se muestra en el área de contenido
-  const [seccionActiva, setSeccionActiva] = useState("inicio");
+  // Carga el nombre del negocio para mostrarlo en el header del sidebar
+  useEffect(() => {
+    const cargarNombreNegocio = async () => {
+      console.log('[panelAdmin] cargarNombreNegocio — request recibido');
+      try {
+        const data = await getNegocio();
+        console.log('[panelAdmin] cargarNombreNegocio — completado | nombre:', data.nombre_negocio);
+        setNombreNegocio(data.nombre_negocio);
+      } catch (err) {
+        console.error('[panelAdmin] Error en cargarNombreNegocio:', err.message);
+      }
+    };
+    cargarNombreNegocio();
+  }, []);
 
   // Busca el componente correspondiente a la sección activa
   const SeccionActual = SECCIONES.find((s) => s.id === seccionActiva)?.componente;
 
   const handleCerrarSesion = () => {
-    console.log("[PanelAdmin] Cerrando sesión");
+    console.log("[panelAdmin] handleCerrarSesion — cerrando sesión");
     onCerrarSesion();
   };
 
   const handleNavegar = (id) => {
-    console.log("[PanelAdmin] Navegando a sección:", id);
+    console.log("[panelAdmin] handleNavegar — navegando a sección:", id);
     setSeccionActiva(id);
   };
 
@@ -182,12 +182,12 @@ const styles = {
     fontSize: '14px',
     fontWeight: '600',
     color: '#ffffff',
-    letterSpacing: '0.08em',   // Raleway respira bien con tracking generoso
+    letterSpacing: '0.08em',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     fontFamily: "'Raleway', 'DM Sans', sans-serif",
-    textTransform: 'uppercase', // opcional — le da más carácter
+    textTransform: 'uppercase',
   },
 
   divisor: {

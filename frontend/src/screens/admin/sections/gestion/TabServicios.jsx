@@ -1,4 +1,4 @@
-// frontend/src/screens/admin/sections/gestion/TabServicios.jsx
+// /frontend/src/screens/admin/sections/gestion/TabServicios.jsx
 // ABM de servicios. Permite listar, crear y editar servicios.
 // No hay eliminación — se usa el campo activo (true/false) para desactivar.
 // Los datos se cargan al montar el componente.
@@ -6,24 +6,21 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../../../../services/api';
 
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
-// ─── Modal crear / editar servicio ───────────────────────────────────────────
+// ─── Modal crear / editar servicio ────────────────────────────────────────────
 /**
  * ModalServicio — formulario para crear o editar un servicio.
- * @param {object|null} servicio - null = modo crear, objeto = modo editar
- * @param {function} onGuardar   - callback al guardar exitosamente
- * @param {function} onCerrar    - callback al cancelar o cerrar
+ * @param {object|null} servicio  - null = modo crear, objeto = modo editar
+ * @param {function}    onGuardar - callback al guardar exitosamente
+ * @param {function}    onCerrar  - callback al cancelar o cerrar
  */
 function ModalServicio({ servicio, onGuardar, onCerrar }) {
   const esEdicion = servicio !== null;
 
-  const [nombre, setNombre]   = useState(servicio?.nombre  ?? '');
-  const [precio, setPrecio]   = useState(servicio?.precio  ?? '');
-  const [activo, setActivo]   = useState(servicio?.activo  ?? true);
+  const [nombre, setNombre]       = useState(servicio?.nombre ?? '');
+  const [precio, setPrecio]       = useState(servicio?.precio ?? '');
+  const [activo, setActivo]       = useState(servicio?.activo ?? true);
   const [guardando, setGuardando] = useState(false);
-  const [error, setError]     = useState(null);
+  const [error, setError]         = useState(null);
 
   const puedeGuardar = nombre.trim() !== '' && precio !== '' && Number(precio) >= 0;
 
@@ -35,23 +32,15 @@ function ModalServicio({ servicio, onGuardar, onCerrar }) {
     setGuardando(true);
     setError(null);
 
-    const body = {
-      nombre: nombre.trim(),
-      precio: Number(precio),
-      activo,
-    };
+    const body   = { nombre: nombre.trim(), precio: Number(precio), activo };
+    const method = esEdicion ? 'PUT' : 'POST';
+    const path   = esEdicion ? `/gestion/servicios/${servicio.id}` : '/gestion/servicios';
+
+    console.log(`[tabServicios] handleGuardar — request recibido | method: ${method} | nombre: ${body.nombre}`);
 
     try {
-      const url = esEdicion
-        ? `${API_URL}/api/gestion/servicios/${servicio.id}`
-        : `${API_URL}/api/gestion/servicios`;
-      const method = esEdicion ? 'PUT' : 'POST';
-
-      console.log(`[TabServicios] ${method} servicio —`, body);
-
-      const res = await apiFetch(url, {
+      const res = await apiFetch(path, {
         method,
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
 
@@ -61,10 +50,10 @@ function ModalServicio({ servicio, onGuardar, onCerrar }) {
       }
 
       const servicioGuardado = await res.json();
-      console.log('[TabServicios] Servicio guardado:', servicioGuardado);
+      console.log('[tabServicios] handleGuardar — completado | id:', servicioGuardado.id);
       onGuardar(servicioGuardado, esEdicion);
     } catch (err) {
-      console.error('[TabServicios] Error al guardar servicio:', err);
+      console.error('[tabServicios] Error en handleGuardar:', err.message);
       setError(err.message || 'No se pudo guardar el servicio. Intentá de nuevo.');
     } finally {
       setGuardando(false);
@@ -161,48 +150,37 @@ function ModalServicio({ servicio, onGuardar, onCerrar }) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function TabServicios() {
-  const [servicios, setServicios]         = useState([]);
-  const [cargando, setCargando]           = useState(true);
-  const [error, setError]                 = useState(null);
-  const [modalAbierto, setModalAbierto]   = useState(false);
-  const [servicioEditando, setServicioEditando] = useState(null); // null = crear
+  const [servicios, setServicios]               = useState([]);
+  const [cargando, setCargando]                 = useState(true);
+  const [error, setError]                       = useState(null);
+  const [modalAbierto, setModalAbierto]         = useState(false);
+  const [servicioEditando, setServicioEditando] = useState(null);
 
-  // ── Carga inicial ──────────────────────────────────────────────────────────
+  // ── Carga inicial ─────────────────────────────────────────────────────────
   useEffect(() => {
-    console.log('[TabServicios] Cargando servicios...');
-    apiFetch(`${API_URL}/api/gestion/servicios`)
-      .then(r => r.json())
-      .then(data => {
-        console.log('[TabServicios] Servicios cargados:', data.length);
+    const cargarServicios = async () => {
+      console.log('[tabServicios] cargarServicios — request recibido');
+      try {
+        const res  = await apiFetch('/gestion/servicios');
+        const data = await res.json();
+        console.log('[tabServicios] cargarServicios — completado | servicios:', data.length);
         setServicios(data);
-        setCargando(false);
-      })
-      .catch(err => {
-        console.error('[TabServicios] Error al cargar servicios:', err);
+      } catch (err) {
+        console.error('[tabServicios] Error en cargarServicios:', err.message);
         setError('No se pudieron cargar los servicios.');
+      } finally {
         setCargando(false);
-      });
+      }
+    };
+    cargarServicios();
   }, []);
 
-  // ── Abrir modal ────────────────────────────────────────────────────────────
-  const abrirCrear = () => {
-    console.log('[TabServicios] Abriendo modal — modo crear');
-    setServicioEditando(null);
-    setModalAbierto(true);
-  };
+  // ── Control del modal ─────────────────────────────────────────────────────
+  const abrirCrear   = ()         => { setServicioEditando(null);     setModalAbierto(true); };
+  const abrirEditar  = (servicio) => { setServicioEditando(servicio); setModalAbierto(true); };
+  const cerrarModal  = ()         => { setModalAbierto(false); setServicioEditando(null); };
 
-  const abrirEditar = (servicio) => {
-    console.log('[TabServicios] Abriendo modal — modo editar:', servicio.id);
-    setServicioEditando(servicio);
-    setModalAbierto(true);
-  };
-
-  const cerrarModal = () => {
-    setModalAbierto(false);
-    setServicioEditando(null);
-  };
-
-  // ── Callback al guardar ────────────────────────────────────────────────────
+  // ── Callback al guardar ───────────────────────────────────────────────────
   /**
    * handleGuardado — actualiza la lista local sin refetch al backend.
    * @param {object}  servicioGuardado - objeto devuelto por el backend
@@ -210,16 +188,14 @@ export default function TabServicios() {
    */
   const handleGuardado = (servicioGuardado, esEdicion) => {
     if (esEdicion) {
-      setServicios(prev =>
-        prev.map(s => s.id === servicioGuardado.id ? servicioGuardado : s)
-      );
+      setServicios(prev => prev.map(s => s.id === servicioGuardado.id ? servicioGuardado : s));
     } else {
       setServicios(prev => [...prev, servicioGuardado]);
     }
     cerrarModal();
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   if (cargando) return <p style={styles.estadoTexto}>Cargando servicios...</p>;
   if (error)    return <p style={styles.errorTexto}>{error}</p>;
 
@@ -265,9 +241,7 @@ export default function TabServicios() {
                   style={{ backgroundColor: i % 2 === 0 ? '#ffffff' : '#fafafa' }}
                 >
                   <td style={styles.td}>{s.nombre}</td>
-                  <td style={styles.td}>
-                    $ {Number(s.precio).toLocaleString('es-AR')}
-                  </td>
+                  <td style={styles.td}>$ {Number(s.precio).toLocaleString('es-AR')}</td>
                   <td style={styles.td}>
                     <span style={{
                       ...styles.badge,

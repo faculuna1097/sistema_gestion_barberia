@@ -6,9 +6,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../../../services/api';
 
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
 // ─── Utilidades ───────────────────────────────────────────────────────────────
 
 /**
@@ -44,10 +41,10 @@ const Card = ({ children }) => (
 
 // ─── Card 1 — Actividad del día ───────────────────────────────────────────────
 /**
- * CardDia — muestra clientes y facturación de hoy 
+ * CardDia — muestra clientes y facturación de hoy
  */
 function CardDia({ data }) {
-  const { clientes_dia, monto_dia,} = data;
+  const { clientes_dia, monto_dia } = data;
 
   return (
     <Card>
@@ -80,7 +77,6 @@ function CardDia({ data }) {
         </div>
 
       </div>
-      
     </Card>
   );
 }
@@ -204,28 +200,26 @@ export default function SeccionInicio() {
   const [error,       setError]       = useState(null);
 
   useEffect(() => {
-    console.log('[SeccionInicio] useEffect — request iniciado');
-    Promise.all([
-      apiFetch(`${API_URL}/api/inicio/resumen-dia`).then(r => r.json()),
-      apiFetch(`${API_URL}/api/inicio/comparativo-mes`).then(r => r.json()),
-      apiFetch(`${API_URL}/api/inicio/stock-bajo`).then(r => r.json()),
-    ])
-      .then(([resumenData, comparativoData, stockData]) => {
-        console.log('[SeccionInicio] useEffect — completado | monto_dia:', resumenData.monto_dia,
-          '| clientes_dia:', resumenData.clientes_dia,
-          '| dif_mes:', comparativoData.diferencia_pct,
-          '| stock_bajo:', stockData.productos?.length
-        );
+    const cargarDatos = async () => {
+      console.log('[seccionInicio] cargarDatos — request recibido');
+      try {
+        const [resumenData, comparativoData, stockData] = await Promise.all([
+          apiFetch('/inicio/resumen-dia').then(r => r.json()),
+          apiFetch('/inicio/comparativo-mes').then(r => r.json()),
+          apiFetch('/inicio/stock-bajo').then(r => r.json()),
+        ]);
+        console.log('[seccionInicio] cargarDatos — completado | stock_bajo:', stockData.productos?.length);
         setResumen(resumenData);
         setComparativo(comparativoData);
         setStockBajo(stockData.productos || []);
-        setCargando(false);
-      })
-      .catch(err => {
-        console.error('[SeccionInicio] Error en useEffect:', err.message);
+      } catch (err) {
+        console.error('[seccionInicio] Error en cargarDatos:', err.message);
         setError('No se pudieron cargar los datos. Intentá recargar la página.');
+      } finally {
         setCargando(false);
-      });
+      }
+    };
+    cargarDatos();
   }, []);
 
   if (cargando) return (

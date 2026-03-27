@@ -7,9 +7,6 @@ import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { apiFetch } from '../../../services/api';
 
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const MESES = [
@@ -50,9 +47,31 @@ const desplazarMes = (mesStr, delta) => {
 const formatMonto = (valor) =>
   `$ ${Number(valor).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-// ─── Modal de confirmación de eliminación ─────────────────────────────────────
-// Idéntico en estructura y estilos al de SeccionCaja.
+// ─── Ícono Excel (inline SVG) ─────────────────────────────────────────────────
+const ExcelIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    style={{ marginRight: '6px' }}>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="8" y1="13" x2="16" y2="13" />
+    <line x1="8" y1="17" x2="16" y2="17" />
+  </svg>
+);
 
+// ─── Badge forma de pago ──────────────────────────────────────────────────────
+const BadgeFormaPago = ({ forma }) => {
+  const estilos = forma === 'efectivo'
+    ? { backgroundColor: '#e8f5e9', color: '#2e7d32' }
+    : { backgroundColor: '#e3f2fd', color: '#1565c0' };
+  return (
+    <span style={{ ...styles.badge, ...estilos }}>
+      {forma === 'efectivo' ? 'Efectivo' : 'Mercado Pago'}
+    </span>
+  );
+};
+
+// ─── Modal de confirmación de eliminación ─────────────────────────────────────
 function ModalConfirmarEliminar({ gasto, onConfirmar, onCancelar }) {
   return (
     <div style={styles.modalOverlay}>
@@ -97,18 +116,6 @@ function ModalConfirmarEliminar({ gasto, onConfirmar, onCancelar }) {
   );
 }
 
-// ─── Sub-componente: badge forma de pago ──────────────────────────────────────
-const BadgeFormaPago = ({ forma }) => {
-  const estilos = forma === 'efectivo'
-    ? { backgroundColor: '#e8f5e9', color: '#2e7d32' }
-    : { backgroundColor: '#e3f2fd', color: '#1565c0' };
-  return (
-    <span style={{ ...styles.badge, ...estilos }}>
-      {forma === 'efectivo' ? 'Efectivo' : 'Mercado Pago'}
-    </span>
-  );
-};
-
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function SeccionGastos() {
   const [mes, setMes]                           = useState(getMesActual);
@@ -120,23 +127,22 @@ export default function SeccionGastos() {
   const [gastoAEliminar, setGastoAEliminar]     = useState(null);
   const [eliminando, setEliminando]             = useState(false);
 
-  // ── Carga de datos al cambiar de mes ───────────────────────────────────────
+  // ── Carga de datos al cambiar de mes ──────────────────────────────────────
   useEffect(() => {
     const cargarGastos = async () => {
-      console.log('[SeccionGastos] Cargando gastos — mes:', mes);
+      console.log('[seccionGastos] cargarGastos — request recibido | mes:', mes);
       setCargando(true);
       setError(null);
       try {
-        const res  = await apiFetch(`${API_BASE}/api/gastos/mensual?mes=${mes}`);
+        const res  = await apiFetch(`/gastos/mensual?mes=${mes}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         setGastos(data.gastos);
         setTotalesPorCat(data.totalesPorCategoria);
         setTotalGeneral(data.totalGeneral);
-        console.log('[SeccionGastos] Datos cargados — registros:', data.gastos.length,
-          '| total general:', data.totalGeneral);
+        console.log('[seccionGastos] cargarGastos — completado | registros:', data.gastos.length);
       } catch (err) {
-        console.error('[SeccionGastos] Error al cargar gastos:', err);
+        console.error('[seccionGastos] Error en cargarGastos:', err.message);
         setError('No se pudieron cargar los gastos. Intentá de nuevo.');
       } finally {
         setCargando(false);
@@ -145,25 +151,22 @@ export default function SeccionGastos() {
     cargarGastos();
   }, [mes]);
 
-  // ── Eliminar gasto ─────────────────────────────────────────────────────────
+  // ── Eliminar gasto ────────────────────────────────────────────────────────
   const confirmarEliminar = async () => {
-    setEliminando(true);
     const { id } = gastoAEliminar;
-    console.log('[SeccionGastos] Eliminando gasto — id:', id);
+    console.log('[seccionGastos] confirmarEliminar — request recibido | id:', id);
+    setEliminando(true);
     try {
-      const res = await apiFetch(`${API_BASE}/api/gastos/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/gastos/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Error del servidor');
-      setGastos(prev => prev.filter(g => g.id !== id));
-      // Recalcular totales después de eliminar
       const nuevosGastos = gastos.filter(g => g.id !== id);
+      setGastos(nuevosGastos);
+      // Recalcular totales localmente tras eliminar
       const nuevoTotal = nuevosGastos.reduce((acc, g) => acc + Number(g.monto), 0);
       setTotalGeneral(nuevoTotal);
-      // Recalcular totales por categoría
       const totalesMap = {};
       nuevosGastos.forEach(g => {
-        if (!totalesMap[g.categoria_nombre]) {
-          totalesMap[g.categoria_nombre] = { total: 0, cantidad: 0 };
-        }
+        if (!totalesMap[g.categoria_nombre]) totalesMap[g.categoria_nombre] = { total: 0, cantidad: 0 };
         totalesMap[g.categoria_nombre].total    += Number(g.monto);
         totalesMap[g.categoria_nombre].cantidad += 1;
       });
@@ -171,9 +174,9 @@ export default function SeccionGastos() {
         .map(([nombre, vals]) => ({ categoria_nombre: nombre, ...vals }))
         .sort((a, b) => b.total - a.total);
       setTotalesPorCat(nuevosTotales);
-      console.log('[SeccionGastos] Gasto eliminado correctamente — id:', id);
+      console.log('[seccionGastos] confirmarEliminar — completado | id:', id);
     } catch (err) {
-      console.error('[SeccionGastos] Error al eliminar gasto:', err);
+      console.error('[seccionGastos] Error en confirmarEliminar:', err.message);
       alert('No se pudo eliminar el gasto. Intentá de nuevo.');
     } finally {
       setEliminando(false);
@@ -181,16 +184,14 @@ export default function SeccionGastos() {
     }
   };
 
-  // ── Exportar Excel ─────────────────────────────────────────────────────────
+  // ── Exportar Excel ────────────────────────────────────────────────────────
   /**
    * exportarExcel — genera un .xlsx con dos hojas:
    *   "Gastos": tabla de movimientos del mes
    *   "Totales": resumen por categoría
    */
   const exportarExcel = () => {
-    console.log('[SeccionGastos] Exportando Excel — mes:', mes, '| registros:', gastos.length);
     const wb = XLSX.utils.book_new();
-
     const filas = gastos.map(g => ({
       Fecha:           g.fecha,
       Categoría:       g.categoria_nombre,
@@ -199,24 +200,22 @@ export default function SeccionGastos() {
       'Forma de pago': g.forma_pago === 'efectivo' ? 'Efectivo' : 'Mercado Pago',
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Gastos');
-
     const filasTotales = totalesPorCategoria.map(t => ({
-      Categoría:           t.categoria_nombre,
+      Categoría:            t.categoria_nombre,
       'Cantidad de gastos': Number(t.cantidad),
-      Total:               Number(t.total),
+      Total:                Number(t.total),
     }));
     filasTotales.push({
-      Categoría: 'TOTAL GENERAL',
+      Categoría:            'TOTAL GENERAL',
       'Cantidad de gastos': gastos.length,
-      Total: totalGeneral,
+      Total:                totalGeneral,
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasTotales), 'Totales');
-
     XLSX.writeFile(wb, `Gastos_${mes}.xlsx`);
-    console.log('[SeccionGastos] Archivo Excel generado: Gastos_' + mes + '.xlsx');
+    console.log('[seccionGastos] exportarExcel — completado | mes:', mes);
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={styles.contenedor}>
 
@@ -240,16 +239,16 @@ export default function SeccionGastos() {
             ...styles.btnExportar,
             ...(gastos.length === 0 ? styles.btnExportarDeshabilitado : {}),
           }}
-          onClick={exportarExcel}
+          onPointerDown={exportarExcel}
           disabled={gastos.length === 0}
         >
           <ExcelIcon /> Exportar Excel
         </button>
       </div>
 
-      {/* ── Selector de mes (centrado) ── */}
+      {/* ── Selector de mes ── */}
       <div style={styles.selectorMes}>
-        <button style={styles.btnMes} onClick={() => setMes(m => desplazarMes(m, -1))}>
+        <button style={styles.btnMes} onPointerDown={() => setMes(m => desplazarMes(m, -1))}>
           ‹
         </button>
         <span style={styles.labelMes}>{mesALabel(mes)}</span>
@@ -258,7 +257,7 @@ export default function SeccionGastos() {
             ...styles.btnMes,
             ...(mes >= getMesActual() ? styles.btnMesDeshabilitado : {}),
           }}
-          onClick={() => setMes(m => desplazarMes(m, +1))}
+          onPointerDown={() => setMes(m => desplazarMes(m, +1))}
           disabled={mes >= getMesActual()}
         >
           ›
@@ -339,7 +338,7 @@ export default function SeccionGastos() {
             </table>
           </div>
 
-          {/* ── Tabla de totales ── */}
+          {/* ── Tabla de totales por categoría ── */}
           <div style={styles.totalesWrapper}>
             <h3 style={styles.tituloTotales}>Resumen del mes</h3>
             <table style={styles.tablaTotales}>
@@ -377,18 +376,6 @@ export default function SeccionGastos() {
     </div>
   );
 }
-
-// ─── Ícono Excel (inline SVG) ─────────────────────────────────────────────────
-const ExcelIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    style={{ marginRight: '6px' }}>
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-    <polyline points="14 2 14 8 20 8" />
-    <line x1="8" y1="13" x2="16" y2="13" />
-    <line x1="8" y1="17" x2="16" y2="17" />
-  </svg>
-);
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 const styles = {

@@ -1,4 +1,4 @@
-// frontend/src/screens/admin/sections/gestion/TabProductos.jsx
+// /frontend/src/screens/admin/sections/gestion/TabProductos.jsx
 // ABM de productos. Permite listar, crear y editar productos.
 // El stock_actual no se edita directamente — se usa "Agregar stock" para sumar
 // unidades (Opción B acordada: stock_actual = stock_actual + cantidad_ingresada).
@@ -7,35 +7,31 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../../../../services/api';
 
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
-// ─── Modal crear / editar producto ───────────────────────────────────────────
+// ─── Modal crear / editar producto ────────────────────────────────────────────
 /**
  * ModalProducto — formulario para crear o editar un producto.
  * En modo edición también permite agregar stock y cambiar el estado activo.
- * @param {object|null} producto - null = modo crear, objeto = modo editar
- * @param {function} onGuardar   - callback al guardar exitosamente
- * @param {function} onCerrar    - callback al cancelar o cerrar
+ * @param {object|null} producto  - null = modo crear, objeto = modo editar
+ * @param {function}    onGuardar - callback al guardar exitosamente
+ * @param {function}    onCerrar  - callback al cancelar o cerrar
  */
 function ModalProducto({ producto, onGuardar, onCerrar }) {
   const esEdicion = producto !== null;
 
-  // ── Campos del formulario ────────────────────────────────────────────────
-  const [nombre, setNombre]         = useState(producto?.nombre      ?? '');
-  const [precio, setPrecio]         = useState(producto?.precio      ?? '');
-  const [stockMinimo, setStockMinimo] = useState(producto?.stock_minimo ?? 0);
-  const [activo, setActivo]         = useState(producto?.activo      ?? true);
+  // ── Campos del formulario ─────────────────────────────────────────────────
+  const [nombre, setNombre]             = useState(producto?.nombre      ?? '');
+  const [precio, setPrecio]             = useState(producto?.precio      ?? '');
+  const [stockMinimo, setStockMinimo]   = useState(producto?.stock_minimo ?? 0);
+  const [activo, setActivo]             = useState(producto?.activo      ?? true);
 
-  // ── Estado para agregar stock ────────────────────────────────────────────
+  // ── Estado para agregar stock ─────────────────────────────────────────────
   const [cantidadAgregar, setCantidadAgregar] = useState('');
 
-  // ── Estado general ───────────────────────────────────────────────────────
+  // ── Estado general ────────────────────────────────────────────────────────
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState(null);
 
-  const puedeGuardar =
-    nombre.trim() !== '' && precio !== '' && Number(precio) >= 0;
+  const puedeGuardar = nombre.trim() !== '' && precio !== '' && Number(precio) >= 0;
 
   /**
    * handleGuardar — envía POST (crear) o PUT (editar) al backend.
@@ -47,24 +43,20 @@ function ModalProducto({ producto, onGuardar, onCerrar }) {
     setGuardando(true);
     setError(null);
 
-    const body = {
+    const body   = {
       nombre: nombre.trim(),
       precio: Number(precio),
       stock_minimo: Number(stockMinimo ?? 0),
       activo,
     };
+    const method = esEdicion ? 'PUT' : 'POST';
+    const path   = esEdicion ? `/gestion/productos/${producto.id}` : '/gestion/productos';
+
+    console.log(`[tabProductos] handleGuardar — request recibido | method: ${method} | nombre: ${body.nombre}`);
 
     try {
-      const url = esEdicion
-        ? `${API_URL}/api/gestion/productos/${producto.id}`
-        : `${API_URL}/api/gestion/productos`;
-      const method = esEdicion ? 'PUT' : 'POST';
-
-      console.log(`[TabProductos] ${method} producto —`, body);
-
-      const res = await apiFetch(url, {
+      const res = await apiFetch(path, {
         method,
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
 
@@ -74,16 +66,13 @@ function ModalProducto({ producto, onGuardar, onCerrar }) {
       }
 
       const productoGuardado = await res.json();
-      console.log('[TabProductos] Producto guardado:', productoGuardado);
 
       // Si hay unidades a agregar, llamar a /agregar-stock junto con el guardado
       if (esEdicion && cantidadAgregar && Number(cantidadAgregar) > 0) {
-        console.log('[TabProductos] Agregando stock junto al guardado — cantidad:', cantidadAgregar);
         const resStock = await apiFetch(
-          `${API_URL}/api/gestion/productos/${producto.id}/agregar-stock`,
+          `/gestion/productos/${producto.id}/agregar-stock`,
           {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cantidad: Number(cantidadAgregar) }),
           }
         );
@@ -92,13 +81,14 @@ function ModalProducto({ producto, onGuardar, onCerrar }) {
           throw new Error(data.error || 'Error al actualizar el stock');
         }
         const dataStock = await resStock.json();
-        console.log('[TabProductos] Stock actualizado — nuevo stock:', dataStock.stock_actual);
+        console.log('[tabProductos] handleGuardar — stock actualizado | nuevo stock:', dataStock.stock_actual);
         productoGuardado.stock_actual = dataStock.stock_actual;
       }
 
+      console.log('[tabProductos] handleGuardar — completado | id:', productoGuardado.id);
       onGuardar(productoGuardado, esEdicion);
     } catch (err) {
-      console.error('[TabProductos] Error al guardar producto:', err);
+      console.error('[tabProductos] Error en handleGuardar:', err.message);
       setError(err.message || 'No se pudo guardar el producto. Intentá de nuevo.');
     } finally {
       setGuardando(false);
@@ -240,42 +230,31 @@ export default function TabProductos() {
   const [modalAbierto, setModalAbierto]         = useState(false);
   const [productoEditando, setProductoEditando] = useState(null);
 
-  // ── Carga inicial ──────────────────────────────────────────────────────────
+  // ── Carga inicial ─────────────────────────────────────────────────────────
   useEffect(() => {
-    console.log('[TabProductos] Cargando productos...');
-    apiFetch(`${API_URL}/api/gestion/productos`)
-      .then(r => r.json())
-      .then(data => {
-        console.log('[TabProductos] Productos cargados:', data.length);
+    const cargarProductos = async () => {
+      console.log('[tabProductos] cargarProductos — request recibido');
+      try {
+        const res  = await apiFetch('/gestion/productos');
+        const data = await res.json();
+        console.log('[tabProductos] cargarProductos — completado | productos:', data.length);
         setProductos(data);
-        setCargando(false);
-      })
-      .catch(err => {
-        console.error('[TabProductos] Error al cargar productos:', err);
+      } catch (err) {
+        console.error('[tabProductos] Error en cargarProductos:', err.message);
         setError('No se pudieron cargar los productos.');
+      } finally {
         setCargando(false);
-      });
+      }
+    };
+    cargarProductos();
   }, []);
 
-  // ── Abrir modal ────────────────────────────────────────────────────────────
-  const abrirCrear = () => {
-    console.log('[TabProductos] Abriendo modal — modo crear');
-    setProductoEditando(null);
-    setModalAbierto(true);
-  };
+  // ── Control del modal ─────────────────────────────────────────────────────
+  const abrirCrear   = ()         => { setProductoEditando(null);      setModalAbierto(true); };
+  const abrirEditar  = (producto) => { setProductoEditando(producto);  setModalAbierto(true); };
+  const cerrarModal  = ()         => { setModalAbierto(false); setProductoEditando(null); };
 
-  const abrirEditar = (producto) => {
-    console.log('[TabProductos] Abriendo modal — modo editar:', producto.id);
-    setProductoEditando(producto);
-    setModalAbierto(true);
-  };
-
-  const cerrarModal = () => {
-    setModalAbierto(false);
-    setProductoEditando(null);
-  };
-
-  // ── Callback al guardar ────────────────────────────────────────────────────
+  // ── Callback al guardar ───────────────────────────────────────────────────
   /**
    * handleGuardado — actualiza la lista local sin refetch al backend.
    * @param {object}  productoGuardado - objeto devuelto por el backend
@@ -283,16 +262,14 @@ export default function TabProductos() {
    */
   const handleGuardado = (productoGuardado, esEdicion) => {
     if (esEdicion) {
-      setProductos(prev =>
-        prev.map(p => p.id === productoGuardado.id ? productoGuardado : p)
-      );
+      setProductos(prev => prev.map(p => p.id === productoGuardado.id ? productoGuardado : p));
     } else {
       setProductos(prev => [...prev, productoGuardado]);
     }
     cerrarModal();
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   if (cargando) return <p style={styles.estadoTexto}>Cargando productos...</p>;
   if (error)    return <p style={styles.errorTexto}>{error}</p>;
 
@@ -346,9 +323,7 @@ export default function TabProductos() {
                   }}
                 >
                   <td style={styles.td}>{p.nombre}</td>
-                  <td style={styles.td}>
-                    $ {Number(p.precio).toLocaleString('es-AR')}
-                  </td>
+                  <td style={styles.td}>$ {Number(p.precio).toLocaleString('es-AR')}</td>
                   <td style={styles.td}>
                     <span style={{
                       fontWeight: '600',
