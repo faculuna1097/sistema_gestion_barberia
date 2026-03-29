@@ -89,7 +89,7 @@ export const getMovimientosDia = async (req, res) => {
       ...cortesResult.rows,
       ...ventasResult.rows,
       ...gastosResult.rows,
-    ].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    ].sort((b, a) => new Date(a.timestamp) - new Date(b.timestamp));
 
     console.log('[caja] getMovimientosDia — completado:', movimientos.length, 'movimientos | fecha:', fecha);
     res.json({ movimientos });
