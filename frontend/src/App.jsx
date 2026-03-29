@@ -16,8 +16,6 @@ import {
   clearAuthToken,
 } from "./services/api";
 
-// ─── Pantalla de carga inicial ────────────────────────────────────────────────
-// Se muestra mientras precargarDatos está en vuelo al arrancar la app.
 const PantallaCargando = () => (
   <div style={stylesEstado.pantalla}>
     <div style={stylesEstado.lineaSuperior} />
@@ -26,9 +24,6 @@ const PantallaCargando = () => (
   </div>
 );
 
-// ─── Pantalla de error de conexión ────────────────────────────────────────────
-// Se muestra cuando precargarDatos falla (sin WiFi, backend caído, etc.).
-// El prop onReintentar dispara precargarDatos + cargarLogo desde App.
 const PantallaError = ({ onReintentar }) => (
   <div style={stylesEstado.pantalla}>
     <div style={stylesEstado.lineaSuperior} />
@@ -41,7 +36,6 @@ const PantallaError = ({ onReintentar }) => (
   </div>
 );
 
-// ─── Estilos compartidos entre PantallaCargando y PantallaError ──────────────
 const stylesEstado = {
   pantalla: {
     width: "100vw",
@@ -100,18 +94,12 @@ const stylesEstado = {
   },
 };
 
-// ─── Componente principal ─────────────────────────────────────────────────────
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState("main");
-  // El token se guarda en estado para controlar el acceso al panel admin,
-  // y también en el módulo api.js (via setAuthToken) para que apiFetch()
-  // lo incluya automáticamente en los headers de las rutas protegidas.
   const [token, setToken] = useState(null);
-
-  // URL del logo del negocio — se carga al arrancar y se reintenta junto a los datos
   const [logoUrl, setLogoUrl] = useState(null);
+  const [bookingUrl, setBookingUrl] = useState(null); // ← NUEVO
 
-  // Datos operativos — se recargan al arrancar y cada vez que algo los modifica
   const [datos, setDatos] = useState({
     barberos: [],
     servicios: [],
@@ -122,29 +110,25 @@ export default function App() {
   });
 
   /**
-   * cargarLogo — obtiene la URL del logo desde la DB.
+   * cargarLogo — obtiene logo y booking_url desde la DB.
    * No forma parte de precargarDatos porque no cambia durante el uso normal.
-   * Si falla, la app sigue funcionando sin logo (no es bloqueante).
    */
   const cargarLogo = useCallback(async () => {
     try {
       const data = await getNegocio();
       setLogoUrl(data.logo || null);
-      console.log('[app] cargarLogo — completado | logo:', data.logo ? 'sí' : 'no');
+      setBookingUrl(data.booking_url || null); // ← NUEVO
+      console.log('[app] cargarLogo — completado | logo:', data.logo ? 'sí' : 'no',
+        '| booking_url:', data.booking_url ? 'sí' : 'no');
     } catch (err) {
       console.error('[app] Error en cargarLogo:', err.message);
     }
   }, []);
 
-  // Carga inicial del logo — una sola vez al montar el componente
   useEffect(() => {
     cargarLogo();
   }, [cargarLogo]);
 
-  /**
-   * precargarDatos — carga barberos, servicios, productos y categorías en paralelo.
-   * Se llama al arrancar, al cerrar el panel admin y al volver de FlujoVenta.
-   */
   const precargarDatos = useCallback(async () => {
     setDatos(prev => ({ ...prev, cargando: true, error: null }));
     try {
@@ -166,15 +150,10 @@ export default function App() {
     }
   }, []);
 
-  // Carga inicial al arrancar la app
   useEffect(() => {
     precargarDatos();
   }, [precargarDatos]);
 
-  /**
-   * reintentar — llamado por el botón de PantallaError.
-   * Relanza tanto los datos operativos como el logo.
-   */
   const reintentar = useCallback(() => {
     console.log('[app] reintentar — iniciado');
     precargarDatos();
@@ -186,24 +165,16 @@ export default function App() {
     setCurrentScreen("main");
   };
 
-  /**
-   * cerrarSesionAdmin — limpia el token (estado + módulo api.js) y recarga
-   * los datos operativos para reflejar cambios hechos desde Gestión.
-   */
   const cerrarSesionAdmin = () => {
     console.log('[app] cerrarSesionAdmin — iniciado');
     setToken(null);
-    clearAuthToken(); // elimina el token del módulo api.js
+    clearAuthToken();
     precargarDatos();
     setCurrentScreen("main");
   };
 
-  // ── Pantalla de carga inicial ──────────────────────────────────────────────
-  if (datos.cargando && datos.barberos.length === 0) {
-    return <PantallaCargando />;
-  }
+  if (datos.cargando && datos.barberos.length === 0) return <PantallaCargando />;
 
-  // ── Pantalla de error de conexión ──────────────────────────────────────────
   if (datos.error && datos.barberos.length === 0) {
     console.error('[app] precargarDatos — mostrando PantallaError');
     return <PantallaError onReintentar={reintentar} />;
@@ -229,8 +200,7 @@ export default function App() {
 
   if (currentScreen === "nuevoGasto") {
     console.log('[app] Renderizando FlujoGasto');
-    return <FlujoGasto onVolver={volverAlInicio}
-      categorias={datos.categorias} />;
+    return <FlujoGasto onVolver={volverAlInicio} categorias={datos.categorias} />;
   }
 
   if (currentScreen === "loginAdmin") {
@@ -240,7 +210,7 @@ export default function App() {
         onAcceso={(tokenRecibido) => {
           console.log('[app] Acceso admin concedido — guardando token y navegando a panel admin');
           setToken(tokenRecibido);
-          setAuthToken(tokenRecibido); // registra el token en el módulo api.js para apiFetch()
+          setAuthToken(tokenRecibido);
           setCurrentScreen("admin");
         }}
         onCancelar={volverAlInicio}
@@ -276,6 +246,7 @@ export default function App() {
         window.open("https://open.spotify.com", "_blank");
       }}
       logoUrl={logoUrl}
+      bookingUrl={bookingUrl} 
     />
   );
 }

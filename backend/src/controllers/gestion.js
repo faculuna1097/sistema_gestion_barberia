@@ -369,7 +369,7 @@ export const getNegocio = async (req, res) => {
   console.log('[gestion] getNegocio — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
-      `SELECT nombre_negocio, logo FROM tenant WHERE id = $1`,
+      `SELECT nombre_negocio, logo, booking_url FROM tenant WHERE id = $1`,
       [req.tenant_id]
     );
     if (result.rows.length === 0) {
@@ -383,16 +383,9 @@ export const getNegocio = async (req, res) => {
   }
 };
 
-/**
- * editarNegocio
- * Actualiza el nombre del negocio del tenant.
- * @param {string} req.tenant_id             - Inyectado por verificarToken
- * @param {string} req.body.nombre_negocio   - Nuevo nombre del negocio
- * @returns {JSON} { nombre_negocio }
- */
 export const editarNegocio = async (req, res) => {
   console.log('[gestion] editarNegocio — request recibido | body:', req.body, '| tenant:', req.tenant_id);
-  const { nombre_negocio } = req.body;
+  const { nombre_negocio, booking_url } = req.body;
 
   if (!nombre_negocio) {
     return res.status(400).json({ error: 'nombre_negocio es requerido' });
@@ -400,8 +393,12 @@ export const editarNegocio = async (req, res) => {
 
   try {
     const result = await query(
-      `UPDATE tenant SET nombre_negocio = $1 WHERE id = $2 RETURNING nombre_negocio`,
-      [nombre_negocio.trim(), req.tenant_id]
+      `UPDATE tenant
+       SET nombre_negocio = $1,
+           booking_url    = $2
+       WHERE id = $3
+       RETURNING nombre_negocio, booking_url`,
+      [nombre_negocio.trim(), booking_url ? booking_url.trim() : null, req.tenant_id]
     );
     console.log('[gestion] editarNegocio — completado | nombre:', result.rows[0].nombre_negocio);
     res.json(result.rows[0]);

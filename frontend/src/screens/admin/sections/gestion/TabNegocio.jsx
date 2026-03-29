@@ -1,19 +1,17 @@
 // /frontend/src/screens/admin/sections/gestion/TabNegocio.jsx
-// Permite ver y editar el nombre del negocio (tabla tenant).
-// Los datos se cargan al montar el componente.
-
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../../../../services/api';
 
 export default function TabNegocio() {
-  const [nombreNegocio, setNombreNegocio]   = useState('');
-  const [nombreOriginal, setNombreOriginal] = useState('');
-  const [cargando, setCargando]             = useState(true);
-  const [guardando, setGuardando]           = useState(false);
-  const [error, setError]                   = useState(null);
-  const [exito, setExito]                   = useState(false);
+  const [nombreNegocio, setNombreNegocio]     = useState('');
+  const [nombreOriginal, setNombreOriginal]   = useState('');
+  const [bookingUrl, setBookingUrl]           = useState('');
+  const [bookingUrlOriginal, setBookingUrlOriginal] = useState('');
+  const [cargando, setCargando]               = useState(true);
+  const [guardando, setGuardando]             = useState(false);
+  const [error, setError]                     = useState(null);
+  const [exito, setExito]                     = useState(false);
 
-  // ── Carga inicial ─────────────────────────────────────────────────────────
   useEffect(() => {
     const cargarNegocio = async () => {
       console.log('[tabNegocio] cargarNegocio — request recibido');
@@ -23,6 +21,8 @@ export default function TabNegocio() {
         console.log('[tabNegocio] cargarNegocio — completado | nombre:', data.nombre_negocio);
         setNombreNegocio(data.nombre_negocio);
         setNombreOriginal(data.nombre_negocio);
+        setBookingUrl(data.booking_url || '');
+        setBookingUrlOriginal(data.booking_url || '');
       } catch (err) {
         console.error('[tabNegocio] Error en cargarNegocio:', err.message);
         setError('No se pudieron cargar los datos del negocio.');
@@ -33,12 +33,10 @@ export default function TabNegocio() {
     cargarNegocio();
   }, []);
 
-  const huboCambios  = nombreNegocio.trim() !== nombreOriginal;
+  const huboCambios  = nombreNegocio.trim() !== nombreOriginal
+                    || bookingUrl.trim() !== bookingUrlOriginal;
   const puedeGuardar = nombreNegocio.trim() !== '' && huboCambios;
 
-  /**
-   * handleGuardar — envía PUT /gestion/negocio con el nuevo nombre.
-   */
   const handleGuardar = async () => {
     if (!puedeGuardar) return;
     setGuardando(true);
@@ -50,7 +48,10 @@ export default function TabNegocio() {
     try {
       const res = await apiFetch('/gestion/negocio', {
         method: 'PUT',
-        body: JSON.stringify({ nombre_negocio: nombreNegocio.trim() }),
+        body: JSON.stringify({
+          nombre_negocio: nombreNegocio.trim(),
+          booking_url: bookingUrl.trim() || null,
+        }),
       });
 
       if (!res.ok) {
@@ -61,6 +62,7 @@ export default function TabNegocio() {
       const data = await res.json();
       console.log('[tabNegocio] handleGuardar — completado | nombre:', data.nombre_negocio);
       setNombreOriginal(data.nombre_negocio);
+      setBookingUrlOriginal(data.booking_url || '');
       setExito(true);
       setTimeout(() => setExito(false), 3000);
     } catch (err) {
@@ -79,20 +81,34 @@ export default function TabNegocio() {
       <div style={styles.card}>
 
         <p style={styles.cardTitulo}>Nombre del negocio</p>
-        <p style={styles.cardHint}>
-          Nombre oficial del negocio registrado en el sistema.
-        </p>
+        <p style={styles.cardHint}>Nombre oficial del negocio registrado en el sistema.</p>
 
         <div style={styles.campoGrupo}>
           <label style={styles.campoLabel}>Nombre</label>
           <input
             type="text"
             value={nombreNegocio}
-            onChange={e => {
-              setNombreNegocio(e.target.value);
-              setExito(false);
-            }}
+            onChange={e => { setNombreNegocio(e.target.value); setExito(false); }}
             placeholder="Ej: Kingsai Studio"
+            style={styles.campoInput}
+          />
+        </div>
+
+        <div style={styles.separador} />
+
+        <p style={styles.cardTitulo}>Plataforma de reserva de turnos</p>
+        <p style={styles.cardHint}>
+          URL de la plataforma de turnos (Setmore, Booksy, Fresha, etc.).
+          Si se configura, aparece un botón de acceso rápido en la pantalla principal.
+        </p>
+
+        <div style={styles.campoGrupo}>
+          <label style={styles.campoLabel}>URL de turnos</label>
+          <input
+            type="url"
+            value={bookingUrl}
+            onChange={e => { setBookingUrl(e.target.value); setExito(false); }}
+            placeholder="Ej: https://setmore.com/kingsaistudio"
             style={styles.campoInput}
           />
         </div>
@@ -100,7 +116,7 @@ export default function TabNegocio() {
         {error && <p style={styles.errorTextoInline}>{error}</p>}
 
         {exito && (
-          <p style={styles.exitoTexto}>✓ Nombre actualizado. Se verá reflejado al volver a ingresar al panel.</p>
+          <p style={styles.exitoTexto}>✓ Datos actualizados correctamente.</p>
         )}
 
         <button
@@ -119,8 +135,6 @@ export default function TabNegocio() {
   );
 }
 
-
-// ─── Estilos ──────────────────────────────────────────────────────────────────
 const styles = {
   contenedor: {
     maxWidth: '580px',
@@ -145,6 +159,11 @@ const styles = {
     fontSize: '13px',
     color: '#aaaaaa',
     margin: 0,
+  },
+  separador: {
+    height: '1px',
+    backgroundColor: '#eeeeee',
+    margin: '4px 0',
   },
   campoGrupo: {
     display: 'flex',
