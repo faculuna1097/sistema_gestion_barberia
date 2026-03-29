@@ -29,14 +29,32 @@ const SECCIONES = [
   { id: "gestion",   emoji: "⚙️", label: "Gestión",   componente: SeccionGestion   },
 ];
 
+
+// ─── Banner de aviso de pago ──────────────────────────────────────────────────
+const BannerAviso = ({ onCerrar }) => (
+  <div style={styles.banner}>
+    <span style={styles.icono}>⚠️</span>
+    <p style={styles.texto}>
+      Tu suscripción aún no fue renovada este mes.
+      Regularizá el pago antes del día 10 para evitar la suspensión del acceso.
+      <strong> WhatsApp: 11 3311-1686</strong>
+    </p>
+    <button style={styles.btnCerrar} onPointerDown={onCerrar} aria-label="Cerrar aviso">
+      ✕
+    </button>
+  </div>
+);
+
 // ─── Componente principal ─────────────────────────────────────────────────────
-export default function PanelAdmin({ onCerrarSesion }) {
+export default function PanelAdmin({ onCerrarSesion, avisosPago }) {
   const [seccionActiva, setSeccionActiva]   = useState("inicio");
   const [nombreNegocio, setNombreNegocio]   = useState('');
+  const [mostrarAviso, setMostrarAviso]   = useState(avisosPago);
+
 
   // Log de montado — solo una vez al montar el componente
   useEffect(() => {
-    console.log("[panelAdmin] Montado");
+    console.log("[panelAdmin] Montado | avisosPago:", avisosPago);
   }, []);
 
   // Carga el nombre del negocio para mostrarlo en el header del sidebar
@@ -129,9 +147,17 @@ export default function PanelAdmin({ onCerrarSesion }) {
       </aside>
 
       {/* ── ÁREA DE CONTENIDO ────────────────────────────────────────────── */}
-      <main style={styles.contenido}>
-        {SeccionActual && <SeccionActual />}
-      </main>
+      <div style={styles.contenidoWrapper}>
+        {mostrarAviso && (
+          <BannerAviso onCerrar={() => {
+            console.log('[panelAdmin] aviso de pago cerrado por el usuario');
+            setMostrarAviso(false);
+          }} />
+        )}
+        <main style={styles.contenido}>
+          {SeccionActual && <SeccionActual />}
+        </main>
+      </div>
 
     </div>
   );
@@ -139,6 +165,15 @@ export default function PanelAdmin({ onCerrarSesion }) {
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 const styles = {
+  banner: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    backgroundColor: "#fff8e1",
+    borderBottom: "1px solid #f9a825",
+    padding: "12px 20px",
+    flexShrink: 0,
+  },
   // Layout raíz: sidebar + contenido en fila, ocupa toda la pantalla
   contenedor: {
     width: "100vw",
@@ -289,5 +324,23 @@ const styles = {
     height: "100vh",
     overflow: "auto",
     backgroundColor: "#f4f4f5",
+  },
+  contenidoWrapper: {
+    flex: 1,
+    height: "100vh",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+  },
+
+  icono: { fontSize: "20px", lineHeight: 1, flexShrink: 0 },
+  texto: {
+    flex: 1, margin: 0, fontSize: "14px", color: "#5d4037",
+    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif", lineHeight: "1.5",
+  },
+  btnCerrar: {
+    background: "none", border: "none", cursor: "pointer",
+    fontSize: "16px", color: "#8d6e63", padding: "4px 8px",
+    flexShrink: 0, fontFamily: "inherit", lineHeight: 1,
   },
 };

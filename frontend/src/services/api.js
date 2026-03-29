@@ -168,9 +168,13 @@ export const getNegocio = async () => {
 
 /**
  * verificarPin
- * Envía el PIN al backend para autenticación. Devuelve un JWT si es correcto.
+ * Envía el PIN al backend para autenticación.
+ * Casos:
+ *   - 200: PIN correcto → devuelve { token, aviso_pago }
+ *   - 402: suscripción vencida → lanza error con bloqueado: true
+ *   - otros: PIN incorrecto u otro error → lanza error con bloqueado: false
  * @param {string} pin - PIN de 4 dígitos ingresado por el usuario
- * @returns {Promise<Object>} { token }
+ * @returns {Promise<Object>} { token, aviso_pago }
  */
 export const verificarPin = async (pin) => {
   const response = await fetch(`${BASE_URL}/auth/verificar-pin`, {
@@ -178,6 +182,13 @@ export const verificarPin = async (pin) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pin }),
   });
+
+  if (response.status === 402) {
+    const err = new Error('Suscripción vencida');
+    err.bloqueado = true;
+    throw err;
+  }
+
   if (!response.ok) throw new Error('PIN incorrecto');
-  return response.json();
+  return response.json(); // { token, aviso_pago }
 };

@@ -1,10 +1,10 @@
 // /frontend/src/screens/PantallaLoginAdmin.jsx
 // Pantalla de ingreso de PIN para acceder al Panel de Administrador.
 // Muestra un teclado numérico táctil de 4 dígitos.
+// Si la suscripción del tenant está vencida, muestra pantalla de acceso suspendido.
 // Props:
-//   onAcceso   — función llamada cuando el PIN es correcto
+//   onAcceso   — función llamada cuando el PIN es correcto y suscripción vigente
 //   onCancelar — función llamada al presionar "Cancelar" (vuelve a MainScreen)
-//   pinCorrecto — string con el PIN admin del tenant (recibido desde App.jsx)
 
 import { useState, useEffect } from "react";
 import { verificarPin } from "../services/api";
@@ -28,13 +28,40 @@ const BackspaceIcon = () => (
   </svg>
 );
 
+// ─── Pantalla de acceso suspendido ────────────────────────────────────────────
+const PantallaBloqueada = ({ onCancelar }) => (
+  <div style={styles.pantalla}>
+    <div style={styles.lineaSuperior} />
+    <div style={styles.headerRow}>
+      <button style={styles.btnCancelar} onClick={onCancelar}>
+        Volver
+      </button>
+    </div>
+    <div style={styles.iconoArea}>
+      <div style={{ ...styles.iconoCirculo, borderColor: "#e74c3c", color: "#e74c3c" }}>
+        <CandadoIcon />
+      </div>
+      <h1 style={styles.titulo}>Acceso suspendido</h1>
+      <p style={{ ...styles.subtitulo, textAlign: "center", maxWidth: "320px", lineHeight: "1.6" }}>
+        El acceso al panel está suspendido por falta de pago.<br />
+        Contactá al soporte para regularizar tu suscripción.
+      </p>
+    </div>
+    <div style={styles.contactoCard}>
+      <p style={styles.contactoLinea}>📱 WhatsApp: <strong>11 3311-1686</strong></p>
+      <p style={styles.contactoLinea}>📧 facundolunagrebe@gmail.com</p>
+    </div>
+  </div>
+);
+
 // ─── Componente principal ─────────────────────────────────────────────────────
-export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {  
+export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {
   console.log('[pantallaLoginAdmin] render — montada');
 
   const [pin, setPin] = useState("");
   const [estado, setEstado] = useState("idle"); // "idle" | "error" | "exito"
   const [shake, setShake] = useState(false);
+  const [bloqueado, setBloqueado] = useState(false);
 
   // ── Agregar dígito ──────────────────────────────────────────────────────────
   const agregarDigito = (digito) => {
@@ -45,7 +72,6 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {
     setEstado("idle");
     setPin(nuevo);
 
-    // Auto-validar cuando llega a 4 dígitos
     if (nuevo.length === 4) {
       validarPin(nuevo);
     }
@@ -58,27 +84,31 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {
     setPin((p) => p.slice(0, -1));
   };
 
-  // ── Validar PIN — llama al backend y recibe un JWT ──────────────────────────
-const validarPin = async (pinIngresado) => {
-  console.log('[pantallaLoginAdmin] validarPin — request iniciado');
-  try {
-    const { token } = await verificarPin(pinIngresado);
-    console.log('[pantallaLoginAdmin] validarPin — completado | acceso concedido');
-    setEstado("exito");
-    setTimeout(() => onAcceso(token), 600);
-  } catch (err) {
-    console.error('[pantallaLoginAdmin] Error en validarPin:', err.message);
-    setEstado("error");
-    setShake(true);
-    setTimeout(() => {
-      setPin("");
-      setEstado("idle");
-      setShake(false);
-    }, 800);
-  }
-};
+  // ── Validar PIN ─────────────────────────────────────────────────────────────
+  const validarPin = async (pinIngresado) => {
+    console.log('[pantallaLoginAdmin] validarPin — request iniciado');
+    try {
+      const { token, aviso_pago } = await verificarPin(pinIngresado);
+      console.log('[pantallaLoginAdmin] validarPin — completado | acceso concedido | aviso_pago:', aviso_pago);
+      setEstado("exito");
+      setTimeout(() => onAcceso(token, aviso_pago), 600);
+    } catch (err) {
+      console.error('[pantallaLoginAdmin] Error en validarPin:', err.message);
+      if (err.bloqueado) {
+        setBloqueado(true);
+      } else {
+        setEstado("error");
+        setShake(true);
+        setTimeout(() => {
+          setPin("");
+          setEstado("idle");
+          setShake(false);
+        }, 800);
+      }
+    }
+  };
 
-  // ── Teclado físico (opcional, para desarrollo en desktop) ──────────────────
+  // ── Teclado físico (desarrollo en desktop) ──────────────────────────────────
   useEffect(() => {
     const manejarTeclado = (e) => {
       if (e.key >= "0" && e.key <= "9") agregarDigito(e.key);
@@ -88,6 +118,11 @@ const validarPin = async (pinIngresado) => {
     return () => window.removeEventListener("keydown", manejarTeclado);
   }, [pin, estado]);
 
+  // ── Si está bloqueado, mostrar pantalla alternativa ─────────────────────────
+  if (bloqueado) {
+    return <PantallaBloqueada onCancelar={onCancelar} />;
+  }
+
   // ── Layout del teclado numérico ─────────────────────────────────────────────
   const teclas = [
     ["1", "2", "3"],
@@ -96,7 +131,6 @@ const validarPin = async (pinIngresado) => {
     [null, "0", "borrar"],
   ];
 
-  // ── Colores según estado ────────────────────────────────────────────────────
   const colorIndicador =
     estado === "error" ? "#e74c3c" :
     estado === "exito" ? "#1a7a4a" :
@@ -104,10 +138,8 @@ const validarPin = async (pinIngresado) => {
 
   return (
     <div style={styles.pantalla}>
-      {/* Línea superior verde */}
       <div style={styles.lineaSuperior} />
 
-      {/* Botón cancelar */}
       <div style={styles.headerRow}>
         <button style={styles.btnCancelar} onClick={() => {
           console.log('[pantallaLoginAdmin] onCancelar — iniciado');
@@ -117,7 +149,6 @@ const validarPin = async (pinIngresado) => {
         </button>
       </div>
 
-      {/* Ícono y título */}
       <div style={styles.iconoArea}>
         <div style={{ ...styles.iconoCirculo, borderColor: colorIndicador, color: colorIndicador }}>
           <CandadoIcon />
@@ -128,7 +159,6 @@ const validarPin = async (pinIngresado) => {
         </p>
       </div>
 
-      {/* Indicadores de dígitos */}
       <div style={{ ...styles.indicadoresRow, ...(shake ? styles.shake : {}) }}>
         {[0, 1, 2, 3].map((i) => (
           <div
@@ -150,33 +180,20 @@ const validarPin = async (pinIngresado) => {
         ))}
       </div>
 
-      {/* Teclado numérico */}
       <div style={styles.teclado}>
         {teclas.map((fila, fi) => (
           <div key={fi} style={styles.filaTeclado}>
             {fila.map((tecla, ti) => {
-              if (tecla === null) {
-                return <div key={ti} style={styles.teclaVacia} />;
-              }
+              if (tecla === null) return <div key={ti} style={styles.teclaVacia} />;
               if (tecla === "borrar") {
                 return (
-                  <button
-                    key={ti}
-                    style={styles.teclaBorrar}
-                    onPointerDown={borrarDigito}
-                    aria-label="Borrar"
-                  >
+                  <button key={ti} style={styles.teclaBorrar} onPointerDown={borrarDigito} aria-label="Borrar">
                     <BackspaceIcon />
                   </button>
                 );
               }
               return (
-                <button
-                  key={ti}
-                  style={styles.tecla}
-                  onPointerDown={() => agregarDigito(tecla)}
-                  aria-label={`Tecla ${tecla}`}
-                >
+                <button key={ti} style={styles.tecla} onPointerDown={() => agregarDigito(tecla)} aria-label={`Tecla ${tecla}`}>
                   {tecla}
                 </button>
               );
@@ -185,7 +202,6 @@ const validarPin = async (pinIngresado) => {
         ))}
       </div>
 
-      {/* Animación CSS para shake */}
       <style>{`
         @keyframes shake {
           0%, 100% { transform: translateX(0); }
@@ -193,9 +209,6 @@ const validarPin = async (pinIngresado) => {
           40%       { transform: translateX(10px); }
           60%       { transform: translateX(-8px); }
           80%       { transform: translateX(8px); }
-        }
-        .shake-anim {
-          animation: shake 0.5s ease;
         }
       `}</style>
     </div>
@@ -284,8 +297,6 @@ const styles = {
     borderRadius: "50%",
     border: "2px solid",
   },
-
-  // Teclado
   teclado: {
     display: "flex",
     flexDirection: "column",
@@ -331,5 +342,23 @@ const styles = {
   },
   teclaVacia: {
     height: "clamp(70px, 10vh, 90px)",
+  },
+  // ── Pantalla bloqueada ────────────────────────────────────────────────────
+  contactoCard: {
+    marginTop: "8px",
+    padding: "20px 32px",
+    borderRadius: "16px",
+    border: "1.5px solid #f0f0f0",
+    backgroundColor: "#fafafa",
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    alignItems: "center",
+  },
+  contactoLinea: {
+    margin: 0,
+    fontSize: "15px",
+    color: "#555555",
+    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
   },
 };

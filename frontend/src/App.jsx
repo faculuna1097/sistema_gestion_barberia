@@ -98,8 +98,8 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState("main");
   const [token, setToken] = useState(null);
   const [logoUrl, setLogoUrl] = useState(null);
-  const [bookingUrl, setBookingUrl] = useState(null); // ← NUEVO
-
+  const [bookingUrl, setBookingUrl] = useState(null); 
+  const [avisosPago, setAvisosPago] = useState(false);
   const [datos, setDatos] = useState({
     barberos: [],
     servicios: [],
@@ -207,10 +207,11 @@ export default function App() {
     console.log('[app] Renderizando PantallaLoginAdmin');
     return (
       <PantallaLoginAdmin
-        onAcceso={(tokenRecibido) => {
-          console.log('[app] Acceso admin concedido — guardando token y navegando a panel admin');
+        onAcceso={(tokenRecibido, aviso_pago) => {
+          console.log('[app] Acceso admin concedido | aviso_pago:', aviso_pago);
           setToken(tokenRecibido);
           setAuthToken(tokenRecibido);
+          setAvisosPago(aviso_pago || false);
           setCurrentScreen("admin");
         }}
         onCancelar={volverAlInicio}
@@ -220,7 +221,7 @@ export default function App() {
 
   if (currentScreen === "admin") {
     console.log('[app] Renderizando PanelAdmin');
-    return <PanelAdmin onCerrarSesion={cerrarSesionAdmin} />;
+    return <PanelAdmin onCerrarSesion={cerrarSesionAdmin} avisosPago={avisosPago} />;
   }
 
   return (
