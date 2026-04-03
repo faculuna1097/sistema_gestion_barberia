@@ -1,24 +1,8 @@
 // /backend/src/controllers/ventas.js
-// Controlador del recurso "venta".
-// Todas las funciones usan req.tenant_id, inyectado por tenantMiddleware
-// en rutas públicas (desde .env) y por verificarToken en rutas protegidas (desde JWT).
-
 import { query } from '../config/db.js';
 
 const TZ = 'America/Argentina/Buenos_Aires';
 
-/**
- * createVenta
- * Registra una nueva venta y descuenta el stock del producto.
- * Ruta pública — req.tenant_id viene del tenantMiddleware (desde .env).
- * Si el descuento de stock falla, elimina la venta registrada (cleanup manual).
- * @param {string} req.tenant_id              - Inyectado por tenantMiddleware
- * @param {string} req.body.producto_id       - UUID del producto
- * @param {number} req.body.cantidad          - Cantidad vendida
- * @param {number} req.body.precio_unitario   - Precio unitario al momento de la venta
- * @param {string} req.body.forma_pago        - 'efectivo' | 'mercado_pago'
- * @returns {JSON} { message, venta_id, monto_total }
- */
 export const createVenta = async (req, res) => {
   console.log('[ventas] createVenta — request recibido | tenant:', req.tenant_id);
 
@@ -34,7 +18,6 @@ export const createVenta = async (req, res) => {
   let ventaId = null;
 
   try {
-    // 1. Verificar stock disponible antes de registrar
     const stockResult = await query(
       `SELECT stock_actual FROM producto WHERE id = $1 AND tenant_id = $2`,
       [producto_id, req.tenant_id]
@@ -49,11 +32,10 @@ export const createVenta = async (req, res) => {
     if (stockActual < cantidad) {
       console.warn('[ventas] createVenta — stock insuficiente | disponible:', stockActual, '| solicitado:', cantidad);
       return res.status(400).json({
-        error: `Stock insuficiente. Disponible: ${stockActual}, solicitado: ${cantidad}`
+        error: `Stock insuficiente. Disponible: ${stockActual}`
       });
     }
 
-    // 2. Registrar la venta
     const ventaResult = await query(
       `INSERT INTO venta (tenant_id, producto_id, cantidad, precio_unitario, forma_pago, usuario_registro)
        VALUES ($1, $2, $3, $4, $5, $6)
@@ -63,7 +45,6 @@ export const createVenta = async (req, res) => {
 
     ventaId = ventaResult.rows[0].id;
 
-    // 3. Descontar stock del producto
     await query(
       `UPDATE producto SET stock_actual = stock_actual - $1 WHERE id = $2`,
       [cantidad, producto_id]
@@ -79,7 +60,6 @@ export const createVenta = async (req, res) => {
   } catch (err) {
     console.error('[ventas] Error en createVenta | venta_id al momento del fallo:', ventaId, '| error:', err.message);
 
-    // Si la venta se insertó pero el UPDATE de stock falló, eliminamos la venta
     if (ventaId) {
       console.warn('[ventas] createVenta — iniciando cleanup | eliminando venta huérfana:', ventaId);
       await query('DELETE FROM venta WHERE id = $1', [ventaId]).catch((cleanupErr) => {
@@ -92,14 +72,6 @@ export const createVenta = async (req, res) => {
   }
 };
 
-/**
- * getVentasMensual
- * Devuelve todos los productos vendidos en un mes.
- * Ruta protegida — req.tenant_id inyectado por verificarToken.
- * @param {string} req.query.mes - Mes en formato YYYY-MM (default: mes actual)
- * @param {string} req.tenant_id - Inyectado por verificarToken
- * @returns {JSON} { ventas, totalesPorProducto, totalGeneral }
- */
 export const getVentasMensual = async (req, res) => {
   const mes = req.query.mes || new Date().toLocaleDateString('sv-SE', { timeZone: TZ }).slice(0, 7);
   console.log('[ventas] getVentasMensual — request recibido | mes:', mes, '| tenant:', req.tenant_id);
@@ -112,6 +84,7 @@ export const getVentasMensual = async (req, res) => {
     const resultadoVentas = await query(
       `SELECT
          v.id,
+         v.producto_id,
          TO_CHAR(v.timestamp AT TIME ZONE $3, 'DD/MM/YYYY') AS fecha,
          p.nombre                                            AS producto_nombre,
          v.cantidad,
@@ -157,14 +130,6 @@ export const getVentasMensual = async (req, res) => {
   }
 };
 
-/**
- * deleteVenta
- * Elimina una venta y restaura el stock del producto.
- * Ruta protegida — req.tenant_id inyectado por verificarToken.
- * @param {string} req.params.id - UUID de la venta a eliminar
- * @param {string} req.tenant_id - Inyectado por verificarToken
- * @returns {JSON} { eliminado: true, id } o error
- */
 export const deleteVenta = async (req, res) => {
   const { id } = req.params;
   console.log('[ventas] deleteVenta — request recibido | id:', id, '| tenant:', req.tenant_id);
@@ -198,5 +163,80 @@ export const deleteVenta = async (req, res) => {
   } catch (err) {
     console.error('[ventas] Error en deleteVenta:', err.message);
     return res.status(500).json({ error: 'Error interno al eliminar la venta' });
+  }
+};
+
+export const updateVenta = async (req, res) => {
+  const { id } = req.params;
+  console.log('[ventas] updateVenta — request recibido | id:', id, '| tenant:', req.tenant_id);
+
+  const { producto_id, cantidad, precio_unitario, forma_pago } = req.body;
+
+  if (!producto_id || !cantidad || !precio_unitario || !forma_pago) {
+    return res.status(400).json({
+      error: 'Faltan campos requeridos: producto_id, cantidad, precio_unitario, forma_pago'
+    });
+  }
+
+  if (!['efectivo', 'mercado_pago'].includes(forma_pago)) {
+    return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });
+  }
+
+  try {
+    const ventaOriginal = await query(
+      `SELECT producto_id, cantidad FROM venta WHERE id = $1 AND tenant_id = $2`,
+      [id, req.tenant_id]
+    );
+
+    if (ventaOriginal.rows.length === 0) {
+      console.warn('[ventas] updateVenta — venta no encontrada | id:', id);
+      return res.status(404).json({ error: 'Venta no encontrada' });
+    }
+
+    const { producto_id: productoIdViejo, cantidad: cantidadVieja } = ventaOriginal.rows[0];
+
+    const stockResult = await query(
+      `SELECT stock_actual FROM producto WHERE id = $1 AND tenant_id = $2`,
+      [producto_id, req.tenant_id]
+    );
+
+    if (stockResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+
+    const stockActual = stockResult.rows[0].stock_actual;
+    const mismoProducto = producto_id === productoIdViejo;
+    const stockDisponible = mismoProducto ? stockActual + cantidadVieja : stockActual;
+
+    if (stockDisponible < cantidad) {
+      console.warn('[ventas] updateVenta — stock insuficiente | disponible:', stockDisponible, '| solicitado:', cantidad);
+      return res.status(400).json({
+        error: `Stock insuficiente. Disponible: ${stockDisponible}`
+      });
+    }
+
+    await query(
+      `UPDATE producto SET stock_actual = stock_actual + $1 WHERE id = $2`,
+      [cantidadVieja, productoIdViejo]
+    );
+
+    await query(
+      `UPDATE venta
+       SET producto_id = $1, cantidad = $2, precio_unitario = $3, forma_pago = $4
+       WHERE id = $5 AND tenant_id = $6`,
+      [producto_id, cantidad, precio_unitario, forma_pago, id, req.tenant_id]
+    );
+
+    await query(
+      `UPDATE producto SET stock_actual = stock_actual - $1 WHERE id = $2`,
+      [cantidad, producto_id]
+    );
+
+    console.log('[ventas] updateVenta — completado | venta_id:', id, '| producto_id:', producto_id, '| cantidad:', cantidad);
+    return res.status(200).json({ id, producto_id, cantidad, precio_unitario, forma_pago });
+
+  } catch (err) {
+    console.error('[ventas] Error en updateVenta:', err.message);
+    return res.status(500).json({ error: 'Error interno al editar la venta' });
   }
 };
