@@ -55,10 +55,10 @@ export const createVenta = async (req, res) => {
 
     // 2. Registrar la venta
     const ventaResult = await query(
-      `INSERT INTO venta (tenant_id, producto_id, cantidad, precio_unitario, forma_pago, usuario_registro)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO venta (tenant_id, producto_id, cantidad, precio_unitario, forma_pago)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING id`,
-      [req.tenant_id, producto_id, cantidad, precio_unitario, forma_pago, null]
+      [req.tenant_id, producto_id, cantidad, precio_unitario, forma_pago]
     );
 
     ventaId = ventaResult.rows[0].id;

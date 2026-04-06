@@ -21,7 +21,7 @@ const TZ = 'America/Argentina/Buenos_Aires';
 export const createGasto = async (req, res) => {
   console.log('[gastos] createGasto — request recibido | tenant:', req.tenant_id);
 
-  const { categoria_id, descripcion, monto, forma_pago, usuario_registro } = req.body;
+  const { categoria_id, descripcion, monto, forma_pago } = req.body;
 
   if (!categoria_id || !descripcion || !monto || !forma_pago) {
     console.warn('[gastos] createGasto — validación fallida | campos faltantes:', { categoria_id, descripcion, monto, forma_pago });
@@ -34,10 +34,10 @@ export const createGasto = async (req, res) => {
 
   try {
     const resultado = await query(
-      `INSERT INTO gasto (tenant_id, categoria_id, descripcion, monto, forma_pago, usuario_registro)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO gasto (tenant_id, categoria_id, descripcion, monto, forma_pago)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [req.tenant_id, categoria_id, descripcion, monto, forma_pago, usuario_registro ?? null]
+      [req.tenant_id, categoria_id, descripcion, monto, forma_pago ?? null]
     );
 
     const gastoCreado = resultado.rows[0];
