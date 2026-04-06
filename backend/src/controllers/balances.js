@@ -18,7 +18,7 @@ const redondear2 = (n) => Math.round(n * 100) / 100;
  * getBalanceMensual
  * Devuelve el balance completo de un mes dado.
  * @param {string} req.query.mes - Mes en formato YYYY-MM (default: mes actual)
- * @param {string} req.tenant_id - Inyectado por verificarToken
+ * @param {string} req.tenant_id - Inyectado por tenantMiddleware
  */
 export const getBalanceMensual = async (req, res) => {
   const mes = req.query.mes || new Date().toISOString().slice(0, 7);
@@ -40,11 +40,10 @@ export const getBalanceMensual = async (req, res) => {
         b.nombre                      AS nombre,
         b.comision_tipo               AS comision_tipo,
         b.comision_valor              AS comision_valor,
-        COUNT(DISTINCT c.id)::int     AS cortes,
-        COALESCE(SUM(cs.precio), 0)   AS monto_servicios
+        COUNT(c.id)::int              AS cortes,
+        COALESCE(SUM(c.precio), 0)    AS monto_servicios
       FROM corte c
       JOIN barbero b ON b.id = c.barbero_id
-      JOIN corte_servicio cs ON cs.corte_id = c.id
       WHERE c.tenant_id = $1
         AND c.timestamp >= $2
         AND c.timestamp < $3
@@ -165,7 +164,7 @@ export const getBalanceMensual = async (req, res) => {
  * getBalanceHistorico
  * Devuelve el resumen de los últimos N meses para la tabla de histórico anual.
  * @param {number} req.query.cantidad - Cantidad de meses (default: 12, máx: 24)
- * @param {string} req.tenant_id - Inyectado por verificarToken
+ * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  */
 export const getBalanceHistorico = async (req, res) => {
   const cantidad = Math.min(parseInt(req.query.cantidad) || 12, 24);
@@ -175,11 +174,10 @@ export const getBalanceHistorico = async (req, res) => {
     const queryServiciosMensuales = `
       SELECT
         TO_CHAR(DATE_TRUNC('month', c.timestamp AT TIME ZONE '${TZ}'), 'YYYY-MM') AS mes,
-        COALESCE(SUM(cs.precio), 0)                                                AS ingresos_brutos_servicios,
-        COALESCE(SUM(cs.precio * b.comision_valor / 100.0), 0)                     AS total_comisiones
+        COALESCE(SUM(c.precio), 0)                                                 AS ingresos_brutos_servicios,
+        COALESCE(SUM(c.precio * b.comision_valor / 100.0), 0)                      AS total_comisiones
       FROM corte c
       JOIN barbero b ON b.id = c.barbero_id
-      JOIN corte_servicio cs ON cs.corte_id = c.id
       WHERE c.tenant_id = $1
         AND c.timestamp >= NOW() AT TIME ZONE '${TZ}' - INTERVAL '1 month' * $2
       GROUP BY DATE_TRUNC('month', c.timestamp AT TIME ZONE '${TZ}')

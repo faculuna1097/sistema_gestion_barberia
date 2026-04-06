@@ -7,7 +7,7 @@ const TZ = 'America/Argentina/Buenos_Aires';
  * getMovimientosDia
  * Devuelve todos los movimientos del día (cortes, ventas y gastos) ordenados por timestamp.
  * @param {string} req.query.fecha - Fecha en formato YYYY-MM-DD (default: hoy en timezone AR)
- * @param {string} req.tenant_id - Inyectado por verificarToken
+ * @param {string} req.tenant_id  - Inyectado por tenantMiddleware
  * @returns {JSON} { movimientos: [...] }
  */
 export const getMovimientosDia = async (req, res) => {
@@ -23,21 +23,15 @@ export const getMovimientosDia = async (req, res) => {
          c.id,
          c.timestamp,
          TO_CHAR(c.timestamp AT TIME ZONE $2, 'HH24:MI') AS hora,
-         b.nombre AS barbero_nombre,
-         COALESCE(cs_agg.servicios, '') AS detalle,
+         b.nombre  AS barbero_nombre,
+         s.nombre  AS detalle,
          c.monto_total AS monto,
          c.forma_pago,
          b.comision_valor,
          'corte' AS tipo
        FROM corte c
-       JOIN barbero b ON c.barbero_id = b.id
-       LEFT JOIN (
-         SELECT cs.corte_id,
-                STRING_AGG(s.nombre, ' + ' ORDER BY s.nombre) AS servicios
-         FROM corte_servicio cs
-         JOIN servicio s ON cs.servicio_id = s.id
-         GROUP BY cs.corte_id
-       ) cs_agg ON cs_agg.corte_id = c.id
+       JOIN barbero b  ON c.barbero_id  = b.id
+       JOIN servicio s ON c.servicio_id = s.id
        WHERE c.tenant_id = $1
          AND DATE(c.timestamp AT TIME ZONE $2) = $3::date
        ORDER BY c.timestamp ASC`,
@@ -103,12 +97,12 @@ export const getMovimientosDia = async (req, res) => {
 /**
  * eliminarMovimiento
  * Elimina un registro del día por tipo e id.
- * - corte: borra corte_servicio primero, luego corte
+ * - corte: borra directo (ya no existe corte_servicio)
  * - venta: restaura stock_actual del producto, luego borra venta
  * - gasto: borra directo
  * @param {string} req.params.tipo - 'corte' | 'venta' | 'gasto'
- * @param {string} req.params.id - UUID del registro
- * @param {string} req.tenant_id - Inyectado por verificarToken
+ * @param {string} req.params.id   - UUID del registro
+ * @param {string} req.tenant_id   - Inyectado por tenantMiddleware
  */
 export const eliminarMovimiento = async (req, res) => {
   const { tipo, id } = req.params;
@@ -116,7 +110,6 @@ export const eliminarMovimiento = async (req, res) => {
 
   try {
     if (tipo === 'corte') {
-      await query('DELETE FROM corte_servicio WHERE corte_id = $1', [id]);
       await query('DELETE FROM corte WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
       console.log('[caja] eliminarMovimiento — corte eliminado | id:', id);
 
