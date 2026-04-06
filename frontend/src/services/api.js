@@ -5,11 +5,23 @@
 // ─── MANEJO DE TOKEN ──────────────────────────────────────────────────────────
 // El token JWT se guarda en este módulo con setAuthToken() luego del login.
 // Las funciones de rutas protegidas lo leen automáticamente vía apiFetch().
-// Las funciones de rutas públicas usan fetch() directamente (sin header).
+// Las funciones de rutas públicas usan fetch() directamente con publicHeaders.
 
 const BASE_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
   : 'http://localhost:3001/api';
+
+// Extraer subdominio del hostname actual.
+// En localhost devuelve undefined → el backend usa el fallback del .env
+const hostname = window.location.hostname;
+const partes = hostname.split('.');
+const subdominio = partes.length >= 3 ? partes[0] : undefined;
+
+// Headers base para rutas públicas — incluye el subdominio si está disponible
+const publicHeaders = {
+  'Content-Type': 'application/json',
+  ...(subdominio ? { 'X-Tenant-Subdomain': subdominio } : {}),
+};
 
 // Variable de módulo — persiste mientras la app está viva, no se guarda en localStorage
 let authToken = null;
@@ -54,6 +66,7 @@ export const apiFetch = (path, options = {}) => {
   const headers = {
     'Content-Type': 'application/json',
     ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+    ...(subdominio ? { 'X-Tenant-Subdomain': subdominio } : {}),
     ...(options.headers || {}),
   };
   return fetch(url, { ...options, headers });
@@ -69,7 +82,7 @@ export const apiFetch = (path, options = {}) => {
  * @returns {Promise<Array>} Array de { id, nombre }
  */
 export const getBarberos = async () => {
-  const response = await fetch(`${BASE_URL}/barberos`);
+  const response = await fetch(`${BASE_URL}/barberos`, { headers: publicHeaders });
   if (!response.ok) throw new Error('Error al obtener barberos');
   return response.json();
 };
@@ -80,7 +93,7 @@ export const getBarberos = async () => {
  * @returns {Promise<Array>} Array de { id, nombre, precio }
  */
 export const getServicios = async () => {
-  const response = await fetch(`${BASE_URL}/servicios`);
+  const response = await fetch(`${BASE_URL}/servicios`, { headers: publicHeaders });
   if (!response.ok) throw new Error('Error al obtener servicios');
   return response.json();
 };
@@ -91,7 +104,7 @@ export const getServicios = async () => {
  * @returns {Promise<Array>} Array de { id, nombre, precio, stock_actual }
  */
 export const getProductos = async () => {
-  const response = await fetch(`${BASE_URL}/productos`);
+  const response = await fetch(`${BASE_URL}/productos`, { headers: publicHeaders });
   if (!response.ok) throw new Error('Error al obtener productos');
   return response.json();
 };
@@ -102,7 +115,7 @@ export const getProductos = async () => {
  * @returns {Promise<Array>} Array de { id, nombre }
  */
 export const getCategorias = async () => {
-  const response = await fetch(`${BASE_URL}/categorias`);
+  const response = await fetch(`${BASE_URL}/categorias`, { headers: publicHeaders });
   if (!response.ok) throw new Error('Error al obtener categorías');
   return response.json();
 };
@@ -116,7 +129,7 @@ export const getCategorias = async () => {
 export const registrarCorte = async (datos) => {
   const response = await fetch(`${BASE_URL}/cortes`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: publicHeaders,
     body: JSON.stringify(datos),
   });
   if (!response.ok) throw new Error('Error al registrar el corte');
@@ -132,7 +145,7 @@ export const registrarCorte = async (datos) => {
 export const registrarVenta = async (datos) => {
   const response = await fetch(`${BASE_URL}/ventas`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: publicHeaders,
     body: JSON.stringify(datos),
   });
   if (!response.ok) throw new Error('Error al registrar la venta');
@@ -148,7 +161,7 @@ export const registrarVenta = async (datos) => {
 export const registrarGasto = async (datos) => {
   const response = await fetch(`${BASE_URL}/gastos`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: publicHeaders,
     body: JSON.stringify(datos),
   });
   if (!response.ok) throw new Error('Error al registrar el gasto');
@@ -161,7 +174,7 @@ export const registrarGasto = async (datos) => {
  * @returns {Promise<Object>} { nombre_negocio, logo }
  */
 export const getNegocio = async () => {
-  const response = await fetch(`${BASE_URL}/gestion/negocio`);
+  const response = await fetch(`${BASE_URL}/gestion/negocio`, { headers: publicHeaders });
   if (!response.ok) throw new Error('Error al obtener datos del negocio');
   return response.json();
 };
@@ -179,7 +192,7 @@ export const getNegocio = async () => {
 export const verificarPin = async (pin) => {
   const response = await fetch(`${BASE_URL}/auth/verificar-pin`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: publicHeaders,
     body: JSON.stringify({ pin }),
   });
 

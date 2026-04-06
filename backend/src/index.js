@@ -30,16 +30,12 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // --- Middlewares globales ---
-const allowedOrigins = [
-  'http://localhost:5173',                               // desarrollo local
-  'https://sistema-gestion-barberia.vercel.app',        // frontend en producción
-];
-
+// DESPUÉS
 app.use(cors({
   origin: (origin, callback) => {
-    // Permitir requests sin origin (Postman, Railway health checks)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (origin === 'http://localhost:5173') return callback(null, true);
+    if (origin.endsWith('.barbermanager.app')) return callback(null, true);
     callback(new Error(`CORS bloqueado para origin: ${origin}`));
   },
   credentials: true,
@@ -47,8 +43,8 @@ app.use(cors({
 app.use(express.json());
 
 // tenantMiddleware — corre en TODAS las rutas antes que cualquier controller.
-// Establece req.tenant_id desde .env. En rutas protegidas, verificarToken
-// lo sobreescribe con el valor del JWT.
+// Resuelve el tenant desde el header X-Tenant-Subdomain (producción)
+// o desde TENANT_ID en .env (desarrollo local).
 app.use(tenantMiddleware);
 
 // Middleware de logging global — loguea cada request que llega al servidor
