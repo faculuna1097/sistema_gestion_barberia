@@ -1,36 +1,58 @@
 // /backend/src/middlewares/tenantMiddleware.js
-// Middleware que establece req.tenant_id en todas las rutas.
-//
-// Opción A — tenant por deploy: cada instancia del backend tiene su propio
-// TENANT_ID en .env, apuntando a un negocio específico en la base de datos.
-//
-// Cuando escale a multi-tenant por subdominio (Opción B), solo cambia este
-// archivo: leer req.hostname, buscar el tenant en DB, asignar req.tenant_id.
-// Ningún controller cambia.
-//
-// Orden de precedencia en el pipeline de middlewares:
-//   1. tenantMiddleware  → pone req.tenant_id desde .env (todas las rutas)
-//   2. verificarToken    → sobreescribe req.tenant_id con el valor del JWT (rutas protegidas)
-// En rutas protegidas el JWT siempre gana. En rutas públicas queda el valor del .env.
+// Lee el subdominio del header X-Tenant-Subdomain enviado por el frontend,
+// busca el tenant en DB (con caché en memoria), e inyecta req.tenant_id.
 
-/**
- * tenantMiddleware
- * Lee TENANT_ID desde process.env y lo inyecta en req.tenant_id.
- * Si la variable no está configurada, responde 500 para evitar que
- * cualquier query corra sin tenant_id y potencialmente exponga datos.
- *
- * @param {Request}  req  - Express request. Agrega req.tenant_id.
- * @param {Response} res  - Express response. Responde 500 si falta TENANT_ID.
- * @param {Function} next - Pasa al siguiente middleware si todo es correcto.
- */
-export const tenantMiddleware = (req, res, next) => {
-  const tenantId = process.env.TENANT_ID;
+import { query } from '../config/db.js';
 
-  if (!tenantId) {
-    console.error('[tenantMiddleware] Error en tenantMiddleware: TENANT_ID no definido en .env');
-    return res.status(500).json({ error: 'Configuración de tenant inválida' });
+const TZ = 'America/Argentina/Buenos_Aires';
+
+// Caché en memoria: { subdominio: tenant_id }
+// Evita ir a la DB en cada request. Se resetea al reiniciar el servidor.
+const tenantCache = {};
+
+export const tenantMiddleware = async (req, res, next) => {
+  const subdominio = req.headers['x-tenant-subdomain'];
+
+  // Fallback para desarrollo local (localhost no tiene subdominio)
+  if (!subdominio) {
+    const fallback = process.env.TENANT_ID;
+    if (fallback) {
+      req.tenant_id = fallback;
+      return next();
+    }
+    console.error('[tenantMiddleware] tenantMiddleware — sin subdominio y sin TENANT_ID en .env');
+    return res.status(400).json({ error: 'Tenant no identificado' });
   }
 
-  req.tenant_id = tenantId;
-  next();
+  // Si ya está en caché, no va a la DB
+  if (tenantCache[subdominio]) {
+    req.tenant_id = tenantCache[subdominio];
+    return next();
+  }
+
+  try {
+    console.log('[tenantMiddleware] tenantMiddleware — request recibido | subdominio:', subdominio);
+
+    const resultado = await query(
+      'SELECT id FROM tenant WHERE subdominio = $1 AND activo = true',
+      [subdominio]
+    );
+
+    if (resultado.rows.length === 0) {
+      console.error('[tenantMiddleware] tenantMiddleware — tenant no encontrado | subdominio:', subdominio);
+      return res.status(404).json({ error: 'Tenant no encontrado' });
+    }
+
+    const tenant_id = resultado.rows[0].id;
+    tenantCache[subdominio] = tenant_id;
+
+    console.log('[tenantMiddleware] tenantMiddleware — completado | tenant_id:', tenant_id);
+
+    req.tenant_id = tenant_id;
+    next();
+
+  } catch (err) {
+    console.error('[tenantMiddleware] Error en tenantMiddleware:', err.message);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
 };

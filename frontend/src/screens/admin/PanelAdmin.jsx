@@ -24,8 +24,8 @@ const SECCIONES = [
   { id: "caja",      emoji: "💰", label: "Caja",      componente: SeccionCaja      },
   { id: "planillas", emoji: "📋", label: "Planillas", componente: SeccionPlanillas },
   { id: "balances",  emoji: "📊", label: "Balances",  componente: SeccionBalances  },
-  { id: "gastos",    emoji: "💸", label: "Gastos",    componente: SeccionGastos    },
   { id: "ventas",    emoji: "🛍️", label: "Ventas",    componente: SeccionVentas    },
+  { id: "gastos",    emoji: "💸", label: "Gastos",    componente: SeccionGastos    },
   { id: "gestion",   emoji: "⚙️", label: "Gestión",   componente: SeccionGestion   },
 ];
 
