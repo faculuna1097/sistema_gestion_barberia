@@ -86,10 +86,11 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
   // ── Envío ───────────────────────────────────────────────────────────────────
   const confirmarCorte = async () => {
     const payload = {
-      barbero_id: barberoSeleccionado.id,
-      servicios: [{ id: servicioSeleccionado.id, precio: servicioSeleccionado.precio }],
-      forma_pago: formaPago,
-      propina: propinaFinal,
+      barbero_id:  barberoSeleccionado.id,
+      servicio_id: servicioSeleccionado.id,
+      precio:      servicioSeleccionado.precio,
+      forma_pago:  formaPago,
+      propina:     propinaFinal,
     };
     setEnviando(true);
     setError(null);

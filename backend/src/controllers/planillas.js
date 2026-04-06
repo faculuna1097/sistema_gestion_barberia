@@ -41,7 +41,7 @@ function semanaAFechas(semanaStr) {
  * getDetalleSemanal
  * Devuelve el detalle de cortes de la semana, agrupado por barbero.
  * @param {string} req.query.semana - Formato "YYYY-WNN"
- * @param {string} req.tenant_id   - Inyectado por verificarToken
+ * @param {string} req.tenant_id   - Inyectado por tenantMiddleware
  * @returns {JSON} Array de { barbero_id, barbero_nombre, cortes: [...] }
  */
 export const getDetalleSemanal = async (req, res) => {
@@ -57,23 +57,21 @@ export const getDetalleSemanal = async (req, res) => {
   try {
     const result = await query(
       `SELECT
-         b.id                                                          AS barbero_id,
-         b.nombre                                                      AS barbero_nombre,
-         TO_CHAR(c.timestamp AT TIME ZONE $4, 'YYYY-MM-DD')           AS fecha,
-         TO_CHAR(c.timestamp AT TIME ZONE $4, 'HH24:MI')              AS hora,
-         STRING_AGG(s.nombre, ', ' ORDER BY s.nombre)                 AS servicio_nombre,
-         SUM(cs.precio)                                                AS monto_servicios,
+         b.id                                                AS barbero_id,
+         b.nombre                                            AS barbero_nombre,
+         TO_CHAR(c.timestamp AT TIME ZONE $4, 'YYYY-MM-DD') AS fecha,
+         TO_CHAR(c.timestamp AT TIME ZONE $4, 'HH24:MI')    AS hora,
+         s.nombre                                            AS servicio_nombre,
+         c.precio                                            AS monto_servicios,
          c.propina,
          c.forma_pago,
-         c.id                                                          AS corte_id,
+         c.id                                                AS corte_id,
          c.timestamp
        FROM corte c
-       JOIN barbero b         ON b.id = c.barbero_id
-       JOIN corte_servicio cs ON cs.corte_id = c.id
-       JOIN servicio s        ON s.id = cs.servicio_id
+       JOIN barbero b  ON b.id = c.barbero_id
+       JOIN servicio s ON s.id = c.servicio_id
        WHERE c.tenant_id = $1
          AND DATE(c.timestamp AT TIME ZONE $4) BETWEEN $2 AND $3
-       GROUP BY c.id, b.id, b.nombre, c.timestamp, c.propina, c.forma_pago
        ORDER BY b.nombre, c.timestamp`,
       [req.tenant_id, lunes, domingo, TZ]
     );
@@ -112,7 +110,7 @@ export const getDetalleSemanal = async (req, res) => {
  * getResumenSemanal
  * Devuelve el resumen consolidado de la semana: una fila por barbero con totales y comisión.
  * @param {string} req.query.semana - Formato "YYYY-WNN"
- * @param {string} req.tenant_id   - Inyectado por verificarToken
+ * @param {string} req.tenant_id   - Inyectado por tenantMiddleware
  * @returns {JSON} { barberos: Array, totales: Object }
  */
 export const getResumenSemanal = async (req, res) => {
@@ -128,16 +126,15 @@ export const getResumenSemanal = async (req, res) => {
   try {
     const result = await query(
       `SELECT
-         b.id                                                          AS barbero_id,
-         b.nombre                                                      AS barbero_nombre,
+         b.id                                      AS barbero_id,
+         b.nombre                                  AS barbero_nombre,
          b.comision_tipo,
          b.comision_valor,
-         COUNT(DISTINCT c.id)                                         AS cantidad_cortes,
-         COALESCE(SUM(cs.precio), 0)                                  AS monto_servicios,
-         COALESCE(SUM(c.propina), 0)                                  AS propinas
+         COUNT(c.id)::int                          AS cantidad_cortes,
+         COALESCE(SUM(c.precio), 0)                AS monto_servicios,
+         COALESCE(SUM(c.propina), 0)               AS propinas
        FROM corte c
-       JOIN barbero b         ON b.id = c.barbero_id
-       JOIN corte_servicio cs ON cs.corte_id = c.id
+       JOIN barbero b ON b.id = c.barbero_id
        WHERE c.tenant_id = $1
          AND DATE(c.timestamp AT TIME ZONE $4) BETWEEN $2 AND $3
        GROUP BY b.id, b.nombre, b.comision_tipo, b.comision_valor
