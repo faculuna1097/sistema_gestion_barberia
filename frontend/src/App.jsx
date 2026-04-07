@@ -117,7 +117,8 @@ export default function App() {
     try {
       const data = await getNegocio();
       setLogoUrl(data.logo || null);
-      setBookingUrl(data.booking_url || null); // ← NUEVO
+      setBookingUrl(data.booking_url || null);
+      if (data.nombre_negocio) document.title = data.nombre_negocio; // ← NUEVO
       console.log('[app] cargarLogo — completado | logo:', data.logo ? 'sí' : 'no',
         '| booking_url:', data.booking_url ? 'sí' : 'no');
     } catch (err) {
