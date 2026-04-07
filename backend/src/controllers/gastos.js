@@ -1,23 +1,8 @@
 // /backend/src/controllers/gastos.js
-// Controlador del recurso "gasto".
-// Todas las funciones usan req.tenant_id, inyectado por tenantMiddleware
-// en rutas públicas (desde .env) y por verificarToken en rutas protegidas (desde JWT).
-
 import { query } from '../config/db.js';
 
 const TZ = 'America/Argentina/Buenos_Aires';
 
-/**
- * createGasto
- * Registra un nuevo gasto en la tabla `gasto`.
- * Ruta pública — req.tenant_id viene del tenantMiddleware (desde .env).
- * @param {string} req.tenant_id            - Inyectado por tenantMiddleware
- * @param {string} req.body.categoria_id    - UUID de la categoría
- * @param {string} req.body.descripcion     - Descripción del gasto
- * @param {number} req.body.monto           - Monto del gasto
- * @param {string} req.body.forma_pago      - 'efectivo' | 'mercado_pago'
- * @returns {JSON} El gasto creado
- */
 export const createGasto = async (req, res) => {
   console.log('[gastos] createGasto — request recibido | tenant:', req.tenant_id);
 
@@ -50,14 +35,6 @@ export const createGasto = async (req, res) => {
   }
 };
 
-/**
- * getGastosMensual
- * Devuelve todos los gastos de un mes para el tenant actual.
- * Ruta protegida — req.tenant_id inyectado por verificarToken.
- * @param {string} req.query.mes  - Mes en formato YYYY-MM (default: mes actual)
- * @param {string} req.tenant_id  - Inyectado por verificarToken
- * @returns {JSON} { gastos, totalesPorCategoria, totalGeneral }
- */
 export const getGastosMensual = async (req, res) => {
   const mes = req.query.mes || new Date().toLocaleDateString('sv-SE', { timeZone: TZ }).slice(0, 7);
   console.log('[gastos] getGastosMensual — request recibido | mes:', mes, '| tenant:', req.tenant_id);
@@ -70,6 +47,7 @@ export const getGastosMensual = async (req, res) => {
     const resultadoGastos = await query(
       `SELECT
          g.id,
+         g.categoria_id,
          TO_CHAR(g.timestamp AT TIME ZONE $3, 'DD/MM/YYYY') AS fecha,
          TO_CHAR(g.timestamp AT TIME ZONE $3, 'HH24:MI')    AS hora,
          COALESCE(cg.nombre, 'Sin categoría') AS categoria_nombre,
@@ -113,14 +91,6 @@ export const getGastosMensual = async (req, res) => {
   }
 };
 
-/**
- * deleteGasto
- * Elimina un gasto por su ID, verificando que pertenezca al tenant.
- * Ruta protegida — req.tenant_id inyectado por verificarToken.
- * @param {string} req.params.id  - UUID del gasto a eliminar
- * @param {string} req.tenant_id  - Inyectado por verificarToken
- * @returns {JSON} { eliminado: true, id } o error
- */
 export const deleteGasto = async (req, res) => {
   const { id } = req.params;
   console.log('[gastos] deleteGasto — request recibido | id:', id, '| tenant:', req.tenant_id);
@@ -146,5 +116,44 @@ export const deleteGasto = async (req, res) => {
   } catch (err) {
     console.error('[gastos] Error en deleteGasto:', err.message);
     return res.status(500).json({ error: 'Error interno al eliminar el gasto' });
+  }
+};
+
+export const updateGasto = async (req, res) => {
+  const { id } = req.params;
+  console.log('[gastos] updateGasto — request recibido | id:', id, '| tenant:', req.tenant_id);
+
+  const { categoria_id, descripcion, monto, forma_pago } = req.body;
+
+  if (!categoria_id || !descripcion || !monto || !forma_pago) {
+    return res.status(400).json({
+      error: 'Faltan campos requeridos: categoria_id, descripcion, monto, forma_pago'
+    });
+  }
+
+  if (!['efectivo', 'mercado_pago'].includes(forma_pago)) {
+    return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });
+  }
+
+  try {
+    const resultado = await query(
+      `UPDATE gasto
+       SET categoria_id = $1, descripcion = $2, monto = $3, forma_pago = $4
+       WHERE id = $5 AND tenant_id = $6
+       RETURNING id, categoria_id, descripcion, monto, forma_pago`,
+      [categoria_id, descripcion, monto, forma_pago, id, req.tenant_id]
+    );
+
+    if (resultado.rows.length === 0) {
+      console.warn('[gastos] updateGasto — gasto no encontrado | id:', id);
+      return res.status(404).json({ error: 'Gasto no encontrado' });
+    }
+
+    console.log('[gastos] updateGasto — completado | gasto_id:', id);
+    return res.status(200).json(resultado.rows[0]);
+
+  } catch (err) {
+    console.error('[gastos] Error en updateGasto:', err.message);
+    return res.status(500).json({ error: 'Error interno al editar el gasto' });
   }
 };

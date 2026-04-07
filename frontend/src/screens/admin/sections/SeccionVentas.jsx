@@ -1,53 +1,31 @@
 // /frontend/src/screens/admin/sections/SeccionVentas.jsx
-// Sección de ventas del panel administrador.
-// Muestra los productos vendidos en el mes seleccionado con totales por producto.
-// Permite eliminar registros (restaura stock automáticamente en el backend).
 
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { apiFetch } from '../../../services/api';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const MESES = [
   'Enero','Febrero','Marzo','Abril','Mayo','Junio',
   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'
 ];
 
-/**
- * mesALabel — convierte 'YYYY-MM' en label legible, ej: 'Marzo 2026'
- */
 const mesALabel = (mesStr) => {
   const [anio, mes] = mesStr.split('-');
   return `${MESES[parseInt(mes, 10) - 1]} ${anio}`;
 };
 
-/**
- * getMesActual — devuelve el mes actual en formato 'YYYY-MM'
- */
 const getMesActual = () =>
-  new Date().toLocaleDateString('sv-SE', {
-    timeZone: 'America/Argentina/Buenos_Aires',
-  }).slice(0, 7);
+  new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' }).slice(0, 7);
 
-/**
- * desplazarMes — suma o resta meses a un string 'YYYY-MM'
- * @param {string} mesStr - 'YYYY-MM'
- * @param {number} delta  - +1 o -1
- */
 const desplazarMes = (mesStr, delta) => {
   const [anio, mes] = mesStr.split('-').map(Number);
   const fecha = new Date(anio, mes - 1 + delta, 1);
   return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
 };
 
-/**
- * formatMonto — formatea número como pesos argentinos, ej: $ 42.000
- */
 const formatMonto = (valor) =>
   `$ ${Number(valor).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-// ─── Ícono Excel (inline SVG) ─────────────────────────────────────────────────
 const ExcelIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -59,7 +37,6 @@ const ExcelIcon = () => (
   </svg>
 );
 
-// ─── Badge forma de pago ──────────────────────────────────────────────────────
 const BadgeFormaPago = ({ forma }) => {
   const estilos = forma === 'efectivo'
     ? { backgroundColor: '#e8f5e9', color: '#2e7d32' }
@@ -71,7 +48,77 @@ const BadgeFormaPago = ({ forma }) => {
   );
 };
 
-// ─── Modal de confirmación de eliminación ─────────────────────────────────────
+function ModalEditarVenta({ venta, form, onChange, onGuardar, onCancelar, guardando, errorEditar }) {
+  return (
+    <div style={styles.modalOverlay}>
+      <div style={{ ...styles.modalCard, width: '480px' }}>
+        <p style={styles.modalTitulo}>Editar venta</p>
+        <p style={styles.modalSubtitulo}>Fecha original: {venta.fecha}</p>
+
+        <div style={styles.formGrupo}>
+          <label style={styles.formLabel}>Producto</label>
+          <div style={styles.campoFijo}>{venta.producto_nombre}</div>
+        </div>
+
+        <div style={styles.formFila}>
+          <div style={{ ...styles.formGrupo, flex: 1 }}>
+            <label style={styles.formLabel}>Cantidad</label>
+            <input
+              type="number"
+              min="1"
+              style={styles.input}
+              value={form.cantidad}
+              onChange={e => onChange('cantidad', e.target.value)}
+            />
+          </div>
+          <div style={{ ...styles.formGrupo, flex: 1 }}>
+            <label style={styles.formLabel}>Precio unitario</label>
+            <div style={styles.campoFijo}>{formatMonto(form.precio_unitario)}</div>
+          </div>
+        </div>
+
+        <div style={styles.formGrupo}>
+          <label style={styles.formLabel}>Forma de pago</label>
+          <select
+            style={styles.select}
+            value={form.forma_pago}
+            onChange={e => onChange('forma_pago', e.target.value)}
+          >
+            <option value="efectivo">Efectivo</option>
+            <option value="mercado_pago">Mercado Pago</option>
+          </select>
+        </div>
+
+        {Number(form.cantidad) > 0 && (
+          <div style={styles.totalPreview}>
+            <span style={styles.totalPreviewLabel}>Total calculado</span>
+            <span style={styles.totalPreviewValor}>
+              {formatMonto(Number(form.cantidad) * Number(form.precio_unitario))}
+            </span>
+          </div>
+        )}
+
+        {errorEditar && (
+          <div style={styles.errorModal}>{errorEditar}</div>
+        )}
+
+        <div style={styles.modalBotones}>
+          <button style={styles.btnCancelar} onPointerDown={onCancelar} disabled={guardando}>
+            Cancelar
+          </button>
+          <button
+            style={{ ...styles.btnGuardar, ...(guardando ? styles.btnGuardarDeshabilitado : {}) }}
+            onPointerDown={onGuardar}
+            disabled={guardando}
+          >
+            {guardando ? 'Guardando...' : 'Guardar cambios'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ModalConfirmarEliminar({ venta, onConfirmar, onCancelar }) {
   return (
     <div style={styles.modalOverlay}>
@@ -104,19 +151,14 @@ function ModalConfirmarEliminar({ venta, onConfirmar, onCancelar }) {
         </div>
 
         <div style={styles.modalBotones}>
-          <button style={styles.btnCancelar} onPointerDown={onCancelar}>
-            Cancelar
-          </button>
-          <button style={styles.btnEliminarConfirm} onPointerDown={onConfirmar}>
-            Sí, eliminar
-          </button>
+          <button style={styles.btnCancelar} onPointerDown={onCancelar}>Cancelar</button>
+          <button style={styles.btnEliminarConfirm} onPointerDown={onConfirmar}>Sí, eliminar</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Componente principal ─────────────────────────────────────────────────────
 export default function SeccionVentas() {
   const [mes, setMes]                           = useState(getMesActual);
   const [ventas, setVentas]                     = useState([]);
@@ -126,8 +168,15 @@ export default function SeccionVentas() {
   const [error, setError]                       = useState(null);
   const [ventaAEliminar, setVentaAEliminar]     = useState(null);
   const [eliminando, setEliminando]             = useState(false);
+  const [ventaAEditar, setVentaAEditar]         = useState(null);
+  const [formEditar, setFormEditar]             = useState({});
+  const [guardando, setGuardando]               = useState(false);
+  const [errorEditar, setErrorEditar]           = useState(null);
 
-  // ── Carga de datos al cambiar de mes ──────────────────────────────────────
+  useEffect(() => {
+    console.log('[seccionVentas] montado');
+  }, []);
+
   useEffect(() => {
     const cargarVentas = async () => {
       console.log('[seccionVentas] cargarVentas — request recibido | mes:', mes);
@@ -151,7 +200,85 @@ export default function SeccionVentas() {
     cargarVentas();
   }, [mes]);
 
-  // ── Eliminar venta ────────────────────────────────────────────────────────
+  const abrirEditar = (v) => {
+    setErrorEditar(null);
+    setFormEditar({
+      producto_id:     v.producto_id,
+      cantidad:        v.cantidad,
+      precio_unitario: v.precio_unitario,
+      forma_pago:      v.forma_pago,
+    });
+    setVentaAEditar(v);
+  };
+
+  const handleChangeForm = (campo, valor) => {
+    setFormEditar(f => ({ ...f, [campo]: valor }));
+  };
+
+  const confirmarEditar = async () => {
+    const { id } = ventaAEditar;
+    console.log('[seccionVentas] confirmarEditar — request recibido | id:', id);
+
+    if (Number(formEditar.cantidad) <= 0 || Number(formEditar.precio_unitario) <= 0) {
+      setErrorEditar('Completá todos los campos correctamente.');
+      return;
+    }
+
+    setGuardando(true);
+    setErrorEditar(null);
+    try {
+      const res = await apiFetch(`/ventas/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          producto_id:     formEditar.producto_id,
+          cantidad:        Number(formEditar.cantidad),
+          precio_unitario: Number(formEditar.precio_unitario),
+          forma_pago:      formEditar.forma_pago,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Error del servidor');
+      }
+
+      const nuevoTotal = Number(formEditar.cantidad) * Number(formEditar.precio_unitario);
+
+      const nuevasVentas = ventas.map(v => v.id === id ? {
+        ...v,
+        cantidad:        Number(formEditar.cantidad),
+        precio_unitario: Number(formEditar.precio_unitario),
+        total:           nuevoTotal,
+        forma_pago:      formEditar.forma_pago,
+      } : v);
+
+      setVentas(nuevasVentas);
+
+      const totalGen = nuevasVentas.reduce((acc, v) => acc + Number(v.total), 0);
+      setTotalGeneral(totalGen);
+
+      const totalesMap = {};
+      nuevasVentas.forEach(v => {
+        if (!totalesMap[v.producto_nombre])
+          totalesMap[v.producto_nombre] = { cantidad_total: 0, monto_total: 0 };
+        totalesMap[v.producto_nombre].cantidad_total += Number(v.cantidad);
+        totalesMap[v.producto_nombre].monto_total    += Number(v.total);
+      });
+      const nuevosTotales = Object.entries(totalesMap)
+        .map(([nombre, vals]) => ({ producto_nombre: nombre, ...vals }))
+        .sort((a, b) => b.monto_total - a.monto_total);
+      setTotalesPorProd(nuevosTotales);
+
+      console.log('[seccionVentas] confirmarEditar — completado | id:', id);
+      setVentaAEditar(null);
+    } catch (err) {
+      console.error('[seccionVentas] Error en confirmarEditar:', err.message);
+      setErrorEditar(err.message || 'No se pudo editar la venta. Intentá de nuevo.');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
   const confirmarEliminar = async () => {
     const { id } = ventaAEliminar;
     console.log('[seccionVentas] confirmarEliminar — request recibido | id:', id);
@@ -161,12 +288,12 @@ export default function SeccionVentas() {
       if (!res.ok) throw new Error('Error del servidor');
       const nuevasVentas = ventas.filter(v => v.id !== id);
       setVentas(nuevasVentas);
-      // Recalcular totales localmente tras eliminar
       const nuevoTotal = nuevasVentas.reduce((acc, v) => acc + Number(v.total), 0);
       setTotalGeneral(nuevoTotal);
       const totalesMap = {};
       nuevasVentas.forEach(v => {
-        if (!totalesMap[v.producto_nombre]) totalesMap[v.producto_nombre] = { cantidad_total: 0, monto_total: 0 };
+        if (!totalesMap[v.producto_nombre])
+          totalesMap[v.producto_nombre] = { cantidad_total: 0, monto_total: 0 };
         totalesMap[v.producto_nombre].cantidad_total += Number(v.cantidad);
         totalesMap[v.producto_nombre].monto_total    += Number(v.total);
       });
@@ -177,19 +304,12 @@ export default function SeccionVentas() {
       console.log('[seccionVentas] confirmarEliminar — completado | id:', id);
     } catch (err) {
       console.error('[seccionVentas] Error en confirmarEliminar:', err.message);
-      alert('No se pudo eliminar la venta. Intentá de nuevo.');
     } finally {
       setEliminando(false);
       setVentaAEliminar(null);
     }
   };
 
-  // ── Exportar Excel ────────────────────────────────────────────────────────
-  /**
-   * exportarExcel — genera un .xlsx con dos hojas:
-   *   "Ventas": tabla de movimientos del mes
-   *   "Totales": resumen por producto
-   */
   const exportarExcel = () => {
     const wb = XLSX.utils.book_new();
     const filas = ventas.map(v => ({
@@ -202,9 +322,9 @@ export default function SeccionVentas() {
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Ventas');
     const filasTotales = totalesPorProducto.map(t => ({
-      Producto:              t.producto_nombre,
-      'Unidades vendidas':   Number(t.cantidad_total),
-      Total:                 Number(t.monto_total),
+      Producto:             t.producto_nombre,
+      'Unidades vendidas':  Number(t.cantidad_total),
+      Total:                Number(t.monto_total),
     }));
     filasTotales.push({
       Producto:            'TOTAL GENERAL',
@@ -216,11 +336,21 @@ export default function SeccionVentas() {
     console.log('[seccionVentas] exportarExcel — completado | mes:', mes);
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={styles.contenedor}>
 
-      {/* ── Modal de confirmación ── */}
+      {ventaAEditar && (
+        <ModalEditarVenta
+          venta={ventaAEditar}
+          form={formEditar}
+          onChange={handleChangeForm}
+          onGuardar={confirmarEditar}
+          onCancelar={() => setVentaAEditar(null)}
+          guardando={guardando}
+          errorEditar={errorEditar}
+        />
+      )}
+
       {ventaAEliminar && (
         <ModalConfirmarEliminar
           venta={ventaAEliminar}
@@ -229,17 +359,13 @@ export default function SeccionVentas() {
         />
       )}
 
-      {/* ── Encabezado ── */}
       <div style={styles.encabezado}>
         <div>
           <h2 style={styles.titulo}>Ventas</h2>
           <p style={styles.subtitulo}>Productos vendidos por mes</p>
         </div>
         <button
-          style={{
-            ...styles.btnExportar,
-            ...(ventas.length === 0 ? styles.btnExportarDeshabilitado : {}),
-          }}
+          style={{ ...styles.btnExportar, ...(ventas.length === 0 ? styles.btnExportarDeshabilitado : {}) }}
           onPointerDown={exportarExcel}
           disabled={ventas.length === 0}
         >
@@ -247,25 +373,16 @@ export default function SeccionVentas() {
         </button>
       </div>
 
-      {/* ── Selector de mes ── */}
       <div style={styles.selectorMes}>
-        <button style={styles.btnMes} onPointerDown={() => setMes(m => desplazarMes(m, -1))}>
-          ‹
-        </button>
+        <button style={styles.btnMes} onPointerDown={() => setMes(m => desplazarMes(m, -1))}>‹</button>
         <span style={styles.labelMes}>{mesALabel(mes)}</span>
         <button
-          style={{
-            ...styles.btnMes,
-            ...(mes >= getMesActual() ? styles.btnMesDeshabilitado : {}),
-          }}
+          style={{ ...styles.btnMes, ...(mes >= getMesActual() ? styles.btnMesDeshabilitado : {}) }}
           onPointerDown={() => setMes(m => desplazarMes(m, +1))}
           disabled={mes >= getMesActual()}
-        >
-          ›
-        </button>
+        >›</button>
       </div>
 
-      {/* ── Estado: cargando ── */}
       {cargando && (
         <div style={styles.estadoCentrado}>
           <div style={styles.spinner} />
@@ -273,19 +390,16 @@ export default function SeccionVentas() {
         </div>
       )}
 
-      {/* ── Estado: error ── */}
       {!cargando && error && (
         <div style={styles.errorBox}>{error}</div>
       )}
 
-      {/* ── Estado: sin datos ── */}
       {!cargando && !error && ventas.length === 0 && (
         <div style={styles.estadoCentrado}>
           <p style={styles.estadoTexto}>No hay ventas de productos registradas en {mesALabel(mes)}.</p>
         </div>
       )}
 
-      {/* ── Tabla de ventas ── */}
       {!cargando && !error && ventas.length > 0 && (
         <>
           <div style={styles.tablaWrapper}>
@@ -311,18 +425,22 @@ export default function SeccionVentas() {
                     <td style={{ ...styles.td, fontWeight: '600', color: '#1a7a4a', whiteSpace: 'nowrap' }}>
                       {formatMonto(v.total)}
                     </td>
-                    <td style={styles.td}>
-                      <BadgeFormaPago forma={v.forma_pago} />
-                    </td>
+                    <td style={styles.td}><BadgeFormaPago forma={v.forma_pago} /></td>
                     <td style={styles.tdAccion}>
-                      <button
-                        style={styles.btnX}
-                        onPointerDown={() => setVentaAEliminar(v)}
-                        disabled={eliminando}
-                        aria-label="Eliminar venta"
-                      >
-                        ✕
-                      </button>
+                      <div style={styles.accionBotones}>
+                        <button
+                          style={styles.btnEditar}
+                          onPointerDown={() => abrirEditar(v)}
+                          disabled={eliminando || guardando}
+                          aria-label="Editar venta"
+                        >✎</button>
+                        <button
+                          style={styles.btnX}
+                          onPointerDown={() => setVentaAEliminar(v)}
+                          disabled={eliminando || guardando}
+                          aria-label="Eliminar venta"
+                        >✕</button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -330,9 +448,7 @@ export default function SeccionVentas() {
               <tfoot>
                 <tr style={styles.filaTotalGeneral}>
                   <td colSpan={4} style={{ ...styles.tdTotal, textAlign: 'left' }}>Total del mes</td>
-                  <td style={{ ...styles.tdTotal, color: '#1a7a4a' }}>
-                    {formatMonto(totalGeneral)}
-                  </td>
+                  <td style={{ ...styles.tdTotal, color: '#1a7a4a' }}>{formatMonto(totalGeneral)}</td>
                   <td style={styles.tdTotal} />
                   <td style={styles.tdTotal} />
                 </tr>
@@ -340,7 +456,6 @@ export default function SeccionVentas() {
             </table>
           </div>
 
-          {/* ── Tabla de totales por producto ── */}
           <div style={styles.totalesWrapper}>
             <h3 style={styles.tituloTotales}>Resumen del mes</h3>
             <table style={styles.tablaTotales}>
@@ -379,25 +494,17 @@ export default function SeccionVentas() {
   );
 }
 
-// ─── Estilos ──────────────────────────────────────────────────────────────────
 const styles = {
   contenedor: {
     padding: '32px 36px',
     fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
-    //maxWidth: '1100px',
   },
-
-  // Encabezado
   encabezado: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
     marginBottom: '24px',
   },
-  titulo: {
-    fontSize: '24px', fontWeight: '700', color: '#111', margin: '0 0 4px',
-  },
-  subtitulo: {
-    fontSize: '14px', color: '#888', margin: 0,
-  },
+  titulo:    { fontSize: '24px', fontWeight: '700', color: '#111', margin: '0 0 4px' },
+  subtitulo: { fontSize: '14px', color: '#888', margin: 0 },
   btnExportar: {
     display: 'flex', alignItems: 'center',
     padding: '10px 18px', borderRadius: '10px',
@@ -405,11 +512,7 @@ const styles = {
     color: '#1a7a4a', fontSize: '14px', fontWeight: '600',
     cursor: 'pointer', fontFamily: 'inherit',
   },
-  btnExportarDeshabilitado: {
-    borderColor: '#e0e0e0', color: '#bbb', cursor: 'not-allowed',
-  },
-
-  // Selector de mes — centrado
+  btnExportarDeshabilitado: { borderColor: '#e0e0e0', color: '#bbb', cursor: 'not-allowed' },
   selectorMes: {
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px',
     marginBottom: '28px',
@@ -418,65 +521,56 @@ const styles = {
     width: '36px', height: '36px', borderRadius: '8px',
     border: '1.5px solid #e0e0e0', backgroundColor: '#fff',
     fontSize: '20px', color: '#333', cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    lineHeight: 1,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
   },
-  btnMesDeshabilitado: {
-    color: '#ccc', cursor: 'not-allowed', borderColor: '#f0f0f0',
-  },
+  btnMesDeshabilitado: { color: '#ccc', cursor: 'not-allowed', borderColor: '#f0f0f0' },
   labelMes: {
     fontSize: '17px', fontWeight: '600', color: '#111',
     minWidth: '160px', textAlign: 'center',
   },
-
-  // Tabla principal
   tablaWrapper: {
     borderRadius: '12px', border: '1.5px solid #eeeeee',
-    overflow: 'hidden', marginBottom: '32px',
-    overflowX: 'auto',
+    overflow: 'hidden', marginBottom: '32px', overflowX: 'auto',
   },
-  tabla: {
-    width: '100%', borderCollapse: 'collapse', fontSize: '14px',
-  },
+  tabla:    { width: '100%', borderCollapse: 'collapse', fontSize: '14px' },
   th: {
     padding: '13px 16px', backgroundColor: '#fafafa',
     color: '#888', fontWeight: '600', fontSize: '11px',
     textTransform: 'uppercase', letterSpacing: '0.07em',
-    textAlign: 'left', borderBottom: '1.5px solid #eeeeee',
-    whiteSpace: 'nowrap',
+    textAlign: 'left', borderBottom: '1.5px solid #eeeeee', whiteSpace: 'nowrap',
   },
   thAccion: {
-    padding: '13px 16px', width: '48px',
+    padding: '13px 12px', width: '80px',
     borderBottom: '1.5px solid #eeeeee', backgroundColor: '#fafafa',
   },
   td: {
     padding: '13px 16px', color: '#333',
-    borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle',
-    fontSize: '14px',
+    borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle', fontSize: '14px',
   },
   tdAccion: {
-    padding: '8px 12px', textAlign: 'center',
-    borderBottom: '1px solid #f0f0f0',
+    padding: '8px 12px', borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle',
+  },
+  accionBotones: {
+    display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'center',
   },
   filaImpar: { backgroundColor: '#ffffff' },
   filaPar:   { backgroundColor: '#fafafa' },
-
-  // Botón X — idéntico a SeccionCaja y SeccionGastos
+  btnEditar: {
+    width: '30px', height: '30px', borderRadius: '8px',
+    border: '1.5px solid #c5dcf5', backgroundColor: '#f0f6ff',
+    color: '#1565c0', fontSize: '15px', cursor: 'pointer',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+  },
   btnX: {
     width: '30px', height: '30px', borderRadius: '8px',
     border: '1.5px solid #f5c6c6', backgroundColor: '#fff5f5',
     color: '#c0392b', fontSize: '13px', cursor: 'pointer',
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    lineHeight: 1,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
   },
-
-  // Badge forma de pago
   badge: {
     display: 'inline-block', padding: '3px 10px',
     borderRadius: '20px', fontSize: '12px', fontWeight: '600',
   },
-
-  // Tabla totales
   totalesWrapper: {
     borderRadius: '12px', border: '1.5px solid #eeeeee',
     overflow: 'hidden', maxWidth: '520px',
@@ -486,41 +580,32 @@ const styles = {
     margin: '0', padding: '14px 16px', backgroundColor: '#fafafa',
     borderBottom: '1.5px solid #eeeeee',
   },
-  tablaTotales: {
-    width: '100%', borderCollapse: 'collapse', fontSize: '14px',
-  },
-  filaTotalGeneral: {
-    backgroundColor: '#f0faf5', borderTop: '2px solid #e8e8e8',
-  },
-  tdTotal: {
-    padding: '14px 16px', fontWeight: '700', fontSize: '15px', color: '#111',
-  },
-
-  // Estados
+  tablaTotales:     { width: '100%', borderCollapse: 'collapse', fontSize: '14px' },
+  filaTotalGeneral: { backgroundColor: '#f0faf5', borderTop: '2px solid #e8e8e8' },
+  tdTotal:          { padding: '14px 16px', fontWeight: '700', fontSize: '15px', color: '#111' },
   estadoCentrado: {
     display: 'flex', flexDirection: 'column', alignItems: 'center',
     justifyContent: 'center', padding: '60px 0', gap: '16px',
   },
-  estadoTexto: {
-    fontSize: '15px', color: '#888', margin: 0,
-  },
+  estadoTexto: { fontSize: '15px', color: '#888', margin: 0 },
   errorBox: {
     padding: '16px 20px', borderRadius: '10px',
     backgroundColor: '#fdecea', color: '#c0392b',
     fontSize: '14px', marginBottom: '16px',
+  },
+  errorModal: {
+    padding: '10px 14px', borderRadius: '8px',
+    backgroundColor: '#fdecea', color: '#c0392b',
+    fontSize: '13px', marginBottom: '16px', textAlign: 'center',
   },
   spinner: {
     width: '32px', height: '32px', borderRadius: '50%',
     border: '3px solid #e8e8e8', borderTopColor: '#1a7a4a',
     animation: 'spin 0.8s linear infinite',
   },
-
-  // Modal — idéntico a SeccionCaja y SeccionGastos
   modalOverlay: {
-    position: 'fixed', inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    zIndex: 1000,
+    position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
   },
   modalCard: {
     backgroundColor: '#ffffff', borderRadius: '20px',
@@ -532,20 +617,20 @@ const styles = {
     fontSize: '20px', fontWeight: '700', color: '#111111',
     margin: '0 0 6px', textAlign: 'center',
   },
+  modalSubtitulo: {
+    fontSize: '13px', color: '#888', textAlign: 'center', margin: '0 0 20px',
+  },
   modalAdvertencia: {
-    fontSize: '13px', color: '#c0392b', textAlign: 'center',
-    margin: '0 0 24px',
+    fontSize: '13px', color: '#c0392b', textAlign: 'center', margin: '0 0 24px',
   },
   modalDetalle: {
     backgroundColor: '#fafafa', borderRadius: '12px',
     border: '1.5px solid #eeeeee', padding: '16px 20px',
     marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '10px',
   },
-  modalFila: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-  },
-  modalLabel: { fontSize: '13px', color: '#888888' },
-  modalValor: { fontSize: '14px', color: '#111111', fontWeight: '600' },
+  modalFila:    { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  modalLabel:   { fontSize: '13px', color: '#888888' },
+  modalValor:   { fontSize: '14px', color: '#111111', fontWeight: '600' },
   modalDivider: { height: '1px', backgroundColor: '#eeeeee' },
   modalBotones: { display: 'flex', gap: '12px' },
   btnCancelar: {
@@ -559,5 +644,43 @@ const styles = {
     border: 'none', backgroundColor: '#c0392b',
     color: '#ffffff', fontSize: '15px', fontWeight: '600',
     cursor: 'pointer', fontFamily: 'inherit',
+  },
+  formGrupo:   { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' },
+  formFila:    { display: 'flex', gap: '12px' },
+  formLabel: {
+    fontSize: '11px', fontWeight: '600', color: '#666',
+    textTransform: 'uppercase', letterSpacing: '0.05em',
+  },
+  input: {
+    padding: '10px 14px', borderRadius: '8px',
+    border: '1.5px solid #e0e0e0', fontSize: '14px',
+    fontFamily: 'inherit', color: '#111', outline: 'none',
+    width: '100%', boxSizing: 'border-box',
+  },
+  select: {
+    padding: '10px 14px', borderRadius: '8px',
+    border: '1.5px solid #e0e0e0', fontSize: '14px',
+    fontFamily: 'inherit', color: '#111', outline: 'none',
+    backgroundColor: '#fff', width: '100%', boxSizing: 'border-box',
+  },
+  totalPreview: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '12px 16px', borderRadius: '10px',
+    backgroundColor: '#f0faf5', border: '1.5px solid #c8e6d4',
+    marginBottom: '20px',
+  },
+  totalPreviewLabel: { fontSize: '13px', color: '#555', fontWeight: '500' },
+  totalPreviewValor: { fontSize: '17px', fontWeight: '700', color: '#1a7a4a' },
+  btnGuardar: {
+    flex: 1, padding: '13px 0', borderRadius: '12px',
+    border: 'none', backgroundColor: '#1a7a4a',
+    color: '#ffffff', fontSize: '15px', fontWeight: '600',
+    cursor: 'pointer', fontFamily: 'inherit',
+  },
+  btnGuardarDeshabilitado: { backgroundColor: '#a8cdb8', cursor: 'not-allowed' },
+  campoFijo: {
+    padding: '10px 14px', borderRadius: '8px',
+    border: '1.5px solid #f0f0f0', backgroundColor: '#fafafa',
+    fontSize: '14px', color: '#555', fontFamily: 'inherit',
   },
 };
