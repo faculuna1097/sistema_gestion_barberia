@@ -1,8 +1,12 @@
 // /frontend/src/screens/flows/FlujoCorte.jsx
-// Flujo para registrar un nuevo corte. 4 pasos (sin pantalla de confirmación inicial).
-// Datos recibidos como props desde App.jsx (precargados al arrancar la app).
+// Flujo para registrar un nuevo corte. 4 pasos + confirmación.
+// Efectos UX implementados:
+//   (A) PressButton   — scale-down sutil al tocar, spring-back al soltar
+//   (B) BarraProgreso — barra verde animada que avanza con cada paso
+//   (C) navigate()    — transición slide + fade entre pasos (3 fases: salida → snap → entrada)
+//   (D) PantallaExito — checkmark SVG animado + filas del resumen con stagger
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { registrarCorte } from "../../services/api";
 
 // ─── CONFIGURACIÓN DE TAMAÑOS ─────────────────────────────────────────────────
@@ -22,66 +26,219 @@ const ArrowLeftIcon = () => (
   </svg>
 );
 
-// ─── Layout compartido por todos los pasos ────────────────────────────────────
-const PasoLayout = ({ paso, total, titulo, subtitulo, onVolver, children }) => (
-  <div style={styles.pantalla}>
-    <div style={styles.lineaSuperior} />
-    <div style={styles.header}>
-      <button style={styles.btnVolver} onClick={onVolver} aria-label="Volver">
-        <ArrowLeftIcon />
-      </button>
-      <span style={styles.indicadorPaso}>Paso {paso} de {total}</span>
-      <div style={{ width: 56 }} />
-    </div>
-    <div style={styles.tituloArea}>
-      <h1 style={styles.titulo}>{titulo}</h1>
-      {subtitulo && <p style={styles.subtitulo}>{subtitulo}</p>}
-    </div>
-    <div style={styles.contenido}>{children}</div>
+// ─── (B) Barra de progreso animada ───────────────────────────────────────────
+// Reemplaza la línea verde estática. Se llena suavemente con cada paso.
+// Usada tanto en PasoLayout como en PantallaExito.
+const BarraProgreso = ({ paso, total }) => (
+  <div style={{
+    position: "absolute", top: 0, left: 0, right: 0, height: "4px",
+    backgroundColor: "#e8f5ee",
+  }}>
+    <div style={{
+      height: "100%",
+      width: `${(paso / total) * 100}%`,
+      background: "linear-gradient(90deg, #1a7a4a, #2dba6e 50%, #1a7a4a)",
+      transition: "width 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+    }} />
   </div>
 );
 
+// ─── (A) Botón con press effect sutil ────────────────────────────────────────
+// Scale-down leve (0.96) al tocar, spring-back suave al soltar.
+// Reemplaza todos los <button> con acciones en el flujo.
+// Acepta los mismos props que un <button> nativo.
+const PressButton = ({ style, onPointerDown, children, disabled, ...props }) => {
+  const [pressed, setPressed] = useState(false);
+  return (
+    <button
+      style={{
+        ...style,
+        transform: pressed ? "scale(0.96)" : "scale(1)",
+        transition: pressed
+          ? "transform 0.06s ease-out"
+          : "transform 0.2s cubic-bezier(0.25, 1.1, 0.5, 1)",
+        willChange: "transform",
+      }}
+      onPointerDown={(e) => {
+        if (!disabled) setPressed(true);
+        onPointerDown?.(e);
+      }}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      disabled={disabled}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+};
+
+// ─── Layout compartido por todos los pasos ────────────────────────────────────
+// slideStyle se aplica al pantallaInner (wrapper interno) para que la barra
+// de progreso quede fija en el top y solo el contenido participe del slide.
+const PasoLayout = ({ paso, total, titulo, subtitulo, onVolver, children, slideStyle }) => (
+  <div style={styles.pantalla}>
+    <BarraProgreso paso={paso} total={total} />
+    <div style={{ ...styles.pantallaInner, ...slideStyle }}>
+      <div style={styles.header}>
+        <button style={styles.btnVolver} onClick={onVolver} aria-label="Volver">
+          <ArrowLeftIcon />
+        </button>
+        <span style={styles.indicadorPaso}>Paso {paso} de {total}</span>
+        <div style={{ width: 56 }} />
+      </div>
+      <div style={styles.tituloArea}>
+        <h1 style={styles.titulo}>{titulo}</h1>
+        {subtitulo && <p style={styles.subtitulo}>{subtitulo}</p>}
+      </div>
+      <div style={styles.contenido}>{children}</div>
+    </div>
+  </div>
+);
+
+// ─── (D) Pantalla de éxito animada ───────────────────────────────────────────
+// Al montarse dispara 3 animaciones encadenadas:
+//   1. Círculo SVG se dibuja (stroke-dashoffset 0.5s)
+//   2. Checkmark SVG se dibuja (stroke-dashoffset 0.35s, con delay)
+//   3. Filas del resumen aparecen en stagger (opacity + translateY, 70ms entre cada una)
+const PantallaExito = ({ montoTotal }) => {
+  const [circleDrawn, setCircleDrawn] = useState(false);
+  const [checkDrawn,  setCheckDrawn]  = useState(false);
+
+  useEffect(() => {
+    console.log('[flujoCorte] PantallaExito — iniciando animaciones | total:', montoTotal);
+    const t1 = setTimeout(() => setCircleDrawn(true), 60);
+    const t2 = setTimeout(() => setCheckDrawn(true),  520);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  const CIRCLE_LEN = 214; // 2π × r(34) ≈ 213.6 → redondeado a 214
+  const CHECK_LEN  = 52;  // largo aproximado del path M24 40 L35 52 L57 28
+
+  return (
+    <div style={{ ...styles.pantallaCentrada, position: "relative" }}>
+      <BarraProgreso paso={5} total={5} />
+
+      <svg width="80" height="80" viewBox="0 0 80 80" style={{ marginBottom: 24 }}>
+        {/* Track: círculo de fondo fijo */}
+        <circle cx="40" cy="40" r="34" fill="none" stroke="#e8f5ee" strokeWidth="3" />
+        {/* Círculo animado que se dibuja */}
+        <circle
+          cx="40" cy="40" r="34"
+          fill="none" stroke="#1a7a4a" strokeWidth="3" strokeLinecap="round"
+          strokeDasharray={CIRCLE_LEN}
+          strokeDashoffset={circleDrawn ? 0 : CIRCLE_LEN}
+          transform="rotate(-90 40 40)"
+          style={{ transition: circleDrawn ? "stroke-dashoffset 0.5s ease-out" : "none" }}
+        />
+        {/* Checkmark animado */}
+        <path
+          d="M24 40 L35 52 L57 28"
+          fill="none" stroke="#1a7a4a" strokeWidth="3.5"
+          strokeLinecap="round" strokeLinejoin="round"
+          strokeDasharray={CHECK_LEN}
+          strokeDashoffset={checkDrawn ? 0 : CHECK_LEN}
+          style={{ transition: checkDrawn ? "stroke-dashoffset 0.35s ease-out" : "none" }}
+        />
+      </svg>
+
+      <p style={styles.exitoTexto}>¡Corte registrado!</p>
+      <p style={styles.exitoMonto}>$ {montoTotal.toLocaleString("es-AR")}</p>
+    </div>
+  );
+};
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function FlujoCorte({ onVolver, barberos, servicios }) {
-  console.log('[flujoCorte] render — barberos:', barberos.length, '| servicios:', servicios.length);
+  console.log('[flujoCorte] montado — barberos:', barberos.length, '| servicios:', servicios.length);
+
   const [paso, setPaso] = useState(1);
 
-  const [barberoSeleccionado, setBarberoSeleccionado] = useState(null);
+  // ── (C) Estado de animación slide ───────────────────────────────────────────
+  // slideStyle se inyecta en PasoLayout → pantallaInner para animar la transición.
+  // navigatingRef bloquea doble-tap durante la animación.
+  const [slideStyle,   setSlideStyle]   = useState({});
+  const navigatingRef = useRef(false);
+
+  // ── Estado del formulario ────────────────────────────────────────────────────
+  const [barberoSeleccionado,  setBarberoSeleccionado]  = useState(null);
   const [servicioSeleccionado, setServicioSeleccionado] = useState(null);
-  const [formaPago, setFormaPago] = useState(null);
+  const [formaPago,    setFormaPago]    = useState(null);
   const [tienePropina, setTienePropina] = useState(null);
   const [montoPropina, setMontoPropina] = useState("");
+  const [enviando,     setEnviando]     = useState(false);
+  const [error,        setError]        = useState(null);
+  const [exito,        setExito]        = useState(false);
 
-  const [enviando, setEnviando] = useState(false);
-  const [error, setError] = useState(null);
-  const [exito, setExito] = useState(false);
+  // ── Cálculos ─────────────────────────────────────────────────────────────────
+  const propinaFinal = tienePropina && montoPropina ? Number(montoPropina) : 0;
+  const montoTotal   = (servicioSeleccionado ? Number(servicioSeleccionado.precio) : 0) + propinaFinal;
 
-  // ── Navegación ──────────────────────────────────────────────────────────────
+  // ── (C) navigate — transición slide en 3 fases ───────────────────────────────
+  // Fase 1 (150ms): contenido actual sale deslizando + fade out
+  // Fase 2 (0ms):   nuevo paso se renderiza posicionado del lado opuesto (sin transición)
+  // Fase 3 (200ms): nuevo contenido entra al centro con spring + fade in
+  // @param {number} nuevoPaso — paso destino
+  // @param {1|-1}  dir        — 1 = avanzar (sale por izquierda), -1 = retroceder (sale por derecha)
+  const navigate = (nuevoPaso, dir) => {
+    if (navigatingRef.current) return;
+    navigatingRef.current = true;
 
-  const avanzar = () => {
-    setPaso((p) => p + 1);
+    // Fase 1 — salida
+    setSlideStyle({
+      transform:  `translateX(${dir === 1 ? "-30px" : "30px"})`,
+      opacity:    0,
+      transition: "transform 0.15s ease-in, opacity 0.13s ease-in",
+    });
+
+    setTimeout(() => {
+      // Fase 2 — snap: actualizar paso + posicionar en el lado de entrada (sin animación)
+      // React 18 batchea estos dos setState en un solo render
+      setPaso(nuevoPaso);
+      setSlideStyle({
+        transform:  `translateX(${dir === 1 ? "30px" : "-30px"})`,
+        opacity:    0,
+        transition: "none",
+      });
+
+      // Fase 3 — entrada: doble rAF para garantizar que el browser pintó la pos. inicial
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        setSlideStyle({
+          transform:  "translateX(0)",
+          opacity:    1,
+          transition: "transform 0.2s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.18s ease-out",
+        });
+        setTimeout(() => {
+          navigatingRef.current = false;
+          setSlideStyle({});
+        }, 210);
+      }));
+    }, 150);
   };
 
-  /**
-   * retroceder — vuelve al paso anterior con lógica especial para propina.
-   */
+  const avanzar = () => navigate(paso + 1,  1);
+
   const retroceder = () => {
-    if (paso === 1) {
-      onVolver();
+    if (paso === 1) { onVolver(); return; }
+
+    // Si estamos en el input de monto → volver a Sí/No sin cambiar de paso
+    if (paso === 4 && tienePropina !== null) {
+      console.log('[flujoCorte] retroceder — volviendo a selección propina sí/no');
+      setTienePropina(null);
+      setMontoPropina("");
       return;
     }
+
     if (paso === 5) {
       console.log('[flujoCorte] retroceder — reseteando propina');
       setTienePropina(null);
       setMontoPropina("");
     }
-    console.log('[flujoCorte] retroceder — paso:', paso, '→', paso - 1);
-    setPaso((p) => p - 1);
-  };
 
-  // ── Cálculos ────────────────────────────────────────────────────────────────
-  const propinaFinal = tienePropina && montoPropina ? Number(montoPropina) : 0;
-  const montoTotal = (servicioSeleccionado ? Number(servicioSeleccionado.precio) : 0) + propinaFinal;
+    console.log('[flujoCorte] retroceder — paso:', paso, '→', paso - 1);
+    navigate(paso - 1, -1);
+  };
 
   // ── Envío ───────────────────────────────────────────────────────────────────
   const confirmarCorte = async () => {
@@ -101,7 +258,7 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
       setTimeout(() => {
         console.log('[flujoCorte] confirmarCorte — redirigiendo a pantalla principal');
         onVolver();
-      }, 2000);
+      }, 2500);
     } catch (err) {
       console.error('[flujoCorte] Error en confirmarCorte:', err.message);
       setError("Error al guardar el corte. Intentá de nuevo.");
@@ -114,22 +271,19 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
   if (exito) {
     console.log('[flujoCorte] exito — monto total:', montoTotal);
     return (
-      <div style={styles.pantallaCentrada}>
-        <div style={styles.lineaSuperior} />
-        <div style={styles.exitoIcono}>✓</div>
-        <p style={styles.exitoTexto}>¡Corte registrado!</p>
-        <p style={styles.exitoMonto}>$ {montoTotal.toLocaleString("es-AR")}</p>
-      </div>
+      <PantallaExito
+        montoTotal={montoTotal}
+      />
     );
   }
 
   // ─── PASO 1 — Selección de barbero ──────────────────────────────────────────
   if (paso === 1) {
     return (
-      <PasoLayout paso={1} total={5} titulo="Seleccione el barbero" onVolver={retroceder}>
+      <PasoLayout paso={1} total={5} titulo="Seleccione el barbero" onVolver={retroceder} slideStyle={slideStyle}>
         <div style={styles.gridOpciones}>
           {barberos.map((b) => (
-            <button
+            <PressButton
               key={b.id}
               style={{
                 ...styles.btnOpcion,
@@ -142,7 +296,7 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
               }}
             >
               {b.nombre}
-            </button>
+            </PressButton>
           ))}
         </div>
       </PasoLayout>
@@ -152,10 +306,10 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
   // ─── PASO 2 — Selección de servicio ──────────────────────────────────────────
   if (paso === 2) {
     return (
-      <PasoLayout paso={2} total={5} titulo="Seleccione el servicio" onVolver={retroceder}>
+      <PasoLayout paso={2} total={5} titulo="Seleccione el servicio" onVolver={retroceder} slideStyle={slideStyle}>
         <div style={styles.gridOpciones}>
           {servicios.map((s) => (
-            <button
+            <PressButton
               key={s.id}
               style={{
                 ...styles.btnOpcion,
@@ -171,7 +325,7 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
               <span style={styles.precioServicio}>
                 $ {Number(s.precio).toLocaleString("es-AR")}
               </span>
-            </button>
+            </PressButton>
           ))}
         </div>
       </PasoLayout>
@@ -179,67 +333,65 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
   }
 
   // ─── PASO 3 — Forma de pago ──────────────────────────────────────────────────
-if (paso === 3) {
-  return (
-    <PasoLayout paso={3} total={5} titulo="Seleccione el medio de pago" onVolver={retroceder}>
-      <div style={styles.gridDos}>
-        {[
-          { key: "efectivo", label: "Efectivo", icono: <span style={styles.emoji}>💵</span> },
-          {
-            key: "mercado_pago", label: "Mercado Pago", icono: (
-              <img
-                src="/mercadopago.png"
-                alt="Mercado Pago"
-                style={styles.mpLogo}
-                onError={(e) => { e.target.style.display = "none"; }}
-              />
-            )
-          },
-        ].map((op) => (
-          <button
-            key={op.key}
-            style={{
-              ...styles.btnOpcionGrande,
-              ...(formaPago === op.key ? styles.btnOpcionActivo : {}),
-            }}
-            onPointerDown={() => {
-              console.log('[flujoCorte] paso 3 — forma de pago:', op.key);
-              setFormaPago(op.key);
-              avanzar();
-            }}
-          >
-            {op.icono}
-            <span>{op.label}</span>
-          </button>
-        ))}
-      </div>
-    </PasoLayout>
-  );
-}
+  if (paso === 3) {
+    return (
+      <PasoLayout paso={3} total={5} titulo="Seleccione el medio de pago" onVolver={retroceder} slideStyle={slideStyle}>
+        <div style={styles.gridDos}>
+          {[
+            { key: "efectivo",     label: "Efectivo",     icono: <span style={styles.emoji}>💵</span> },
+            { key: "mercado_pago", label: "Mercado Pago", icono: (
+                <img
+                  src="/mercadopago.png"
+                  alt="Mercado Pago"
+                  style={styles.mpLogo}
+                  onError={(e) => { e.target.style.display = "none"; }}
+                />
+              )
+            },
+          ].map((op) => (
+            <PressButton
+              key={op.key}
+              style={{
+                ...styles.btnOpcionGrande,
+                ...(formaPago === op.key ? styles.btnOpcionActivo : {}),
+              }}
+              onPointerDown={() => {
+                console.log('[flujoCorte] paso 3 — forma de pago:', op.key);
+                setFormaPago(op.key);
+                avanzar();
+              }}
+            >
+              {op.icono}
+              <span>{op.label}</span>
+            </PressButton>
+          ))}
+        </div>
+      </PasoLayout>
+    );
+  }
 
   // ─── PASO 4 — Propina ────────────────────────────────────────────────────────
   if (paso === 4) {
     return (
-      <PasoLayout paso={4} total={5} titulo="¿Propina?" onVolver={retroceder}>
+      <PasoLayout paso={4} total={5} titulo="¿Propina?" onVolver={retroceder} slideStyle={slideStyle}>
         {tienePropina === null ? (
           <div style={styles.gridDos}>
-            <button style={styles.btnOpcionGrande}
+            <PressButton style={styles.btnOpcionGrande}
               onPointerDown={() => {
                 console.log('[flujoCorte] paso 4 — propina: sí');
                 setTienePropina(true);
               }}>
               <span style={styles.emoji}>✅</span>
               <span>Sí</span>
-            </button>
-            <button style={styles.btnOpcionGrande}
+            </PressButton>
+            <PressButton style={styles.btnOpcionGrande}
               onPointerDown={() => {
                 console.log('[flujoCorte] paso 4 — propina: no');
-                setTienePropina(false);
                 avanzar();
               }}>
               <span style={styles.emoji}>❌</span>
               <span>No</span>
-            </button>
+            </PressButton>
           </div>
         ) : (
           <div style={styles.propinaContainer}>
@@ -250,27 +402,26 @@ if (paso === 3) {
                 type="number"
                 min="0"
                 value={montoPropina}
-                onChange={(e) => {
-                  setMontoPropina(e.target.value);
-                }}
+                onChange={(e) => setMontoPropina(e.target.value)}
                 placeholder="0"
                 style={styles.propinaInput}
                 autoFocus
               />
             </div>
-            <button
+            <PressButton
               style={{
                 ...styles.btnContinuar,
                 ...(montoPropina === "" ? styles.btnDeshabilitado : {}),
               }}
               onPointerDown={() => {
+                if (montoPropina === "") return;
                 console.log('[flujoCorte] paso 4 — propina confirmada | monto:', montoPropina);
                 avanzar();
               }}
               disabled={montoPropina === ""}
             >
               Continuar
-            </button>
+            </PressButton>
           </div>
         )}
       </PasoLayout>
@@ -280,9 +431,9 @@ if (paso === 3) {
   // ─── PASO 5 — Resumen y confirmación ─────────────────────────────────────────
   if (paso === 5) {
     console.log('[flujoCorte] paso 5 — resumen | barbero:', barberoSeleccionado?.nombre,
-     '| servicio:', servicioSeleccionado?.nombre, '| total:', montoTotal);
+      '| servicio:', servicioSeleccionado?.nombre, '| total:', montoTotal);
     return (
-      <PasoLayout paso={5} total={5} titulo="Confirmá el corte" onVolver={retroceder}>
+      <PasoLayout paso={5} total={5} titulo="Confirmá el corte" onVolver={retroceder} slideStyle={slideStyle}>
         <div style={styles.resumenCard}>
 
           <div style={styles.resumenFila}>
@@ -336,7 +487,7 @@ if (paso === 3) {
 
         {error && <p style={styles.errorTexto}>{error}</p>}
 
-        <button
+        <PressButton
           style={{
             ...styles.btnConfirmar,
             ...(enviando ? styles.btnDeshabilitado : {}),
@@ -345,7 +496,7 @@ if (paso === 3) {
           disabled={enviando}
         >
           {enviando ? "Guardando..." : "Confirmar Corte"}
-        </button>
+        </PressButton>
       </PasoLayout>
     );
   }
@@ -359,14 +510,15 @@ const styles = {
     overflow: "hidden", fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
     position: "relative",
   },
+  // Wrapper interno sobre el que actúa el slide. La barra de progreso queda fuera.
+  pantallaInner: {
+    width: "100%", display: "flex", flexDirection: "column", alignItems: "center",
+    flex: 1, willChange: "transform",
+  },
   pantallaCentrada: {
     width: "100vw", height: "100vh", backgroundColor: "#ffffff",
     display: "flex", flexDirection: "column", alignItems: "center",
     justifyContent: "center", fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  lineaSuperior: {
-    position: "absolute", top: 0, left: 0, right: 0, height: "4px",
-    background: "linear-gradient(90deg, #1a7a4a 0%, #2dba6e 50%, #1a7a4a 100%)",
   },
   header: {
     width: "100%", maxWidth: "820px", display: "flex", alignItems: "center",
@@ -388,40 +540,30 @@ const styles = {
     gap: "2vh", flex: 1, justifyContent: "center",
   },
   gridOpciones: {
-    display: "flex",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: "16px",
-    width: "100%",
+    display: "flex", flexWrap: "wrap", justifyContent: "center",
+    gap: "16px", width: "100%",
   },
   gridDos: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", width: "100%" },
   btnOpcion: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "8px",
+    display: "flex", flexDirection: "column", alignItems: "center",
+    justifyContent: "center", gap: "8px",
     padding: CONFIG.paddingBotonSeleccion,
     minHeight: CONFIG.alturaBotonSeleccion,
-    width: "calc(33.333% - 12px)",  // ← ocupa 1/3 del ancho, igual que antes
-    minWidth: "200px",               // ← nunca se achica demasiado
-    borderRadius: "16px",
-    border: "2px solid #e8e8e8",
-    backgroundColor: "#fafafa",
-    color: "#111111",
-    fontSize: CONFIG.tamanoTextoBoton,
-    fontWeight: "600",
-    cursor: "pointer",
-    fontFamily: "inherit",
+    width: "calc(33.333% - 12px)",
+    minWidth: "200px",
+    borderRadius: "16px", border: "2px solid #e8e8e8",
+    backgroundColor: "#fafafa", color: "#111111",
+    fontSize: CONFIG.tamanoTextoBoton, fontWeight: "600",
+    cursor: "pointer", fontFamily: "inherit",
   },
   btnOpcionActivo: { border: "2px solid #1a7a4a", backgroundColor: "#f0faf5", color: "#1a7a4a" },
   btnOpcionGrande: {
     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
     gap: "12px", padding: "4vh 2vw", minHeight: CONFIG.alturaBotonGrande,
     borderRadius: "20px", border: "2px solid #e8e8e8", backgroundColor: "#fafafa",
-    color: "#111111", fontSize: CONFIG.tamanoTextoBoton, fontWeight: "600", cursor: "pointer", fontFamily: "inherit",
+    color: "#111111", fontSize: CONFIG.tamanoTextoBoton, fontWeight: "600",
+    cursor: "pointer", fontFamily: "inherit",
   },
-  
   precioServicio: { fontSize: "clamp(13px, 1.4vw, 16px)", fontWeight: "400", color: "#666666" },
   btnContinuar: {
     width: "100%", padding: "2.5vh 0", borderRadius: "16px", border: "none",
@@ -455,19 +597,17 @@ const styles = {
   resumenDivider: { height: "1px", backgroundColor: "#eeeeee", width: "100%" },
   resumenTotalLabel: { fontSize: "clamp(17px, 2vw, 21px)", fontWeight: "700", color: "#111111" },
   resumenTotalValor: { fontSize: "clamp(20px, 2.5vw, 28px)", fontWeight: "700", color: "#1a7a4a" },
-  exitoIcono: {
-    width: "80px", height: "80px", borderRadius: "50%", backgroundColor: "#1a7a4a",
-    color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center",
-    fontSize: "40px", marginBottom: "24px",
+  exitoTexto: {
+    fontSize: "22px", fontWeight: "500", color: "#555555",
+    margin: "0 0 12px", fontFamily: "'DM Sans', Arial, sans-serif",
+    letterSpacing: "0.01em",
   },
-  exitoTexto: { fontSize: "28px", fontWeight: "700", color: "#111111", margin: "0 0 12px", fontFamily: "'DM Sans', Arial, sans-serif" },
-  exitoMonto: { fontSize: "22px", fontWeight: "400", color: "#1a7a4a", margin: 0, fontFamily: "'DM Sans', Arial, sans-serif" },
+  exitoMonto: {
+    fontSize: "clamp(48px, 7vw, 72px)", fontWeight: "700",
+    color: "#1a7a4a", margin: 0, fontFamily: "'DM Sans', Arial, sans-serif",
+    letterSpacing: "-0.02em", lineHeight: 1.1,
+  },
   errorTexto: { color: "#c0392b", fontSize: "15px", textAlign: "center", margin: 0 },
-
-  mpLogo: {
-  height: "clamp(34px, 4vw, 62px)",
-  width: "auto",
-  objectFit: "contain",
-  },
+  mpLogo: { height: "clamp(34px, 4vw, 62px)", width: "auto", objectFit: "contain" },
   emoji: { fontSize: "clamp(34px, 4vw, 42px)" },
 };
