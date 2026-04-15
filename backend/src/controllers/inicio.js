@@ -150,7 +150,7 @@ export const getComparativoMes = async (req, res) => {
 
     const ahora = new Date();
     const mesActualNombre   = ahora.toLocaleString('es-AR', { month: 'long', timeZone: TZ });
-    const mesAnteriorDate   = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1);
+    const mesAnteriorDate   = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 15);
     const mesAnteriorNombre = mesAnteriorDate.toLocaleString('es-AR', { month: 'long', timeZone: TZ });
 
     const resultado = {
