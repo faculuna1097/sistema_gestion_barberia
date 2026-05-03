@@ -147,6 +147,9 @@ export default function SeccionPlanillas() {
   const [mostrarComisiones, setMostrarComisiones] = useState(true);
   const [loading, setLoading]             = useState(false);
   const [error, setError]                 = useState(null);
+  // Set de fechas (YYYY-MM-DD) actualmente expandidas en el tab Detalle.
+  // Por defecto solo el día de hoy arranca expandido; el resto contraído.
+  const [diasExpandidos, setDiasExpandidos] = useState(new Set());
 
   // ── Carga de datos ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -168,6 +171,8 @@ export default function SeccionPlanillas() {
         setDetalleData(detalle);
         setResumenData(resumen);
         if (detalle.length > 0) setBarberoActivo(detalle[0].barbero_id);
+        // Solo el día de hoy arranca expandido al cargar la semana.
+        setDiasExpandidos(new Set([getFechaHoy()]));
       } catch (err) {
         console.error("[seccionPlanillas] Error en cargarDatos:", err.message);
         setError("No se pudieron cargar los datos. Revisá la conexión.");
@@ -256,6 +261,28 @@ export default function SeccionPlanillas() {
   const barberoSeleccionado = detalleData.find((b) => b.barbero_id === barberoActivo);
   const diasDelBarbero      = barberoSeleccionado ? agruparPorDia(barberoSeleccionado.cortes) : [];
   const infoComisionActiva  = resumenData?.barberos.find((b) => b.barbero_id === barberoActivo);
+
+  /**
+   * Alterna la expansión de un bloque de día.
+   * Si la fecha está en el Set, la quita (contrae); si no, la agrega (expande).
+   */
+  const toggleDia = (fecha) => {
+    setDiasExpandidos((prev) => {
+      const nuevo = new Set(prev);
+      if (nuevo.has(fecha)) nuevo.delete(fecha);
+      else nuevo.add(fecha);
+      return nuevo;
+    });
+  };
+
+  /**
+   * Cambia de barbero activo y resetea los días expandidos a solo hoy.
+   * Evita que quede "expandido" un día que el nuevo barbero no trabajó.
+   */
+  const cambiarBarbero = (barberoId) => {
+    setBarberoActivo(barberoId);
+    setDiasExpandidos(new Set([hoy]));
+  };
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -349,7 +376,7 @@ export default function SeccionPlanillas() {
                       <button
                         key={b.barbero_id}
                         style={{ ...styles.tabBtn, ...(barberoActivo === b.barbero_id ? styles.tabBtnActivo : {}) }}
-                        onPointerDown={() => setBarberoActivo(b.barbero_id)}
+                        onPointerDown={() => cambiarBarbero(b.barbero_id)}
                       >
                         {b.barbero_nombre}
                       </button>
@@ -372,47 +399,63 @@ export default function SeccionPlanillas() {
 
                   return (
                     <div key={fecha} style={styles.bloque}>
-                      <div style={{ ...styles.bloqueTituloRow, backgroundColor: esHoy ? "#f0faf5" : "#fafafa" }}>
+                      <div
+                        style={{
+                          ...styles.bloqueTituloRow,
+                          backgroundColor: esHoy ? "#f0faf5" : "#fafafa",
+                          cursor: "pointer",
+                        }}
+                        onPointerDown={() => toggleDia(fecha)}
+                      >
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                           <span style={styles.bloqueTituloTexto}>{formatFecha(fecha)}</span>
                           {esHoy && <span style={styles.badgeHoy}>Hoy</span>}
                         </div>
-                        <span style={styles.bloqueCantidad}>
-                          {cortesDelDia.length} corte{cortesDelDia.length !== 1 ? "s" : ""}
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          <span style={styles.bloqueCantidad}>
+                            {cortesDelDia.length} corte{cortesDelDia.length !== 1 ? "s" : ""}
+                          </span>
+                          <span style={styles.chevron}>
+                            {diasExpandidos.has(fecha) ? "▼" : "▶"}
+                          </span>
+                        </div>
                       </div>
 
                       <table style={styles.tabla}>
-                        <thead>
-                          <tr>
-                            <th style={styles.th}>Hora</th>
-                            <th style={styles.th}>Servicio</th>
-                            <th style={{ ...styles.th, textAlign: "right" }}>Monto</th>
-                            <th style={{ ...styles.th, textAlign: "right" }}>Propina</th>
-                            <th style={{ ...styles.th, textAlign: "right" }}>Total</th>
-                            <th style={styles.th}>Pago</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {cortesDelDia.map((c) => (
-                            <tr key={c.corte_id}>
-                              <td style={styles.td}>{c.hora}</td>
-                              <td style={styles.td}>{c.servicio_nombre}</td>
-                              <td style={{ ...styles.td, textAlign: "right" }}>{ars(c.monto_servicios)}</td>
-                              <td style={{ ...styles.td, textAlign: "right" }}>
-                                {c.propina > 0 ? ars(c.propina) : <span style={styles.sinPropina}>—</span>}
-                              </td>
-                              <td style={{ ...styles.td, textAlign: "right", fontWeight: "600" }}>
-                                {ars(c.monto_servicios + c.propina)}
-                              </td>
-                              <td style={styles.td}>
-                                <span style={{ ...styles.badgePago, ...(c.forma_pago === "efectivo" ? styles.badgeEfectivo : styles.badgeMP) }}>
-                                  {fmtPago(c.forma_pago)}
-                                </span>
-                              </td>
+                        {diasExpandidos.has(fecha) && (
+                          <thead>
+                            <tr>
+                              <th style={styles.th}>Hora</th>
+                              <th style={styles.th}>Servicio</th>
+                              <th style={{ ...styles.th, textAlign: "right" }}>Monto</th>
+                              <th style={{ ...styles.th, textAlign: "right" }}>Propina</th>
+                              <th style={{ ...styles.th, textAlign: "right" }}>Total</th>
+                              <th style={styles.th}>Pago</th>
                             </tr>
-                          ))}
-                        </tbody>
+                          </thead>
+                        )}
+                        {diasExpandidos.has(fecha) && (
+                          <tbody>
+                            {cortesDelDia.map((c) => (
+                              <tr key={c.corte_id}>
+                                <td style={styles.td}>{c.hora}</td>
+                                <td style={styles.td}>{c.servicio_nombre}</td>
+                                <td style={{ ...styles.td, textAlign: "right" }}>{ars(c.monto_servicios)}</td>
+                                <td style={{ ...styles.td, textAlign: "right" }}>
+                                  {c.propina > 0 ? ars(c.propina) : <span style={styles.sinPropina}>—</span>}
+                                </td>
+                                <td style={{ ...styles.td, textAlign: "right", fontWeight: "600" }}>
+                                  {ars(c.monto_servicios + c.propina)}
+                                </td>
+                                <td style={styles.td}>
+                                  <span style={{ ...styles.badgePago, ...(c.forma_pago === "efectivo" ? styles.badgeEfectivo : styles.badgeMP) }}>
+                                    {fmtPago(c.forma_pago)}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        )}
                         <tfoot>
                           <tr style={styles.trTotal}>
                             <td style={styles.tdTotal} colSpan={2}>
@@ -693,6 +736,12 @@ const styles = {
     color: "#888888",
     fontWeight: "500",
   },
+  chevron: {
+    fontSize: "12px",
+    color: "#888888",
+    lineHeight: 1,
+    userSelect: "none",
+  },
   badgeHoy: {
     fontSize: "10px",
     fontWeight: "700",
@@ -727,7 +776,7 @@ const styles = {
     borderBottom: "1px solid #f7f7f7",
   },
   trTotal: {
-    backgroundColor: "#f7f7f7",
+    backgroundColor: "#eeeeee",
     borderTop: "2px solid #eeeeee",
   },
   tdTotal: {
