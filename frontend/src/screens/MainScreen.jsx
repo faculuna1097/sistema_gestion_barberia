@@ -1,6 +1,11 @@
 // MainScreen.jsx
 import { useState } from "react";
 
+// URL de la app nativa de YouTube. Si la app no está instalada, hacemos
+// fallback a la versión web tras un pequeño timeout.
+const YOUTUBE_APP_URL = "youtube://";
+const YOUTUBE_WEB_URL = "https://www.youtube.com";
+
 const LockIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"
     viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -17,6 +22,14 @@ const SpotifyIcon = () => (
   </svg>
 );
 
+// Ícono oficial de YouTube — rectángulo rojo redondeado con play blanco
+const YouTubeIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="36" height="32"
+    viewBox="0 0 24 24" fill="#FF0000">
+    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+  </svg>
+);
+
 // Ícono de calendario — genérico, funciona con cualquier plataforma de turnos
 const BookingIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"
@@ -29,6 +42,36 @@ const BookingIcon = () => (
   </svg>
 );
 
+/**
+ * Abre la app nativa de YouTube. Si no responde en 500ms (probablemente
+ * porque la app no está instalada), hace fallback a la web.
+ */
+const abrirYouTube = () => {
+  console.log('[mainScreen] Abriendo YouTube');
+  const inicio = Date.now();
+
+  // Timer de fallback: si la app no toma el control en 500ms, abrir web
+  const timer = setTimeout(() => {
+    // Si pasaron menos de ~600ms desde el intento, asumimos que la app
+    // no estaba instalada (si hubiera abierto, el navegador habría perdido
+    // foco y los timers se habrían pausado).
+    if (Date.now() - inicio < 600) {
+      console.log('[mainScreen] App de YouTube no respondió, abriendo versión web');
+      window.open(YOUTUBE_WEB_URL, '_blank');
+    }
+  }, 500);
+
+  // Si el usuario vuelve al iPad y la app abrió bien, cancelamos el fallback
+  const cancelarFallback = () => {
+    clearTimeout(timer);
+    document.removeEventListener('visibilitychange', cancelarFallback);
+  };
+  document.addEventListener('visibilitychange', cancelarFallback);
+
+  // Intentar abrir la app
+  window.location.href = YOUTUBE_APP_URL;
+};
+
 export default function MainScreen({
   onNuevoCorte,
   onNuevaVenta,
@@ -36,7 +79,7 @@ export default function MainScreen({
   onAdminAccess,
   onSpotify,
   logoUrl,
-  bookingUrl,   // ← NUEVO: URL de la plataforma de turnos (o null si no aplica)
+  bookingUrl,
 }) {
   const [pressed, setPressed] = useState(null);
 
@@ -116,9 +159,36 @@ export default function MainScreen({
         </button>
       </div>
 
-      {/* ── Esquina inferior izquierda: Booking (si existe) + Spotify ─────── */}
-      {/* El contenedor flex-column apila los botones: booking arriba, Spotify abajo */}
+      {/* ── Esquina inferior izquierda: YouTube arriba, Spotify abajo ────── */}
       <div style={styles.bottomLeftStack}>
+        <button
+          style={{
+            ...styles.cornerButton,
+            ...(pressed === "youtube" ? styles.cornerButtonPressed : {}),
+          }}
+          onPointerDown={() => handlePress("youtube", abrirYouTube)}
+          aria-label="Abrir YouTube"
+          title="YouTube"
+        >
+          <YouTubeIcon />
+        </button>
+
+        <button
+          style={{
+            ...styles.cornerButton,
+            ...styles.spotifyButton,
+            ...(pressed === "spotify" ? styles.cornerButtonPressed : {}),
+          }}
+          onPointerDown={() => handlePress("spotify", onSpotify)}
+          aria-label="Abrir Spotify"
+          title="Spotify"
+        >
+          <SpotifyIcon />
+        </button>
+      </div>
+
+      {/* ── Esquina inferior derecha: Booking arriba, Admin abajo ────────── */}
+      <div style={styles.bottomRightStack}>
         {bookingUrl && (
           <button
             style={{
@@ -140,33 +210,16 @@ export default function MainScreen({
         <button
           style={{
             ...styles.cornerButton,
-            ...styles.spotifyButton,
-            ...(pressed === "spotify" ? styles.cornerButtonPressed : {}),
+            ...styles.adminButton,
+            ...(pressed === "admin" ? styles.cornerButtonPressed : {}),
           }}
-          onPointerDown={() => handlePress("spotify", onSpotify)}
-          aria-label="Abrir Spotify"
-          title="Spotify"
+          onPointerDown={() => handlePress("admin", onAdminAccess)}
+          aria-label="Acceder al panel de administrador"
+          title="Panel administrador"
         >
-          <SpotifyIcon />
+          <LockIcon />
         </button>
       </div>
-
-      {/* ── Esquina inferior derecha: Admin ──────────────────────────────── */}
-      <button
-        style={{
-          ...styles.cornerButton,
-          ...styles.adminButton,
-          position: "absolute",
-          bottom: 28,
-          right: 32,
-          ...(pressed === "admin" ? styles.cornerButtonPressed : {}),
-        }}
-        onPointerDown={() => handlePress("admin", onAdminAccess)}
-        aria-label="Acceder al panel de administrador"
-        title="Panel administrador"
-      >
-        <LockIcon />
-      </button>
     </div>
   );
 }
@@ -278,14 +331,23 @@ const styles = {
     lineHeight: 1,
   },
 
-  // ── Contenedor que apila Booking y Spotify en la esquina inferior izquierda
+  // ── Stacks de las esquinas ───────────────────────────────────────────
   bottomLeftStack: {
     position: "absolute",
     bottom: 28,
     left: 32,
     display: "flex",
-    flexDirection: "column",  // booking arriba, Spotify abajo
+    flexDirection: "column",
     alignItems: "flex-start",
+    gap: 12,
+  },
+  bottomRightStack: {
+    position: "absolute",
+    bottom: 28,
+    right: 32,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
     gap: 12,
   },
 
@@ -303,7 +365,6 @@ const styles = {
     WebkitUserSelect: "none",
     WebkitTapHighlightColor: "transparent",
   },
-  // Azul oscuro para diferenciarlo de Spotify y del candado
   bookingButton: {
     color: "#1a4a7a",
   },
