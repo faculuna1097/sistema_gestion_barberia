@@ -3,25 +3,8 @@
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { apiFetch } from '../../../services/api';
-
-const MESES = [
-  'Enero','Febrero','Marzo','Abril','Mayo','Junio',
-  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'
-];
-
-const mesALabel = (mesStr) => {
-  const [anio, mes] = mesStr.split('-');
-  return `${MESES[parseInt(mes, 10) - 1]} ${anio}`;
-};
-
-const getMesActual = () =>
-  new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' }).slice(0, 7);
-
-const desplazarMes = (mesStr, delta) => {
-  const [anio, mes] = mesStr.split('-').map(Number);
-  const fecha = new Date(anio, mes - 1 + delta, 1);
-  return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
-};
+import SelectorMes from '../../../components/SelectorMes';
+import { mesALabel, getMesActual } from '../../../utils/fechas';
 
 const formatMonto = (valor) =>
   `$ ${Number(valor).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -373,14 +356,8 @@ export default function SeccionVentas() {
         </button>
       </div>
 
-      <div style={styles.selectorMes}>
-        <button style={styles.btnMes} onPointerDown={() => setMes(m => desplazarMes(m, -1))}>‹</button>
-        <span style={styles.labelMes}>{mesALabel(mes)}</span>
-        <button
-          style={{ ...styles.btnMes, ...(mes >= getMesActual() ? styles.btnMesDeshabilitado : {}) }}
-          onPointerDown={() => setMes(m => desplazarMes(m, +1))}
-          disabled={mes >= getMesActual()}
-        >›</button>
+      <div style={styles.selectorMesWrapper}>
+        <SelectorMes value={mes} onChange={setMes} />
       </div>
 
       {cargando && (
@@ -513,26 +490,15 @@ const styles = {
     cursor: 'pointer', fontFamily: 'inherit',
   },
   btnExportarDeshabilitado: { borderColor: '#e0e0e0', color: '#bbb', cursor: 'not-allowed' },
-  selectorMes: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px',
-    marginBottom: '28px',
-  },
-  btnMes: {
-    width: '36px', height: '36px', borderRadius: '8px',
-    border: '1.5px solid #e0e0e0', backgroundColor: '#fff',
-    fontSize: '20px', color: '#333', cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
-  },
-  btnMesDeshabilitado: { color: '#ccc', cursor: 'not-allowed', borderColor: '#f0f0f0' },
-  labelMes: {
-    fontSize: '17px', fontWeight: '600', color: '#111',
-    minWidth: '160px', textAlign: 'center',
-  },
   tablaWrapper: {
     borderRadius: '12px', border: '1.5px solid #eeeeee',
     overflow: 'hidden', marginBottom: '32px', overflowX: 'auto',
   },
-  tabla:    { width: '100%', borderCollapse: 'collapse', fontSize: '14px' },
+  selectorMesWrapper: {
+    display: 'flex', justifyContent: 'center',
+    marginBottom: '28px',
+  },
+  tabla: { width: '100%', borderCollapse: 'collapse', fontSize: '14px' },
   th: {
     padding: '13px 16px', backgroundColor: '#fafafa',
     color: '#888', fontWeight: '600', fontSize: '11px',

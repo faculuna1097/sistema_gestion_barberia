@@ -1,4 +1,5 @@
 // /frontend/src/screens/admin/sections/SeccionCaja.jsx
+
 // Sección Caja del Panel de Administrador.
 // Tab 1: movimientos del día seleccionado + totales neto por canal.
 // Tab 2 y Tab 3: placeholders para v1.1.
@@ -6,29 +7,10 @@
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { apiFetch } from '../../../services/api';
+import SelectorDia from '../../../components/SelectorDia';
+import { getFechaHoy } from '../../../utils/fechas';
 
-// ─── Helpers de fecha ─────────────────────────────────────────────────────────
 
-const MESES = [
-  'Enero','Febrero','Marzo','Abril','Mayo','Junio',
-  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'
-];
-const DIAS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-
-const getFechaHoy = () =>
-  new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
-
-const desplazarDia = (fechaStr, delta) => {
-  const [anio, mes, dia] = fechaStr.split('-').map(Number);
-  const fecha = new Date(anio, mes - 1, dia + delta);
-  return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
-};
-
-const fechaALabel = (fechaStr) => {
-  const [anio, mes, dia] = fechaStr.split('-').map(Number);
-  const fecha = new Date(anio, mes - 1, dia);
-  return `${DIAS[fecha.getDay()]} ${dia} de ${MESES[mes - 1]} de ${anio}`;
-};
 
 const ExcelIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -102,8 +84,6 @@ function TabMovimientos() {
   const [movimientoAEliminar, setMovimientoAEliminar] = useState(null);
   const [eliminando, setEliminando]   = useState(false);
   const [soloNegocio, setSoloNegocio] = useState(false);
-
-  const esHoy = fecha === getFechaHoy();
 
   useEffect(() => {
     const cargarMovimientos = async () => {
@@ -229,22 +209,7 @@ function TabMovimientos() {
           </button>
         </div>
 
-        <div style={styles.selectorFecha}>
-          <button style={styles.btnDia} onPointerDown={() => setFecha(d => desplazarDia(d, -1))}>
-            ‹
-          </button>
-          <div style={styles.labelFechaContenedor}>
-            <span style={styles.labelFecha}>{fechaALabel(fecha)}</span>
-            {esHoy && <span style={styles.badgeHoy}>HOY</span>}
-          </div>
-          <button
-            style={{ ...styles.btnDia, ...(esHoy ? styles.btnDiaDeshabilitado : {}) }}
-            onPointerDown={() => { if (!esHoy) setFecha(d => desplazarDia(d, +1)); }}
-            disabled={esHoy}
-          >
-            ›
-          </button>
-        </div>
+        <SelectorDia value={fecha} onChange={setFecha} />
 
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button
@@ -424,33 +389,6 @@ const styles = {
   accionesRow: {
     display: 'grid', gridTemplateColumns: '1fr auto 1fr',
     alignItems: 'center', marginBottom: '16px',
-  },
-
-  // Selector de fecha
-  selectorFecha: {
-    display: 'flex', alignItems: 'center', gap: '12px',
-  },
-  btnDia: {
-    width: '36px', height: '36px', borderRadius: '8px',
-    border: '1.5px solid #e0e0e0', backgroundColor: '#ffffff',
-    fontSize: '20px', color: '#333333', cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    lineHeight: 1, fontFamily: 'inherit',
-  },
-  btnDiaDeshabilitado: {
-    color: '#cccccc', cursor: 'not-allowed', borderColor: '#f0f0f0',
-  },
-  labelFechaContenedor: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
-  },
-  labelFecha: {
-    fontSize: '15px', fontWeight: '600', color: '#111111',
-    minWidth: '220px', textAlign: 'center',
-  },
-  badgeHoy: {
-    fontSize: '10px', color: '#1a7a4a', backgroundColor: '#c8ead8',
-    padding: '2px 8px', borderRadius: '20px', textTransform: 'uppercase',
-    fontWeight: '600', letterSpacing: '0.05em',
   },
 
   // Exportar

@@ -1,4 +1,5 @@
 // /frontend/src/screens/admin/sections/SeccionPlanillas.jsx
+
 // Sección de planillas semanales del panel de administrador.
 //
 // Layout:
@@ -18,65 +19,11 @@
 import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { apiFetch } from '../../../services/api';
+import SelectorSemana from '../../../components/SelectorSemana';
+import { getFechaHoy, formatFechaCorta, getSemanaActual } from '../../../utils/fechas';
 
 // ─── Helpers de semana ────────────────────────────────────────────────────────
 
-function getISOWeekNum(date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
-  const week1 = new Date(d.getFullYear(), 0, 4);
-  const weekNum =
-    1 + Math.round(((d - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
-  return [d.getFullYear(), weekNum];
-}
-
-function getSemanaActual() {
-  const [year, week] = getISOWeekNum(new Date());
-  return `${year}-W${String(week).padStart(2, "0")}`;
-}
-
-function semanaALunes(semanaStr) {
-  const [yearStr, wStr] = semanaStr.split("-W");
-  const year = parseInt(yearStr);
-  const week = parseInt(wStr);
-  const jan4 = new Date(year, 0, 4);
-  const jan4Day = jan4.getDay() === 0 ? 7 : jan4.getDay();
-  const lunesSemana1 = new Date(jan4);
-  lunesSemana1.setDate(jan4.getDate() - (jan4Day - 1));
-  const lunes = new Date(lunesSemana1);
-  lunes.setDate(lunesSemana1.getDate() + (week - 1) * 7);
-  return lunes;
-}
-
-function navegarSemana(semanaStr, delta) {
-  const lunes = semanaALunes(semanaStr);
-  lunes.setDate(lunes.getDate() + delta * 7);
-  const [year, week] = getISOWeekNum(lunes);
-  return `${year}-W${String(week).padStart(2, "0")}`;
-}
-
-function formatRangoSemana(semanaStr) {
-  const lunes = semanaALunes(semanaStr);
-  const domingo = new Date(lunes);
-  domingo.setDate(lunes.getDate() + 6);
-  const fmtCorto = (d) =>
-    `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
-  return `${fmtCorto(lunes)} → ${fmtCorto(domingo)}/${domingo.getFullYear()}`;
-}
-
-function formatFecha(fechaStr) {
-  const [year, month, day] = fechaStr.split("-").map(Number);
-  const d = new Date(year, month - 1, day);
-  const dias = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-  return `${dias[d.getDay()]} ${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}`;
-}
-
-function getFechaHoy() {
-  return new Date().toLocaleDateString("sv-SE", {
-    timeZone: "America/Argentina/Buenos_Aires",
-  });
-}
 
 /**
  * Agrupa un array de cortes por fecha.
@@ -199,7 +146,7 @@ export default function SeccionPlanillas() {
       agruparPorDia(barbero.cortes).forEach(({ fecha, cortes: cd }) => {
         cd.forEach((c) => {
           filas.push({
-            Barbero: "", Fecha: formatFecha(c.fecha), Hora: c.hora, Servicio: c.servicio_nombre,
+            Barbero: "", Fecha: formatFechaCorta(c.fecha), Hora: c.hora, Servicio: c.servicio_nombre,
             "Monto ($)": c.monto_servicios, "Propina ($)": c.propina,
             "Total ($)": c.monto_servicios + c.propina,
             ...(mostrarComisiones ? { "Comisión ($)": "" } : {}),
@@ -256,7 +203,6 @@ export default function SeccionPlanillas() {
   };
 
   // ── Datos derivados ───────────────────────────────────────────────────────
-  const esSemanaActual      = semana === getSemanaActual();
   const hoy                 = getFechaHoy();
   const barberoSeleccionado = detalleData.find((b) => b.barbero_id === barberoActivo);
   const diasDelBarbero      = barberoSeleccionado ? agruparPorDia(barberoSeleccionado.cortes) : [];
@@ -321,28 +267,7 @@ export default function SeccionPlanillas() {
           />
         </div>
 
-        <div style={styles.selectorSemana}>
-          <button
-            style={styles.btnSemana}
-            onPointerDown={() => setSemana((s) => navegarSemana(s, -1))}
-            title="Semana anterior"
-          >
-            ‹
-          </button>
-          <div style={styles.labelSemanaWrapper}>
-            <span style={{ ...styles.labelSemana, color: esSemanaActual ? "#1a7a4a" : "#111111" }}>
-              {formatRangoSemana(semana)}
-            </span>
-            {esSemanaActual && <span style={styles.badgeSemanaActual}>Esta semana</span>}
-          </div>
-          <button
-            style={{ ...styles.btnSemana, ...(esSemanaActual ? styles.btnSemanaDeshabilitado : {}) }}
-            onPointerDown={() => { if (!esSemanaActual) setSemana((s) => navegarSemana(s, 1)); }}
-            title={esSemanaActual ? "Ya estás en la semana actual" : "Semana siguiente"}
-          >
-            ›
-          </button>
-        </div>
+        <SelectorSemana value={semana} onChange={setSemana} />
 
         <div style={{ justifySelf: "end" }}>
           <button
@@ -408,7 +333,7 @@ export default function SeccionPlanillas() {
                         onPointerDown={() => toggleDia(fecha)}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <span style={styles.bloqueTituloTexto}>{formatFecha(fecha)}</span>
+                          <span style={styles.bloqueTituloTexto}>{formatFechaCorta(fecha)}</span>
                           {esHoy && <span style={styles.badgeHoy}>Hoy</span>}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -594,55 +519,6 @@ const styles = {
     alignItems: "center",
   },
 
-  // ── Selector de semana — estilo SeccionBalances ───────────────────────────
-  selectorSemana: {
-    display: "flex",
-    alignItems: "center",
-    gap: "16px",
-    justifySelf: "center",
-  },
-  btnSemana: {
-    width: "36px",
-    height: "36px",
-    borderRadius: "8px",
-    border: "1.5px solid #e0e0e0",
-    backgroundColor: "#ffffff",
-    fontSize: "20px",
-    color: "#333333",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    lineHeight: 1,
-    fontFamily: "inherit",
-  },
-  btnSemanaDeshabilitado: {
-    color: "#cccccc",
-    cursor: "not-allowed",
-    borderColor: "#f0f0f0",
-  },
-  labelSemanaWrapper: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: "3px",
-  },
-  labelSemana: {
-    fontSize: "15px",
-    fontWeight: "600",
-    minWidth: "200px",
-    textAlign: "center",
-  },
-  badgeSemanaActual: {
-    fontSize: "10px",
-    fontWeight: "600",
-    color: "#1a7a4a",
-    backgroundColor: "#c8ead8",
-    padding: "2px 8px",
-    borderRadius: "20px",
-    letterSpacing: "0.04em",
-    textTransform: "uppercase",
-  },
 
   // ── Tabs pill ─────────────────────────────────────────────────────────────
   tabsContainer: {

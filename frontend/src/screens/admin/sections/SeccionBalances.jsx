@@ -1,4 +1,5 @@
 // /frontend/src/screens/admin/sections/SeccionBalances.jsx
+
 // Sección Balances del panel de administrador.
 // Tab 1 — Balance mensual: cards resumen + desglose por barbero + gastos por categoría.
 // Tab 2 — Histórico anual: tabla de los últimos 12 meses con variación vs mes anterior.
@@ -7,6 +8,8 @@
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { apiFetch } from '../../../services/api';
+import SelectorMes from '../../../components/SelectorMes';
+import { getMesActual, mesALabel } from '../../../utils/fechas';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -14,29 +17,6 @@ import { apiFetch } from '../../../services/api';
 const fmt = (n) =>
   Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
-const MESES = [
-  'Enero','Febrero','Marzo','Abril','Mayo','Junio',
-  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'
-];
-
-/** Devuelve el mes actual en formato YYYY-MM (con timezone Argentina) */
-const mesActual = () =>
-  new Date().toLocaleDateString('sv-SE', {
-    timeZone: 'America/Argentina/Buenos_Aires',
-  }).slice(0, 7);
-
-/** Devuelve el label legible de un mes YYYY-MM → "Marzo 2026" */
-const labelMes = (mes) => {
-  const [anio, m] = mes.split('-').map(Number);
-  return `${MESES[m - 1]} ${anio}`;
-};
-
-/** Avanza o retrocede un mes desde un string YYYY-MM */
-const moverMes = (mes, delta) => {
-  const [anio, m] = mes.split('-').map(Number);
-  const d = new Date(anio, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-};
 
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
 
@@ -83,7 +63,7 @@ const ExcelIcon = () => (
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function SeccionBalances() {
   const [tabActivo, setTabActivo]             = useState('mensual');
-  const [mesSeleccionado, setMesSeleccionado] = useState(mesActual());
+  const [mesSeleccionado, setMesSeleccionado] = useState(getMesActual());
   const [mostrarComisiones, setMostrarComisiones] = useState(true);
 
   // Estado Tab 1
@@ -148,12 +128,7 @@ export default function SeccionBalances() {
   }, [tabActivo]);
 
   // ── Navegación de mes ─────────────────────────────────────────────────────
-  const irMesAnterior = () => setMesSeleccionado((m) => moverMes(m, -1));
-  const irMesSiguiente = () => {
-    const siguiente = moverMes(mesSeleccionado, 1);
-    if (siguiente <= mesActual()) setMesSeleccionado(siguiente);
-  };
-  const esMesActual = mesSeleccionado >= mesActual();
+  const esMesActual = mesSeleccionado >= getMesActual();
 
   // ── Exportar Excel ────────────────────────────────────────────────────────
   /**
@@ -271,14 +246,8 @@ export default function SeccionBalances() {
               />
             </div>
 
-            <div style={styles.selectorMes}>
-              <button onPointerDown={irMesAnterior} style={styles.btnMes}>‹</button>
-              <span style={styles.labelMes}>{labelMes(mesSeleccionado)}</span>
-              <button
-                onPointerDown={irMesSiguiente}
-                style={{ ...styles.btnMes, ...(esMesActual ? styles.btnMesDeshabilitado : {}) }}
-                disabled={esMesActual}
-              >›</button>
+            <div style={styles.selectorMesWrapper}>
+              <SelectorMes value={mesSeleccionado} onChange={setMesSeleccionado} />
             </div>
 
             <div style={{ justifySelf: 'end' }}>
@@ -511,7 +480,7 @@ export default function SeccionBalances() {
                     const balance = mostrarComisiones
                       ? fila.balance_neto
                       : fila.ingresos_brutos - fila.egresos;
-                    const esMesActualFila = fila.mes === mesActual();
+                    const esMesActualFila = fila.mes === getMesActual();
 
                     return (
                       <tr key={fila.mes} style={{
@@ -630,36 +599,9 @@ const styles = {
     alignItems: 'center',
     gap: '16px',
   },
-  selectorMes: {
+  selectorMesWrapper: {
     display: 'flex',
-    alignItems: 'center',
-    gap: '16px',
-  },
-  btnMes: {
-    width: '36px',
-    height: '36px',
-    borderRadius: '8px',
-    border: '1.5px solid #e0e0e0',
-    backgroundColor: '#fff',
-    fontSize: '20px',
-    color: '#333',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
     justifyContent: 'center',
-    lineHeight: 1,
-  },
-  btnMesDeshabilitado: {
-    color: '#ccc',
-    cursor: 'not-allowed',
-    borderColor: '#f0f0f0',
-  },
-  labelMes: {
-    fontSize: '17px',
-    fontWeight: '600',
-    color: '#111',
-    minWidth: '160px',
-    textAlign: 'center',
   },
   btnExportar: {
     display: 'flex',
