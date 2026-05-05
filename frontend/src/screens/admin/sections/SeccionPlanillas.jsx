@@ -20,7 +20,9 @@ import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { apiFetch } from '../../../services/api';
 import SelectorSemana from '../../../components/SelectorSemana';
+import BotonExportarExcel from '../../../components/BotonExportarExcel';
 import { getFechaHoy, formatFechaCorta, getSemanaActual } from '../../../utils/fechas';
+import { formatARS, formatPago } from '../../../utils/formatos';
 
 // ─── Helpers de semana ────────────────────────────────────────────────────────
 
@@ -53,9 +55,6 @@ function calcularComisionDia(montoServicios, tipo, valor, cantidadCortes) {
   return valor * cantidadCortes; // fijo por corte
 }
 
-const ars = (n) => `$ ${Number(n).toLocaleString("es-AR")}`;
-const fmtPago = (p) => (p === "efectivo" ? "Efectivo" : "Mercado Pago");
-
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
 
 const TogglePill = ({ activo, onToggle, labelOn, labelOff }) => (
@@ -71,17 +70,6 @@ const TogglePill = ({ activo, onToggle, labelOn, labelOff }) => (
     <span style={{ ...styles.toggleDot, backgroundColor: activo ? "#2e7d32" : "#cccccc" }} />
     {activo ? labelOn : labelOff}
   </button>
-);
-
-const ExcelIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    style={{ marginRight: "6px", flexShrink: 0 }}>
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-    <polyline points="14 2 14 8 20 8" />
-    <line x1="8" y1="13" x2="16" y2="13" />
-    <line x1="8" y1="17" x2="16" y2="17" />
-  </svg>
 );
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -150,7 +138,7 @@ export default function SeccionPlanillas() {
             "Monto ($)": c.monto_servicios, "Propina ($)": c.propina,
             "Total ($)": c.monto_servicios + c.propina,
             ...(mostrarComisiones ? { "Comisión ($)": "" } : {}),
-            "Forma de pago": fmtPago(c.forma_pago),
+            "Forma de pago": formatPago(c.forma_pago),
           });
         });
         if (mostrarComisiones && infoComision) {
@@ -270,12 +258,7 @@ export default function SeccionPlanillas() {
         <SelectorSemana value={semana} onChange={setSemana} />
 
         <div style={{ justifySelf: "end" }}>
-          <button
-            style={styles.btnExportar}
-            onPointerDown={tabActiva === "detalle" ? exportarDetalle : exportarResumen}
-          >
-            <ExcelIcon /> Exportar Excel
-          </button>
+          <BotonExportarExcel onPointerDown={tabActiva === "detalle" ? exportarDetalle : exportarResumen} />
         </div>
       </div>
 
@@ -365,16 +348,16 @@ export default function SeccionPlanillas() {
                               <tr key={c.corte_id}>
                                 <td style={styles.td}>{c.hora}</td>
                                 <td style={styles.td}>{c.servicio_nombre}</td>
-                                <td style={{ ...styles.td, textAlign: "right" }}>{ars(c.monto_servicios)}</td>
+                                <td style={{ ...styles.td, textAlign: "right" }}>{formatARS(c.monto_servicios)}</td>
                                 <td style={{ ...styles.td, textAlign: "right" }}>
-                                  {c.propina > 0 ? ars(c.propina) : <span style={styles.sinPropina}>—</span>}
+                                  {c.propina > 0 ? formatARS(c.propina) : <span style={styles.sinPropina}>—</span>}
                                 </td>
                                 <td style={{ ...styles.td, textAlign: "right", fontWeight: "600" }}>
-                                  {ars(c.monto_servicios + c.propina)}
+                                  {formatARS(c.monto_servicios + c.propina)}
                                 </td>
                                 <td style={styles.td}>
                                   <span style={{ ...styles.badgePago, ...(c.forma_pago === "efectivo" ? styles.badgeEfectivo : styles.badgeMP) }}>
-                                    {fmtPago(c.forma_pago)}
+                                    {formatPago(c.forma_pago)}
                                   </span>
                                 </td>
                               </tr>
@@ -386,13 +369,13 @@ export default function SeccionPlanillas() {
                             <td style={styles.tdTotal} colSpan={2}>
                               Subtotal — {cortesDelDia.length} corte{cortesDelDia.length !== 1 ? "s" : ""}
                             </td>
-                            <td style={{ ...styles.tdTotal, textAlign: "right" }}>{ars(totalMonto)}</td>
-                            <td style={{ ...styles.tdTotal, textAlign: "right" }}>{ars(totalProp)}</td>
-                            <td style={{ ...styles.tdTotal, textAlign: "right", color: "#1a7a4a" }}>{ars(totalGeneral)}</td>
+                            <td style={{ ...styles.tdTotal, textAlign: "right" }}>{formatARS(totalMonto)}</td>
+                            <td style={{ ...styles.tdTotal, textAlign: "right" }}>{formatARS(totalProp)}</td>
+                            <td style={{ ...styles.tdTotal, textAlign: "right", color: "#1a7a4a" }}>{formatARS(totalGeneral)}</td>
                             <td style={{ ...styles.tdTotal, textAlign: "right" }}>
                               {mostrarComisiones && infoComisionActiva ? (
                                 <span style={styles.comisionValor}>
-                                  {ars(comisionDelDia + totalProp)}
+                                  {formatARS(comisionDelDia + totalProp)}
                                   <span style={styles.comisionTipo}>
                                     {infoComisionActiva.comision_tipo === "porcentaje"
                                       ? ` (${infoComisionActiva.comision_valor}% + prop)`
@@ -439,12 +422,12 @@ export default function SeccionPlanillas() {
                       <tr key={b.barbero_id}>
                         <td style={{ ...styles.td, fontWeight: "600" }}>{b.barbero_nombre}</td>
                         <td style={{ ...styles.td, textAlign: "right" }}>{b.cantidad_cortes}</td>
-                        <td style={{ ...styles.td, textAlign: "right" }}>{ars(b.monto_servicios)}</td>
-                        <td style={{ ...styles.td, textAlign: "right" }}>{ars(b.propinas)}</td>
-                        <td style={{ ...styles.td, textAlign: "right", fontWeight: "600" }}>{ars(b.total_generado)}</td>
+                        <td style={{ ...styles.td, textAlign: "right" }}>{formatARS(b.monto_servicios)}</td>
+                        <td style={{ ...styles.td, textAlign: "right" }}>{formatARS(b.propinas)}</td>
+                        <td style={{ ...styles.td, textAlign: "right", fontWeight: "600" }}>{formatARS(b.total_generado)}</td>
                         {mostrarComisiones && (
                           <td style={{ ...styles.td, textAlign: "right", color: "#1a7a4a", fontWeight: "600" }}>
-                            {ars(b.comision)}
+                            {formatARS(b.comision)}
                             <span style={styles.comisionTipo}>
                               {b.comision_tipo === "porcentaje" ? ` (${b.comision_valor}%)` : ` ($${b.comision_valor}/c)`}
                             </span>
@@ -457,12 +440,12 @@ export default function SeccionPlanillas() {
                     <tr style={styles.trTotal}>
                       <td style={styles.tdTotal}>TOTAL</td>
                       <td style={{ ...styles.tdTotal, textAlign: "right" }}>{resumenData.totales.cantidad_cortes}</td>
-                      <td style={{ ...styles.tdTotal, textAlign: "right" }}>{ars(resumenData.totales.monto_servicios)}</td>
-                      <td style={{ ...styles.tdTotal, textAlign: "right" }}>{ars(resumenData.totales.propinas)}</td>
-                      <td style={{ ...styles.tdTotal, textAlign: "right" }}>{ars(resumenData.totales.total_generado)}</td>
+                      <td style={{ ...styles.tdTotal, textAlign: "right" }}>{formatARS(resumenData.totales.monto_servicios)}</td>
+                      <td style={{ ...styles.tdTotal, textAlign: "right" }}>{formatARS(resumenData.totales.propinas)}</td>
+                      <td style={{ ...styles.tdTotal, textAlign: "right" }}>{formatARS(resumenData.totales.total_generado)}</td>
                       {mostrarComisiones && (
                         <td style={{ ...styles.tdTotal, textAlign: "right", color: "#1a7a4a" }}>
-                          {ars(resumenData.totales.comision)}
+                          {formatARS(resumenData.totales.comision)}
                         </td>
                       )}
                     </tr>
@@ -485,7 +468,6 @@ const styles = {
     padding: "36px 40px",
     fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
     color: "#111111",
-    //maxWidth: "1100px",
   },
 
   // ── Fila 1: título | tabs ────────────────────────────────────────────────
@@ -563,21 +545,6 @@ const styles = {
     height: "10px",
     borderRadius: "50%",
     flexShrink: 0,
-  },
-
-  // ── Botón exportar ───────────────────────────────────────────────────────
-  btnExportar: {
-    display: "flex",
-    alignItems: "center",
-    padding: "10px 18px",
-    borderRadius: "10px",
-    border: "1.5px solid #1a7a4a",
-    backgroundColor: "#ffffff",
-    color: "#1a7a4a",
-    fontSize: "14px",
-    fontWeight: "600",
-    cursor: "pointer",
-    fontFamily: "inherit",
   },
 
   // ── Contenido ────────────────────────────────────────────────────────────

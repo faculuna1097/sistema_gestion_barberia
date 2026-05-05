@@ -9,14 +9,9 @@ import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { apiFetch } from '../../../services/api';
 import SelectorMes from '../../../components/SelectorMes';
+import BotonExportarExcel from '../../../components/BotonExportarExcel';
 import { getMesActual, mesALabel } from '../../../utils/fechas';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Formatea un número como moneda argentina */
-const fmt = (n) =>
-  Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-
+import { formatARS } from '../../../utils/formatos';
 
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
 
@@ -24,7 +19,7 @@ const fmt = (n) =>
 const KpiCard = ({ titulo, valor, color, subtitulo }) => (
   <div style={styles.kpiCard}>
     <span style={styles.kpiTitulo}>{titulo}</span>
-    <span style={{ ...styles.kpiValor, color }}>${fmt(valor)}</span>
+    <span style={{ ...styles.kpiValor, color }}>{formatARS(valor)}</span>
     {subtitulo && <span style={styles.kpiSubtitulo}>{subtitulo}</span>}
   </div>
 );
@@ -46,18 +41,6 @@ const TogglePill = ({ activo, onToggle, labelOn, labelOff }) => (
     }} />
     {activo ? labelOn : labelOff}
   </button>
-);
-
-// ─── Ícono Excel (inline SVG) ─────────────────────────────────────────────────
-const ExcelIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    style={{ marginRight: '6px' }}>
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-    <polyline points="14 2 14 8 20 8" />
-    <line x1="8" y1="13" x2="16" y2="13" />
-    <line x1="8" y1="17" x2="16" y2="17" />
-  </svg>
 );
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -251,16 +234,7 @@ export default function SeccionBalances() {
             </div>
 
             <div style={{ justifySelf: 'end' }}>
-              <button
-                style={{
-                  ...styles.btnExportar,
-                  ...(!puedeExportar ? styles.btnExportarDeshabilitado : {}),
-                }}
-                onPointerDown={exportarExcel}
-                disabled={!puedeExportar}
-              >
-                <ExcelIcon /> Exportar Excel
-              </button>
+              <BotonExportarExcel onPointerDown={exportarExcel} disabled={!puedeExportar} />
             </div>
           </div>
 
@@ -322,15 +296,15 @@ export default function SeccionBalances() {
                         <td style={styles.td}>{b.nombre}</td>
                         <td style={{ ...styles.td, textAlign: 'right' }}>{b.cortes}</td>
                         <td style={{ ...styles.td, textAlign: 'right', color: '#1a7a4a', fontWeight: 600 }}>
-                          ${fmt(b.monto_servicios)}
+                          {formatARS(b.monto_servicios)}
                         </td>
                         {mostrarComisiones && <>
                           <td style={{ ...styles.td, textAlign: 'right' }}>{b.comision_valor}%</td>
                           <td style={{ ...styles.td, textAlign: 'right', color: '#c0392b' }}>
-                            ${fmt(b.monto_comision)}
+                            {formatARS(b.monto_comision)}
                           </td>
                           <td style={{ ...styles.td, textAlign: 'right', fontWeight: 700 }}>
-                            ${fmt(b.neto_negocio)}
+                            {formatARS(b.neto_negocio)}
                           </td>
                         </>}
                       </tr>
@@ -342,13 +316,13 @@ export default function SeccionBalances() {
                         <td style={{ ...styles.td, color: '#555', fontStyle: 'italic' }}>Productos vendidos</td>
                         <td style={{ ...styles.td, textAlign: 'right', color: '#888' }}>—</td>
                         <td style={{ ...styles.td, textAlign: 'right', color: '#1a7a4a', fontWeight: 600 }}>
-                          ${fmt(datosMensual.productos.total)}
+                          {formatARS(datosMensual.productos.total)}
                         </td>
                         {mostrarComisiones && <>
                           <td style={{ ...styles.td, textAlign: 'right', color: '#888' }}>—</td>
                           <td style={{ ...styles.td, textAlign: 'right', color: '#888' }}>—</td>
                           <td style={{ ...styles.td, textAlign: 'right', fontWeight: 700 }}>
-                            ${fmt(datosMensual.productos.total)}
+                            {formatARS(datosMensual.productos.total)}
                           </td>
                         </>}
                       </tr>
@@ -361,15 +335,15 @@ export default function SeccionBalances() {
                         {datosMensual.serviciosPorBarbero.reduce((a, b) => a + b.cortes, 0)}
                       </td>
                       <td style={{ ...styles.tdTotal, textAlign: 'right', color: '#1a7a4a' }}>
-                        ${fmt(datosMensual.resumen.ingresos_brutos)}
+                        {formatARS(datosMensual.resumen.ingresos_brutos)}
                       </td>
                       {mostrarComisiones && <>
                         <td style={styles.tdTotal} />
                         <td style={{ ...styles.tdTotal, textAlign: 'right', color: '#c0392b' }}>
-                          ${fmt(datosMensual.resumen.total_comisiones)}
+                          {formatARS(datosMensual.resumen.total_comisiones)}
                         </td>
                         <td style={{ ...styles.tdTotal, textAlign: 'right', color: '#1a7a4a' }}>
-                          ${fmt(datosMensual.resumen.ingresos_netos)}
+                          {formatARS(datosMensual.resumen.ingresos_netos)}
                         </td>
                       </>}
                     </tr>
@@ -379,7 +353,7 @@ export default function SeccionBalances() {
                 {/* Nota propinas */}
                 {datosMensual.propinas.total > 0 && (
                   <p style={styles.notaPropinas}>
-                    💡 Propinas generadas en el período: <strong>${fmt(datosMensual.propinas.total)}</strong> — van al barbero, no incluidas en el balance.
+                    💡 Propinas generadas en el período: <strong>{formatARS(datosMensual.propinas.total)}</strong> — van al barbero, no incluidas en el balance.
                   </p>
                 )}
               </div>
@@ -400,14 +374,14 @@ export default function SeccionBalances() {
                         <tr key={g.categoria} style={styles.trHover}>
                           <td style={styles.td}>{g.categoria}</td>
                           <td style={{ ...styles.td, textAlign: 'right', color: '#c0392b', fontWeight: 600 }}>
-                            ${fmt(g.total)}
+                            {formatARS(g.total)}
                           </td>
                         </tr>
                       ))}
                       <tr style={styles.trTotal}>
                         <td style={styles.tdTotal}>Total egresos</td>
                         <td style={{ ...styles.tdTotal, textAlign: 'right', color: '#c0392b' }}>
-                          ${fmt(datosMensual.resumen.egresos)}
+                          {formatARS(datosMensual.resumen.egresos)}
                         </td>
                       </tr>
                     </tbody>
@@ -443,16 +417,7 @@ export default function SeccionBalances() {
             <span style={styles.labelSecundario}>Últimos 12 meses</span>
 
             <div style={{ justifySelf: 'end' }}>
-              <button
-                style={{
-                  ...styles.btnExportar,
-                  ...(!puedeExportar ? styles.btnExportarDeshabilitado : {}),
-                }}
-                onPointerDown={exportarExcel}
-                disabled={!puedeExportar}
-              >
-                <ExcelIcon /> Exportar Excel
-              </button>
+              <BotonExportarExcel onPointerDown={exportarExcel} disabled={!puedeExportar} />
             </div>
           </div>
 
@@ -494,22 +459,22 @@ export default function SeccionBalances() {
                           )}
                         </td>
                         <td style={{ ...styles.td, textAlign: 'right' }}>
-                          ${fmt(fila.ingresos_brutos)}
+                          {formatARS(fila.ingresos_brutos)}
                         </td>
                         {mostrarComisiones && <>
                           <td style={{ ...styles.td, textAlign: 'right', color: '#c0392b' }}>
-                            ${fmt(fila.total_comisiones)}
+                            {formatARS(fila.total_comisiones)}
                           </td>
                           <td style={{ ...styles.td, textAlign: 'right', color: '#1a7a4a', fontWeight: 600 }}>
-                            ${fmt(fila.ingresos_netos)}
+                            {formatARS(fila.ingresos_netos)}
                           </td>
                         </>}
                         <td style={{ ...styles.td, textAlign: 'right', color: '#c0392b' }}>
-                          ${fmt(fila.egresos)}
+                          {formatARS(fila.egresos)}
                         </td>
                         <td style={{ ...styles.td, textAlign: 'right', fontWeight: 700,
                           color: balance >= 0 ? '#1a7a4a' : '#c0392b' }}>
-                          ${fmt(balance)}
+                          {formatARS(balance)}
                         </td>
                         <td style={{ ...styles.td, textAlign: 'center' }}>
                           {fila.variacion_vs_anterior !== null ? (
@@ -547,7 +512,6 @@ const styles = {
     padding: '36px 40px',
     fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
     color: '#111111',
-    //maxWidth: '1100px',
   },
   encabezado: {
     display: 'flex',
@@ -602,24 +566,6 @@ const styles = {
   selectorMesWrapper: {
     display: 'flex',
     justifyContent: 'center',
-  },
-  btnExportar: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '10px 18px',
-    borderRadius: '10px',
-    border: '1.5px solid #1a7a4a',
-    backgroundColor: '#fff',
-    color: '#1a7a4a',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-  },
-  btnExportarDeshabilitado: {
-    borderColor: '#e0e0e0',
-    color: '#bbb',
-    cursor: 'not-allowed',
   },
   labelSecundario: {
     fontSize: '14px',

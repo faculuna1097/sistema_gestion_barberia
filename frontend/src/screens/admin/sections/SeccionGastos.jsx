@@ -4,32 +4,10 @@ import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { apiFetch } from '../../../services/api';
 import SelectorMes from '../../../components/SelectorMes';
+import BadgeFormaPago from '../../../components/BadgeFormaPago';
+import BotonExportarExcel from '../../../components/BotonExportarExcel';
 import { getMesActual, mesALabel } from '../../../utils/fechas';
-
-const formatMonto = (valor) =>
-  `$ ${Number(valor).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-
-const ExcelIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    style={{ marginRight: '6px' }}>
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-    <polyline points="14 2 14 8 20 8" />
-    <line x1="8" y1="13" x2="16" y2="13" />
-    <line x1="8" y1="17" x2="16" y2="17" />
-  </svg>
-);
-
-const BadgeFormaPago = ({ forma }) => {
-  const estilos = forma === 'efectivo'
-    ? { backgroundColor: '#e8f5e9', color: '#2e7d32' }
-    : { backgroundColor: '#e3f2fd', color: '#1565c0' };
-  return (
-    <span style={{ ...styles.badge, ...estilos }}>
-      {forma === 'efectivo' ? 'Efectivo' : 'Mercado Pago'}
-    </span>
-  );
-};
+import { formatARS } from '../../../utils/formatos';
 
 function ModalEditarGasto({ gasto, categorias, form, onChange, onGuardar, onCancelar, guardando, errorEditar }) {
   return (
@@ -132,7 +110,7 @@ function ModalConfirmarEliminar({ gasto, onConfirmar, onCancelar }) {
           <div style={styles.modalFila}>
             <span style={styles.modalLabel}>Monto</span>
             <span style={{ ...styles.modalValor, color: '#c0392b', fontWeight: '700' }}>
-              {formatMonto(gasto.monto)}
+              {formatARS(gasto.monto)}
             </span>
           </div>
         </div>
@@ -162,7 +140,6 @@ export default function SeccionGastos() {
   const [errorEditar, setErrorEditar]           = useState(null);
 
   useEffect(() => {
-    console.log('[seccionGastos] montado');
     const cargarCategorias = async () => {
       try {
         const res = await apiFetch('/categorias');
@@ -217,13 +194,6 @@ export default function SeccionGastos() {
   const confirmarEditar = async () => {
     const { id } = gastoAEditar;
     console.log('[seccionGastos] confirmarEditar — request recibido | id:', id);
-
-    /*
-    if (!formEditar.categoria_id || !formEditar.descripcion.trim() || Number(formEditar.monto) <= 0) {
-      setErrorEditar('Completá todos los campos correctamente.');
-      return;
-    }
-    */
 
     setGuardando(true);
     setErrorEditar(null);
@@ -367,17 +337,14 @@ export default function SeccionGastos() {
           <h2 style={styles.titulo}>Gastos</h2>
           <p style={styles.subtitulo}>Registro mensual de egresos</p>
         </div>
-        <button
-          style={{ ...styles.btnExportar, ...(gastos.length === 0 ? styles.btnExportarDeshabilitado : {}) }}
-          onPointerDown={exportarExcel}
-          disabled={gastos.length === 0}
-        >
-          <ExcelIcon /> Exportar Excel
-        </button>
       </div>
 
       <div style={styles.selectorMesWrapper}>
+        <div />
         <SelectorMes value={mes} onChange={setMes} />
+        <div style={{ justifySelf: 'end' }}>
+          <BotonExportarExcel onPointerDown={exportarExcel} disabled={gastos.length === 0} />
+        </div>
       </div>
 
       {cargando && (
@@ -420,7 +387,7 @@ export default function SeccionGastos() {
                     </td>
                     <td style={{ ...styles.td, color: '#444' }}>{g.descripcion}</td>
                     <td style={{ ...styles.td, fontWeight: '600', color: '#c0392b', whiteSpace: 'nowrap' }}>
-                      {formatMonto(g.monto)}
+                      {formatARS(g.monto)}
                     </td>
                     <td style={styles.td}><BadgeFormaPago forma={g.forma_pago} /></td>
                     <td style={styles.tdAccion}>
@@ -446,7 +413,7 @@ export default function SeccionGastos() {
                 <tr style={styles.filaTotalGeneral}>
                   <td colSpan={4} style={{ ...styles.tdTotal, textAlign: 'left' }}>Total del mes</td>
                   <td style={{ ...styles.tdTotal, textAlign: 'right', color: '#c0392b' }}>
-                    {formatMonto(totalGeneral)}
+                    {formatARS(totalGeneral)}
                   </td>
                   <td style={styles.tdTotal} />
                 </tr>
@@ -470,7 +437,7 @@ export default function SeccionGastos() {
                     <td style={{ ...styles.td, fontWeight: '500' }}>{t.categoria_nombre}</td>
                     <td style={{ ...styles.td, textAlign: 'center', color: '#666' }}>{t.cantidad}</td>
                     <td style={{ ...styles.td, textAlign: 'right', fontWeight: '600' }}>
-                      {formatMonto(t.total)}
+                      {formatARS(t.total)}
                     </td>
                   </tr>
                 ))}
@@ -480,7 +447,7 @@ export default function SeccionGastos() {
                     {gastos.length} {gastos.length === 1 ? 'gasto' : 'gastos'}
                   </td>
                   <td style={{ ...styles.tdTotal, textAlign: 'right', color: '#c0392b' }}>
-                    {formatMonto(totalGeneral)}
+                    {formatARS(totalGeneral)}
                   </td>
                 </tr>
               </tbody>
@@ -503,17 +470,12 @@ const styles = {
   },
   titulo:    { fontSize: '24px', fontWeight: '700', color: '#111', margin: '0 0 4px' },
   subtitulo: { fontSize: '14px', color: '#888', margin: 0 },
-  btnExportar: {
-    display: 'flex', alignItems: 'center',
-    padding: '10px 18px', borderRadius: '10px',
-    border: '1.5px solid #1a7a4a', backgroundColor: '#fff',
-    color: '#1a7a4a', fontSize: '14px', fontWeight: '600',
-    cursor: 'pointer', fontFamily: 'inherit',
-  },
-  btnExportarDeshabilitado: { borderColor: '#e0e0e0', color: '#bbb', cursor: 'not-allowed' },
   selectorMesWrapper: {
-  display: 'flex', justifyContent: 'center',
-  marginBottom: '28px',
+    display: 'grid',
+    gridTemplateColumns: '1fr auto 1fr',
+    alignItems: 'center',
+    gap: '16px',
+    marginBottom: '28px',
   },
   tablaWrapper: {
     borderRadius: '12px', border: '1.5px solid #eeeeee',
@@ -558,10 +520,6 @@ const styles = {
     display: 'inline-block', padding: '3px 10px',
     borderRadius: '20px', fontSize: '12px', fontWeight: '500',
     backgroundColor: '#f3f4f6', color: '#374151',
-  },
-  badge: {
-    display: 'inline-block', padding: '3px 10px',
-    borderRadius: '20px', fontSize: '12px', fontWeight: '600',
   },
   totalesWrapper: {
     borderRadius: '12px', border: '1.5px solid #eeeeee',

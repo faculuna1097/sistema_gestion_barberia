@@ -8,37 +8,16 @@ import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { apiFetch } from '../../../services/api';
 import SelectorDia from '../../../components/SelectorDia';
+import BadgeFormaPago from '../../../components/BadgeFormaPago';
+import BotonExportarExcel from '../../../components/BotonExportarExcel';
 import { getFechaHoy } from '../../../utils/fechas';
-
-
-
-const ExcelIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    style={{ marginRight: '6px' }}>
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-    <polyline points="14 2 14 8 20 8" />
-    <line x1="8" y1="13" x2="16" y2="13" />
-    <line x1="8" y1="17" x2="16" y2="17" />
-  </svg>
-);
-
-const BadgeFormaPago = ({ forma }) => {
-  const estilos = forma === 'efectivo'
-    ? { backgroundColor: '#e8f5e9', color: '#2e7d32' }
-    : { backgroundColor: '#e3f2fd', color: '#1565c0' };
-  return (
-    <span style={{ ...styles.badge, ...estilos }}>
-      {forma === 'efectivo' ? 'Efectivo' : 'Mercado Pago'}
-    </span>
-  );
-};
+import { formatARS, formatPago } from '../../../utils/formatos';
 
 function ModalConfirmarEliminar({ movimiento, onConfirmar, onCancelar }) {
   return (
     <div style={styles.modalOverlay}>
       <div style={styles.modalCard}>
-        <p style={styles.modalTitulo}>Eliminar este registro?</p>
+        <p style={styles.modalTitulo}>¿Eliminar este registro?</p>
         <p style={styles.modalAdvertencia}>Esta acción no se puede deshacer.</p>
         <div style={styles.modalDetalle}>
           <div style={styles.modalFila}>
@@ -63,13 +42,13 @@ function ModalConfirmarEliminar({ movimiento, onConfirmar, onCancelar }) {
           <div style={styles.modalFila}>
             <span style={styles.modalLabel}>Monto</span>
             <span style={{ ...styles.modalValor, color: '#c0392b', fontWeight: '700' }}>
-              $ {Number(movimiento.monto).toLocaleString('es-AR')}
+              {formatARS(movimiento.monto)}
             </span>
           </div>
         </div>
         <div style={styles.modalBotones}>
           <button style={styles.btnCancelar} onPointerDown={onCancelar}>Cancelar</button>
-          <button style={styles.btnEliminarConfirm} onPointerDown={onConfirmar}>Si, eliminar</button>
+          <button style={styles.btnEliminarConfirm} onPointerDown={onConfirmar}>Sí, eliminar</button>
         </div>
       </div>
     </div>
@@ -130,7 +109,6 @@ function TabMovimientos() {
       console.log('[seccionCaja] confirmarEliminar — completado | id:', id);
     } catch (err) {
       console.error('[seccionCaja] Error en confirmarEliminar:', err.message);
-      alert('No se pudo eliminar el registro. Intentalo de nuevo.');
     } finally {
       setEliminando(false);
       setMovimientoAEliminar(null);
@@ -144,7 +122,7 @@ function TabMovimientos() {
       Barbero:         m.barbero_nombre || '-',
       Detalle:         m.detalle,
       Monto:           m.tipo === 'gasto' ? -Number(m.monto) : Number(m.monto),
-      'Forma de pago': m.forma_pago === 'efectivo' ? 'Efectivo' : 'Mercado Pago',
+      'Forma de pago': formatPago(m.forma_pago),
     }));
     const ws = XLSX.utils.json_to_sheet(datos);
     const wb = XLSX.utils.book_new();
@@ -178,7 +156,7 @@ function TabMovimientos() {
           <div>
             <p style={styles.totalLabel}>Efectivo neto</p>
             <p style={{ ...styles.totalMonto, color: efectivoNeto >= 0 ? '#1a7a4a' : '#c0392b' }}>
-              $ {efectivoNeto.toLocaleString('es-AR')}
+              {formatARS(efectivoNeto)}
             </p>
           </div>
         </div>
@@ -192,7 +170,7 @@ function TabMovimientos() {
           <div>
             <p style={styles.totalLabel}>Mercado Pago neto</p>
             <p style={{ ...styles.totalMonto, color: mercadoPagoNeto >= 0 ? '#1a7a4a' : '#c0392b' }}>
-              $ {mercadoPagoNeto.toLocaleString('es-AR')}
+              {formatARS(mercadoPagoNeto)}
             </p>
           </div>
         </div>
@@ -212,22 +190,13 @@ function TabMovimientos() {
         <SelectorDia value={fecha} onChange={setFecha} />
 
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            style={movimientos.length === 0
-              ? { ...styles.btnExportar, ...styles.btnExportarDeshabilitado }
-              : styles.btnExportar}
-            onPointerDown={exportarExcel}
-            disabled={movimientos.length === 0}
-          >
-            <ExcelIcon />
-            Exportar Excel
-          </button>
+          <BotonExportarExcel onPointerDown={exportarExcel} disabled={movimientos.length === 0} />
         </div>
       </div>
 
       {movimientosFiltrados.length === 0 ? (
         <div style={styles.estadoCentrado}>
-          <p style={styles.estadoTexto}>No hay movimientos registrados este dia.</p>
+          <p style={styles.estadoTexto}>No hay movimientos registrados este día.</p>
         </div>
       ) : (
         <div style={styles.tablaWrapper}>
@@ -260,7 +229,7 @@ function TabMovimientos() {
                   <td style={{ ...styles.td, color: '#888888' }}>{m.barbero_nombre || '-'}</td>
                   <td style={styles.td}>{m.detalle}</td>
                   <td style={{ ...styles.td, fontWeight: '600', color: m.tipo === 'gasto' ? '#c0392b' : '#111111' }}>
-                    {m.tipo === 'gasto' ? '- ' : ''}$ {Number(m.monto).toLocaleString('es-AR')}
+                    {m.tipo === 'gasto' ? '- ' : ''}{formatARS(m.monto)}
                   </td>
                   <td style={styles.td}><BadgeFormaPago forma={m.forma_pago} /></td>
                   <td style={styles.tdAccion}>
@@ -281,7 +250,7 @@ function TabMovimientos() {
 function TabCierre() {
   return (
     <div style={styles.estadoCentrado}>
-      <p style={styles.estadoTexto}>Cierre de caja — proximamente.</p>
+      <p style={styles.estadoTexto}>Cierre de caja — próximamente.</p>
     </div>
   );
 }
@@ -289,7 +258,7 @@ function TabCierre() {
 function TabHistorial() {
   return (
     <div style={styles.estadoCentrado}>
-      <p style={styles.estadoTexto}>Historial de cierres — proximamente.</p>
+      <p style={styles.estadoTexto}>Historial de cierres — próximamente.</p>
     </div>
   );
 }
@@ -329,9 +298,6 @@ export default function SeccionCaja() {
     </div>
   );
 }
-
-// SIN CAMBIOS en styles — mantener el objeto existente en tu archivo
-
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 const styles = {
@@ -389,18 +355,6 @@ const styles = {
   accionesRow: {
     display: 'grid', gridTemplateColumns: '1fr auto 1fr',
     alignItems: 'center', marginBottom: '16px',
-  },
-
-  // Exportar
-  btnExportar: {
-    display: 'flex', alignItems: 'center',
-    padding: '10px 18px', borderRadius: '10px',
-    border: '1.5px solid #1a7a4a', backgroundColor: '#ffffff',
-    color: '#1a7a4a', fontSize: '14px', fontWeight: '600',
-    cursor: 'pointer', fontFamily: 'inherit',
-  },
-  btnExportarDeshabilitado: {
-    borderColor: '#e0e0e0', color: '#bbbbbb', cursor: 'not-allowed',
   },
 
   // Toggle Solo Barberos
