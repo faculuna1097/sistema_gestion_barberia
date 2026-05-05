@@ -54,7 +54,7 @@ Excepción: podés leer los archivos `.md` de contexto general (los que están e
 |---|---|
 | `/docs/convenciones_tecnicas.md` | Referencia activa de cómo se escribe código en el proyecto. |
 | `/docs/estado_actual.md` | El "dónde estamos": estado funcional, lo que ya está, lo que falta, decisiones tomadas. |
-| `ruta_actual_proyecto.txt` | Estructura de carpetas y archivos del proyecto. Consultá esto antes de asumir rutas. |
+| `/docs/ruta_proyecto.md` | Estructura de carpetas y archivos del proyecto. Consultá esto antes de asumir rutas. |
 | `/docs/SQL_Schema.md` | Schema completo de la DB (referencia, no ejecutar). |
 | `/docs/onboarding.md`| Alta de un cliente nuevo.
 
