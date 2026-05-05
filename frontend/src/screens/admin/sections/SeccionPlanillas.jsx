@@ -21,6 +21,7 @@ import * as XLSX from "xlsx";
 import { apiFetch } from '../../../services/api';
 import SelectorSemana from '../../../components/SelectorSemana';
 import BotonExportarExcel from '../../../components/BotonExportarExcel';
+import TogglePill from '../../../components/TogglePill';
 import { getFechaHoy, formatFechaCorta, getSemanaActual } from '../../../utils/fechas';
 import { formatARS, formatPago } from '../../../utils/formatos';
 
@@ -54,23 +55,6 @@ function calcularComisionDia(montoServicios, tipo, valor, cantidadCortes) {
   if (tipo === "porcentaje") return montoServicios * valor / 100;
   return valor * cantidadCortes; // fijo por corte
 }
-
-// ─── Subcomponentes ───────────────────────────────────────────────────────────
-
-const TogglePill = ({ activo, onToggle, labelOn, labelOff }) => (
-  <button
-    onPointerDown={onToggle}
-    style={{
-      ...styles.togglePill,
-      backgroundColor: activo ? "#e8f5e9" : "#f5f5f5",
-      color:           activo ? "#2e7d32" : "#888888",
-      border:          `1.5px solid ${activo ? "#a5d6a7" : "#e0e0e0"}`,
-    }}
-  >
-    <span style={{ ...styles.toggleDot, backgroundColor: activo ? "#2e7d32" : "#cccccc" }} />
-    {activo ? labelOn : labelOff}
-  </button>
-);
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function SeccionPlanillas() {
@@ -526,25 +510,6 @@ const styles = {
     color: "#111111",
     fontWeight: "600",
     boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
-  },
-
-  // ── Toggle pill ───────────────────────────────────────────────────────────
-  togglePill: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    padding: "8px 16px",
-    borderRadius: "20px",
-    cursor: "pointer",
-    fontSize: "13px",
-    fontWeight: "600",
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  toggleDot: {
-    width: "10px",
-    height: "10px",
-    borderRadius: "50%",
-    flexShrink: 0,
   },
 
   // ── Contenido ────────────────────────────────────────────────────────────

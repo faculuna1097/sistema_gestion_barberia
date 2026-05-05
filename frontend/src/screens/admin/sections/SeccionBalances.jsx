@@ -10,6 +10,7 @@ import * as XLSX from 'xlsx';
 import { apiFetch } from '../../../services/api';
 import SelectorMes from '../../../components/SelectorMes';
 import BotonExportarExcel from '../../../components/BotonExportarExcel';
+import TogglePill from '../../../components/TogglePill';
 import { getMesActual, mesALabel } from '../../../utils/fechas';
 import { formatARS } from '../../../utils/formatos';
 
@@ -22,25 +23,6 @@ const KpiCard = ({ titulo, valor, color, subtitulo }) => (
     <span style={{ ...styles.kpiValor, color }}>{formatARS(valor)}</span>
     {subtitulo && <span style={styles.kpiSubtitulo}>{subtitulo}</span>}
   </div>
-);
-
-/** Toggle pill reutilizable */
-const TogglePill = ({ activo, onToggle, labelOn, labelOff }) => (
-  <button
-    onPointerDown={onToggle}
-    style={{
-      ...styles.togglePill,
-      backgroundColor: activo ? '#e8f5e9' : '#f5f5f5',
-      color: activo ? '#2e7d32' : '#888888',
-      border: `1.5px solid ${activo ? '#a5d6a7' : '#e0e0e0'}`,
-    }}
-  >
-    <span style={{
-      ...styles.toggleDot,
-      backgroundColor: activo ? '#2e7d32' : '#cccccc',
-    }} />
-    {activo ? labelOn : labelOff}
-  </button>
 );
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -571,25 +553,6 @@ const styles = {
     fontSize: '14px',
     color: '#888',
     fontWeight: '500',
-  },
-  togglePill: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    padding: '8px 16px',
-    borderRadius: '20px',
-    cursor: 'pointer',
-    fontSize: '13px',
-    fontWeight: '600',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-    transition: 'all 0.2s',
-  },
-
-  toggleDot: {
-    width: '10px',
-    height: '10px',
-    borderRadius: '50%',
-    flexShrink: 0,
   },
   kpiGrid: {
     display: 'grid',

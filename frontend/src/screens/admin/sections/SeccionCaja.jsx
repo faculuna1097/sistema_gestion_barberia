@@ -10,6 +10,7 @@ import { apiFetch } from '../../../services/api';
 import SelectorDia from '../../../components/SelectorDia';
 import BadgeFormaPago from '../../../components/BadgeFormaPago';
 import BotonExportarExcel from '../../../components/BotonExportarExcel';
+import TogglePill from '../../../components/TogglePill';
 import { getFechaHoy } from '../../../utils/fechas';
 import { formatARS, formatPago } from '../../../utils/formatos';
 
@@ -178,13 +179,11 @@ function TabMovimientos() {
 
       <div style={styles.accionesRow}>
         <div>
-          <button
-            style={{ ...styles.btnToggle, ...(soloNegocio ? styles.btnToggleActivo : {}) }}
-            onPointerDown={() => setSoloNegocio(v => !v)}
-          >
-            <span style={{ ...styles.togglePunto, backgroundColor: soloNegocio ? '#2e7d32' : '#aaaaaa' }} />
-            Solo Barberos
-          </button>
+          <TogglePill
+            activo={soloNegocio}
+            onToggle={() => setSoloNegocio(v => !v)}
+            labelOn="Solo Barberos"
+          />
         </div>
 
         <SelectorDia value={fecha} onChange={setFecha} />
@@ -355,22 +354,6 @@ const styles = {
   accionesRow: {
     display: 'grid', gridTemplateColumns: '1fr auto 1fr',
     alignItems: 'center', marginBottom: '16px',
-  },
-
-  // Toggle Solo Barberos
-  btnToggle: {
-    display: 'flex', alignItems: 'center', gap: '10px',
-    padding: '8px 16px', borderRadius: '20px',
-    border: '1.5px solid #e0e0e0', backgroundColor: '#f5f5f5',
-    color: '#888888', fontSize: '13px', fontWeight: '600',
-    cursor: 'pointer', fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  btnToggleActivo: {
-    backgroundColor: '#e8f5e9', color: '#2e7d32',
-    border: '1.5px solid #a5d6a7',
-  },
-  togglePunto: {
-    width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0,
   },
 
   // Tabla
