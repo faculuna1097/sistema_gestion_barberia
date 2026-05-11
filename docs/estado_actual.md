@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-Última actualización: mayo 2026.
+Última actualización: 2026-05-11.
 
 Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convenciones_tecnicas.md).
 
@@ -25,11 +25,34 @@ Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convencio
 - `TENANT_ID` eliminado de Railway — ya no se usa en producción.
 
 ### Frontend — Vercel
-- URL genérica: `https://sistema-gestion-barberia.vercel.app`
-- Root Directory: `/frontend`
-- `VITE_API_URL = https://sistemagestionbarberia-production.up.railway.app` (sin barra final)
-- Auto-deploy en push a `main`.
-- Wildcard domain `*.barbermanager.app` configurado en Vercel.
+
+Tres proyectos deployados en Vercel, todos auto-deploy en push a `main`.
+
+| Proyecto | Root | URL Vercel |
+|---|---|---|
+| Gestión | `/frontend` | `sistema-gestion-barberia.vercel.app` |
+| Turnero del cliente | `/frontend-turnero` | `sistema-gestion-barberia-turnero.vercel.app` |
+| App del barbero | `/frontend-barbero` | `sistema-gestion-barberia-barbero.vercel.app` |
+
+El proyecto de gestión actúa de shell: su `/frontend/vercel.json` proxea
+`/turnos/*` y `/barbero/*` a los otros dos proyectos vía rewrites.
+`trailingSlash: false` para normalizar URLs y que los rewrites se apliquen
+sobre `/turnos` (sin barra) — sin esa normalización, Vercel trata las URLs
+con barra final como acceso a directorio y devuelve 404 antes de procesar
+rewrites.
+
+Durante la fase placeholder del turnero, los rewrites están limitados al
+hostname `demo.barbermanager.app` mediante un `has` condition. Cuando se
+deploye el código real (post-merge de `feature/turnero` a `main`), se
+remueve esa restricción para que `/turnos/` y `/barbero/` funcionen también
+en producción (kingsai y futuros tenants). Ver pendientes.
+
+`VITE_API_URL` solo está seteada en el proyecto de gestión:
+`VITE_API_URL = https://sistemagestionbarberia-production.up.railway.app`
+(sin barra final). El turnero y el barbero todavía no consumen backend.
+
+Wildcard domain `*.barbermanager.app` configurado en el proyecto de gestión
+solamente; los otros dos se acceden vía rewrites del primero.
 
 ### Dominio y DNS
 - Dominio: `barbermanager.app` (comprado en Namecheap).
@@ -127,7 +150,8 @@ URL de producción: `kingsai.barbermanager.app` ✅ funcionando.
 - **Log de actividad:** registrar quién eliminó qué y cuándo (hoy las eliminaciones no dejan rastro).
 - **Generación de QR de Mercado Pago** para cobro en el momento desde el iPad.
 - **Envío de planillas/datos por WhatsApp.**
-- **Software propio de turnero** para integrar con el sistema de gestión.
+- **Software propio de turnero** para integrar con el sistema de gestión. En curso en branch `feature/turnero`. Placeholders Vite ya deployados en Vercel y validados (routing por path funciona). Plan completo en `docs/plan_turnero_v2.md`.
+- **Remover `has` condition de `frontend/vercel.json`** cuando se deploye el código real del turnero. Hoy los rewrites a `/turnos/*` y `/barbero/*` solo se aplican en `demo.barbermanager.app` para no afectar producción durante la fase placeholder.
 
 ---
 
