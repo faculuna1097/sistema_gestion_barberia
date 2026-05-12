@@ -33,11 +33,16 @@ sistema-gestion-barberia/
 │       │   └── db.js                  # Pool PostgreSQL (Supabase Session Pooler) + función query()
 │       │
 │       ├── middlewares/
-│       │   ├── authMiddleware.js      # Verifica JWT Bearer token para rutas protegidas
-│       │   └── tenantMiddleware.js    # Resuelve tenant_id desde header X-Tenant-Subdomain (con caché)
+│       │   ├── authMiddleware.js              # Verifica JWT, valida tenant cruzado, inyecta rol/barbero_id
+│       │   ├── requiereRolMiddleware.js       # Factory requiereRol(...roles) → 403 si el rol no autoriza
+│       │   └── tenantMiddleware.js            # Resuelve tenant_id desde header X-Tenant-Subdomain (con caché)
+│       │
+│       ├── utils/
+│       │   └── sanitizarLogs.js               # Tacha credenciales (pin, password) antes de loguearlas
 │       │
 │       ├── controllers/               # Lógica de negocio (consultas a DB, respuestas HTTP)
-│       │   ├── auth.js                # Login con PIN, generación de JWT
+│       │   ├── auth.js                # Login admin con PIN, genera JWT con rol='admin' (30d)
+│       │   ├── authBarbero.js         # Login barbero con PIN, genera JWT con rol='barbero' (30d)
 │       │   ├── barberos.js            # CRUD de barberos
 │       │   ├── servicios.js           # CRUD de servicios de corte
 │       │   ├── productos.js           # CRUD de productos de venta
@@ -52,7 +57,8 @@ sistema-gestion-barberia/
 │       │   └── gestion.js             # Gestión de tenant: PIN, datos negocio, ABMs
 │       │
 │       ├── routes/                    # Definición de rutas HTTP (conectan URL → controller)
-│       │   ├── auth.js                # /api/auth/*
+│       │   ├── auth.js                # /api/auth/verificar-pin
+│       │   ├── authBarbero.js         # /api/auth/barbero/login
 │       │   ├── barberos.js            # /api/barberos/*
 │       │   ├── servicios.js           # /api/servicios/*
 │       │   ├── productos.js           # /api/productos/*
@@ -143,29 +149,37 @@ sistema-gestion-barberia/
 
 | Módulo | Método | Path | Protección |
 |--------|--------|------|-----------|
-| **Auth** | `POST` | `/api/auth/login` | Público |
+| **Auth admin** | `POST` | `/api/auth/verificar-pin` | Público |
+| **Auth barbero** | `POST` | `/api/auth/barbero/login` | Público |
 | **Barberos** | `GET` | `/api/barberos` | Público |
-| **Barberos** | `POST` | `/api/barberos` | Público |
 | **Servicios** | `GET` | `/api/servicios` | Público |
-| **Servicios** | `POST` | `/api/servicios` | Público |
 | **Productos** | `GET` | `/api/productos` | Público |
-| **Productos** | `POST` | `/api/productos` | Público |
 | **Categorías** | `GET` | `/api/categorias` | Público |
 | **Cortes** | `POST` | `/api/cortes` | Público |
 | **Ventas** | `POST` | `/api/ventas` | Público |
 | **Ventas** | `GET` | `/api/ventas/mensual` | JWT |
+| **Ventas** | `PUT` | `/api/ventas/:id` | JWT |
 | **Ventas** | `DELETE` | `/api/ventas/:id` | JWT |
 | **Gastos** | `POST` | `/api/gastos` | Público |
 | **Gastos** | `GET` | `/api/gastos/mensual` | JWT |
+| **Gastos** | `PUT` | `/api/gastos/:id` | JWT |
 | **Gastos** | `DELETE` | `/api/gastos/:id` | JWT |
-| **Planillas** | `GET` | `/api/planillas/mensual` | JWT |
-| **Planillas** | `GET` | `/api/planillas/historial` | JWT |
-| **Caja** | `GET` | `/api/caja/dia` | JWT |
-| **Caja** | `GET` | `/api/caja/historial` | JWT |
-| **Inicio** | `GET` | `/api/inicio/dashboard` | JWT |
-| **Balances** | `GET` | `/api/balances/periodo` | JWT |
-| **Gestión** | `GET` | `/api/gestion/negocio` | Público |
-| **Gestión** | `PATCH/PUT/DELETE` | `/api/gestion/*` | JWT |
+| **Planillas** | `GET` | `/api/planillas/detalle-semanal` | JWT |
+| **Planillas** | `GET` | `/api/planillas/resumen-semanal` | JWT |
+| **Caja** | `GET` | `/api/caja/movimientos-dia` | JWT |
+| **Caja** | `DELETE` | `/api/caja/movimientos/:tipo/:id` | JWT |
+| **Inicio** | `GET` | `/api/inicio/resumen-dia` | JWT |
+| **Inicio** | `GET` | `/api/inicio/comparativo-mes` | JWT |
+| **Inicio** | `GET` | `/api/inicio/stock-bajo` | JWT |
+| **Balances** | `GET` | `/api/balances/mensual` | JWT |
+| **Balances** | `GET` | `/api/balances/historico` | JWT |
+| **Gestión — negocio** | `GET` | `/api/gestion/negocio` | Público |
+| **Gestión — negocio** | `PUT` | `/api/gestion/negocio` | JWT |
+| **Gestión — PIN admin** | `PUT` | `/api/gestion/pin-admin` | JWT |
+| **Gestión — barberos** | `GET / POST / PUT` | `/api/gestion/barberos[/:id]` | JWT |
+| **Gestión — servicios** | `GET / POST / PUT` | `/api/gestion/servicios[/:id]` | JWT |
+| **Gestión — productos** | `GET / POST / PUT` | `/api/gestion/productos[/:id]` | JWT |
+| **Gestión — stock** | `PUT` | `/api/gestion/productos/:id/agregar-stock` | JWT |
 | **Health** | `GET` | `/api/health` | Público |
 
 ---
@@ -227,10 +241,11 @@ sistema-gestion-barberia/
 │  Deploy: Railway (sistemagestionbarberia-production...  │
 │           .up.railway.app)                              │
 │                                                         │
-│  tenantMiddleware → resuelve tenant_id desde subdomain  │
-│  authMiddleware   → verifica JWT en rutas protegidas    │
+│  tenantMiddleware  → resuelve tenant_id desde subdomain │
+│  authMiddleware    → valida JWT + tenant cruzado + rol  │
+│  requiereRolMiddleware → restringe rutas por rol        │
 │                                                         │
-│  14 módulos de rutas → 13 controllers → función query() │
+│  15 módulos de rutas → 14 controllers → función query() │
 └────────────────────────┬────────────────────────────────┘
                          │ SQL (pg pool, max 3 conexiones)
 ┌────────────────────────▼────────────────────────────────┐

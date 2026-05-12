@@ -8,6 +8,7 @@ import cors from 'cors';
 import { testConnection } from './config/db.js';
 import { verificarToken } from './middlewares/authMiddleware.js';
 import { tenantMiddleware } from './middlewares/tenantMiddleware.js';
+import { sanitizarObjeto } from './utils/sanitizarLogs.js';
 
 // --- Importación de rutas ---
 import barberoRoutes    from './routes/barberos.js';
@@ -23,6 +24,7 @@ import gestionRouter    from './routes/gestion.js';
 import balancesRouter   from './routes/balances.js';
 import inicioRoutes     from './routes/inicio.js';
 import authRoutes       from './routes/auth.js';
+import authBarberoRoutes from './routes/authBarbero.js';
 
 console.log('[index] Iniciando Barbershop Manager API...');
 
@@ -47,12 +49,14 @@ app.use(express.json());
 // o desde TENANT_ID en .env (desarrollo local).
 app.use(tenantMiddleware);
 
-// Middleware de logging global — loguea cada request que llega al servidor
+// Middleware de logging global — loguea cada request que llega al servidor.
+// El body se sanitiza antes de loguear para no filtrar credenciales (PINs,
+// passwords) a los logs de Railway. Ver /utils/sanitizarLogs.js.
 app.use((req, res, next) => {
-  console.log(
-    `[index] ${req.method} ${req.url}`,
-    req.body && Object.keys(req.body).length ? `— body: ${JSON.stringify(req.body)}` : ''
-  );
+  const bodyLog = req.body && Object.keys(req.body).length
+    ? `— body: ${JSON.stringify(sanitizarObjeto(req.body))}`
+    : '';
+  console.log(`[index] ${req.method} ${req.url}`, bodyLog);
   next();
 });
 
@@ -64,6 +68,7 @@ app.get('/api/health', (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS PÚBLICAS — accesibles sin token (flujos operativos + auth)
 // ─────────────────────────────────────────────────────────────────────────────
+app.use('/api/auth/barbero', authBarberoRoutes);
 app.use('/api/auth',       authRoutes);
 app.use('/api/barberos',   barberoRoutes);
 app.use('/api/servicios',  servicioRoutes);

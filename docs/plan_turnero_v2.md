@@ -356,11 +356,12 @@ del controller mirando `req.rol` y `req.barbero_id`.
 
 #### Login del admin (existente — se ajusta)
 
-`POST /api/auth/login` (ya existe).
+`POST /api/auth/verificar-pin` (ya existe; nombre histórico que se mantiene
+para no impactar el frontend de gestión).
 
 **Cambio:** al firmar el JWT, agregar el claim `rol: 'admin'` y
-`expiresIn: '30d'`. Hoy el JWT no expira o expira con default; pasamos a 30
-días explícitos por consistencia con el login del barbero.
+`expiresIn: '30d'`. Antes expiraba a las 12h; pasamos a 30 días explícitos
+por consistencia con el login del barbero.
 
 #### Login del barbero (nuevo)
 

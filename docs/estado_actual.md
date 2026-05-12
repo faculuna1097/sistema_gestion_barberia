@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-Última actualización: 2026-05-11 (schema del turnero ejecutado).
+Última actualización: 2026-05-12 (Paso 3 del turnero — refactor de auth + login barbero).
 
 Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convenciones_tecnicas.md).
 
@@ -156,7 +156,7 @@ de cambios:
 - Gestión (5 tabs) ✅
 
 ### Sistema
-- Auth: bcrypt + JWT ✅ — `usuario_registro` eliminado del schema.
+- Auth: bcrypt + JWT ✅ — `usuario_registro` eliminado del schema. `verificarToken` valida `tenant_id` cruzado (cierra agujero multi-tenant) e inyecta `req.rol` + `req.barbero_id`. JWT admin: `{ tenant_id, rol: 'admin' }` con 30d. JWT barbero: `{ tenant_id, rol: 'barbero', barbero_id }` con 30d (login via `POST /api/auth/barbero/login`). Middleware `requiereRol(...roles)` disponible pero todavía no aplicado en ninguna ruta.
 - Bloqueo/aviso por suscripción ✅ mergeado a `main`.
 - Multi-tenancy por subdominio ✅ en producción (`kingsai.barbermanager.app`).
 - Migración de schema `refactor/schema-corte` ✅ mergeado a `main`.
@@ -172,7 +172,7 @@ de cambios:
 - **Log de actividad:** registrar quién eliminó qué y cuándo (hoy las eliminaciones no dejan rastro).
 - **Generación de QR de Mercado Pago** para cobro en el momento desde el iPad.
 - **Envío de planillas/datos por WhatsApp.**
-- **Software propio de turnero** para integrar con el sistema de gestión. En curso en branch `feature/turnero`. Placeholders Vite ya deployados en Vercel y validados (routing por path funciona). Schema de DB ejecutado en Supabase (Paso 1 de `plan_turnero_v2.md` ✅). Próximo: Paso 2 (setup Google Calendar) y Paso 3 (refactor de auth + login barbero). Plan completo en `docs/plan_turnero_v2.md`.
+- **Software propio de turnero** para integrar con el sistema de gestión. En curso en branch `feature/turnero`. Placeholders Vite ya deployados en Vercel y validados (routing por path funciona). Schema de DB ejecutado en Supabase (Paso 1 ✅). Refactor de auth + login barbero implementado y probado con Bruno (Paso 3 ✅). Próximo: Paso 2 (setup operativo Google Calendar — manual) o Paso 4 (services compartidos: `mailer.js` + `googleCalendar.js`). Plan completo en `docs/plan_turnero_v2.md`.
 - **Remover `has` condition de `frontend/vercel.json`** cuando se deploye el código real del turnero. Hoy los rewrites a `/turnos/*` y `/barbero/*` solo se aplican en `demo.barbermanager.app` para no afectar producción durante la fase placeholder.
 
 ---
@@ -181,5 +181,7 @@ de cambios:
 
 - **Columna `tenant.configuracion`:** se setea por default con `{"ciudad": "Buenos Aires", "moneda": "ARS"}` en `crearTenant.js` para mantener consistencia con los tenants existentes, pero falta verificar si efectivamente se usa en algún controller. Si no se usa, evaluar si conviene eliminarla o si es para uso futuro.
 - **Caché del `tenantMiddleware` sin invalidación:** ver pendiente "Endpoint admin de invalidación de caché". Es la mitigación planificada.
+- **Logging global filtra el body completo de cada request** (`index.js`). En las rutas de auth (`/api/auth/verificar-pin`, `/api/auth/barbero/login`) eso significa que el PIN viaja en texto plano a los logs de Railway. A mitigar agregando una lista de rutas cuyo body no se loguea (o de keys sensibles que se reemplazan por `***`).
+- **Inconsistencia de nombres en rutas de auth:** `POST /api/auth/verificar-pin` para admin vs `POST /api/auth/barbero/login` para barbero. Renombrar el del admin a `/login` queda postergado al Paso 6 del `plan_turnero_v2.md`, cuando se reorganizan las rutas bajo `/api/admin/*`.
 
 *— Fin del documento —*

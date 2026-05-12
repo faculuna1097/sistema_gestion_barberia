@@ -60,9 +60,9 @@ export async function verificarPin(req, res) {
     const aviso_pago = diaDelMes >= 5 && diaDelMes <= 10 && suscripcionNoRenovada;
 
     const token = jwt.sign(
-      { tenant_id },
+      { tenant_id, rol: 'admin' },
       process.env.JWT_SECRET,
-      { expiresIn: '12h' }
+      { expiresIn: '30d' }
     );
 
     console.log('[auth] verificarPin — completado | token emitido para tenant:', tenant_id,
