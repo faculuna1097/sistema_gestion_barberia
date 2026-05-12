@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-Última actualización: 2026-05-12 (Paso 3 del turnero — refactor de auth + login barbero).
+Última actualización: 2026-05-12 (Paso 2 del turnero — setup operativo de Google Calendar).
 
 Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convenciones_tecnicas.md).
 
@@ -21,8 +21,9 @@ Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convencio
 - URL: `https://sistemagestionbarberia-production.up.railway.app`
 - Root Directory: `/backend`
 - Start command: `node src/index.js`
-- Variables de entorno: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `NODE_ENV=production`, `PORT=3000`
+- Variables de entorno: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `NODE_ENV=production`, `PORT=3000`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_EMAIL`.
 - `TENANT_ID` eliminado de Railway — ya no se usa en producción.
+- Las cuatro `GOOGLE_*` corresponden a la cuenta central `turnos.barbermanager@gmail.com` (organizador de eventos del turnero). Cargadas pero todavía no consumidas por código — se activan recién en el Paso 4 (`services/googleCalendar.js`). El refresh token es estable (app publicada en Google Cloud, no expira por inactividad).
 
 ### Frontend — Vercel
 
@@ -71,6 +72,24 @@ Función dinámica en `index.js`: acepta `localhost:5173` y cualquier `*.barberm
 | Demo | Desarrollo | `demo` | `aaaaaaaa-0000-0000-0000-000000000002` |
 
 URL de producción: `kingsai.barbermanager.app` ✅ funcionando.
+
+### Setup de dev local para la integración con Google Calendar
+
+Las cuatro variables `GOOGLE_*` también están cargadas en `backend/.env`
+(local, gitignored) con los mismos valores que Railway. Esto permite probar
+end-to-end la integración con Google Calendar durante desarrollo, **siempre
+y cuando se use el tenant demo**, no Kingsai.
+
+Para que los eventos lleguen a algún lado durante el dev, hay barberos del
+tenant demo con email cargado a un dev real:
+
+| `barbero_id` | Nombre | Email | Tenant |
+|---|---|---|---|
+| `a74343cf-9388-452f-bcff-7df58d63244b` | facundo | `faculunacarp@gmail.com` | demo |
+
+Los barberos de Kingsai siguen con `email = NULL` hasta que se coordine con
+ellos personalmente. Cargar emails reales de Kingsai sin avisarles antes
+generaría invitaciones de Google que ellos no entenderían.
 
 ---
 
@@ -172,7 +191,7 @@ de cambios:
 - **Log de actividad:** registrar quién eliminó qué y cuándo (hoy las eliminaciones no dejan rastro).
 - **Generación de QR de Mercado Pago** para cobro en el momento desde el iPad.
 - **Envío de planillas/datos por WhatsApp.**
-- **Software propio de turnero** para integrar con el sistema de gestión. En curso en branch `feature/turnero`. Placeholders Vite ya deployados en Vercel y validados (routing por path funciona). Schema de DB ejecutado en Supabase (Paso 1 ✅). Refactor de auth + login barbero implementado y probado con Bruno (Paso 3 ✅). Próximo: Paso 2 (setup operativo Google Calendar — manual) o Paso 4 (services compartidos: `mailer.js` + `googleCalendar.js`). Plan completo en `docs/plan_turnero_v2.md`.
+- **Software propio de turnero** para integrar con el sistema de gestión. En curso en branch `feature/turnero`. Placeholders Vite ya deployados en Vercel y validados (routing por path funciona). Schema de DB ejecutado en Supabase (Paso 1 ✅). Refactor de auth + login barbero implementado y probado con Bruno (Paso 3 ✅). Setup operativo de Google Calendar completo: cuenta central `turnos.barbermanager@gmail.com` creada, proyecto en Google Cloud con Calendar API habilitada, OAuth consent screen publicado, credenciales Desktop app generadas, refresh token obtenido y cuatro variables `GOOGLE_*` cargadas en Railway (Paso 2 ✅). Próximo: Paso 4 (services compartidos: `mailer.js` + `googleCalendar.js`). Plan completo en `docs/plan_turnero_v2.md`.
 - **Remover `has` condition de `frontend/vercel.json`** cuando se deploye el código real del turnero. Hoy los rewrites a `/turnos/*` y `/barbero/*` solo se aplican en `demo.barbermanager.app` para no afectar producción durante la fase placeholder.
 
 ---
