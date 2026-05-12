@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-Última actualización: 2026-05-12 (Paso 2 del turnero — setup operativo de Google Calendar).
+Última actualización: 2026-05-12 (Paso 4 del turnero — services compartidos `googleCalendar.js` y `mailer.js`).
 
 Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convenciones_tecnicas.md).
 
@@ -191,7 +191,7 @@ de cambios:
 - **Log de actividad:** registrar quién eliminó qué y cuándo (hoy las eliminaciones no dejan rastro).
 - **Generación de QR de Mercado Pago** para cobro en el momento desde el iPad.
 - **Envío de planillas/datos por WhatsApp.**
-- **Software propio de turnero** para integrar con el sistema de gestión. En curso en branch `feature/turnero`. Placeholders Vite ya deployados en Vercel y validados (routing por path funciona). Schema de DB ejecutado en Supabase (Paso 1 ✅). Refactor de auth + login barbero implementado y probado con Bruno (Paso 3 ✅). Setup operativo de Google Calendar completo: cuenta central `turnos.barbermanager@gmail.com` creada, proyecto en Google Cloud con Calendar API habilitada, OAuth consent screen publicado, credenciales Desktop app generadas, refresh token obtenido y cuatro variables `GOOGLE_*` cargadas en Railway (Paso 2 ✅). Próximo: Paso 4 (services compartidos: `mailer.js` + `googleCalendar.js`). Plan completo en `docs/plan_turnero_v2.md`.
+- **Software propio de turnero** para integrar con el sistema de gestión. En curso en branch `feature/turnero`. Placeholders Vite ya deployados en Vercel y validados (routing por path funciona). Schema de DB ejecutado en Supabase (Paso 1 ✅). Setup operativo de Google Calendar completo: cuenta central `turnos.barbermanager@gmail.com` creada, proyecto en Google Cloud con Calendar API habilitada, OAuth consent screen publicado, credenciales Desktop app generadas, refresh token obtenido y cuatro variables `GOOGLE_*` cargadas en Railway (Paso 2 ✅). Refactor de auth + login barbero implementado y probado con Bruno (Paso 3 ✅). Services compartidos `services/googleCalendar.js` (crear/cancelar/actualizar evento, best-effort) y `services/mailer.js` (4 tipos de mail vía Nodemailer + SMTP de Gmail con App Password) implementados y validados end-to-end con los scripts `backend/src/scripts/probar*.js` (Paso 4 ✅). Próximo: Paso 5 (endpoints públicos del turnero — tenant, servicios, barberos, disponibilidad, crear/ver/cancelar/reprogramar turno). Plan completo en `docs/plan_turnero_v2.md`.
 - **Remover `has` condition de `frontend/vercel.json`** cuando se deploye el código real del turnero. Hoy los rewrites a `/turnos/*` y `/barbero/*` solo se aplican en `demo.barbermanager.app` para no afectar producción durante la fase placeholder.
 
 ---
@@ -202,5 +202,6 @@ de cambios:
 - **Caché del `tenantMiddleware` sin invalidación:** ver pendiente "Endpoint admin de invalidación de caché". Es la mitigación planificada.
 - **Logging global filtra el body completo de cada request** (`index.js`). En las rutas de auth (`/api/auth/verificar-pin`, `/api/auth/barbero/login`) eso significa que el PIN viaja en texto plano a los logs de Railway. A mitigar agregando una lista de rutas cuyo body no se loguea (o de keys sensibles que se reemplazan por `***`).
 - **Inconsistencia de nombres en rutas de auth:** `POST /api/auth/verificar-pin` para admin vs `POST /api/auth/barbero/login` para barbero. Renombrar el del admin a `/login` queda postergado al Paso 6 del `plan_turnero_v2.md`, cuando se reorganizan las rutas bajo `/api/admin/*`.
+- **Mailing del turnero vía Nodemailer + SMTP de Gmail.** Hoy el `services/mailer.js` envía desde `turnos.barbermanager@gmail.com` usando una App Password (16 chars, generada con 2FA activa). Gmail limita a ~500 mails/día por cuenta. Cuando el volumen crezca (varios tenants activos), migrar a Resend (o Postmark) con dominio propio `turnos@barbermanager.app`: requiere verificar el dominio en Vercel DNS con registros SPF/DKIM y reemplazar el transport interno del service. La API pública del service (`enviarConfirmacion`, `enviarCancelacion`, `enviarReprogramacion`, `enviarCancelacionPorSuspension`) no cambia, por eso queda encapsulado.
 
 *— Fin del documento —*
