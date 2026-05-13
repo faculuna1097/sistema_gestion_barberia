@@ -25,6 +25,7 @@ import balancesRouter   from './routes/balances.js';
 import inicioRoutes     from './routes/inicio.js';
 import authRoutes       from './routes/auth.js';
 import authBarberoRoutes from './routes/authBarbero.js';
+import turneroRoutes    from './routes/turnero.js';
 
 console.log('[index] Iniciando Barbershop Manager API...');
 
@@ -70,6 +71,7 @@ app.get('/api/health', (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 app.use('/api/auth/barbero', authBarberoRoutes);
 app.use('/api/auth',       authRoutes);
+app.use('/api/turnero',    turneroRoutes);
 app.use('/api/barberos',   barberoRoutes);
 app.use('/api/servicios',  servicioRoutes);
 app.use('/api/productos',  productoRoutes);
