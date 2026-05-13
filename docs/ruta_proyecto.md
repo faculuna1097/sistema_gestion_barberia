@@ -38,7 +38,8 @@ sistema-gestion-barberia/
 │       │   └── tenantMiddleware.js            # Resuelve tenant_id desde header X-Tenant-Subdomain (con caché)
 │       │
 │       ├── utils/
-│       │   └── sanitizarLogs.js               # Tacha credenciales (pin, password) antes de loguearlas
+│       │   ├── sanitizarLogs.js               # Tacha credenciales (pin, password) antes de loguearlas
+│       │   └── constantes.js                  # TZ Argentina y ANTELACION_MINIMA_MINUTOS (compartidas)
 │       │
 │       ├── controllers/               # Lógica de negocio (consultas a DB, respuestas HTTP)
 │       │   ├── auth.js                # Login admin con PIN, genera JWT con rol='admin' (30d)
@@ -54,7 +55,8 @@ sistema-gestion-barberia/
 │       │   ├── caja.js                # Movimientos de caja del día
 │       │   ├── inicio.js              # Dashboard del panel admin (resumen diario)
 │       │   ├── balances.js            # Reportes de ingresos/gastos por período
-│       │   └── gestion.js             # Gestión de tenant: PIN, datos negocio, ABMs
+│       │   ├── gestion.js             # Gestión de tenant: PIN, datos negocio, ABMs
+│       │   └── turnero.js             # Endpoints públicos del turnero del cliente (sin auth)
 │       │
 │       ├── routes/                    # Definición de rutas HTTP (conectan URL → controller)
 │       │   ├── auth.js                # /api/auth/verificar-pin
@@ -71,11 +73,19 @@ sistema-gestion-barberia/
 │       │   ├── inicio.js              # /api/inicio/*
 │       │   ├── balances.js            # /api/balances/*
 │       │   ├── gestion.js             # /api/gestion/*
+│       │   ├── turnero.js             # /api/turnero/*
 │       │   └── health.js              # /api/health (health check)
+│       │
+│       ├── services/                  # Lógica de negocio reutilizable (integraciones externas, algoritmos)
+│       │   ├── googleCalendar.js      # Crear/cancelar/actualizar evento (best-effort, googleapis)
+│       │   ├── mailer.js              # Mails transaccionales del turnero (Nodemailer + SMTP Gmail)
+│       │   └── disponibilidadService.js  # Algoritmo de cálculo de slots disponibles (luxon)
 │       │
 │       └── scripts/                   # Scripts CLI de utilidad (no son rutas HTTP)
 │           ├── crearTenant.js         # Alta de nuevo cliente (ejecutar manualmente)
-│           └── hashearPinAdmin.js     # Hashear PIN de admin (utilidad de setup)
+│           ├── hashearPinAdmin.js     # Hashear PIN de admin (utilidad de setup)
+│           ├── probarGoogleCalendar.js # Validación end-to-end del service de Google Calendar
+│           └── probarMailer.js        # Validación end-to-end del service de mailer
 │
 └── frontend/                          # Cliente React + Vite
     ├── package.json                   # Dependencias y scripts del frontend
@@ -181,6 +191,14 @@ sistema-gestion-barberia/
 | **Gestión — productos** | `GET / POST / PUT` | `/api/gestion/productos[/:id]` | JWT |
 | **Gestión — stock** | `PUT` | `/api/gestion/productos/:id/agregar-stock` | JWT |
 | **Health** | `GET` | `/api/health` | Público |
+| **Turnero — tenant** | `GET` | `/api/turnero/tenant` | Público |
+| **Turnero — servicios** | `GET` | `/api/turnero/servicios` | Público |
+| **Turnero — barberos** | `GET` | `/api/turnero/barberos` | Público |
+| **Turnero — disponibilidad** | `GET` | `/api/turnero/disponibilidad` | Público |
+| **Turnero — turnos** | `POST` | `/api/turnero/turnos` | Público |
+| **Turnero — turnos** | `GET` | `/api/turnero/turnos/:token` | Público |
+| **Turnero — turnos** | `POST` | `/api/turnero/turnos/:token/cancelar` | Público |
+| **Turnero — turnos** | `POST` | `/api/turnero/turnos/:token/reprogramar` | Público |
 
 ---
 

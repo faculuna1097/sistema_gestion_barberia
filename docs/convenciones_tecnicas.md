@@ -46,11 +46,22 @@ Siempre en estos 4 puntos:
 
 ## 4. Timezone y fechas
 
-### Constante
+### Constante TZ
+La constante `TZ = 'America/Argentina/Buenos_Aires'` vive centralizada en
+`backend/src/utils/constantes.js`. Importar desde ahí en cada archivo que la
+use:
 ```js
-const TZ = 'America/Argentina/Buenos_Aires';
+import { TZ } from '../utils/constantes.js';
 ```
-Va al tope de cada archivo que la use. Nunca hardcodear el string en queries.
+Nunca hardcodear el string en queries ni redeclararlo al tope del archivo
+en código nuevo. (Algunos archivos previos al refactor del turnero siguen
+con la declaración local; ver deudas técnicas en `estado_actual.md`.)
+
+### Aritmética de fechas con TZ
+Para cualquier cómputo que requiera sumar minutos, comparar rangos, o
+generar grillas en TZ Argentina, usar **luxon** (`DateTime.fromISO(s, { zone: TZ })`,
+`.plus({ minutes })`, `.setZone()`). Evitar `new Date(...toLocaleString('en-US', ...))`
+en código nuevo.
 
 ### Queries SQL
 Formato correcto:
