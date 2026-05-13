@@ -48,7 +48,7 @@ sistema-gestion-barberia/
 │       │   ├── servicios.js           # CRUD de servicios de corte
 │       │   ├── productos.js           # CRUD de productos de venta
 │       │   ├── categorias.js          # CRUD de categorías de gastos
-│       │   ├── cortes.js              # Registrar cortes (flujo operativo)
+│       │   ├── cortes.js              # Registrar cortes (flujo operativo, turno_id opcional para vincular turno)
 │       │   ├── ventas.js              # Registrar ventas (flujo operativo + panel admin)
 │       │   ├── gastos.js              # Registrar gastos (flujo operativo + panel admin)
 │       │   ├── planillas.js           # Reporte de comisiones por barbero
@@ -56,7 +56,12 @@ sistema-gestion-barberia/
 │       │   ├── inicio.js              # Dashboard del panel admin (resumen diario)
 │       │   ├── balances.js            # Reportes de ingresos/gastos por período
 │       │   ├── gestion.js             # Gestión de tenant: PIN, datos negocio, ABMs
-│       │   └── turnero.js             # Endpoints públicos del turnero del cliente (sin auth)
+│       │   ├── turnero.js             # Endpoints públicos del turnero del cliente (sin auth)
+│       │   ├── turnos.js              # CRUD turnos backoffice (scope según rol admin/barbero)
+│       │   ├── horarios.js            # CRUD horarios backoffice (scope según rol)
+│       │   ├── suspensiones.js        # CRUD suspensiones backoffice (scope según rol)
+│       │   ├── clientes.js            # Búsqueda y listado de clientes backoffice
+│       │   └── planilla.js            # Planilla semanal backoffice (scope según rol)
 │       │
 │       ├── routes/                    # Definición de rutas HTTP (conectan URL → controller)
 │       │   ├── auth.js                # /api/auth/verificar-pin
@@ -74,18 +79,30 @@ sistema-gestion-barberia/
 │       │   ├── balances.js            # /api/balances/*
 │       │   ├── gestion.js             # /api/gestion/*
 │       │   ├── turnero.js             # /api/turnero/*
+│       │   ├── turnos.js              # /api/admin/turnos/*
+│       │   ├── horarios.js            # /api/admin/horarios/*
+│       │   ├── suspensiones.js        # /api/admin/suspensiones/*
+│       │   ├── clientes.js            # /api/admin/clientes/*
+│       │   ├── planilla.js            # /api/admin/planilla/*
+│       │   ├── adminBarberos.js       # /api/admin/barberos/* (requiereRol admin)
+│       │   ├── adminServicios.js      # /api/admin/servicios/* (requiereRol admin)
 │       │   └── health.js              # /api/health (health check)
 │       │
 │       ├── services/                  # Lógica de negocio reutilizable (integraciones externas, algoritmos)
 │       │   ├── googleCalendar.js      # Crear/cancelar/actualizar evento (best-effort, googleapis)
 │       │   ├── mailer.js              # Mails transaccionales del turnero (Nodemailer + SMTP Gmail)
-│       │   └── disponibilidadService.js  # Algoritmo de cálculo de slots disponibles (luxon)
+│       │   ├── disponibilidadService.js  # Algoritmo de cálculo de slots disponibles (luxon)
+│       │   ├── turnosService.js       # Helpers compartidos + operaciones backoffice de turnos
+│       │   ├── horariosService.js     # CRUD de horarios de barberos
+│       │   ├── suspensionesService.js # CRUD suspensiones (flujo 409 → confirmar_cancelacion → 201)
+│       │   └── planillaService.js     # Detalle y resumen semanal con scoping por barbero
 │       │
 │       └── scripts/                   # Scripts CLI de utilidad (no son rutas HTTP)
 │           ├── crearTenant.js         # Alta de nuevo cliente (ejecutar manualmente)
 │           ├── hashearPinAdmin.js     # Hashear PIN de admin (utilidad de setup)
 │           ├── probarGoogleCalendar.js # Validación end-to-end del service de Google Calendar
-│           └── probarMailer.js        # Validación end-to-end del service de mailer
+│           ├── probarMailer.js        # Validación end-to-end del service de mailer
+│           └── testAdminEndpoints.js  # 34 tests automatizados de endpoints /api/admin/*
 │
 └── frontend/                          # Cliente React + Vite
     ├── package.json                   # Dependencias y scripts del frontend
@@ -199,6 +216,19 @@ sistema-gestion-barberia/
 | **Turnero — turnos** | `GET` | `/api/turnero/turnos/:token` | Público |
 | **Turnero — turnos** | `POST` | `/api/turnero/turnos/:token/cancelar` | Público |
 | **Turnero — turnos** | `POST` | `/api/turnero/turnos/:token/reprogramar` | Público |
+| **Admin — turnos** | `GET` | `/api/admin/turnos` | JWT (admin/barbero) |
+| **Admin — turnos** | `POST` | `/api/admin/turnos` | JWT (admin/barbero) |
+| **Admin — turnos** | `PATCH` | `/api/admin/turnos/:id/estado` | JWT (admin/barbero) |
+| **Admin — horarios** | `GET` | `/api/admin/horarios/:barbero_id` | JWT (admin/barbero) |
+| **Admin — horarios** | `PUT` | `/api/admin/horarios/:barbero_id` | JWT (admin/barbero) |
+| **Admin — suspensiones** | `GET` | `/api/admin/suspensiones` | JWT (admin/barbero) |
+| **Admin — suspensiones** | `POST` | `/api/admin/suspensiones` | JWT (admin/barbero) |
+| **Admin — suspensiones** | `DELETE` | `/api/admin/suspensiones/:id` | JWT (admin/barbero) |
+| **Admin — planilla** | `GET` | `/api/admin/planilla/detalle` | JWT (admin/barbero) |
+| **Admin — planilla** | `GET` | `/api/admin/planilla/resumen` | JWT (admin/barbero) |
+| **Admin — clientes** | `GET` | `/api/admin/clientes` | JWT (admin/barbero) |
+| **Admin — barberos** | `GET / POST / PUT` | `/api/admin/barberos[/:id]` | JWT (admin) |
+| **Admin — servicios** | `GET / POST / PUT` | `/api/admin/servicios[/:id]` | JWT (admin) |
 
 ---
 
