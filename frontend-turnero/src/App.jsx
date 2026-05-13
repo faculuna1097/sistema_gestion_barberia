@@ -1,5 +1,159 @@
+// /frontend-turnero/src/App.jsx
+// Router principal del turnero del cliente.
+// Si la URL contiene /turnos/gestionar/:token → muestra GestionTurno.
+// Si no → muestra el wizard de reserva (pasos 1-7).
+
+import { useState, useEffect } from 'react';
+import { getTenant } from './services/api.js';
+import Landing from './components/Landing.jsx';
+import SeleccionServicio from './components/SeleccionServicio.jsx';
+import SeleccionBarbero from './components/SeleccionBarbero.jsx';
+import SeleccionFecha from './components/SeleccionFecha.jsx';
+import SeleccionHorario from './components/SeleccionHorario.jsx';
+import DatosCliente from './components/DatosCliente.jsx';
+import Confirmacion from './components/Confirmacion.jsx';
+import GestionTurno from './components/GestionTurno.jsx';
+
+/**
+ * extraerTokenDeURL
+ * Busca el patrón /turnos/gestionar/:token en el pathname.
+ * @returns {string|null} El token si existe, null si no
+ */
+function extraerTokenDeURL() {
+  const path = window.location.pathname;
+  const match = path.match(/\/turnos\/gestionar\/([^/]+)/);
+  return match ? match[1] : null;
+}
+
 function App() {
-  return <h1>Hola desde turnos</h1>;
+  const [tenant, setTenant] = useState(null);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Token de gestión si la URL es /turnos/gestionar/:token
+  const [tokenGestion] = useState(() => extraerTokenDeURL());
+
+  // Estado del wizard de reserva
+  const [paso, setPaso] = useState(0);
+  const [reserva, setReserva] = useState({
+    servicio: null,
+    barbero: null,
+    fecha: null,
+    horario: null,
+    nombre: '',
+    telefono: '',
+    email: '',
+  });
+
+  // Resultado post-confirmación
+  const [resultado, setResultado] = useState(null);
+
+  useEffect(() => {
+    async function cargar() {
+      try {
+        const data = await getTenant();
+        setTenant(data);
+        console.log('[App] getTenant — cargado | nombre:', data.nombre);
+      } catch (err) {
+        console.error('[App] Error cargando tenant:', err.message);
+        setError('No se pudo cargar la información del negocio');
+      } finally {
+        setCargando(false);
+      }
+    }
+    cargar();
+  }, []);
+
+  if (cargando) return <p>Cargando...</p>;
+  if (error) return <p>{error}</p>;
+
+  // Ruta especial: gestión del turno desde link del mail
+  if (tokenGestion) {
+    return <GestionTurno token={tokenGestion} tenant={tenant} />;
+  }
+
+  /**
+   * actualizarReserva
+   * Merge parcial sobre el estado de reserva.
+   * @param {Object} datos - Campos a actualizar
+   */
+  const actualizarReserva = (datos) => {
+    setReserva(prev => ({ ...prev, ...datos }));
+  };
+
+  /**
+   * siguiente
+   * Avanza al próximo paso del wizard.
+   */
+  const siguiente = () => setPaso(prev => prev + 1);
+
+  /**
+   * volver
+   * Retrocede al paso anterior del wizard.
+   */
+  const volver = () => setPaso(prev => prev - 1);
+
+  // Wizard de reserva — paso 0 a 6 (7 pantallas)
+  switch (paso) {
+    case 0:
+      return <Landing tenant={tenant} onReservar={siguiente} />;
+    case 1:
+      return (
+        <SeleccionServicio
+          seleccionado={reserva.servicio}
+          onSeleccionar={(s) => { actualizarReserva({ servicio: s }); siguiente(); }}
+          onVolver={volver}
+        />
+      );
+    case 2:
+      return (
+        <SeleccionBarbero
+          seleccionado={reserva.barbero}
+          onSeleccionar={(b) => { actualizarReserva({ barbero: b }); siguiente(); }}
+          onVolver={volver}
+        />
+      );
+    case 3:
+      return (
+        <SeleccionFecha
+          seleccionada={reserva.fecha}
+          onSeleccionar={(f) => { actualizarReserva({ fecha: f, horario: null }); siguiente(); }}
+          onVolver={volver}
+        />
+      );
+    case 4:
+      return (
+        <SeleccionHorario
+          barberoId={reserva.barbero.id}
+          servicioId={reserva.servicio.id}
+          fecha={reserva.fecha}
+          seleccionado={reserva.horario}
+          onSeleccionar={(h) => { actualizarReserva({ horario: h }); siguiente(); }}
+          onVolver={volver}
+        />
+      );
+    case 5:
+      return (
+        <DatosCliente
+          datos={{ nombre: reserva.nombre, telefono: reserva.telefono, email: reserva.email }}
+          onConfirmar={(d) => { actualizarReserva(d); siguiente(); }}
+          onVolver={volver}
+        />
+      );
+    case 6:
+      return (
+        <Confirmacion
+          reserva={reserva}
+          tenant={tenant}
+          onExito={(res) => setResultado(res)}
+          onVolver={volver}
+          resultado={resultado}
+          onNuevaReserva={() => { setReserva({ servicio: null, barbero: null, fecha: null, horario: null, nombre: '', telefono: '', email: '' }); setResultado(null); setPaso(0); }}
+        />
+      );
+    default:
+      return <p>Paso desconocido</p>;
+  }
 }
 
 export default App;
