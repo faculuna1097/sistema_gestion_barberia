@@ -6,54 +6,23 @@
 //
 // Cobertura: ver plan_turnero_v2.md sección 4.
 
-import crypto from 'crypto';
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { calcularSlotsDisponibles, DisponibilidadError } from '../services/disponibilidadService.js';
-import { crearEvento, cancelarEvento, actualizarEvento } from '../services/googleCalendar.js';
-import { enviarConfirmacion, enviarCancelacion, enviarReprogramacion } from '../services/mailer.js';
-import { TZ, ANTELACION_MINIMA_MINUTOS } from '../utils/constantes.js';
+import { actualizarEvento, cancelarEvento } from '../services/googleCalendar.js';
+import { enviarCancelacion, enviarReprogramacion } from '../services/mailer.js';
+import {
+  calcularDuracionServicio, upsertCliente, insertarTurno, enriquecerTurno,
+  armarLinkGestion, sincronizarCalendarCreacion, notificarConfirmacion,
+  inicioPosteriorAhora,
+} from '../services/turnosService.js';
+import { TZ } from '../utils/constantes.js';
 
 // Regex YYYY-MM-DD para validar el query param ?fecha.
 const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 // Regex mínimo de email — solo formato superficial.
-// La verificación real (envío + click) está fuera de scope.
 const REGEX_EMAIL = /.+@.+\..+/;
-
-/**
- * Construye el link de gestión del turno que va en los mails.
- * Lee el subdominio del header X-Tenant-Subdomain (lo que el frontend envía
- * en cada request) y arma la URL pública. En dev local (sin subdominio en
- * el header) cae a PUBLIC_BASE_URL del .env, o a localhost como último
- * recurso.
- *
- * @param {Object} req - request de Express
- * @param {string} token - token_gestion del turno
- * @returns {string} URL completa
- */
-/**
- * Verifica que un inicio sea posterior a ahora + el margen mínimo. Mantiene
- * coherencia con el algoritmo de disponibilidad: si un slot no aparece como
- * disponible (por estar en el pasado o demasiado pegado al ahora), tampoco
- * debe poder reservarse/reprogramarse directamente.
- *
- * @param {DateTime} inicioDT
- * @returns {boolean} true si el inicio es válido (futuro con margen)
- */
-const inicioPosteriorAhora = (inicioDT) => {
-  const umbral = DateTime.now().setZone(TZ).plus({ minutes: ANTELACION_MINIMA_MINUTOS });
-  return inicioDT > umbral;
-};
-
-const armarLinkGestion = (req, token) => {
-  const subdominio = req.headers['x-tenant-subdomain'];
-  if (subdominio) {
-    return `https://${subdominio}.barbermanager.app/turnos/${token}`;
-  }
-  const base = process.env.PUBLIC_BASE_URL ?? 'http://localhost:5173';
-  return `${base}/turnos/${token}`;
-};
 
 /**
  * getTenant
@@ -229,98 +198,44 @@ export const crearTurno = async (req, res) => {
     return res.status(400).json({ error: 'inicio debe ser futuro' });
   }
 
-  const emailNormalizado = email.trim().toLowerCase();
-
   try {
     // ── Calcular duración del servicio ──────────────────────────────────────
-    const duracionRes = await query(
-      `SELECT (t.duracion_slot_minutos * s.cantidad_slots) AS duracion_minutos
-       FROM servicio s
-       JOIN tenant t ON t.id = s.tenant_id
-       WHERE s.id = $1 AND s.tenant_id = $2 AND s.activo = true`,
-      [servicio_id, req.tenant_id]
-    );
-    if (duracionRes.rows.length === 0) {
+    const duracionMin = await calcularDuracionServicio(servicio_id, req.tenant_id);
+    if (duracionMin === null) {
       return res.status(404).json({ error: 'Servicio no encontrado o inactivo' });
     }
-    const duracionMin = duracionRes.rows[0].duracion_minutos;
     const finDT = inicioDT.plus({ minutes: duracionMin });
 
     // ── Upsert cliente ──────────────────────────────────────────────────────
-    const clienteRes = await query(
-      `INSERT INTO cliente (tenant_id, nombre, telefono, email)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (tenant_id, email) DO UPDATE
-         SET nombre = EXCLUDED.nombre, telefono = EXCLUDED.telefono
-       RETURNING id`,
-      [req.tenant_id, nombre, telefono, emailNormalizado]
-    );
-    const cliente_id = clienteRes.rows[0].id;
+    const cliente_id = await upsertCliente(req.tenant_id, { nombre, telefono, email });
 
     // ── INSERT turno ────────────────────────────────────────────────────────
-    const token_gestion = crypto.randomUUID();
-    let turnoRes;
+    let resultado;
     try {
-      turnoRes = await query(
-        `INSERT INTO turno
-           (tenant_id, cliente_id, barbero_id, servicio_id, inicio, fin,
-            estado, origen_creacion, token_gestion)
-         VALUES ($1, $2, $3, $4, $5, $6, 'reservado', 'turnero', $7)
-         RETURNING id`,
-        [req.tenant_id, cliente_id, barbero_id, servicio_id,
-         inicioDT.toISO(), finDT.toISO(), token_gestion]
-      );
+      resultado = await insertarTurno({
+        tenantId: req.tenant_id, clienteId: cliente_id, barberoId: barbero_id,
+        servicioId: servicio_id, inicioDT, finDT, origenCreacion: 'turnero',
+      });
     } catch (err) {
-      if (err.code === '23P01') {
+      if (err.code === 'SLOT_OCUPADO') {
         console.warn('[turnero] crearTurno — slot ya reservado (constraint 23P01)');
-        return res.status(409).json({ error: 'El slot elegido ya no está disponible' });
+        return res.status(409).json({ error: err.message });
       }
       throw err;
     }
-    const turno_id = turnoRes.rows[0].id;
+    const { turno_id, token_gestion } = resultado;
     console.log('[turnero] crearTurno — turno insertado | turno_id:', turno_id);
 
-    // ── SELECT enriquecido para Calendar + mail ─────────────────────────────
-    let enriquecido = null;
+    // ── Best-effort: Calendar + mail ────────────────────────────────────────
     try {
-      const enrichRes = await query(
-        `SELECT t.inicio, t.fin,
-                b.nombre AS barbero_nombre, b.email AS barbero_email,
-                s.nombre AS servicio_nombre,
-                c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono
-         FROM turno t
-         JOIN barbero  b ON b.id = t.barbero_id
-         JOIN servicio s ON s.id = t.servicio_id
-         JOIN cliente  c ON c.id = t.cliente_id
-         WHERE t.id = $1`,
-        [turno_id]
-      );
-      enriquecido = enrichRes.rows[0];
-    } catch (err) {
-      // No rompemos el flujo: el turno ya está creado. Solo logueamos
-      // y nos saltamos Calendar y mail.
-      console.error('[turnero] crearTurno — fallo SELECT enriquecido:', err.message);
-    }
-
-    // ── Best-effort: Google Calendar ────────────────────────────────────────
-    if (enriquecido) {
-      const turnoParaServices = { inicio: enriquecido.inicio, fin: enriquecido.fin };
-      const barbero  = { nombre: enriquecido.barbero_nombre, email: enriquecido.barbero_email };
-      const servicio = { nombre: enriquecido.servicio_nombre };
-      const cliente  = { nombre: enriquecido.cliente_nombre, email: enriquecido.cliente_email, telefono: enriquecido.cliente_telefono };
-
-      const eventId = await crearEvento(turnoParaServices, barbero, servicio, cliente);
-      if (eventId) {
-        try {
-          await query(`UPDATE turno SET google_event_id = $1 WHERE id = $2`, [eventId, turno_id]);
-        } catch (err) {
-          console.error('[turnero] crearTurno — fallo UPDATE google_event_id:', err.message);
-        }
+      const enriquecido = await enriquecerTurno(turno_id);
+      if (enriquecido) {
+        await sincronizarCalendarCreacion(turno_id, enriquecido);
+        const linkGestion = armarLinkGestion(req, token_gestion);
+        await notificarConfirmacion(enriquecido, linkGestion);
       }
-
-      // ── Best-effort: mail de confirmación ────────────────────────────────
-      const linkGestion = armarLinkGestion(req, token_gestion);
-      await enviarConfirmacion(turnoParaServices, barbero, servicio, cliente, linkGestion);
+    } catch (err) {
+      console.error('[turnero] crearTurno — fallo best-effort (Calendar/mail):', err.message);
     }
 
     console.log('[turnero] crearTurno — completado | turno_id:', turno_id);

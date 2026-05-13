@@ -26,6 +26,14 @@ import inicioRoutes     from './routes/inicio.js';
 import authRoutes       from './routes/auth.js';
 import authBarberoRoutes from './routes/authBarbero.js';
 import turneroRoutes    from './routes/turnero.js';
+import turnosAdminRoutes   from './routes/turnos.js';
+import horariosAdminRoutes     from './routes/horarios.js';
+import suspensionesAdminRoutes  from './routes/suspensiones.js';
+import clientesAdminRoutes     from './routes/clientes.js';
+import planillaAdminRoutes     from './routes/planilla.js';
+import adminBarberosRoutes    from './routes/adminBarberos.js';
+import adminServiciosRoutes   from './routes/adminServicios.js';
+import { requiereRol } from './middlewares/requiereRolMiddleware.js';
 
 console.log('[index] Iniciando Barbershop Manager API...');
 
@@ -96,6 +104,17 @@ app.use('/api/gestion', (req, res, next) => {
   if (req.method === 'GET' && req.path === '/negocio') return next();
   verificarToken(req, res, next);
 }, gestionRouter);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RUTAS DEL BACKOFFICE — /api/admin/* (admin + barbero autenticados)
+// ─────────────────────────────────────────────────────────────────────────────
+app.use('/api/admin/turnos',    verificarToken, turnosAdminRoutes);
+app.use('/api/admin/horarios',      verificarToken, horariosAdminRoutes);
+app.use('/api/admin/suspensiones',  verificarToken, suspensionesAdminRoutes);
+app.use('/api/admin/clientes',      verificarToken, clientesAdminRoutes);
+app.use('/api/admin/planilla',      verificarToken, planillaAdminRoutes);
+app.use('/api/admin/barberos',     verificarToken, requiereRol('admin'), adminBarberosRoutes);
+app.use('/api/admin/servicios',    verificarToken, requiereRol('admin'), adminServiciosRoutes);
 
 console.log('[index] Rutas registradas correctamente');
 
