@@ -223,6 +223,7 @@ sistema-gestion-barberia/
                     ├── SeccionGastos.jsx      # Historial de gastos con filtros por período
                     ├── SeccionVentas.jsx      # Historial de ventas con filtros por período
                     ├── SeccionBalances.jsx    # Reportes de ingresos/gastos por período
+                    ├── SeccionTurnero.jsx     # Vista global de turnos del día (todos los barberos)
                     ├── SeccionGestion.jsx     # Contenedor de gestión con tabs
                     └── gestion/               # Tabs dentro de SeccionGestion
                         ├── TabNegocio.jsx     # Datos del negocio (nombre, logo, suscripción)
@@ -309,6 +310,7 @@ sistema-gestion-barberia/
 | `SeccionGastos.jsx` | Historial de gastos con filtros |
 | `SeccionVentas.jsx` | Historial de ventas con filtros |
 | `SeccionBalances.jsx` | Reporte de ingresos y gastos por período |
+| `SeccionTurnero.jsx` | Vista global de turnos del día con filtro por barbero |
 | `SeccionGestion.jsx` | Contenedor de las 5 tabs de configuración |
 | `TabNegocio.jsx` | Editar datos del negocio |
 | `TabBarberos.jsx` | ABM de barberos |
@@ -336,7 +338,7 @@ sistema-gestion-barberia/
 │  Deploy: Vercel (sistema-gestion-barberia.vercel.app)   │
 │                                                         │
 │  Flujos operativos        Panel administrativo          │
-│  FlujoCorte / Venta /     PanelAdmin + 7 secciones      │
+│  FlujoCorte / Venta /     PanelAdmin + 8 secciones      │
 │  Gasto (público)          (requiere JWT)                │
 │                                                         │
 │  → Todas las llamadas vía apiFetch() en api.js          │

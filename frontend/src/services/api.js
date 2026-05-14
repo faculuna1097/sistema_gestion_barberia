@@ -205,3 +205,58 @@ export const verificarPin = async (pin) => {
   if (!response.ok) throw new Error('PIN incorrecto');
   return response.json(); // { token, aviso_pago }
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN — Turnero (gestión de turnos)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * getAdminTurnos
+ * Obtiene los turnos de un día. Sin barbero_id devuelve todos los barberos.
+ * @param {string} fecha - 'YYYY-MM-DD'
+ * @param {string|null} barberoId - filtra por barbero (null = todos)
+ * @returns {Promise<Array>} Array de turnos con barbero, servicio y cliente
+ */
+export const getAdminTurnos = async (fecha, barberoId = null) => {
+  let path = `/admin/turnos?fecha=${fecha}`;
+  if (barberoId) path += `&barbero_id=${barberoId}`;
+  const res = await apiFetch(path);
+  if (!res.ok) throw new Error('Error al obtener turnos');
+  return res.json();
+};
+
+/**
+ * patchAdminTurnoEstado
+ * Cambia el estado de un turno (completado / no_asistio).
+ * @param {string} turnoId
+ * @param {string} estado - 'completado' | 'no_asistio'
+ * @returns {Promise<Object>} turno actualizado
+ */
+export const patchAdminTurnoEstado = async (turnoId, estado) => {
+  const res = await apiFetch(`/admin/turnos/${turnoId}/estado`, {
+    method: 'PATCH',
+    body: JSON.stringify({ estado }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error || 'Error al cambiar estado del turno');
+  }
+  return res.json();
+};
+
+/**
+ * cancelarAdminTurno
+ * Cancela un turno (DELETE lógico → estado 'cancelado').
+ * @param {string} turnoId
+ * @returns {Promise<Object>} turno cancelado
+ */
+export const cancelarAdminTurno = async (turnoId) => {
+  const res = await apiFetch(`/admin/turnos/${turnoId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error || 'Error al cancelar turno');
+  }
+  return res.json();
+};

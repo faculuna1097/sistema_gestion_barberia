@@ -16,6 +16,7 @@ import SeccionGastos     from "./sections/SeccionGastos";
 import SeccionVentas     from "./sections/SeccionVentas";
 import SeccionGestion    from "./sections/SeccionGestion";
 import SeccionBalances   from './sections/SeccionBalances.jsx';
+import SeccionTurnero   from './sections/SeccionTurnero.jsx';
 
 // ─── Items del sidebar ────────────────────────────────────────────────────────
 // Cada ítem tiene: id, emoji, label, componente a renderizar
@@ -26,6 +27,7 @@ const SECCIONES = [
   { id: "balances",  emoji: "📊", label: "Balances",  componente: SeccionBalances  },
   { id: "ventas",    emoji: "🛍️", label: "Ventas",    componente: SeccionVentas    },
   { id: "gastos",    emoji: "💸", label: "Gastos",    componente: SeccionGastos    },
+  { id: "turnero",   emoji: "📅", label: "Turnero",   componente: SeccionTurnero  },
   { id: "gestion",   emoji: "⚙️", label: "Gestión",   componente: SeccionGestion   },
 ];
 

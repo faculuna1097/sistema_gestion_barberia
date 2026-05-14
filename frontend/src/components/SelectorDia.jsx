@@ -20,11 +20,13 @@ import {
 
 /**
  * @param {object} props
- * @param {string}   props.value     - Día seleccionado en formato 'YYYY-MM-DD'
+ * @param {string}   props.value          - Día seleccionado en formato 'YYYY-MM-DD'
  * @param {(fecha: string) => void} props.onChange - Callback al cambiar de día
+ * @param {boolean}  [props.permitirFuturo=false] - Si true, no deshabilita navegación a días futuros
  */
-export default function SelectorDia({ value, onChange }) {
-  const esHoy = value >= getFechaHoy();
+export default function SelectorDia({ value, onChange, permitirFuturo = false }) {
+  const hoy   = getFechaHoy();
+  const esHoy = value === hoy;
 
   const handleAnterior  = () => onChange(desplazarDia(value, -1));
   const handleSiguiente = () => onChange(desplazarDia(value, +1));
@@ -34,7 +36,7 @@ export default function SelectorDia({ value, onChange }) {
       label={fechaALabel(value)}
       onAnterior={handleAnterior}
       onSiguiente={handleSiguiente}
-      siguienteDeshabilitado={esHoy}
+      siguienteDeshabilitado={!permitirFuturo && esHoy}
       badge={esHoy ? { texto: 'Hoy', destacado: true } : null}
       minWidth={220}
       fontSize={15}
