@@ -104,6 +104,69 @@ sistema-gestion-barberia/
 │           ├── probarMailer.js        # Validación end-to-end del service de mailer
 │           └── testAdminEndpoints.js  # 34 tests automatizados de endpoints /api/admin/*
 │
+├── frontend-turnero/                  # Turnero del cliente — React + Vite
+│   ├── package.json
+│   ├── vite.config.js                 # base: '/turnos/'
+│   ├── index.html
+│   ├── eslint.config.js
+│   ├── .gitignore
+│   │
+│   ├── public/
+│   │   ├── favicon.svg
+│   │   └── icons.svg
+│   │
+│   └── src/
+│       ├── main.jsx
+│       ├── App.jsx                    # Router: wizard de reserva (pasos 0-6) + ruta /gestionar/:token
+│       ├── App.css                    # Placeholder — estilos en chat dedicado
+│       ├── index.css                  # Reset mínimo
+│       │
+│       ├── services/
+│       │   └── api.js                 # 8 funciones contra /api/turnero/* (sin auth)
+│       │
+│       ├── assets/
+│       │   └── hero.png
+│       │
+│       └── components/
+│           ├── Landing.jsx            # Pantalla 1: logo + nombre + botón "Reservar turno"
+│           ├── SeleccionServicio.jsx   # Pantalla 2: lista de servicios
+│           ├── SeleccionBarbero.jsx    # Pantalla 3: lista de barberos
+│           ├── SeleccionFecha.jsx      # Pantalla 4: grilla de próximos 14 días
+│           ├── SeleccionHorario.jsx    # Pantalla 5: slots disponibles del día
+│           ├── DatosCliente.jsx        # Pantalla 6: nombre, teléfono, email
+│           ├── Confirmacion.jsx        # Pantalla 7: resumen + confirmar + resultado
+│           └── GestionTurno.jsx        # Pantalla 8: ver/cancelar/reprogramar turno por token
+│
+├── frontend-barbero/                  # App del barbero — React + Vite
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── vite.config.js                 # base: '/barbero/'
+│   ├── index.html
+│   ├── eslint.config.js
+│   ├── .gitignore
+│   │
+│   ├── public/
+│   │   ├── favicon.svg
+│   │   └── icons.svg
+│   │
+│   └── src/
+│       ├── main.jsx
+│       ├── App.jsx                    # Router: login → navegación por sección (dashboard, agenda, etc.)
+│       ├── App.css                    # Placeholder — estilos en chat dedicado
+│       ├── index.css                  # Reset mínimo
+│       │
+│       ├── services/
+│       │   └── api.js                 # 17 funciones: 4 públicas + 13 protegidas vía apiFetch con JWT
+│       │
+│       └── components/
+│           ├── Login.jsx              # Selector de barbero + teclado PIN (mismo formato que gestión)
+│           ├── Dashboard.jsx          # Turnos del día como lista + gestión de estados
+│           ├── CrearTurno.jsx         # Wizard: servicio → fecha → horario → datos cliente
+│           ├── Agenda.jsx             # Timeline vertical tipo Google Calendar mobile
+│           ├── MiPlanilla.jsx         # Detalle + resumen semanal navegable por semana
+│           ├── Gestion.jsx            # Tabs: Mis Horarios (editor bloques) + Mis Suspensiones
+│           └── Clientes.jsx           # Lista de clientes históricos del barbero con filtro
+│
 └── frontend/                          # Cliente React + Vite
     ├── package.json                   # Dependencias y scripts del frontend
     ├── package-lock.json
@@ -219,6 +282,7 @@ sistema-gestion-barberia/
 | **Admin — turnos** | `GET` | `/api/admin/turnos` | JWT (admin/barbero) |
 | **Admin — turnos** | `POST` | `/api/admin/turnos` | JWT (admin/barbero) |
 | **Admin — turnos** | `PATCH` | `/api/admin/turnos/:id/estado` | JWT (admin/barbero) |
+| **Admin — turnos** | `DELETE` | `/api/admin/turnos/:id` | JWT (admin/barbero) |
 | **Admin — horarios** | `GET` | `/api/admin/horarios/:barbero_id` | JWT (admin/barbero) |
 | **Admin — horarios** | `PUT` | `/api/admin/horarios/:barbero_id` | JWT (admin/barbero) |
 | **Admin — suspensiones** | `GET` | `/api/admin/suspensiones` | JWT (admin/barbero) |
@@ -226,6 +290,7 @@ sistema-gestion-barberia/
 | **Admin — suspensiones** | `DELETE` | `/api/admin/suspensiones/:id` | JWT (admin/barbero) |
 | **Admin — planilla** | `GET` | `/api/admin/planilla/detalle` | JWT (admin/barbero) |
 | **Admin — planilla** | `GET` | `/api/admin/planilla/resumen` | JWT (admin/barbero) |
+| **Admin — clientes** | `GET` | `/api/admin/clientes/mis-clientes` | JWT (admin/barbero) |
 | **Admin — clientes** | `GET` | `/api/admin/clientes` | JWT (admin/barbero) |
 | **Admin — barberos** | `GET / POST / PUT` | `/api/admin/barberos[/:id]` | JWT (admin) |
 | **Admin — servicios** | `GET / POST / PUT` | `/api/admin/servicios[/:id]` | JWT (admin) |

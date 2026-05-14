@@ -11,6 +11,50 @@ import { query } from '../config/db.js';
  * @param {string} req.query.busqueda - texto de búsqueda (mínimo 2 caracteres)
  * @returns {JSON} array de clientes
  */
+/**
+ * GET /api/admin/clientes/mis-clientes
+ * Devuelve los clientes que tuvieron al menos un turno con el barbero autenticado.
+ * Si rol=admin y se pasa barbero_id como query param, filtra por ese barbero.
+ * Si rol=barbero, usa req.barbero_id (ignora query param).
+ * @param {string} req.tenant_id - inyectado por tenantMiddleware
+ * @param {string} req.barbero_id - inyectado por verificarToken (solo rol=barbero)
+ * @param {string} [req.query.barbero_id] - opcional, solo para admin
+ * @returns {JSON} array de { id, nombre, email, telefono, total_visitas, ultima_visita }
+ */
+export const getMisClientes = async (req, res) => {
+  const barbero_id = req.rol === 'barbero'
+    ? req.barbero_id
+    : req.query.barbero_id;
+
+  console.log('[clientes] getMisClientes — request recibido | tenant:', req.tenant_id,
+    '| barbero_id:', barbero_id ?? '(todos)');
+
+  if (!barbero_id) {
+    return res.status(400).json({ error: 'barbero_id es requerido' });
+  }
+
+  try {
+    const result = await query(
+      `SELECT c.id, c.nombre, c.email, c.telefono,
+              COUNT(t.id)::int AS total_visitas,
+              MAX(t.inicio)    AS ultima_visita
+       FROM cliente c
+       JOIN turno t ON t.cliente_id = c.id
+       WHERE t.barbero_id = $1
+         AND t.tenant_id  = $2
+         AND t.estado IN ('completado', 'reservado')
+       GROUP BY c.id, c.nombre, c.email, c.telefono
+       ORDER BY ultima_visita DESC`,
+      [barbero_id, req.tenant_id]
+    );
+    console.log('[clientes] getMisClientes — completado |', result.rows.length, 'clientes');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('[clientes] Error en getMisClientes:', err.message);
+    res.status(500).json({ error: 'Error al obtener clientes del barbero' });
+  }
+};
+
 export const getClientes = async (req, res) => {
   console.log('[clientes] getClientes — request recibido | tenant:', req.tenant_id,
     '| busqueda:', req.query.busqueda ?? '(vacía)');
