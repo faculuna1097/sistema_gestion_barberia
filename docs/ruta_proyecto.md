@@ -51,7 +51,6 @@ sistema-gestion-barberia/
 │       │   ├── cortes.js              # Registrar cortes (flujo operativo, turno_id opcional para vincular turno)
 │       │   ├── ventas.js              # Registrar ventas (flujo operativo + panel admin)
 │       │   ├── gastos.js              # Registrar gastos (flujo operativo + panel admin)
-│       │   ├── planillas.js           # Reporte de comisiones por barbero
 │       │   ├── caja.js                # Movimientos de caja del día
 │       │   ├── inicio.js              # Dashboard del panel admin (resumen diario)
 │       │   ├── balances.js            # Reportes de ingresos/gastos por período
@@ -73,11 +72,9 @@ sistema-gestion-barberia/
 │       │   ├── cortes.js              # /api/cortes/*
 │       │   ├── ventas.js              # /api/ventas/*
 │       │   ├── gastos.js              # /api/gastos/*
-│       │   ├── planillas.js           # /api/planillas/*
 │       │   ├── caja.js                # /api/caja/*
 │       │   ├── inicio.js              # /api/inicio/*
 │       │   ├── balances.js            # /api/balances/*
-│       │   ├── gestion.js             # /api/gestion/*
 │       │   ├── turnero.js             # /api/turnero/*
 │       │   ├── turnos.js              # /api/admin/turnos/*
 │       │   ├── horarios.js            # /api/admin/horarios/*
@@ -86,6 +83,8 @@ sistema-gestion-barberia/
 │       │   ├── planilla.js            # /api/admin/planilla/*
 │       │   ├── adminBarberos.js       # /api/admin/barberos/* (requiereRol admin)
 │       │   ├── adminServicios.js      # /api/admin/servicios/* (requiereRol admin)
+│       │   ├── adminProductos.js      # /api/admin/productos/* (requiereRol admin)
+│       │   ├── adminNegocio.js        # /api/admin/negocio/* (requiereRol admin)
 │       │   └── health.js              # /api/health (health check)
 │       │
 │       ├── services/                  # Lógica de negocio reutilizable (integraciones externas, algoritmos)
@@ -254,8 +253,6 @@ sistema-gestion-barberia/
 | **Gastos** | `GET` | `/api/gastos/mensual` | JWT |
 | **Gastos** | `PUT` | `/api/gastos/:id` | JWT |
 | **Gastos** | `DELETE` | `/api/gastos/:id` | JWT |
-| **Planillas** | `GET` | `/api/planillas/detalle-semanal` | JWT |
-| **Planillas** | `GET` | `/api/planillas/resumen-semanal` | JWT |
 | **Caja** | `GET` | `/api/caja/movimientos-dia` | JWT |
 | **Caja** | `DELETE` | `/api/caja/movimientos/:tipo/:id` | JWT |
 | **Inicio** | `GET` | `/api/inicio/resumen-dia` | JWT |
@@ -263,13 +260,7 @@ sistema-gestion-barberia/
 | **Inicio** | `GET` | `/api/inicio/stock-bajo` | JWT |
 | **Balances** | `GET` | `/api/balances/mensual` | JWT |
 | **Balances** | `GET` | `/api/balances/historico` | JWT |
-| **Gestión — negocio** | `GET` | `/api/gestion/negocio` | Público |
-| **Gestión — negocio** | `PUT` | `/api/gestion/negocio` | JWT |
-| **Gestión — PIN admin** | `PUT` | `/api/gestion/pin-admin` | JWT |
-| **Gestión — barberos** | `GET / POST / PUT` | `/api/gestion/barberos[/:id]` | JWT |
-| **Gestión — servicios** | `GET / POST / PUT` | `/api/gestion/servicios[/:id]` | JWT |
-| **Gestión — productos** | `GET / POST / PUT` | `/api/gestion/productos[/:id]` | JWT |
-| **Gestión — stock** | `PUT` | `/api/gestion/productos/:id/agregar-stock` | JWT |
+| **Negocio** | `GET` | `/api/negocio` | Público |
 | **Health** | `GET` | `/api/health` | Público |
 | **Turnero — tenant** | `GET` | `/api/turnero/tenant` | Público |
 | **Turnero — servicios** | `GET` | `/api/turnero/servicios` | Público |
@@ -288,12 +279,16 @@ sistema-gestion-barberia/
 | **Admin — suspensiones** | `GET` | `/api/admin/suspensiones` | JWT (admin/barbero) |
 | **Admin — suspensiones** | `POST` | `/api/admin/suspensiones` | JWT (admin/barbero) |
 | **Admin — suspensiones** | `DELETE` | `/api/admin/suspensiones/:id` | JWT (admin/barbero) |
-| **Admin — planilla** | `GET` | `/api/admin/planilla/detalle` | JWT (admin/barbero) |
+| **Admin — planilla** | `GET` | `/api/admin/planilla` | JWT (admin/barbero) |
 | **Admin — planilla** | `GET` | `/api/admin/planilla/resumen` | JWT (admin/barbero) |
 | **Admin — clientes** | `GET` | `/api/admin/clientes/mis-clientes` | JWT (admin/barbero) |
 | **Admin — clientes** | `GET` | `/api/admin/clientes` | JWT (admin/barbero) |
 | **Admin — barberos** | `GET / POST / PUT` | `/api/admin/barberos[/:id]` | JWT (admin) |
 | **Admin — servicios** | `GET / POST / PUT` | `/api/admin/servicios[/:id]` | JWT (admin) |
+| **Admin — productos** | `GET / POST / PUT` | `/api/admin/productos[/:id]` | JWT (admin) |
+| **Admin — stock** | `PUT` | `/api/admin/productos/:id/agregar-stock` | JWT (admin) |
+| **Admin — negocio** | `PUT` | `/api/admin/negocio` | JWT (admin) |
+| **Admin — PIN admin** | `PUT` | `/api/admin/negocio/pin-admin` | JWT (admin) |
 
 ---
 

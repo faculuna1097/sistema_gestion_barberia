@@ -50,7 +50,7 @@ function ModalProducto({ producto, onGuardar, onCerrar }) {
       activo,
     };
     const method = esEdicion ? 'PUT' : 'POST';
-    const path   = esEdicion ? `/gestion/productos/${producto.id}` : '/gestion/productos';
+    const path   = esEdicion ? `/admin/productos/${producto.id}` : '/admin/productos';
 
     console.log(`[tabProductos] handleGuardar — request recibido | method: ${method} | nombre: ${body.nombre}`);
 
@@ -70,7 +70,7 @@ function ModalProducto({ producto, onGuardar, onCerrar }) {
       // Si hay unidades a agregar, llamar a /agregar-stock junto con el guardado
       if (esEdicion && cantidadAgregar && Number(cantidadAgregar) > 0) {
         const resStock = await apiFetch(
-          `/gestion/productos/${producto.id}/agregar-stock`,
+          `/admin/productos/${producto.id}/agregar-stock`,
           {
             method: 'PUT',
             body: JSON.stringify({ cantidad: Number(cantidadAgregar) }),
@@ -235,7 +235,7 @@ export default function TabProductos() {
     const cargarProductos = async () => {
       console.log('[tabProductos] cargarProductos — request recibido');
       try {
-        const res  = await apiFetch('/gestion/productos');
+        const res  = await apiFetch('/admin/productos');
         const data = await res.json();
         console.log('[tabProductos] cargarProductos — completado | productos:', data.length);
         setProductos(data);

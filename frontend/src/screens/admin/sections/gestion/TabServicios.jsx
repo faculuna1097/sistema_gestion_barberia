@@ -34,7 +34,7 @@ function ModalServicio({ servicio, onGuardar, onCerrar }) {
 
     const body   = { nombre: nombre.trim(), precio: Number(precio), activo };
     const method = esEdicion ? 'PUT' : 'POST';
-    const path   = esEdicion ? `/gestion/servicios/${servicio.id}` : '/gestion/servicios';
+    const path   = esEdicion ? `/admin/servicios/${servicio.id}` : '/admin/servicios';
 
     console.log(`[tabServicios] handleGuardar — request recibido | method: ${method} | nombre: ${body.nombre}`);
 
@@ -161,7 +161,7 @@ export default function TabServicios() {
     const cargarServicios = async () => {
       console.log('[tabServicios] cargarServicios — request recibido');
       try {
-        const res  = await apiFetch('/gestion/servicios');
+        const res  = await apiFetch('/admin/servicios');
         const data = await res.json();
         console.log('[tabServicios] cargarServicios — completado | servicios:', data.length);
         setServicios(data);

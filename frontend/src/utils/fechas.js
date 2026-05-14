@@ -117,6 +117,19 @@ export const formatFechaCorta = (fechaStr) => {
   return `${DIAS[fecha.getDay()]} ${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}`;
 };
 
+// ─── Conversión semana ISO → fecha ────────────────────────────────────────────
+
+/**
+ * Convierte una semana ISO 'YYYY-WNN' a la fecha del lunes en formato 'YYYY-MM-DD'.
+ * Útil para enviar la semana al backend que espera formato fecha.
+ * @param {string} semanaStr - Semana en formato 'YYYY-WNN'
+ * @returns {string} Fecha del lunes en formato 'YYYY-MM-DD'
+ */
+export const semanaAFechaLunes = (semanaStr) => {
+  const lunes = semanaALunes(semanaStr);
+  return `${lunes.getFullYear()}-${String(lunes.getMonth() + 1).padStart(2, '0')}-${String(lunes.getDate()).padStart(2, '0')}`;
+};
+
 // ─── Internals: cálculo de semana ISO ─────────────────────────────────────────
 
 /**

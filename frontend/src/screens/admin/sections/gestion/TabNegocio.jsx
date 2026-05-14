@@ -16,7 +16,7 @@ export default function TabNegocio() {
     const cargarNegocio = async () => {
       console.log('[tabNegocio] cargarNegocio — request recibido');
       try {
-        const res  = await apiFetch('/gestion/negocio');
+        const res  = await apiFetch('/admin/negocio');
         const data = await res.json();
         console.log('[tabNegocio] cargarNegocio — completado | nombre:', data.nombre_negocio);
         setNombreNegocio(data.nombre_negocio);
@@ -46,7 +46,7 @@ export default function TabNegocio() {
     console.log('[tabNegocio] handleGuardar — request recibido | nombre:', nombreNegocio.trim());
 
     try {
-      const res = await apiFetch('/gestion/negocio', {
+      const res = await apiFetch('/admin/negocio', {
         method: 'PUT',
         body: JSON.stringify({
           nombre_negocio: nombreNegocio.trim(),

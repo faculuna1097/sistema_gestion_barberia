@@ -59,7 +59,7 @@ export const clearAuthToken = () => {
  * Ejemplos de uso:
  *   apiFetch('/caja/movimientos-dia?fecha=2026-03-27')
  *   apiFetch(`/caja/movimientos/corte/${id}`, { method: 'DELETE' })
- *   apiFetch('/gestion/barberos', { method: 'POST', body: JSON.stringify(datos) })
+ *   apiFetch('/admin/barberos', { method: 'POST', body: JSON.stringify(datos) })
  */
 export const apiFetch = (path, options = {}) => {
   const url = `${BASE_URL}${path}`;
@@ -174,7 +174,7 @@ export const registrarGasto = async (datos) => {
  * @returns {Promise<Object>} { nombre_negocio, logo }
  */
 export const getNegocio = async () => {
-  const response = await fetch(`${BASE_URL}/gestion/negocio`, { headers: publicHeaders });
+  const response = await fetch(`${BASE_URL}/negocio`, { headers: publicHeaders });
   if (!response.ok) throw new Error('Error al obtener datos del negocio');
   return response.json();
 };

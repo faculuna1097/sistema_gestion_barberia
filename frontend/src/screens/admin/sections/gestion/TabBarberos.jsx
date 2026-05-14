@@ -55,7 +55,7 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
     if (pin !== '') body.pin = pin;
 
     const method = esEdicion ? 'PUT' : 'POST';
-    const path   = esEdicion ? `/gestion/barberos/${barbero.id}` : '/gestion/barberos';
+    const path   = esEdicion ? `/admin/barberos/${barbero.id}` : '/admin/barberos';
 
     // NUNCA loguear el PIN
     console.log(`[tabBarberos] handleGuardar — request recibido | method: ${method} | nombre: ${body.nombre}`);
@@ -215,7 +215,7 @@ export default function TabBarberos() {
     const cargarBarberos = async () => {
       console.log('[tabBarberos] cargarBarberos — request recibido');
       try {
-        const res  = await apiFetch('/gestion/barberos');
+        const res  = await apiFetch('/admin/barberos');
         const data = await res.json();
         console.log('[tabBarberos] cargarBarberos — completado | barberos:', data.length);
         setBarberos(data);

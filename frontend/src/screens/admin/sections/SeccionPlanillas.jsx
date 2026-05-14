@@ -22,7 +22,7 @@ import { apiFetch } from '../../../services/api';
 import SelectorSemana from '../../../components/SelectorSemana';
 import BotonExportarExcel from '../../../components/BotonExportarExcel';
 import TogglePill from '../../../components/TogglePill';
-import { getFechaHoy, formatFechaCorta, getSemanaActual } from '../../../utils/fechas';
+import { getFechaHoy, formatFechaCorta, getSemanaActual, semanaAFechaLunes } from '../../../utils/fechas';
 import { formatARS, formatPago } from '../../../utils/formatos';
 
 // ─── Helpers de semana ────────────────────────────────────────────────────────
@@ -77,9 +77,10 @@ export default function SeccionPlanillas() {
       setLoading(true);
       setError(null);
       try {
+        const fechaLunes = semanaAFechaLunes(semana);
         const [resDetalle, resResumen] = await Promise.all([
-          apiFetch(`/planillas/detalle-semanal?semana=${semana}`),
-          apiFetch(`/planillas/resumen-semanal?semana=${semana}`),
+          apiFetch(`/admin/planilla?semana=${fechaLunes}`),
+          apiFetch(`/admin/planilla/resumen?semana=${fechaLunes}`),
         ]);
         if (!resDetalle.ok || !resResumen.ok) throw new Error("Error en la respuesta del servidor");
         const [detalle, resumen] = await Promise.all([

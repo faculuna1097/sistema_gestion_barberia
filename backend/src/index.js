@@ -18,9 +18,7 @@ import corteRoutes      from './routes/cortes.js';
 import ventaRoutes      from './routes/ventas.js';
 import gastoRoutes      from './routes/gastos.js';
 import categoriaRoutes  from './routes/categorias.js';
-import planillasRouter  from './routes/planillas.js';
 import cajaRouter       from './routes/caja.js';
-import gestionRouter    from './routes/gestion.js';
 import balancesRouter   from './routes/balances.js';
 import inicioRoutes     from './routes/inicio.js';
 import authRoutes       from './routes/auth.js';
@@ -33,7 +31,10 @@ import clientesAdminRoutes     from './routes/clientes.js';
 import planillaAdminRoutes     from './routes/planilla.js';
 import adminBarberosRoutes    from './routes/adminBarberos.js';
 import adminServiciosRoutes   from './routes/adminServicios.js';
+import adminProductosRoutes   from './routes/adminProductos.js';
+import adminNegocioRoutes     from './routes/adminNegocio.js';
 import { requiereRol } from './middlewares/requiereRolMiddleware.js';
+import { getNegocio } from './controllers/gestion.js';
 
 console.log('[index] Iniciando Barbershop Manager API...');
 
@@ -85,6 +86,9 @@ app.use('/api/servicios',  servicioRoutes);
 app.use('/api/productos',  productoRoutes);
 app.use('/api/categorias', categoriaRoutes);
 app.use('/api/cortes',     corteRoutes);
+// GET /api/negocio — datos públicos del negocio (nombre, logo).
+// Lo consume App.jsx antes del login para mostrar el logo del tenant.
+app.get('/api/negocio',    getNegocio);
 // /api/ventas y /api/gastos son rutas MIXTAS:
 // POST es público (flujos operativos). GET /mensual y DELETE /:id requieren token.
 // La protección se aplica a nivel de router en routes/ventas.js y routes/gastos.js.
@@ -94,17 +98,9 @@ app.use('/api/gastos',     gastoRoutes);
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS PROTEGIDAS — solo accesibles desde el panel admin con JWT válido
 // ─────────────────────────────────────────────────────────────────────────────
-app.use('/api/planillas', verificarToken, planillasRouter);
 app.use('/api/caja',      verificarToken, cajaRouter);
 app.use('/api/inicio',    verificarToken, inicioRoutes);
 app.use('/api/balances',  verificarToken, balancesRouter);
-// GET /api/gestion/negocio es público — App.jsx lo llama al arrancar para cargar
-// el logo, antes de que el usuario se autentique. El resto de /gestion requiere token.
-app.use('/api/gestion', (req, res, next) => {
-  if (req.method === 'GET' && req.path === '/negocio') return next();
-  verificarToken(req, res, next);
-}, gestionRouter);
-
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS DEL BACKOFFICE — /api/admin/* (admin + barbero autenticados)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -115,6 +111,8 @@ app.use('/api/admin/clientes',      verificarToken, clientesAdminRoutes);
 app.use('/api/admin/planilla',      verificarToken, planillaAdminRoutes);
 app.use('/api/admin/barberos',     verificarToken, requiereRol('admin'), adminBarberosRoutes);
 app.use('/api/admin/servicios',    verificarToken, requiereRol('admin'), adminServiciosRoutes);
+app.use('/api/admin/productos',    verificarToken, requiereRol('admin'), adminProductosRoutes);
+app.use('/api/admin/negocio',      verificarToken, requiereRol('admin'), adminNegocioRoutes);
 
 console.log('[index] Rutas registradas correctamente');
 

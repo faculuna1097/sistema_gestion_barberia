@@ -27,7 +27,7 @@ export default function TabPinAdmin() {
     pinsCoinciden;
 
   /**
-   * handleCambiarPin — envía PUT /gestion/pin-admin con pin_actual y pin_nuevo.
+   * handleCambiarPin — envía PUT /admin/negocio/pin-admin con pin_actual y pin_nuevo.
    * El backend verifica el pin_actual con bcrypt y hashea el nuevo antes de guardarlo.
    */
   const handleCambiarPin = async () => {
@@ -40,7 +40,7 @@ export default function TabPinAdmin() {
     console.log('[tabPinAdmin] handleCambiarPin — request recibido');
 
     try {
-      const res = await apiFetch('/gestion/pin-admin', {
+      const res = await apiFetch('/admin/negocio/pin-admin', {
         method: 'PUT',
         body: JSON.stringify({ pin_actual: pinActual, pin_nuevo: pinNuevo }),
       });
