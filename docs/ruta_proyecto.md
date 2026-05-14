@@ -60,7 +60,8 @@ sistema-gestion-barberia/
 │       │   ├── horarios.js            # CRUD horarios backoffice (scope según rol)
 │       │   ├── suspensiones.js        # CRUD suspensiones backoffice (scope según rol)
 │       │   ├── clientes.js            # Búsqueda y listado de clientes backoffice
-│       │   └── planilla.js            # Planilla semanal backoffice (scope según rol)
+│       │   ├── planilla.js            # Planilla semanal backoffice (scope según rol)
+│       │   └── turneroConfig.js       # Config turnero: GET/PUT duracion_slot_minutos (admin)
 │       │
 │       ├── routes/                    # Definición de rutas HTTP (conectan URL → controller)
 │       │   ├── auth.js                # /api/auth/verificar-pin
@@ -85,6 +86,7 @@ sistema-gestion-barberia/
 │       │   ├── adminServicios.js      # /api/admin/servicios/* (requiereRol admin)
 │       │   ├── adminProductos.js      # /api/admin/productos/* (requiereRol admin)
 │       │   ├── adminNegocio.js        # /api/admin/negocio/* (requiereRol admin)
+│       │   ├── adminTurneroConfig.js  # /api/admin/turnero/config (requiereRol admin)
 │       │   └── health.js              # /api/health (health check)
 │       │
 │       ├── services/                  # Lógica de negocio reutilizable (integraciones externas, algoritmos)
@@ -227,9 +229,10 @@ sistema-gestion-barberia/
                     ├── SeccionGestion.jsx     # Contenedor de gestión con tabs
                     └── gestion/               # Tabs dentro de SeccionGestion
                         ├── TabNegocio.jsx     # Datos del negocio (nombre, logo, suscripción)
-                        ├── TabBarberos.jsx    # ABM de barberos (crear, editar, comisión)
+                        ├── TabBarberos.jsx    # ABM de barberos + filas expandibles (horarios/suspensiones)
                         ├── TabServicios.jsx   # ABM de servicios (crear, editar, inactivar)
                         ├── TabProductos.jsx   # ABM de productos (precio, stock, inactivar)
+                        ├── TabTurnero.jsx     # Config turnero: duración de slots
                         └── TabPinAdmin.jsx    # Cambio de PIN del panel admin
 ```
 
@@ -288,8 +291,11 @@ sistema-gestion-barberia/
 | **Admin — servicios** | `GET / POST / PUT` | `/api/admin/servicios[/:id]` | JWT (admin) |
 | **Admin — productos** | `GET / POST / PUT` | `/api/admin/productos[/:id]` | JWT (admin) |
 | **Admin — stock** | `PUT` | `/api/admin/productos/:id/agregar-stock` | JWT (admin) |
+| **Admin — negocio** | `GET` | `/api/admin/negocio` | JWT (admin) |
 | **Admin — negocio** | `PUT` | `/api/admin/negocio` | JWT (admin) |
 | **Admin — PIN admin** | `PUT` | `/api/admin/negocio/pin-admin` | JWT (admin) |
+| **Admin — turnero config** | `GET` | `/api/admin/turnero/config` | JWT (admin) |
+| **Admin — turnero config** | `PUT` | `/api/admin/turnero/config` | JWT (admin) |
 
 ---
 
@@ -311,9 +317,10 @@ sistema-gestion-barberia/
 | `SeccionVentas.jsx` | Historial de ventas con filtros |
 | `SeccionBalances.jsx` | Reporte de ingresos y gastos por período |
 | `SeccionTurnero.jsx` | Vista global de turnos del día con filtro por barbero |
-| `SeccionGestion.jsx` | Contenedor de las 5 tabs de configuración |
+| `SeccionGestion.jsx` | Contenedor de las 6 tabs de configuración |
 | `TabNegocio.jsx` | Editar datos del negocio |
-| `TabBarberos.jsx` | ABM de barberos |
+| `TabBarberos.jsx` | ABM de barberos + filas expandibles con horarios y suspensiones |
+| `TabTurnero.jsx` | Configuración del turnero (duración de slots) |
 | `TabServicios.jsx` | ABM de servicios |
 | `TabProductos.jsx` | ABM de productos |
 | `TabPinAdmin.jsx` | Cambio de PIN admin |

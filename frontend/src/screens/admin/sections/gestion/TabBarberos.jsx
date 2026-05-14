@@ -1,11 +1,20 @@
 // /frontend/src/screens/admin/sections/gestion/TabBarberos.jsx
-// ABM de barberos. Permite listar, crear y editar barberos.
+// ABM de barberos con filas expandibles para horarios y suspensiones.
 // Comisión siempre en porcentaje (0-100).
 // PIN: requerido al crear, opcional al editar (vacío = no cambia).
 // No hay eliminación — se usa activo (true/false) para desactivar.
 
 import { useState, useEffect } from 'react';
-import { apiFetch } from '../../../../services/api';
+import {
+  apiFetch,
+  getAdminHorarios,
+  putAdminHorarios,
+  getAdminSuspensiones,
+  crearAdminSuspension,
+  eliminarAdminSuspension,
+} from '../../../../services/api';
+
+const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
 // ─── Modal crear / editar barbero ─────────────────────────────────────────────
 /**
@@ -24,7 +33,6 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState(null);
 
-  // ── Validaciones ──────────────────────────────────────────────────────────
   const pinValido    = pin === '' || (pin.length === 4 && /^\d{4}$/.test(pin));
   const pinRequerido = !esEdicion && pin.length !== 4;
 
@@ -51,13 +59,11 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
       activo,
     };
 
-    // PIN: siempre requerido al crear; en edición solo si se completó
     if (pin !== '') body.pin = pin;
 
     const method = esEdicion ? 'PUT' : 'POST';
     const path   = esEdicion ? `/admin/barberos/${barbero.id}` : '/admin/barberos';
 
-    // NUNCA loguear el PIN
     console.log(`[tabBarberos] handleGuardar — request recibido | method: ${method} | nombre: ${body.nombre}`);
 
     try {
@@ -86,14 +92,12 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
     <div style={styles.modalOverlay}>
       <div style={styles.modalCard}>
 
-        {/* Título */}
         <p style={styles.modalTitulo}>
           {esEdicion ? 'Editar barbero' : 'Nuevo barbero'}
         </p>
 
         <div style={styles.camposCol}>
 
-          {/* Nombre */}
           <div style={styles.campoGrupo}>
             <label style={styles.campoLabel}>Nombre</label>
             <input
@@ -106,7 +110,6 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
             />
           </div>
 
-          {/* PIN */}
           <div style={styles.campoGrupo}>
             <label style={styles.campoLabel}>
               PIN {esEdicion ? '(dejá vacío para no cambiar)' : ''}
@@ -135,7 +138,6 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
             )}
           </div>
 
-          {/* Comisión */}
           <div style={styles.campoGrupo}>
             <label style={styles.campoLabel}>Comisión</label>
             <div style={styles.comisionRow}>
@@ -155,7 +157,6 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
             )}
           </div>
 
-          {/* Activo — solo en edición */}
           {esEdicion && (
             <div style={styles.activoRow}>
               <span style={styles.campoLabel}>Estado</span>
@@ -173,10 +174,8 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
 
         </div>
 
-        {/* Error general */}
         {error && <p style={styles.errorTextoModal}>{error}</p>}
 
-        {/* Botones */}
         <div style={styles.modalBotones}>
           <button
             style={styles.btnCancelar}
@@ -202,6 +201,384 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
   );
 }
 
+// ─── Panel expandido: Horarios ───────────────────────────────────────────────
+/**
+ * PanelHorarios — editor del horario semanal de un barbero.
+ * @param {object} barbero - { id, nombre }
+ */
+function PanelHorarios({ barbero }) {
+  const [bloques, setBloques]     = useState([]);
+  const [cargando, setCargando]   = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [mensaje, setMensaje]     = useState(null);
+
+  useEffect(() => {
+    setCargando(true);
+    async function cargar() {
+      try {
+        const data = await getAdminHorarios(barbero.id);
+        setBloques(data);
+        console.log('[tabBarberos/Horarios] cargar — completado |', data.length, 'bloques');
+      } catch (err) {
+        console.error('[tabBarberos/Horarios] Error cargando:', err.message);
+        setMensaje('Error al cargar horarios');
+      } finally {
+        setCargando(false);
+      }
+    }
+    cargar();
+  }, [barbero.id]);
+
+  /**
+   * agregarBloque — agrega un bloque vacío para un día.
+   * @param {number} dia - 0-6
+   */
+  const agregarBloque = (dia) => {
+    setBloques(prev => [...prev, { dia_semana: dia, hora_inicio: '09:00', hora_fin: '18:00' }]);
+    setMensaje(null);
+  };
+
+  /**
+   * actualizarBloque — actualiza un campo de un bloque existente.
+   * @param {number} index
+   * @param {string} campo
+   * @param {string} valor
+   */
+  const actualizarBloque = (index, campo, valor) => {
+    setBloques(prev => prev.map((b, i) => i === index ? { ...b, [campo]: valor } : b));
+    setMensaje(null);
+  };
+
+  /**
+   * eliminarBloque — elimina un bloque del array local.
+   * @param {number} index
+   */
+  const eliminarBloque = (index) => {
+    setBloques(prev => prev.filter((_, i) => i !== index));
+    setMensaje(null);
+  };
+
+  /**
+   * guardar — envía el horario completo al backend (PUT reemplaza todo).
+   */
+  const guardar = async () => {
+    setGuardando(true);
+    setMensaje(null);
+    try {
+      const payload = bloques.map(({ dia_semana, hora_inicio, hora_fin }) => ({
+        dia_semana,
+        hora_inicio,
+        hora_fin,
+      }));
+      const resultado = await putAdminHorarios(barbero.id, payload);
+      setBloques(resultado);
+      setMensaje('Horarios guardados correctamente');
+      console.log('[tabBarberos/Horarios] guardar — completado');
+    } catch (err) {
+      console.error('[tabBarberos/Horarios] Error guardando:', err.message);
+      setMensaje('Error: ' + err.message);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  if (cargando) return <p style={styles.panelCargando}>Cargando horarios...</p>;
+
+  return (
+    <div>
+      {mensaje && (
+        <p style={{
+          ...styles.panelMensaje,
+          color: mensaje.startsWith('Error') ? '#c0392b' : '#2e7d32',
+        }}>
+          {mensaje}
+        </p>
+      )}
+
+      {[1, 2, 3, 4, 5, 6, 0].map((dia) => {
+        const bloquesDelDia = bloques
+          .map((b, i) => ({ ...b, _index: i }))
+          .filter(b => b.dia_semana === dia);
+
+        return (
+          <div key={dia} style={styles.diaRow}>
+            <div style={styles.diaHeader}>
+              <span style={styles.diaNombre}>{DIAS_SEMANA[dia]}</span>
+              {bloquesDelDia.length === 0 && (
+                <span style={styles.sinHorario}>Sin horario</span>
+              )}
+            </div>
+            {bloquesDelDia.map((bloque) => (
+              <div key={bloque._index} style={styles.bloqueRow}>
+                <input
+                  type="time"
+                  value={bloque.hora_inicio}
+                  onChange={(e) => actualizarBloque(bloque._index, 'hora_inicio', e.target.value)}
+                  style={styles.inputTime}
+                />
+                <span style={styles.bloqueA}>a</span>
+                <input
+                  type="time"
+                  value={bloque.hora_fin}
+                  onChange={(e) => actualizarBloque(bloque._index, 'hora_fin', e.target.value)}
+                  style={styles.inputTime}
+                />
+                <button
+                  onPointerDown={() => eliminarBloque(bloque._index)}
+                  style={styles.btnEliminarBloque}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            <button
+              onPointerDown={() => agregarBloque(dia)}
+              style={styles.btnAgregarBloque}
+            >
+              + Agregar bloque
+            </button>
+          </div>
+        );
+      })}
+
+      <button
+        onPointerDown={guardar}
+        disabled={guardando}
+        style={{
+          ...styles.btnGuardarHorarios,
+          ...(guardando ? styles.btnDeshabilitado : {}),
+        }}
+      >
+        {guardando ? 'Guardando...' : 'Guardar horarios'}
+      </button>
+    </div>
+  );
+}
+
+// ─── Panel expandido: Suspensiones ───────────────────────────────────────────
+/**
+ * PanelSuspensiones — lista, crea y elimina suspensiones de un barbero.
+ * @param {object} barbero - { id, nombre }
+ */
+function PanelSuspensiones({ barbero }) {
+  const [suspensiones, setSuspensiones] = useState([]);
+  const [cargando, setCargando]         = useState(true);
+  const [eliminando, setEliminando]     = useState(null);
+
+  const [formDesde, setFormDesde]   = useState('');
+  const [formHasta, setFormHasta]   = useState('');
+  const [formMotivo, setFormMotivo] = useState('');
+  const [creando, setCreando]       = useState(false);
+  const [conflicto, setConflicto]   = useState(null);
+  const [mensaje, setMensaje]       = useState(null);
+
+  /**
+   * cargarSuspensiones — fetch de suspensiones futuras del barbero.
+   */
+  const cargarSuspensiones = async () => {
+    try {
+      const data = await getAdminSuspensiones(barbero.id);
+      setSuspensiones(data);
+      console.log('[tabBarberos/Suspensiones] cargar — completado |', data.length, 'suspensiones');
+    } catch (err) {
+      console.error('[tabBarberos/Suspensiones] Error cargando:', err.message);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarSuspensiones();
+  }, [barbero.id]);
+
+  /**
+   * crear — crea una nueva suspensión. Maneja el flujo de conflicto 409.
+   * @param {boolean} confirmarCancelacion - true para forzar tras conflicto
+   */
+  const crear = async (confirmarCancelacion = false) => {
+    if (!formDesde || !formHasta) return;
+    setCreando(true);
+    setMensaje(null);
+    try {
+      const datos = {
+        barbero_id: barbero.id,
+        desde: formDesde,
+        hasta: formHasta,
+        ...(formMotivo.trim() ? { motivo: formMotivo.trim() } : {}),
+        ...(confirmarCancelacion ? { confirmar_cancelacion: true } : {}),
+      };
+      const res = await crearAdminSuspension(datos);
+
+      if (res.conflicto) {
+        setConflicto(res);
+        setCreando(false);
+        return;
+      }
+
+      setMensaje(`Suspensión creada. ${res.turnos_cancelados || 0} turnos cancelados.`);
+      setConflicto(null);
+      setFormDesde('');
+      setFormHasta('');
+      setFormMotivo('');
+      await cargarSuspensiones();
+    } catch (err) {
+      console.error('[tabBarberos/Suspensiones] Error creando:', err.message);
+      setMensaje('Error: ' + err.message);
+    } finally {
+      setCreando(false);
+    }
+  };
+
+  /**
+   * eliminar — elimina una suspensión por su id.
+   * @param {string} id
+   */
+  const eliminar = async (id) => {
+    if (!confirm('¿Eliminar esta suspensión?')) return;
+    setEliminando(id);
+    try {
+      await eliminarAdminSuspension(id);
+      console.log('[tabBarberos/Suspensiones] eliminar — completado |', id);
+      await cargarSuspensiones();
+    } catch (err) {
+      console.error('[tabBarberos/Suspensiones] Error eliminando:', err.message);
+      setMensaje('Error: ' + err.message);
+    } finally {
+      setEliminando(null);
+    }
+  };
+
+  /**
+   * formatearFechaHora — formatea un ISO a formato legible argentino.
+   * @param {string} iso
+   * @returns {string}
+   */
+  const formatearFechaHora = (iso) => {
+    const d = new Date(iso);
+    return d.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  if (cargando) return <p style={styles.panelCargando}>Cargando suspensiones...</p>;
+
+  return (
+    <div>
+      {/* Formulario de nueva suspensión */}
+      <div style={styles.formSuspension}>
+        <p style={styles.formTitulo}>Nueva suspensión</p>
+
+        <div style={styles.formRow}>
+          <div style={styles.formCampo}>
+            <label style={styles.campoLabel}>Desde</label>
+            <input
+              type="datetime-local"
+              value={formDesde}
+              onChange={(e) => setFormDesde(e.target.value)}
+              style={styles.campoInput}
+            />
+          </div>
+          <div style={styles.formCampo}>
+            <label style={styles.campoLabel}>Hasta</label>
+            <input
+              type="datetime-local"
+              value={formHasta}
+              onChange={(e) => setFormHasta(e.target.value)}
+              style={styles.campoInput}
+            />
+          </div>
+        </div>
+
+        <div style={styles.formCampo}>
+          <label style={styles.campoLabel}>Motivo (opcional)</label>
+          <input
+            type="text"
+            value={formMotivo}
+            onChange={(e) => setFormMotivo(e.target.value)}
+            placeholder="Ej: Vacaciones, turno médico..."
+            style={styles.campoInput}
+          />
+        </div>
+
+        {/* Conflicto: turnos afectados */}
+        {conflicto && (
+          <div style={styles.conflictoBox}>
+            <p style={styles.conflictoTitulo}>
+              Hay {conflicto.turnos_afectados?.length || 0} turno{(conflicto.turnos_afectados?.length || 0) !== 1 ? 's' : ''} que será{(conflicto.turnos_afectados?.length || 0) !== 1 ? 'n' : ''} cancelado{(conflicto.turnos_afectados?.length || 0) !== 1 ? 's' : ''}:
+            </p>
+            <ul style={styles.conflictoLista}>
+              {conflicto.turnos_afectados?.map((t, i) => (
+                <li key={i}>{formatearFechaHora(t.inicio)} — {t.cliente_nombre || 'Sin nombre'}</li>
+              ))}
+            </ul>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onPointerDown={() => crear(true)}
+                disabled={creando}
+                style={styles.btnConfirmarConflicto}
+              >
+                {creando ? 'Creando...' : 'Confirmar y crear'}
+              </button>
+              <button
+                onPointerDown={() => setConflicto(null)}
+                style={styles.btnCancelarConflicto}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!conflicto && (
+          <button
+            onPointerDown={() => crear(false)}
+            disabled={creando || !formDesde || !formHasta}
+            style={{
+              ...styles.btnCrearSuspension,
+              ...(creando || !formDesde || !formHasta ? styles.btnDeshabilitado : {}),
+            }}
+          >
+            {creando ? 'Creando...' : 'Crear suspensión'}
+          </button>
+        )}
+
+        {mensaje && (
+          <p style={{
+            ...styles.panelMensaje,
+            color: mensaje.startsWith('Error') ? '#c0392b' : '#2e7d32',
+          }}>
+            {mensaje}
+          </p>
+        )}
+      </div>
+
+      {/* Lista de suspensiones */}
+      {suspensiones.length === 0 ? (
+        <p style={styles.sinSuspensiones}>No hay suspensiones programadas.</p>
+      ) : (
+        <div style={styles.suspensionesLista}>
+          {suspensiones.map((s) => (
+            <div key={s.id} style={styles.suspensionItem}>
+              <div style={styles.suspensionInfo}>
+                <span style={styles.suspensionFechas}>
+                  {formatearFechaHora(s.desde)} — {formatearFechaHora(s.hasta)}
+                </span>
+                {s.motivo && <span style={styles.suspensionMotivo}>{s.motivo}</span>}
+                <span style={styles.suspensionOrigen}>Origen: {s.origen}</span>
+              </div>
+              <button
+                onPointerDown={() => eliminar(s.id)}
+                disabled={eliminando === s.id}
+                style={styles.btnEliminarSuspension}
+              >
+                {eliminando === s.id ? '...' : '✕'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function TabBarberos() {
   const [barberos, setBarberos]               = useState([]);
@@ -209,8 +586,9 @@ export default function TabBarberos() {
   const [error, setError]                     = useState(null);
   const [modalAbierto, setModalAbierto]       = useState(false);
   const [barberoEditando, setBarberoEditando] = useState(null);
+  const [expandido, setExpandido]             = useState(null);
+  const [subTab, setSubTab]                   = useState('horarios');
 
-  // ── Carga inicial ─────────────────────────────────────────────────────────
   useEffect(() => {
     const cargarBarberos = async () => {
       console.log('[tabBarberos] cargarBarberos — request recibido');
@@ -229,12 +607,10 @@ export default function TabBarberos() {
     cargarBarberos();
   }, []);
 
-  // ── Control del modal ─────────────────────────────────────────────────────
   const abrirCrear  = ()        => { setBarberoEditando(null);    setModalAbierto(true); };
   const abrirEditar = (barbero) => { setBarberoEditando(barbero); setModalAbierto(true); };
   const cerrarModal = ()        => { setModalAbierto(false); setBarberoEditando(null); };
 
-  // ── Callback al guardar ───────────────────────────────────────────────────
   /**
    * handleGuardado — actualiza la lista local sin refetch.
    * @param {object}  barberoGuardado - objeto devuelto por el backend
@@ -249,13 +625,24 @@ export default function TabBarberos() {
     cerrarModal();
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  /**
+   * toggleExpandir — expande o colapsa la fila de un barbero.
+   * @param {string} barberoId
+   */
+  const toggleExpandir = (barberoId) => {
+    if (expandido === barberoId) {
+      setExpandido(null);
+    } else {
+      setExpandido(barberoId);
+      setSubTab('horarios');
+    }
+  };
+
   if (cargando) return <p style={styles.estadoTexto}>Cargando barberos...</p>;
   if (error)    return <p style={styles.errorTexto}>{error}</p>;
 
   return (
     <div>
-      {/* Modal */}
       {modalAbierto && (
         <ModalBarbero
           barbero={barberoEditando}
@@ -264,7 +651,7 @@ export default function TabBarberos() {
         />
       )}
 
-      {/* ── Fila superior ── */}
+      {/* Fila superior */}
       <div style={styles.filaAcciones}>
         <p style={styles.subtitulo}>
           {barberos.length} barbero{barberos.length !== 1 ? 's' : ''} registrado{barberos.length !== 1 ? 's' : ''}
@@ -274,7 +661,7 @@ export default function TabBarberos() {
         </button>
       </div>
 
-      {/* ── Tabla ── */}
+      {/* Tabla */}
       {barberos.length === 0 ? (
         <p style={styles.estadoTexto}>No hay barberos registrados todavía.</p>
       ) : (
@@ -282,6 +669,7 @@ export default function TabBarberos() {
           <table style={styles.tabla}>
             <thead>
               <tr>
+                <th style={{ ...styles.th, width: '48px' }}></th>
                 <th style={styles.th}>Nombre</th>
                 <th style={styles.th}>Comisión</th>
                 <th style={styles.th}>Estado</th>
@@ -289,31 +677,76 @@ export default function TabBarberos() {
               </tr>
             </thead>
             <tbody>
-              {barberos.map((b, i) => (
-                <tr
-                  key={b.id}
-                  style={{ backgroundColor: i % 2 === 0 ? '#ffffff' : '#fafafa' }}
-                >
-                  <td style={styles.td}>{b.nombre}</td>
-                  <td style={styles.td}>{Number(b.comision_valor)}%</td>
-                  <td style={styles.td}>
-                    <span style={{
-                      ...styles.badge,
-                      ...(b.activo ? styles.badgeActivo : styles.badgeInactivo),
-                    }}>
-                      {b.activo ? 'Activo' : 'Inactivo'}
-                    </span>
-                  </td>
-                  <td style={styles.tdAccion}>
-                    <button
-                      style={styles.btnEditar}
-                      onPointerDown={() => abrirEditar(b)}
-                    >
-                      ✎
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {barberos.map((b, i) => {
+                const estaExpandido = expandido === b.id;
+                return [
+                  /* Fila normal */
+                  <tr
+                    key={b.id}
+                    style={{ backgroundColor: i % 2 === 0 ? '#ffffff' : '#fafafa' }}
+                  >
+                    <td style={styles.td}>
+                      <button
+                        style={styles.btnExpandir}
+                        onPointerDown={() => toggleExpandir(b.id)}
+                      >
+                        {estaExpandido ? '▾' : '▸'}
+                      </button>
+                    </td>
+                    <td style={styles.td}>{b.nombre}</td>
+                    <td style={styles.td}>{Number(b.comision_valor)}%</td>
+                    <td style={styles.td}>
+                      <span style={{
+                        ...styles.badge,
+                        ...(b.activo ? styles.badgeActivo : styles.badgeInactivo),
+                      }}>
+                        {b.activo ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </td>
+                    <td style={styles.tdAccion}>
+                      <button
+                        style={styles.btnEditar}
+                        onPointerDown={() => abrirEditar(b)}
+                      >
+                        ✎
+                      </button>
+                    </td>
+                  </tr>,
+
+                  /* Fila expandida (panel de horarios/suspensiones) */
+                  estaExpandido && (
+                    <tr key={`${b.id}-panel`}>
+                      <td colSpan={5} style={{ padding: 0 }}>
+                        <div style={styles.panelExpandido}>
+                          <div style={styles.subTabsContainer}>
+                            <button
+                              style={{
+                                ...styles.subTabBtn,
+                                ...(subTab === 'horarios' ? styles.subTabBtnActivo : {}),
+                              }}
+                              onPointerDown={() => setSubTab('horarios')}
+                            >
+                              Horarios
+                            </button>
+                            <button
+                              style={{
+                                ...styles.subTabBtn,
+                                ...(subTab === 'suspensiones' ? styles.subTabBtnActivo : {}),
+                              }}
+                              onPointerDown={() => setSubTab('suspensiones')}
+                            >
+                              Suspensiones
+                            </button>
+                          </div>
+
+                          {subTab === 'horarios' && <PanelHorarios barbero={b} />}
+                          {subTab === 'suspensiones' && <PanelSuspensiones barbero={b} />}
+                        </div>
+                      </td>
+                    </tr>
+                  ),
+                ];
+              })}
             </tbody>
           </table>
         </div>
@@ -413,6 +846,284 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  // Botón expandir
+  btnExpandir: {
+    width: '28px',
+    height: '28px',
+    borderRadius: '6px',
+    border: '1.5px solid #e0e0e0',
+    backgroundColor: '#ffffff',
+    color: '#555555',
+    fontSize: '12px',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontFamily: "'DM Sans', Arial, sans-serif",
+  },
+
+  // Panel expandido
+  panelExpandido: {
+    padding: '16px 24px 24px',
+    backgroundColor: '#f9fafb',
+    borderBottom: '2px solid #e0e0e0',
+  },
+  subTabsContainer: {
+    display: 'flex',
+    gap: '4px',
+    marginBottom: '16px',
+    backgroundColor: '#eeeeee',
+    borderRadius: '8px',
+    padding: '3px',
+    width: 'fit-content',
+  },
+  subTabBtn: {
+    padding: '6px 16px',
+    borderRadius: '6px',
+    border: 'none',
+    backgroundColor: 'transparent',
+    color: '#888888',
+    fontSize: '13px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    fontFamily: "'DM Sans', Arial, sans-serif",
+  },
+  subTabBtnActivo: {
+    backgroundColor: '#ffffff',
+    color: '#111111',
+    fontWeight: '600',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+  },
+
+  // Panel: estados
+  panelCargando: {
+    color: '#888888',
+    fontSize: '14px',
+    padding: '16px 0',
+    margin: 0,
+  },
+  panelMensaje: {
+    fontSize: '13px',
+    margin: '8px 0 0',
+  },
+
+  // Horarios: días
+  diaRow: {
+    marginBottom: '8px',
+    padding: '10px 12px',
+    backgroundColor: '#ffffff',
+    borderRadius: '8px',
+    border: '1px solid #eeeeee',
+  },
+  diaHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '4px',
+  },
+  diaNombre: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#333333',
+    minWidth: '80px',
+  },
+  sinHorario: {
+    fontSize: '13px',
+    color: '#aaaaaa',
+  },
+  bloqueRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginTop: '6px',
+    marginLeft: '88px',
+  },
+  bloqueA: {
+    fontSize: '13px',
+    color: '#888888',
+  },
+  inputTime: {
+    padding: '6px 10px',
+    borderRadius: '6px',
+    border: '1.5px solid #e0e0e0',
+    fontSize: '14px',
+    fontFamily: "'DM Sans', Arial, sans-serif",
+    color: '#333333',
+  },
+  btnEliminarBloque: {
+    width: '26px',
+    height: '26px',
+    borderRadius: '6px',
+    border: '1.5px solid #e0e0e0',
+    backgroundColor: '#ffffff',
+    color: '#c0392b',
+    fontSize: '12px',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnAgregarBloque: {
+    marginTop: '6px',
+    marginLeft: '88px',
+    padding: '4px 12px',
+    borderRadius: '6px',
+    border: '1px dashed #cccccc',
+    backgroundColor: 'transparent',
+    color: '#1a7a4a',
+    fontSize: '12px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    fontFamily: "'DM Sans', Arial, sans-serif",
+  },
+  btnGuardarHorarios: {
+    marginTop: '12px',
+    padding: '10px 24px',
+    borderRadius: '8px',
+    border: 'none',
+    backgroundColor: '#1a7a4a',
+    color: '#ffffff',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: "'DM Sans', Arial, sans-serif",
+  },
+
+  // Suspensiones: formulario
+  formSuspension: {
+    padding: '16px',
+    backgroundColor: '#ffffff',
+    borderRadius: '10px',
+    border: '1px solid #eeeeee',
+    marginBottom: '16px',
+  },
+  formTitulo: {
+    fontSize: '15px',
+    fontWeight: '600',
+    color: '#333333',
+    margin: '0 0 12px',
+  },
+  formRow: {
+    display: 'flex',
+    gap: '12px',
+    marginBottom: '10px',
+    flexWrap: 'wrap',
+  },
+  formCampo: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    flex: 1,
+    minWidth: '200px',
+    marginBottom: '8px',
+  },
+  btnCrearSuspension: {
+    padding: '10px 24px',
+    borderRadius: '8px',
+    border: 'none',
+    backgroundColor: '#1a7a4a',
+    color: '#ffffff',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: "'DM Sans', Arial, sans-serif",
+  },
+
+  // Suspensiones: conflicto
+  conflictoBox: {
+    padding: '12px',
+    backgroundColor: '#fff9e6',
+    border: '1px solid #f4b400',
+    borderRadius: '8px',
+    marginBottom: '8px',
+  },
+  conflictoTitulo: {
+    margin: '0 0 8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#8a6d00',
+  },
+  conflictoLista: {
+    margin: '0 0 8px',
+    paddingLeft: '20px',
+    fontSize: '13px',
+    color: '#555555',
+  },
+  btnConfirmarConflicto: {
+    padding: '8px 16px',
+    borderRadius: '6px',
+    border: 'none',
+    backgroundColor: '#c0392b',
+    color: '#ffffff',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: "'DM Sans', Arial, sans-serif",
+  },
+  btnCancelarConflicto: {
+    padding: '8px 16px',
+    borderRadius: '6px',
+    border: '1.5px solid #e0e0e0',
+    backgroundColor: '#ffffff',
+    color: '#555555',
+    fontSize: '13px',
+    cursor: 'pointer',
+    fontFamily: "'DM Sans', Arial, sans-serif",
+  },
+
+  // Suspensiones: lista
+  sinSuspensiones: {
+    color: '#888888',
+    fontSize: '14px',
+    margin: 0,
+  },
+  suspensionesLista: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  suspensionItem: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '12px',
+    backgroundColor: '#ffffff',
+    borderRadius: '8px',
+    border: '1px solid #eeeeee',
+  },
+  suspensionInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  suspensionFechas: {
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#333333',
+  },
+  suspensionMotivo: {
+    fontSize: '13px',
+    color: '#666666',
+  },
+  suspensionOrigen: {
+    fontSize: '12px',
+    color: '#aaaaaa',
+  },
+  btnEliminarSuspension: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    border: '1.5px solid #e0e0e0',
+    backgroundColor: '#ffffff',
+    color: '#c0392b',
+    fontSize: '14px',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
 
   // Estados

@@ -4,9 +4,12 @@
 // Solo admin: requiereRol('admin') se aplica en index.js.
 
 import { Router } from 'express';
-import { editarNegocio, cambiarPinAdmin } from '../controllers/gestion.js';
+import { getNegocio, editarNegocio, cambiarPinAdmin } from '../controllers/gestion.js';
 
 const router = Router();
+
+// GET /api/admin/negocio — obtener datos del negocio
+router.get('/',           getNegocio);
 
 // PUT /api/admin/negocio — editar nombre/logo del negocio
 router.put('/',           editarNegocio);

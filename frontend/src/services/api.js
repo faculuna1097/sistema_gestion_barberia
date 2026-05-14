@@ -260,3 +260,128 @@ export const cancelarAdminTurno = async (turnoId) => {
   }
   return res.json();
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN — Horarios (gestión de horarios por barbero)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * getAdminHorarios
+ * Obtiene el horario semanal de un barbero.
+ * @param {string} barberoId
+ * @returns {Promise<Array>} [{ id, dia_semana, hora_inicio, hora_fin }]
+ */
+export const getAdminHorarios = async (barberoId) => {
+  const res = await apiFetch(`/admin/horarios/${barberoId}`);
+  if (!res.ok) throw new Error('Error al obtener horarios');
+  return res.json();
+};
+
+/**
+ * putAdminHorarios
+ * Reemplaza completo el horario semanal de un barbero.
+ * @param {string} barberoId
+ * @param {Array} bloques - [{ dia_semana, hora_inicio, hora_fin }]
+ * @returns {Promise<Array>} bloques insertados con id
+ */
+export const putAdminHorarios = async (barberoId, bloques) => {
+  const res = await apiFetch(`/admin/horarios/${barberoId}`, {
+    method: 'PUT',
+    body: JSON.stringify(bloques),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Error al guardar horarios');
+  }
+  return res.json();
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN — Suspensiones (gestión de suspensiones por barbero)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * getAdminSuspensiones
+ * Obtiene suspensiones futuras de un barbero.
+ * @param {string} barberoId
+ * @returns {Promise<Array>} suspensiones con id, desde, hasta, motivo, origen
+ */
+export const getAdminSuspensiones = async (barberoId) => {
+  const res = await apiFetch(`/admin/suspensiones?barbero_id=${barberoId}`);
+  if (!res.ok) throw new Error('Error al obtener suspensiones');
+  return res.json();
+};
+
+/**
+ * crearAdminSuspension
+ * Crea una suspensión para un barbero. Si hay turnos en conflicto,
+ * devuelve 409 con la lista de turnos afectados.
+ * Reenviar con confirmar_cancelacion: true para forzar.
+ * @param {Object} datos - { barbero_id, desde, hasta, motivo?, confirmar_cancelacion? }
+ * @returns {Promise<Object>} { suspension, turnos_cancelados } o { conflicto: true, turnos_afectados }
+ */
+export const crearAdminSuspension = async (datos) => {
+  const res = await apiFetch('/admin/suspensiones', {
+    method: 'POST',
+    body: JSON.stringify(datos),
+  });
+  if (res.status === 409) {
+    const body = await res.json();
+    return { conflicto: true, ...body };
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || 'Error al crear suspensión');
+  }
+  return res.json();
+};
+
+/**
+ * eliminarAdminSuspension
+ * Elimina una suspensión por su id.
+ * @param {string} suspensionId
+ * @returns {Promise<Object>} confirmación
+ */
+export const eliminarAdminSuspension = async (suspensionId) => {
+  const res = await apiFetch(`/admin/suspensiones/${suspensionId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Error al eliminar suspensión');
+  }
+  return res.json();
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN — Configuración del turnero
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * getAdminTurneroConfig
+ * Obtiene la configuración actual del turnero (duracion_slot_minutos).
+ * @returns {Promise<Object>} { duracion_slot_minutos }
+ */
+export const getAdminTurneroConfig = async () => {
+  const res = await apiFetch('/admin/turnero/config');
+  if (!res.ok) throw new Error('Error al obtener configuración del turnero');
+  return res.json();
+};
+
+/**
+ * putAdminTurneroConfig
+ * Actualiza la configuración del turnero.
+ * @param {Object} datos - { duracion_slot_minutos }
+ * @returns {Promise<Object>} { duracion_slot_minutos }
+ */
+export const putAdminTurneroConfig = async (datos) => {
+  const res = await apiFetch('/admin/turnero/config', {
+    method: 'PUT',
+    body: JSON.stringify(datos),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Error al guardar configuración del turnero');
+  }
+  return res.json();
+};

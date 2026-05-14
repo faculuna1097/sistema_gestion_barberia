@@ -11,12 +11,14 @@ import TabServicios from './gestion/TabServicios.jsx';
 import TabProductos from './gestion/TabProductos.jsx';
 import TabNegocio   from './gestion/TabNegocio.jsx';
 import TabPinAdmin  from './gestion/TabPinAdmin.jsx';
+import TabTurnero   from './gestion/TabTurnero.jsx';
 
 // ─── Tabs disponibles ─────────────────────────────────────────────────────────
 const TABS = [
   { key: 'barberos',  label: '✂️  Barberos'         },
   { key: 'servicios', label: '📋  Servicios'         },
   { key: 'productos', label: '🧴  Productos'         },
+  { key: 'turnero',   label: '📅  Turnero'            },
   { key: 'negocio',   label: '🏠  Datos del negocio' },
   { key: 'pin',       label: '🔑  PIN admin'         },
 ];
@@ -58,6 +60,7 @@ export default function SeccionGestion() {
         {tabActiva === 'barberos'  && <TabBarberos />}
         {tabActiva === 'servicios' && <TabServicios />}
         {tabActiva === 'productos' && <TabProductos />}
+        {tabActiva === 'turnero'   && <TabTurnero />}
         {tabActiva === 'negocio'   && <TabNegocio />}
         {tabActiva === 'pin'       && <TabPinAdmin />}
       </div>
