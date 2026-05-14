@@ -50,7 +50,7 @@ const armarCuerpoEvento = (turno, barbero, servicio, cliente) => {
   ].filter(linea => linea !== null);
 
   return {
-    summary: `${servicio.nombre} — ${cliente.nombre}`,
+    summary: `${cliente.nombre} — ${servicio.nombre}`,
     description: lineasDescripcion.join('\n'),
     start: {
       dateTime: new Date(turno.inicio).toISOString(),
@@ -89,7 +89,7 @@ export const crearEvento = async (turno, barbero, servicio, cliente) => {
   try {
     const respuesta = await calendar.events.insert({
       calendarId: 'primary',
-      sendUpdates: 'all',
+      sendUpdates: 'none',
       requestBody: armarCuerpoEvento(turno, barbero, servicio, cliente),
     });
     const eventId = respuesta.data.id;
