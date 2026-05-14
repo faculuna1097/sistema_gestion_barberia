@@ -33,6 +33,21 @@ export const getSemanaActual = () => {
   return `${year}-W${String(week).padStart(2, '0')}`;
 };
 
+// ─── Hora desde timestamp ─────────────────────────────────────────────────────
+
+/**
+ * Extrae la hora 'HH:MM' de un timestamp ISO, en timezone Argentina.
+ * @param {string} iso - Timestamp ISO (ej: '2026-05-14T10:30:00-03:00')
+ * @returns {string} 'HH:MM' (24h)
+ */
+export const formatHora = (iso) =>
+  new Date(iso).toLocaleTimeString('es-AR', {
+    timeZone: TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
 // ─── Desplazamiento (anterior/siguiente) ──────────────────────────────────────
 
 /**

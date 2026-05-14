@@ -12,7 +12,7 @@
 
 import { useState, useEffect } from 'react';
 import { getBarberos, getAdminTurnos, patchAdminTurnoEstado, cancelarAdminTurno } from '../../../services/api';
-import { getFechaHoy } from '../../../utils/fechas';
+import { getFechaHoy, formatHora } from '../../../utils/fechas';
 import SelectorDia from '../../../components/SelectorDia';
 
 // Colores por estado de turno
@@ -30,17 +30,6 @@ const LABEL_ESTADO = {
   no_asistio: 'No asistió',
   cancelado:  'Cancelado',
 };
-
-/**
- * formatHora
- * Extrae HH:MM de un timestamp ISO.
- * @param {string} iso - timestamp ISO (ej: '2026-05-14T10:30:00-03:00')
- * @returns {string} 'HH:MM'
- */
-function formatHora(iso) {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
 
 // ─── Modal de confirmación de cancelación ────────────────────────────────────
 /**

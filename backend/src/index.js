@@ -24,6 +24,7 @@ import inicioRoutes     from './routes/inicio.js';
 import authRoutes       from './routes/auth.js';
 import authBarberoRoutes from './routes/authBarbero.js';
 import turneroRoutes    from './routes/turnero.js';
+import turnosOperativoRoutes from './routes/turnosOperativo.js';
 import turnosAdminRoutes   from './routes/turnos.js';
 import horariosAdminRoutes     from './routes/horarios.js';
 import suspensionesAdminRoutes  from './routes/suspensiones.js';
@@ -87,6 +88,9 @@ app.use('/api/servicios',  servicioRoutes);
 app.use('/api/productos',  productoRoutes);
 app.use('/api/categorias', categoriaRoutes);
 app.use('/api/cortes',     corteRoutes);
+// GET /api/turnos — turnos del día de un barbero para el flujo operativo (iPad).
+// Lo consume FlujoCorte para ofrecer registrar un corte vinculado a un turno.
+app.use('/api/turnos',     turnosOperativoRoutes);
 // GET /api/negocio — datos públicos del negocio (nombre, logo).
 // Lo consume App.jsx antes del login para mostrar el logo del tenant.
 app.get('/api/negocio',    getNegocio);

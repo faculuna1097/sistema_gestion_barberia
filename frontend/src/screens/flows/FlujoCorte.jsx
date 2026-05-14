@@ -1,5 +1,7 @@
 // /frontend/src/screens/flows/FlujoCorte.jsx
-// Flujo para registrar un nuevo corte. 4 pasos + confirmación.
+// Flujo para registrar un nuevo corte. 6 pasos: barbero → turnos del día →
+// servicio → pago → propina → confirmación. El paso 2 permite vincular el
+// corte a un turno reservado (o seguir como walk-in sin reserva).
 // Efectos UX implementados:
 //   (A) PressButton   — scale-down sutil al tocar, spring-back al soltar
 //   (B) BarraProgreso — barra verde animada que avanza con cada paso
@@ -7,7 +9,8 @@
 //   (D) PantallaExito — checkmark SVG animado + filas del resumen con stagger
 
 import { useState, useRef, useEffect } from "react";
-import { registrarCorte } from "../../services/api";
+import { registrarCorte, getTurnosDelDia } from "../../services/api";
+import { getFechaHoy, formatHora } from "../../utils/fechas";
 
 // ─── CONFIGURACIÓN DE TAMAÑOS ─────────────────────────────────────────────────
 const CONFIG = {
@@ -118,7 +121,7 @@ const PantallaExito = ({ montoTotal }) => {
 
   return (
     <div style={{ ...styles.pantallaCentrada, position: "relative" }}>
-      <BarraProgreso paso={5} total={5} />
+      <BarraProgreso paso={6} total={6} />
 
       <svg width="80" height="80" viewBox="0 0 80 80" style={{ marginBottom: 24 }}>
         {/* Track: círculo de fondo fijo */}
@@ -171,9 +174,40 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
   const [error,        setError]        = useState(null);
   const [exito,        setExito]        = useState(false);
 
+  // ── Estado del paso 2 (turnos del día) ──────────────────────────────────────
+  // turnoSeleccionado: turno elegido, o null si el corte es walk-in (sin reserva).
+  const [turnosDelDia,      setTurnosDelDia]      = useState([]);
+  const [turnoSeleccionado, setTurnoSeleccionado] = useState(null);
+  const [cargandoTurnos,    setCargandoTurnos]    = useState(false);
+  const [errorTurnos,       setErrorTurnos]       = useState(null);
+
   // ── Cálculos ─────────────────────────────────────────────────────────────────
   const propinaFinal = tienePropina && montoPropina ? Number(montoPropina) : 0;
   const montoTotal   = (servicioSeleccionado ? Number(servicioSeleccionado.precio) : 0) + propinaFinal;
+
+  // ── Carga de turnos del día al entrar al paso 2 ─────────────────────────────
+  // Se dispara cada vez que se llega al paso 2 (también al volver con retroceder),
+  // así la lista refleja turnos recién creados desde el turnero.
+  useEffect(() => {
+    if (paso !== 2 || !barberoSeleccionado) return;
+
+    const cargarTurnos = async () => {
+      setCargandoTurnos(true);
+      setErrorTurnos(null);
+      try {
+        const turnos = await getTurnosDelDia(barberoSeleccionado.id, getFechaHoy());
+        console.log('[flujoCorte] cargarTurnos — completado |', turnos.length, 'turnos');
+        setTurnosDelDia(turnos);
+      } catch (err) {
+        console.error('[flujoCorte] Error en cargarTurnos:', err.message);
+        setErrorTurnos("No se pudieron cargar los turnos del día.");
+        setTurnosDelDia([]);
+      } finally {
+        setCargandoTurnos(false);
+      }
+    };
+    cargarTurnos();
+  }, [paso, barberoSeleccionado]);
 
   // ── (C) navigate — transición slide en 3 fases ───────────────────────────────
   // Fase 1 (150ms): contenido actual sale deslizando + fade out
@@ -222,15 +256,15 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
   const retroceder = () => {
     if (paso === 1) { onVolver(); return; }
 
-    // Si estamos en el input de monto → volver a Sí/No sin cambiar de paso
-    if (paso === 4 && tienePropina !== null) {
+    // Paso 5 (propina): si estamos en el input de monto → volver a Sí/No sin cambiar de paso
+    if (paso === 5 && tienePropina !== null) {
       console.log('[flujoCorte] retroceder — volviendo a selección propina sí/no');
       setTienePropina(null);
       setMontoPropina("");
       return;
     }
 
-    if (paso === 5) {
+    if (paso === 6) {
       console.log('[flujoCorte] retroceder — reseteando propina');
       setTienePropina(null);
       setMontoPropina("");
@@ -248,6 +282,9 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
       precio:      servicioSeleccionado.precio,
       forma_pago:  formaPago,
       propina:     propinaFinal,
+      // Si el corte viene de un turno, el backend lo vincula y marca el turno
+      // como completado. Sin turno_id es un walk-in.
+      ...(turnoSeleccionado && { turno_id: turnoSeleccionado.id }),
     };
     setEnviando(true);
     setError(null);
@@ -280,7 +317,7 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
   // ─── PASO 1 — Selección de barbero ──────────────────────────────────────────
   if (paso === 1) {
     return (
-      <PasoLayout paso={1} total={5} titulo="Seleccione el barbero" onVolver={retroceder} slideStyle={slideStyle}>
+      <PasoLayout paso={1} total={6} titulo="Seleccione el barbero" onVolver={retroceder} slideStyle={slideStyle}>
         <div style={styles.gridOpciones}>
           {barberos.map((b) => (
             <PressButton
@@ -292,6 +329,10 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
               onPointerDown={() => {
                 console.log('[flujoCorte] paso 1 — barbero seleccionado:', b.nombre);
                 setBarberoSeleccionado(b);
+                // Resetear selección de turno/servicio: pudo haber quedado de
+                // un barbero elegido antes de retroceder.
+                setTurnoSeleccionado(null);
+                setServicioSeleccionado(null);
                 avanzar();
               }}
             >
@@ -303,10 +344,75 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
     );
   }
 
-  // ─── PASO 2 — Selección de servicio ──────────────────────────────────────────
+  // ─── PASO 2 — Turnos del día del barbero ────────────────────────────────────
+  // Lista los turnos reservados de hoy. Elegir uno pre-selecciona su servicio
+  // en el paso siguiente (editable). "Sin turno" sigue el flujo como walk-in.
   if (paso === 2) {
     return (
-      <PasoLayout paso={2} total={5} titulo="Seleccione el servicio" onVolver={retroceder} slideStyle={slideStyle}>
+      <PasoLayout
+        paso={2}
+        total={6}
+        titulo="Turnos de hoy"
+        subtitulo={barberoSeleccionado?.nombre}
+        onVolver={retroceder}
+        slideStyle={slideStyle}
+      >
+        {cargandoTurnos ? (
+          <p style={styles.turnosMensaje}>Cargando turnos...</p>
+        ) : (
+          <>
+            {errorTurnos ? (
+              <p style={styles.errorTexto}>{errorTurnos}</p>
+            ) : (
+              turnosDelDia.length === 0 && (
+                <p style={styles.turnosMensaje}>No hay turnos reservados para hoy.</p>
+              )
+            )}
+            <div style={styles.gridOpciones}>
+              {turnosDelDia.map((t) => (
+                <PressButton
+                  key={t.id}
+                  style={{
+                    ...styles.btnOpcion,
+                    ...(turnoSeleccionado?.id === t.id ? styles.btnOpcionActivo : {}),
+                  }}
+                  onPointerDown={() => {
+                    console.log('[flujoCorte] paso 2 — turno seleccionado:', t.cliente_nombre);
+                    setTurnoSeleccionado(t);
+                    // Pre-selección del servicio del turno (editable en el paso 3).
+                    // Si el servicio fue desactivado, no aparece en la lista → null.
+                    setServicioSeleccionado(servicios.find((s) => s.id === t.servicio_id) || null);
+                    avanzar();
+                  }}
+                >
+                  <span>{t.cliente_nombre}</span>
+                  <span style={styles.turnoHora}>{formatHora(t.inicio)}</span>
+                </PressButton>
+              ))}
+
+              <PressButton
+                style={styles.btnWalkIn}
+                onPointerDown={() => {
+                  console.log('[flujoCorte] paso 2 — walk-in (sin turno)');
+                  setTurnoSeleccionado(null);
+                  setServicioSeleccionado(null);
+                  avanzar();
+                }}
+              >
+                <span>Sin turno</span>
+                <span style={styles.walkInSub}>Cliente sin reserva</span>
+              </PressButton>
+            </div>
+          </>
+        )}
+      </PasoLayout>
+    );
+  }
+
+  // ─── PASO 3 — Selección de servicio ──────────────────────────────────────────
+  if (paso === 3) {
+    return (
+      <PasoLayout paso={3} total={6} titulo="Seleccione el servicio" onVolver={retroceder} slideStyle={slideStyle}>
         <div style={styles.gridOpciones}>
           {servicios.map((s) => (
             <PressButton
@@ -316,7 +422,7 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
                 ...(servicioSeleccionado?.id === s.id ? styles.btnOpcionActivo : {}),
               }}
               onPointerDown={() => {
-                console.log('[flujoCorte] paso 2 — servicio seleccionado:', s.nombre);
+                console.log('[flujoCorte] paso 3 — servicio seleccionado:', s.nombre);
                 setServicioSeleccionado(s);
                 avanzar();
               }}
@@ -332,10 +438,10 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
     );
   }
 
-  // ─── PASO 3 — Forma de pago ──────────────────────────────────────────────────
-  if (paso === 3) {
+  // ─── PASO 4 — Forma de pago ──────────────────────────────────────────────────
+  if (paso === 4) {
     return (
-      <PasoLayout paso={3} total={5} titulo="Seleccione el medio de pago" onVolver={retroceder} slideStyle={slideStyle}>
+      <PasoLayout paso={4} total={6} titulo="Seleccione el medio de pago" onVolver={retroceder} slideStyle={slideStyle}>
         <div style={styles.gridDos}>
           {[
             { key: "efectivo",     label: "Efectivo",     icono: <span style={styles.emoji}>💵</span> },
@@ -356,7 +462,7 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
                 ...(formaPago === op.key ? styles.btnOpcionActivo : {}),
               }}
               onPointerDown={() => {
-                console.log('[flujoCorte] paso 3 — forma de pago:', op.key);
+                console.log('[flujoCorte] paso 4 — forma de pago:', op.key);
                 setFormaPago(op.key);
                 avanzar();
               }}
@@ -370,15 +476,15 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
     );
   }
 
-  // ─── PASO 4 — Propina ────────────────────────────────────────────────────────
-  if (paso === 4) {
+  // ─── PASO 5 — Propina ────────────────────────────────────────────────────────
+  if (paso === 5) {
     return (
-      <PasoLayout paso={4} total={5} titulo="¿Propina?" onVolver={retroceder} slideStyle={slideStyle}>
+      <PasoLayout paso={5} total={6} titulo="¿Propina?" onVolver={retroceder} slideStyle={slideStyle}>
         {tienePropina === null ? (
           <div style={styles.gridDos}>
             <PressButton style={styles.btnOpcionGrande}
               onPointerDown={() => {
-                console.log('[flujoCorte] paso 4 — propina: sí');
+                console.log('[flujoCorte] paso 5 — propina: sí');
                 setTienePropina(true);
               }}>
               <span style={styles.emoji}>✅</span>
@@ -386,7 +492,7 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
             </PressButton>
             <PressButton style={styles.btnOpcionGrande}
               onPointerDown={() => {
-                console.log('[flujoCorte] paso 4 — propina: no');
+                console.log('[flujoCorte] paso 5 — propina: no');
                 avanzar();
               }}>
               <span style={styles.emoji}>❌</span>
@@ -415,7 +521,7 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
               }}
               onPointerDown={() => {
                 if (montoPropina === "") return;
-                console.log('[flujoCorte] paso 4 — propina confirmada | monto:', montoPropina);
+                console.log('[flujoCorte] paso 5 — propina confirmada | monto:', montoPropina);
                 avanzar();
               }}
               disabled={montoPropina === ""}
@@ -428,12 +534,12 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
     );
   }
 
-  // ─── PASO 5 — Resumen y confirmación ─────────────────────────────────────────
-  if (paso === 5) {
-    console.log('[flujoCorte] paso 5 — resumen | barbero:', barberoSeleccionado?.nombre,
+  // ─── PASO 6 — Resumen y confirmación ─────────────────────────────────────────
+  if (paso === 6) {
+    console.log('[flujoCorte] paso 6 — resumen | barbero:', barberoSeleccionado?.nombre,
       '| servicio:', servicioSeleccionado?.nombre, '| total:', montoTotal);
     return (
-      <PasoLayout paso={5} total={5} titulo="Confirmá el corte" onVolver={retroceder} slideStyle={slideStyle}>
+      <PasoLayout paso={6} total={6} titulo="Confirmá el corte" onVolver={retroceder} slideStyle={slideStyle}>
         <div style={styles.resumenCard}>
 
           <div style={styles.resumenFila}>
@@ -441,6 +547,16 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
             <span style={styles.resumenValor}>{barberoSeleccionado?.nombre}</span>
           </div>
           <div style={styles.resumenDivider} />
+
+          {turnoSeleccionado && (
+            <>
+              <div style={styles.resumenFila}>
+                <span style={styles.resumenLabel}>Cliente</span>
+                <span style={styles.resumenValor}>{turnoSeleccionado.cliente_nombre}</span>
+              </div>
+              <div style={styles.resumenDivider} />
+            </>
+          )}
 
           <div style={styles.resumenFila}>
             <span style={styles.resumenLabel}>Servicio</span>
@@ -557,6 +673,22 @@ const styles = {
     cursor: "pointer", fontFamily: "inherit",
   },
   btnOpcionActivo: { border: "2px solid #1a7a4a", backgroundColor: "#f0faf5", color: "#1a7a4a" },
+  // Botón "Sin turno" del paso 2 — borde punteado para diferenciarlo de los turnos.
+  btnWalkIn: {
+    display: "flex", flexDirection: "column", alignItems: "center",
+    justifyContent: "center", gap: "8px",
+    padding: CONFIG.paddingBotonSeleccion,
+    minHeight: CONFIG.alturaBotonSeleccion,
+    width: "calc(33.333% - 12px)",
+    minWidth: "200px",
+    borderRadius: "16px", border: "2px dashed #1a7a4a",
+    backgroundColor: "#ffffff", color: "#1a7a4a",
+    fontSize: CONFIG.tamanoTextoBoton, fontWeight: "600",
+    cursor: "pointer", fontFamily: "inherit",
+  },
+  walkInSub: { fontSize: "clamp(13px, 1.4vw, 16px)", fontWeight: "400", color: "#1a7a4a", opacity: 0.65 },
+  turnoHora: { fontSize: "clamp(13px, 1.4vw, 16px)", fontWeight: "400", color: "#666666" },
+  turnosMensaje: { fontSize: "clamp(15px, 1.7vw, 19px)", color: "#888888", textAlign: "center", margin: 0 },
   btnOpcionGrande: {
     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
     gap: "12px", padding: "4vh 2vw", minHeight: CONFIG.alturaBotonGrande,

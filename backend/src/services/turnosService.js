@@ -239,6 +239,29 @@ export const listarTurnos = async ({ tenantId, fecha, desde, hasta, barberoId })
 };
 
 /**
+ * Lista los turnos reservados de un barbero en un día puntual, con datos
+ * mínimos para el flujo operativo público (registrar corte desde el iPad).
+ * No expone email ni teléfono del cliente — solo lo que la pantalla necesita.
+ * @param {Object} filtros - { tenantId, barberoId, fecha (YYYY-MM-DD) }
+ * @returns {Promise<Array>} [{ id, inicio, cliente_nombre, servicio_id }]
+ */
+export const listarTurnosOperativos = async ({ tenantId, barberoId, fecha }) => {
+  const result = await query(
+    `SELECT t.id, t.inicio, t.servicio_id,
+            c.nombre AS cliente_nombre
+     FROM turno t
+     JOIN cliente c ON c.id = t.cliente_id
+     WHERE t.tenant_id = $1
+       AND t.barbero_id = $2
+       AND t.estado = 'reservado'
+       AND DATE(t.inicio AT TIME ZONE '${TZ}') = $3::date
+     ORDER BY t.inicio ASC`,
+    [tenantId, barberoId, fecha]
+  );
+  return result.rows;
+};
+
+/**
  * Cambia el estado de un turno a 'completado' o 'no_asistio'.
  * @param {string} turnoId
  * @param {string} nuevoEstado - 'completado' | 'no_asistio'

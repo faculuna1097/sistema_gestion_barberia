@@ -56,6 +56,7 @@ sistema-gestion-barberia/
 │       │   ├── balances.js            # Reportes de ingresos/gastos por período
 │       │   ├── gestion.js             # Gestión de tenant: PIN, datos negocio, ABMs
 │       │   ├── turnero.js             # Endpoints públicos del turnero del cliente (sin auth)
+│       │   ├── turnosOperativo.js     # GET turnos del día del barbero para FlujoCorte (público, sin auth)
 │       │   ├── turnos.js              # CRUD turnos backoffice (scope según rol admin/barbero)
 │       │   ├── horarios.js            # CRUD horarios backoffice (scope según rol)
 │       │   ├── suspensiones.js        # CRUD suspensiones backoffice (scope según rol)
@@ -77,6 +78,7 @@ sistema-gestion-barberia/
 │       │   ├── inicio.js              # /api/inicio/*
 │       │   ├── balances.js            # /api/balances/*
 │       │   ├── turnero.js             # /api/turnero/*
+│       │   ├── turnosOperativo.js     # /api/turnos (público — flujo operativo)
 │       │   ├── turnos.js              # /api/admin/turnos/*
 │       │   ├── horarios.js            # /api/admin/horarios/*
 │       │   ├── suspensiones.js        # /api/admin/suspensiones/*
@@ -212,7 +214,7 @@ sistema-gestion-barberia/
             ├── PantallaLoginAdmin.jsx # Login del panel admin con PIN
             │
             ├── flows/                 # Flujos operativos (modo iPad, sin autenticación)
-            │   ├── FlujoCorte.jsx     # Registrar corte: barbero → servicio → propina → pago
+            │   ├── FlujoCorte.jsx     # Registrar corte: barbero → turnos del día → servicio → pago → propina → confirmación
             │   ├── FlujoVenta.jsx     # Registrar venta de producto
             │   └── FlujoGasto.jsx     # Registrar gasto con categoría
             │
@@ -249,6 +251,7 @@ sistema-gestion-barberia/
 | **Productos** | `GET` | `/api/productos` | Público |
 | **Categorías** | `GET` | `/api/categorias` | Público |
 | **Cortes** | `POST` | `/api/cortes` | Público |
+| **Turnos (operativo)** | `GET` | `/api/turnos` | Público |
 | **Ventas** | `POST` | `/api/ventas` | Público |
 | **Ventas** | `GET` | `/api/ventas/mensual` | JWT |
 | **Ventas** | `PUT` | `/api/ventas/:id` | JWT |
@@ -306,7 +309,7 @@ sistema-gestion-barberia/
 | `App.jsx` | Raíz: autenticación, precarga de datos, routing entre pantallas |
 | `MainScreen.jsx` | Pantalla inicial con los 3 botones de flujo operativo |
 | `PantallaLoginAdmin.jsx` | Formulario de PIN para acceder al panel admin |
-| `FlujoCorte.jsx` | Paso a paso para registrar un corte (barbero → servicio → propina → pago) |
+| `FlujoCorte.jsx` | Paso a paso para registrar un corte (6 pasos; el paso 2 permite vincularlo a un turno del día o seguir como walk-in) |
 | `FlujoVenta.jsx` | Paso a paso para registrar venta de un producto |
 | `FlujoGasto.jsx` | Paso a paso para registrar un gasto con categoría |
 | `PanelAdmin.jsx` | Layout del panel admin con navegación lateral y carga de secciones |

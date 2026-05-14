@@ -121,9 +121,27 @@ export const getCategorias = async () => {
 };
 
 /**
+ * getTurnosDelDia
+ * Obtiene los turnos reservados de un barbero en una fecha (flujo operativo).
+ * @param {string} barberoId - UUID del barbero
+ * @param {string} fecha - 'YYYY-MM-DD'
+ * @returns {Promise<Array>} [{ id, inicio, cliente_nombre, servicio_id }]
+ */
+export const getTurnosDelDia = async (barberoId, fecha) => {
+  const response = await fetch(
+    `${BASE_URL}/turnos?barbero_id=${barberoId}&fecha=${fecha}`,
+    { headers: publicHeaders }
+  );
+  if (!response.ok) throw new Error('Error al obtener los turnos del día');
+  return response.json();
+};
+
+/**
  * registrarCorte
  * Envía un nuevo corte al backend para guardarlo en la base de datos.
- * @param {Object} datos - { barbero_id, servicios, forma_pago, propina }
+ * Si datos incluye turno_id, el backend vincula el corte al turno y lo marca
+ * como completado.
+ * @param {Object} datos - { barbero_id, servicio_id, precio, forma_pago, propina, turno_id? }
  * @returns {Promise<Object>} { message, corte_id, monto_total }
  */
 export const registrarCorte = async (datos) => {
@@ -132,7 +150,10 @@ export const registrarCorte = async (datos) => {
     headers: publicHeaders,
     body: JSON.stringify(datos),
   });
-  if (!response.ok) throw new Error('Error al registrar el corte');
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || 'Error al registrar el corte');
+  }
   return response.json();
 };
 
