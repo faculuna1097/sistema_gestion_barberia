@@ -35,7 +35,7 @@ export async function loginOperativo(req, res) {
 
   try {
     const resultado = await query(
-      `SELECT operativo_usuario, operativo_password_hash
+      `SELECT operativo_usuario, operativo_password_hash, operativo_token_version
          FROM tenant
         WHERE id = $1 AND activo = true`,
       [tenant_id]
@@ -48,7 +48,7 @@ export async function loginOperativo(req, res) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
-    const { operativo_usuario, operativo_password_hash } = resultado.rows[0];
+    const { operativo_usuario, operativo_password_hash, operativo_token_version } = resultado.rows[0];
 
     // Tenant sin credenciales operativas seteadas. Mensaje genérico para no
     // exponer ese estado a un atacante.
@@ -66,8 +66,12 @@ export async function loginOperativo(req, res) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
+    // tv (token version) permite invalidar todos los tokens operativos del
+    // tenant al cambiar la password operativa: adminOperativo incrementa
+    // operativo_token_version, y authMiddleware rechaza cualquier token con
+    // tv distinto al actual.
     const token = jwt.sign(
-      { tenant_id, rol: 'operativo' },
+      { tenant_id, rol: 'operativo', tv: operativo_token_version },
       process.env.JWT_SECRET,
       { expiresIn: '30d' }
     );

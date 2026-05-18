@@ -6,6 +6,7 @@
 // para que los controllers puedan scopear la respuesta según el consumidor.
 
 import jwt from 'jsonwebtoken';
+import { query } from '../config/db.js';
 
 /**
  * verificarToken
@@ -22,7 +23,7 @@ import jwt from 'jsonwebtoken';
  * @param {Response} res  - Express response. Responde 401/403 si la validación falla.
  * @param {Function} next - Pasa al siguiente middleware o controller si todo es correcto.
  */
-export const verificarToken = (req, res, next) => {
+export const verificarToken = async (req, res, next) => {
   console.log('[authMiddleware] verificarToken — request recibido | ruta:', req.method, req.url);
 
   const authHeader = req.headers['authorization'];
@@ -51,6 +52,26 @@ export const verificarToken = (req, res, next) => {
     req.tenant_id  = payload.tenant_id;
     req.rol        = payload.rol;
     req.barbero_id = payload.barbero_id; // solo presente si rol === 'barbero'
+
+    // Token version check para tokens operativos: al cambiar la password
+    // operativa, adminOperativo incrementa tenant.operativo_token_version.
+    // Cualquier token emitido antes (con tv menor) queda invalidado de
+    // inmediato, sin esperar a su expiración natural de 30 días.
+    // Tokens viejos sin tv en el payload se tratan como tv=0 para no
+    // romper sesiones existentes mientras nadie haya rotado la password.
+    if (payload.rol === 'operativo') {
+      const resultado = await query(
+        'SELECT operativo_token_version FROM tenant WHERE id = $1',
+        [req.tenant_id]
+      );
+      const tvActual = resultado.rows[0]?.operativo_token_version ?? 0;
+      const tvToken  = payload.tv ?? 0;
+      if (tvToken !== tvActual) {
+        console.error('[authMiddleware] Error en verificarToken: tv del token operativo no coincide',
+          '| token:', tvToken, '| tenant:', tvActual);
+        return res.status(401).json({ error: 'Token inválido o expirado' });
+      }
+    }
 
     console.log('[authMiddleware] verificarToken — completado | rol:', req.rol, '| barbero_id:', req.barbero_id);
     next();

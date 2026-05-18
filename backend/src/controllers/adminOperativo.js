@@ -12,10 +12,12 @@
 // con placeholder/aviso "Dejar vacío para no modificar" para que el usuario
 // entienda que pisar una password requiere escribir la nueva.
 //
-// Limitación conocida (deuda futura, aceptada para MVP, plan §10):
-// los tokens operativos viejos siguen siendo válidos hasta su expiración
-// natural de 30 días. Si se necesita revocación inmediata, se implementa
-// blacklist o rotación de JWT_SECRET en una iteración posterior.
+// Cambio de password ⇒ invalidación inmediata de tokens operativos viejos:
+// se incrementa tenant.operativo_token_version en el mismo UPDATE.
+// authOperativo firma el JWT con tv = operativo_token_version, y
+// authMiddleware rechaza los tokens cuyo tv no coincida con el actual.
+// Cambiar solo el usuario NO invalida tokens (un rename no compromete
+// credenciales). Mantener consistente con esa semántica.
 
 import bcrypt from 'bcrypt';
 import { query } from '../config/db.js';
@@ -91,6 +93,8 @@ export async function actualizarCredencialesOperativas(req, res) {
       const hash = await bcrypt.hash(password, 10);
       setClauses.push(`operativo_password_hash = $${indice++}`);
       valores.push(hash);
+      // Invalida todos los JWT operativos emitidos antes de este cambio.
+      setClauses.push('operativo_token_version = operativo_token_version + 1');
     }
 
     valores.push(tenant_id);

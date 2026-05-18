@@ -136,6 +136,9 @@ CREATE TABLE public.tenant (
   suscripcion_vigente_hasta date,
   subdominio text NOT NULL UNIQUE,
   duracion_slot_minutos integer NOT NULL DEFAULT 30 CHECK (duracion_slot_minutos > 0 AND duracion_slot_minutos <= 240),
+  operativo_usuario text,
+  operativo_password_hash text,
+  operativo_token_version integer NOT NULL DEFAULT 0,
   CONSTRAINT tenant_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.turno (
