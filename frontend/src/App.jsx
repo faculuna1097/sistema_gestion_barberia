@@ -8,7 +8,7 @@ import PantallaLoginAdmin from "./screens/PantallaLoginAdmin";
 import PantallaLoginOperativo from "./screens/PantallaLoginOperativo";
 import PanelAdmin from "./screens/admin/PanelAdmin";
 import {
-  getBarberos,
+  getBarberosOperativo,
   getServicios,
   getProductos,
   getCategorias,
@@ -166,7 +166,7 @@ export default function App() {
     setDatos(prev => ({ ...prev, cargando: true, error: null }));
     try {
       const [barberos, servicios, productos, categorias] = await Promise.all([
-        getBarberos(),
+        getBarberosOperativo(),
         getServicios(),
         getProductos(),
         getCategorias(),

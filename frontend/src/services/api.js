@@ -175,16 +175,25 @@ export const apiFetchOperativo = async (path, options = {}) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RUTAS PÚBLICAS — no requieren token (catálogos y datos pre-login)
+// RUTAS PÚBLICAS — no requieren token (datos pre-login)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// (Los catálogos vivían acá hasta que se privatizaron — ahora están en la
+// sección RUTAS OPERATIVAS más abajo. Pre-login solo queda /api/negocio.)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RUTAS OPERATIVAS — requieren tokenOperativo (vía apiFetchOperativo)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * getBarberos
- * Obtiene la lista de barberos activos del tenant.
+ * getBarberosOperativo
+ * Obtiene la lista de barberos activos del tenant para el modo operativo.
+ * Usa tokenOperativo — pensado para precargar datos tras el login operativo.
+ * SeccionTurnero del panel admin usa getBarberosAdmin() (con token admin).
  * @returns {Promise<Array>} Array de { id, nombre }
  */
-export const getBarberos = async () => {
-  const response = await fetch(`${BASE_URL}/barberos`, { headers: publicHeaders });
+export const getBarberosOperativo = async () => {
+  const response = await apiFetchOperativo(`/barberos`);
   if (!response.ok) throw new Error('Error al obtener barberos');
   return response.json();
 };
@@ -192,10 +201,11 @@ export const getBarberos = async () => {
 /**
  * getServicios
  * Obtiene la lista de servicios activos del tenant.
+ * Usa tokenOperativo — solo lo consume precargarDatos() del modo operativo.
  * @returns {Promise<Array>} Array de { id, nombre, precio }
  */
 export const getServicios = async () => {
-  const response = await fetch(`${BASE_URL}/servicios`, { headers: publicHeaders });
+  const response = await apiFetchOperativo(`/servicios`);
   if (!response.ok) throw new Error('Error al obtener servicios');
   return response.json();
 };
@@ -203,10 +213,11 @@ export const getServicios = async () => {
 /**
  * getProductos
  * Obtiene la lista de productos activos del tenant.
+ * Usa tokenOperativo — solo lo consume precargarDatos() (FlujoVenta).
  * @returns {Promise<Array>} Array de { id, nombre, precio, stock_actual }
  */
 export const getProductos = async () => {
-  const response = await fetch(`${BASE_URL}/productos`, { headers: publicHeaders });
+  const response = await apiFetchOperativo(`/productos`);
   if (!response.ok) throw new Error('Error al obtener productos');
   return response.json();
 };
@@ -214,17 +225,14 @@ export const getProductos = async () => {
 /**
  * getCategorias
  * Obtiene las categorías de gasto del tenant.
+ * Usa tokenOperativo — solo lo consume precargarDatos() (FlujoGasto).
  * @returns {Promise<Array>} Array de { id, nombre }
  */
 export const getCategorias = async () => {
-  const response = await fetch(`${BASE_URL}/categorias`, { headers: publicHeaders });
+  const response = await apiFetchOperativo(`/categorias`);
   if (!response.ok) throw new Error('Error al obtener categorías');
   return response.json();
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// RUTAS OPERATIVAS — requieren tokenOperativo (vía apiFetchOperativo)
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * getTurnosDelDia
@@ -358,6 +366,19 @@ export const loginOperativo = async (usuario, password) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // ADMIN — Turnero (gestión de turnos)
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * getBarberosAdmin
+ * Obtiene la lista de barberos activos del tenant usando el token admin.
+ * Lo consume SeccionTurnero del panel para poblar el selector de barberos.
+ * El equivalente operativo es getBarberosOperativo() (más arriba).
+ * @returns {Promise<Array>} Array de { id, nombre }
+ */
+export const getBarberosAdmin = async () => {
+  const res = await apiFetch('/barberos');
+  if (!res.ok) throw new Error('Error al obtener barberos');
+  return res.json();
+};
 
 /**
  * getAdminTurnos

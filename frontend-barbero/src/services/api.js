@@ -64,10 +64,12 @@ export const apiFetch = (path, options = {}) => {
 /**
  * getBarberos
  * Lista barberos activos del tenant (para el selector de login).
+ * Usa /api/turnero/barberos porque es el único endpoint público de listado
+ * tras la privatización de /api/barberos.
  * @returns {Promise<Array>} [{ id, nombre }]
  */
 export const getBarberos = async () => {
-  const res = await fetch(`${BASE_URL}/barberos`, { headers: publicHeaders });
+  const res = await fetch(`${BASE_URL}/turnero/barberos`, { headers: publicHeaders });
   if (!res.ok) throw new Error('Error al obtener barberos');
   return res.json();
 };

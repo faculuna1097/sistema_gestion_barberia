@@ -11,7 +11,7 @@
 // No recibe props — carga sus datos con useEffect.
 
 import { useState, useEffect } from 'react';
-import { getBarberos, getAdminTurnos, patchAdminTurnoEstado, cancelarAdminTurno } from '../../../services/api';
+import { getBarberosAdmin, getAdminTurnos, patchAdminTurnoEstado, cancelarAdminTurno } from '../../../services/api';
 import { getFechaHoy, formatHora } from '../../../utils/fechas';
 import SelectorDia from '../../../components/SelectorDia';
 
@@ -98,7 +98,7 @@ export default function SeccionTurnero() {
     const cargar = async () => {
       console.log('[seccionTurnero] cargarBarberos — request recibido');
       try {
-        const data = await getBarberos();
+        const data = await getBarberosAdmin();
         console.log('[seccionTurnero] cargarBarberos — completado |', data.length, 'barberos');
         setBarberos(data);
       } catch (err) {
