@@ -303,8 +303,8 @@ export const getNegocio = async () => {
 };
 
 /**
- * verificarPin
- * Envía el PIN al backend para autenticación.
+ * loginAdmin
+ * Envía el PIN al backend para autenticación del admin.
  * Casos:
  *   - 200: PIN correcto → devuelve { token, aviso_pago }
  *   - 402: suscripción vencida → lanza error con bloqueado: true
@@ -312,8 +312,8 @@ export const getNegocio = async () => {
  * @param {string} pin - PIN de 4 dígitos ingresado por el usuario
  * @returns {Promise<Object>} { token, aviso_pago }
  */
-export const verificarPin = async (pin) => {
-  const response = await fetch(`${BASE_URL}/auth/verificar-pin`, {
+export const loginAdmin = async (pin) => {
+  const response = await fetch(`${BASE_URL}/auth/admin/login`, {
     method: 'POST',
     headers: publicHeaders,
     body: JSON.stringify({ pin }),

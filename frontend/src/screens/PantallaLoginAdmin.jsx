@@ -7,7 +7,7 @@
 //   onCancelar — función llamada al presionar "Cancelar" (vuelve a MainScreen)
 
 import { useState, useEffect } from "react";
-import { verificarPin } from "../services/api";
+import { loginAdmin } from "../services/api";
 
 // ─── Ícono de candado ─────────────────────────────────────────────────────────
 const CandadoIcon = () => (
@@ -88,7 +88,7 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {
   const validarPin = async (pinIngresado) => {
     console.log('[pantallaLoginAdmin] validarPin — request iniciado');
     try {
-      const { token, aviso_pago } = await verificarPin(pinIngresado);
+      const { token, aviso_pago } = await loginAdmin(pinIngresado);
       console.log('[pantallaLoginAdmin] validarPin — completado | acceso concedido | aviso_pago:', aviso_pago);
       setEstado("exito");
       setTimeout(() => onAcceso(token, aviso_pago), 600);

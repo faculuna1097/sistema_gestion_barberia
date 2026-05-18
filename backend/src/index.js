@@ -21,7 +21,7 @@ import categoriaRoutes  from './routes/categorias.js';
 import cajaRouter       from './routes/caja.js';
 import balancesRouter   from './routes/balances.js';
 import inicioRoutes     from './routes/inicio.js';
-import authRoutes       from './routes/auth.js';
+import authAdminRoutes  from './routes/authAdmin.js';
 import authBarberoRoutes from './routes/authBarbero.js';
 import authOperativoRoutes from './routes/authOperativo.js';
 import turneroRoutes    from './routes/turnero.js';
@@ -104,8 +104,8 @@ app.get('/api/health', (req, res) => {
 //     usar versiones protegidas si se quisiera.
 // ─────────────────────────────────────────────────────────────────────────────
 app.use('/api/auth/operativo', authOperativoRoutes);
-app.use('/api/auth/barbero', authBarberoRoutes);
-app.use('/api/auth',       authRoutes);
+app.use('/api/auth/barbero',   authBarberoRoutes);
+app.use('/api/auth/admin',     authAdminRoutes);
 app.use('/api/turnero',    turneroRoutes);
 app.use('/api/barberos',   barberoRoutes);
 app.use('/api/servicios',  servicioRoutes);

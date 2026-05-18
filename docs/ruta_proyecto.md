@@ -67,7 +67,7 @@ sistema-gestion-barberia/
 │       │   └── turneroConfig.js       # Config turnero: GET/PUT duracion_slot_minutos (admin)
 │       │
 │       ├── routes/                    # Definición de rutas HTTP (conectan URL → controller)
-│       │   ├── auth.js                # /api/auth/verificar-pin
+│       │   ├── authAdmin.js           # /api/auth/admin/login
 │       │   ├── authBarbero.js         # /api/auth/barbero/login
 │       │   ├── authOperativo.js       # /api/auth/operativo/login
 │       │   ├── adminOperativo.js      # /api/admin/operativo/credenciales (GET/PUT, requiereRol admin)
@@ -250,7 +250,7 @@ sistema-gestion-barberia/
 
 | Módulo | Método | Path | Protección |
 |--------|--------|------|-----------|
-| **Auth admin** | `POST` | `/api/auth/verificar-pin` | Público |
+| **Auth admin** | `POST` | `/api/auth/admin/login` | Público |
 | **Auth barbero** | `POST` | `/api/auth/barbero/login` | Público |
 | **Auth operativo** | `POST` | `/api/auth/operativo/login` | Público |
 | **Barberos** | `GET` | `/api/barberos` | Público |
