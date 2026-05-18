@@ -253,10 +253,10 @@ sistema-gestion-barberia/
 | **Auth admin** | `POST` | `/api/auth/admin/login` | Público |
 | **Auth barbero** | `POST` | `/api/auth/barbero/login` | Público |
 | **Auth operativo** | `POST` | `/api/auth/operativo/login` | Público |
-| **Barberos** | `GET` | `/api/barberos` | Público |
-| **Servicios** | `GET` | `/api/servicios` | Público |
-| **Productos** | `GET` | `/api/productos` | Público |
-| **Categorías** | `GET` | `/api/categorias` | Público |
+| **Barberos** | `GET` | `/api/barberos` | JWT (operativo/admin) |
+| **Servicios** | `GET` | `/api/servicios` | JWT (operativo/admin) |
+| **Productos** | `GET` | `/api/productos` | JWT (operativo/admin) |
+| **Categorías** | `GET` | `/api/categorias` | JWT (operativo/admin) |
 | **Cortes** | `POST` | `/api/cortes` | JWT (operativo/admin) |
 | **Turnos (operativo)** | `GET` | `/api/turnos` | JWT (operativo/admin) |
 | **Ventas** | `POST` | `/api/ventas` | JWT (operativo/admin) |

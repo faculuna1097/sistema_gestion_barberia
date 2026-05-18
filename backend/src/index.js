@@ -84,33 +84,17 @@ app.get('/api/health', (req, res) => {
 //
 // Criterio de qué queda público:
 //   1. Logins (no puede haber token antes de loguearse).
-//   2. Datos necesarios ANTES del login: lista de barberos para el selector
-//      de la app del barbero, y datos del negocio (logo, nombre) para la
-//      pantalla de login del modo gestión y del barbero.
+//   2. Datos del negocio (logo, nombre) para la pantalla de login del modo
+//      gestión y del barbero.
 //   3. Turnero del cliente: público por diseño (cliente anónimo reservando).
-//   4. Catálogos no-sensibles (servicios, productos, categorías): siguen
-//      públicos porque su contenido es equivalente a una carta de restaurante
-//      —cualquier cliente del local los ve—. Mover a privado es posible una
-//      vez que el modo operativo siempre mande token, pero quedó como
-//      refactor futuro para no inflar el PR de login operativo.
-//
-// DEUDA TÉCNICA conocida (relevante a este bloque):
-//   - Duplicación /api/servicios ↔ /api/turnero/servicios.
-//   - Duplicación /api/barberos  ↔ /api/turnero/barberos.
-//     A futuro: eliminar /api/servicios y /api/barberos, migrar a los
-//     consumidores (modo operativo + app del barbero) a los endpoints
-//     /api/turnero/*, que están semánticamente diseñados para acceso
-//     anónimo. Una vez hecho, el modo operativo autenticado podría incluso
-//     usar versiones protegidas si se quisiera.
+//      Este namespace es el ÚNICO que sirve listados públicos del tenant
+//      (barberos, servicios, disponibilidad). La app del barbero consume
+//      /api/turnero/barberos en su selector pre-PIN.
 // ─────────────────────────────────────────────────────────────────────────────
 app.use('/api/auth/operativo', authOperativoRoutes);
 app.use('/api/auth/barbero',   authBarberoRoutes);
 app.use('/api/auth/admin',     authAdminRoutes);
 app.use('/api/turnero',    turneroRoutes);
-app.use('/api/barberos',   barberoRoutes);
-app.use('/api/servicios',  servicioRoutes);
-app.use('/api/productos',  productoRoutes);
-app.use('/api/categorias', categoriaRoutes);
 // GET /api/negocio — datos públicos del negocio (nombre, logo).
 // Lo consume App.jsx antes del login para mostrar el logo del tenant.
 app.get('/api/negocio',    getNegocio);
@@ -123,11 +107,21 @@ app.get('/api/negocio',    getNegocio);
 // jerárquicamente superior). Mover acá rutas que antes eran públicas cierra
 // el agujero histórico de que /api/cortes y /api/turnos exponían datos
 // (nombres de clientes, movimientos del día) sin autenticación.
+//
+// Catálogos de lectura (barberos, servicios, productos, categorías): viven
+// acá desde que se privatizaron — el panel de gestión los precarga después
+// del login operativo y SeccionTurnero (admin) los reusa. Lectura simple,
+// sin info sensible, pero ya no necesitan ser anónimos porque ningún flujo
+// pre-login los consume (la app del barbero usa /api/turnero/barberos).
 // ─────────────────────────────────────────────────────────────────────────────
 app.use('/api/cortes',    verificarToken, requiereRol('operativo', 'admin'), corteRoutes);
 // GET /api/turnos — turnos del día de un barbero para el flujo operativo (iPad).
 // Lo consume FlujoCorte para ofrecer registrar un corte vinculado a un turno.
 app.use('/api/turnos',    verificarToken, requiereRol('operativo', 'admin'), turnosOperativoRoutes);
+app.use('/api/barberos',   verificarToken, requiereRol('operativo', 'admin'), barberoRoutes);
+app.use('/api/servicios',  verificarToken, requiereRol('operativo', 'admin'), servicioRoutes);
+app.use('/api/productos',  verificarToken, requiereRol('operativo', 'admin'), productoRoutes);
+app.use('/api/categorias', verificarToken, requiereRol('operativo', 'admin'), categoriaRoutes);
 // /api/ventas y /api/gastos son rutas MIXTAS por rol:
 //   - POST  → operativo o admin (crear desde iPad o panel)
 //   - GET /mensual, DELETE, PUT → admin (consulta y gestión de pasado)
