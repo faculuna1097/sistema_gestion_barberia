@@ -52,6 +52,7 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago }) {
   const [seccionActiva, setSeccionActiva]   = useState("inicio");
   const [nombreNegocio, setNombreNegocio]   = useState('');
   const [mostrarAviso, setMostrarAviso]   = useState(avisosPago);
+  const [colapsado, setColapsado]           = useState(false);
 
 
   // Log de montado — solo una vez al montar el componente
@@ -91,14 +92,39 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago }) {
     <div style={styles.contenedor}>
 
       {/* ── SIDEBAR ─────────────────────────────────────────────────────── */}
-      <aside style={styles.sidebar}>
+      <aside style={{
+        ...styles.sidebar,
+        ...(colapsado ? styles.sidebarColapsado : {}),
+      }}>
 
-        {/* Encabezado del sidebar — nombre del negocio */}
-        <div style={styles.sidebarHeader}>
-          <div style={styles.logoMarca}>
-            <span style={styles.logoIcono}>💈</span>
-            <span style={styles.logoTexto}>{nombreNegocio}</span>
-          </div>
+        {/* Encabezado del sidebar.
+            Expandido: el bloque "logo + nombre del negocio" es un botón que al
+            presionarse colapsa el sidebar (no se muestra ninguna flecha).
+            Colapsado: el header se reemplaza por un botón "›" centrado que expande. */}
+        <div style={{
+          ...styles.sidebarHeader,
+          ...(colapsado ? styles.sidebarHeaderColapsado : {}),
+        }}>
+          {colapsado ? (
+            <button
+              style={styles.btnToggle}
+              onPointerDown={() => setColapsado(false)}
+              title="Expandir menú"
+              aria-label="Expandir menú"
+            >
+              ›
+            </button>
+          ) : (
+            <button
+              style={styles.logoMarca}
+              onPointerDown={() => setColapsado(true)}
+              title="Colapsar menú"
+              aria-label="Colapsar menú"
+            >
+              <span style={styles.logoIcono}>💈</span>
+              <span style={styles.logoTexto}>{nombreNegocio}</span>
+            </button>
+          )}
         </div>
 
         {/* Línea divisoria */}
@@ -113,9 +139,11 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago }) {
                 key={seccion.id}
                 style={{
                   ...styles.navItem,
+                  ...(colapsado ? styles.navItemColapsado : {}),
                   ...(activo ? styles.navItemActivo : {}),
                 }}
                 onPointerDown={() => handleNavegar(seccion.id)}
+                title={colapsado ? seccion.label : undefined}
               >
                 {/* Indicador lateral verde cuando está activo */}
                 <span style={{
@@ -123,7 +151,7 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago }) {
                   ...(activo ? styles.navIndicadorActivo : {}),
                 }} />
                 <span style={styles.navEmoji}>{seccion.emoji}</span>
-                <span style={styles.navLabel}>{seccion.label}</span>
+                {!colapsado && <span style={styles.navLabel}>{seccion.label}</span>}
               </button>
             );
           })}
@@ -138,11 +166,15 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago }) {
         {/* Botón cerrar sesión */}
         <div style={styles.sidebarFooter}>
           <button
-            style={styles.btnCerrarSesion}
+            style={{
+              ...styles.btnCerrarSesion,
+              ...(colapsado ? styles.btnCerrarSesionColapsado : {}),
+            }}
             onPointerDown={handleCerrarSesion}
+            title={colapsado ? "Cerrar sesión" : undefined}
           >
             <span style={styles.navEmoji}>🔓</span>
-            <span>Cerrar sesión</span>
+            {!colapsado && <span>Cerrar sesión</span>}
           </button>
         </div>
 
@@ -198,16 +230,59 @@ const styles = {
     overflow: "hidden",
     // Sombra sutil hacia la derecha para separar visualmente del contenido
     boxShadow: "2px 0 12px rgba(0, 0, 0, 0.25)",
+    // Animación suave entre estados expandido/colapsado
+    transition: "width 0.2s ease, min-width 0.2s ease",
+  },
+
+  // Sidebar colapsado: solo íconos
+  sidebarColapsado: {
+    width: "64px",
+    minWidth: "64px",
   },
 
   sidebarHeader: {
     padding: "28px 20px 20px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "10px",
   },
 
+  // Header cuando el sidebar está colapsado: solo el botón toggle, centrado
+  sidebarHeaderColapsado: {
+    padding: "28px 0 20px",
+    justifyContent: "center",
+  },
+
+  // Botón para expandir/colapsar el sidebar
+  btnToggle: {
+    background: "transparent",
+    border: "none",
+    color: "#9a9a9a",
+    fontSize: "22px",
+    cursor: "pointer",
+    padding: "4px 10px",
+    lineHeight: 1,
+    borderRadius: "4px",
+    fontFamily: "inherit",
+    flexShrink: 0,
+  },
+
+  // Bloque "logo + nombre del negocio". Se usa como botón clickeable para
+  // colapsar el sidebar, por eso lleva reset de estilos default de <button>.
   logoMarca: {
     display: "flex",
     alignItems: "center",
     gap: "10px",
+    background: "transparent",
+    border: "none",
+    padding: 0,
+    margin: 0,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    color: "inherit",
+    textAlign: "left",
+    width: "100%",
   },
 
   logoIcono: {
@@ -268,6 +343,12 @@ const styles = {
     color: "#ffffff",
   },
 
+  // Ítem de navegación cuando el sidebar está colapsado: ícono centrado, sin label
+  navItemColapsado: {
+    padding: "14px 0",
+    justifyContent: "center",
+  },
+
   // Barra indicadora lateral izquierda (visible solo en ítem activo)
   navIndicador: {
     position: "absolute",
@@ -318,6 +399,12 @@ const styles = {
     cursor: "pointer",
     fontFamily: "inherit",
     textAlign: "left",
+  },
+
+  // Botón cerrar sesión cuando el sidebar está colapsado: ícono centrado, sin label
+  btnCerrarSesionColapsado: {
+    padding: "14px 0",
+    justifyContent: "center",
   },
 
   // ── Área de contenido ──────────────────────────────────────────────────

@@ -24,4 +24,7 @@ Thumbs.db
 # Scripts operativos one-off (no se commitean)
 backend/scripts/
 
+# Configuración local de Claude Code
+.claude/
+
 
