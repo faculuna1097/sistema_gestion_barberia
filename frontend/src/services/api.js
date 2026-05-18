@@ -23,14 +23,43 @@ const publicHeaders = {
   ...(subdominio ? { 'X-Tenant-Subdomain': subdominio } : {}),
 };
 
-// Variable de módulo — persiste mientras la app está viva, no se guarda en localStorage
+// ─── Tokens ──────────────────────────────────────────────────────────────────
+// Se manejan dos tokens distintos, uno por audiencia:
+//   - authToken (admin): vive en memoria. Se setea tras el login PIN admin y se
+//     pierde al refrescar la página → re-login obligatorio. Apropiado para el
+//     dueño operando desde un dispositivo no dedicado.
+//   - tokenOperativo: vive en memoria Y se sincroniza con localStorage para
+//     sobrevivir reloads, cierres del browser y reinicios del iPad. Apropiado
+//     para el iPad del local, que está siempre "logueado operativo".
+//
+// Cada token tiene su propio helper (apiFetch / apiFetchOperativo) que sabe
+// cuál inyectar y, en el caso del operativo, cómo reaccionar a 401.
+
+// Token admin — solo memoria.
 let authToken = null;
+
+// Token operativo — memoria + localStorage. Se hidrata desde el storage al
+// cargar el módulo para no perderlo entre sesiones del navegador.
+let tokenOperativo = null;
+try {
+  tokenOperativo = localStorage.getItem('token_operativo');
+  if (tokenOperativo) console.log('[api] tokenOperativo hidratado desde localStorage');
+} catch (err) {
+  // localStorage puede estar deshabilitado (modo privado agresivo, etc.).
+  // En ese caso el operativo va a tener que re-loguearse cada vez que recargue.
+  console.warn('[api] localStorage inaccesible — tokenOperativo no persistirá:', err.message);
+}
+
+// Callback que App.jsx registra para reaccionar a un 401 del operativo
+// (típicamente limpiar estado y redirigir al login). Disparado desde
+// apiFetchOperativo cuando el backend devuelve 401.
+let onUnauthorizedOperativo = null;
 
 /**
  * setAuthToken
- * Guarda el JWT en el módulo para que apiFetch() lo incluya en los headers.
- * Llamar desde App.jsx inmediatamente después del login exitoso.
- * @param {string} token - JWT recibido del backend
+ * Guarda el JWT admin en el módulo para que apiFetch() lo incluya en los headers.
+ * Llamar desde App.jsx inmediatamente después del login PIN admin exitoso.
+ * @param {string} token - JWT con rol='admin' recibido del backend
  */
 export const setAuthToken = (token) => {
   authToken = token;
@@ -39,11 +68,55 @@ export const setAuthToken = (token) => {
 
 /**
  * clearAuthToken
- * Elimina el token del módulo. Llamar desde App.jsx al cerrar sesión.
+ * Elimina el token admin del módulo. Llamar desde App.jsx al cerrar sesión admin.
  */
 export const clearAuthToken = () => {
   authToken = null;
   console.log('[api] clearAuthToken — completado');
+};
+
+/**
+ * setAuthTokenOperativo
+ * Guarda el JWT del modo operativo en memoria y en localStorage para que
+ * sobreviva al reload. Se llama desde loginOperativo() automáticamente;
+ * también queda exportada por si App.jsx necesita rehidratar manualmente.
+ * @param {string} token - JWT con rol='operativo' recibido del backend
+ */
+export const setAuthTokenOperativo = (token) => {
+  tokenOperativo = token;
+  try {
+    localStorage.setItem('token_operativo', token);
+  } catch (err) {
+    console.warn('[api] No se pudo persistir tokenOperativo en localStorage:', err.message);
+  }
+  console.log('[api] setAuthTokenOperativo — completado');
+};
+
+/**
+ * clearAuthTokenOperativo
+ * Elimina el token operativo de memoria y de localStorage. Se llama
+ * automáticamente desde apiFetchOperativo cuando recibe un 401, y también
+ * desde App.jsx al hacer logout manual.
+ */
+export const clearAuthTokenOperativo = () => {
+  tokenOperativo = null;
+  try {
+    localStorage.removeItem('token_operativo');
+  } catch (err) {
+    console.warn('[api] No se pudo limpiar tokenOperativo de localStorage:', err.message);
+  }
+  console.log('[api] clearAuthTokenOperativo — completado');
+};
+
+/**
+ * setOnUnauthorizedOperativo
+ * Registra un callback que apiFetchOperativo ejecuta cuando el backend
+ * devuelve 401 (token expirado, revocado o inválido). App.jsx lo usa para
+ * limpiar su estado local y redirigir al login operativo.
+ * @param {Function|null} fn - función sin argumentos, o null para desregistrar
+ */
+export const setOnUnauthorizedOperativo = (fn) => {
+  onUnauthorizedOperativo = fn;
 };
 
 /**
@@ -72,8 +145,37 @@ export const apiFetch = (path, options = {}) => {
   return fetch(url, { ...options, headers });
 };
 
+/**
+ * apiFetchOperativo
+ * Análogo a apiFetch() pero inyecta tokenOperativo en lugar de authToken.
+ * Si el backend devuelve 401, limpia el token automáticamente y dispara el
+ * callback registrado con setOnUnauthorizedOperativo (típicamente para
+ * redirigir al login). Devuelve la Response normal para que el caller pueda
+ * mostrar su propio mensaje de error antes de que ocurra la redirección.
+ *
+ * @param {string} path    - Path del endpoint sin BASE_URL
+ * @param {Object} options - Opciones de fetch
+ * @returns {Promise<Response>}
+ */
+export const apiFetchOperativo = async (path, options = {}) => {
+  const url = `${BASE_URL}${path}`;
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(tokenOperativo ? { 'Authorization': `Bearer ${tokenOperativo}` } : {}),
+    ...(subdominio ? { 'X-Tenant-Subdomain': subdominio } : {}),
+    ...(options.headers || {}),
+  };
+  const response = await fetch(url, { ...options, headers });
+  if (response.status === 401) {
+    console.warn('[api] apiFetchOperativo — 401 | path:', path, '| limpiando token y notificando a la app');
+    clearAuthTokenOperativo();
+    if (onUnauthorizedOperativo) onUnauthorizedOperativo();
+  }
+  return response;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
-// RUTAS PÚBLICAS — no requieren token (flujos operativos)
+// RUTAS PÚBLICAS — no requieren token (catálogos y datos pre-login)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -120,6 +222,10 @@ export const getCategorias = async () => {
   return response.json();
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// RUTAS OPERATIVAS — requieren tokenOperativo (vía apiFetchOperativo)
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * getTurnosDelDia
  * Obtiene los turnos reservados de un barbero en una fecha (flujo operativo).
@@ -128,9 +234,8 @@ export const getCategorias = async () => {
  * @returns {Promise<Array>} [{ id, inicio, cliente_nombre, servicio_id }]
  */
 export const getTurnosDelDia = async (barberoId, fecha) => {
-  const response = await fetch(
-    `${BASE_URL}/turnos?barbero_id=${barberoId}&fecha=${fecha}`,
-    { headers: publicHeaders }
+  const response = await apiFetchOperativo(
+    `/turnos?barbero_id=${barberoId}&fecha=${fecha}`
   );
   if (!response.ok) throw new Error('Error al obtener los turnos del día');
   return response.json();
@@ -145,9 +250,8 @@ export const getTurnosDelDia = async (barberoId, fecha) => {
  * @returns {Promise<Object>} { message, corte_id, monto_total }
  */
 export const registrarCorte = async (datos) => {
-  const response = await fetch(`${BASE_URL}/cortes`, {
+  const response = await apiFetchOperativo('/cortes', {
     method: 'POST',
-    headers: publicHeaders,
     body: JSON.stringify(datos),
   });
   if (!response.ok) {
@@ -164,9 +268,8 @@ export const registrarCorte = async (datos) => {
  * @returns {Promise<Object>} { message, venta_id, monto_total }
  */
 export const registrarVenta = async (datos) => {
-  const response = await fetch(`${BASE_URL}/ventas`, {
+  const response = await apiFetchOperativo('/ventas', {
     method: 'POST',
-    headers: publicHeaders,
     body: JSON.stringify(datos),
   });
   if (!response.ok) throw new Error('Error al registrar la venta');
@@ -180,9 +283,8 @@ export const registrarVenta = async (datos) => {
  * @returns {Promise<Object>} { message, gasto_id }
  */
 export const registrarGasto = async (datos) => {
-  const response = await fetch(`${BASE_URL}/gastos`, {
+  const response = await apiFetchOperativo('/gastos', {
     method: 'POST',
-    headers: publicHeaders,
     body: JSON.stringify(datos),
   });
   if (!response.ok) throw new Error('Error al registrar el gasto');
@@ -225,6 +327,32 @@ export const verificarPin = async (pin) => {
 
   if (!response.ok) throw new Error('PIN incorrecto');
   return response.json(); // { token, aviso_pago }
+};
+
+/**
+ * loginOperativo
+ * Autentica al modo operativo con usuario + password contra el endpoint
+ * /api/auth/operativo/login. Si las credenciales son correctas, guarda el
+ * JWT en memoria y en localStorage (vía setAuthTokenOperativo) y devuelve
+ * el token. Si son incorrectas, lanza un Error.
+ *
+ * @param {string} usuario
+ * @param {string} password
+ * @returns {Promise<string>} el JWT recibido
+ */
+export const loginOperativo = async (usuario, password) => {
+  const response = await fetch(`${BASE_URL}/auth/operativo/login`, {
+    method: 'POST',
+    headers: publicHeaders,
+    body: JSON.stringify({ usuario, password }),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || 'Credenciales inválidas');
+  }
+  const { token } = await response.json();
+  setAuthTokenOperativo(token);
+  return token;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -372,6 +500,40 @@ export const eliminarAdminSuspension = async (suspensionId) => {
     throw new Error(data.error || 'Error al eliminar suspensión');
   }
   return res.json();
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN — Credenciales del modo operativo
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * getCredencialesOperativas
+ * Obtiene el usuario operativo actual del tenant. Solo el usuario — la
+ * password nunca se devuelve (bcrypt es one-way).
+ * @returns {Promise<{ usuario: string|null }>}
+ */
+export const getCredencialesOperativas = async () => {
+  const res = await apiFetch('/admin/operativo/credenciales');
+  if (!res.ok) throw new Error('Error al obtener credenciales operativas');
+  return res.json();
+};
+
+/**
+ * actualizarCredencialesOperativas
+ * Actualiza usuario y/o password del modo operativo. Cualquiera de los dos
+ * campos es opcional; enviar solo lo que se quiere cambiar.
+ * @param {Object} datos - { usuario?: string, password?: string }
+ * @returns {Promise<void>}
+ */
+export const actualizarCredencialesOperativas = async (datos) => {
+  const res = await apiFetch('/admin/operativo/credenciales', {
+    method: 'PUT',
+    body: JSON.stringify(datos),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Error al actualizar credenciales operativas');
+  }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

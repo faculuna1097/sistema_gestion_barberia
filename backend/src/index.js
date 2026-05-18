@@ -23,6 +23,7 @@ import balancesRouter   from './routes/balances.js';
 import inicioRoutes     from './routes/inicio.js';
 import authRoutes       from './routes/auth.js';
 import authBarberoRoutes from './routes/authBarbero.js';
+import authOperativoRoutes from './routes/authOperativo.js';
 import turneroRoutes    from './routes/turnero.js';
 import turnosOperativoRoutes from './routes/turnosOperativo.js';
 import turnosAdminRoutes   from './routes/turnos.js';
@@ -35,6 +36,7 @@ import adminServiciosRoutes   from './routes/adminServicios.js';
 import adminProductosRoutes   from './routes/adminProductos.js';
 import adminNegocioRoutes     from './routes/adminNegocio.js';
 import adminTurneroConfigRoutes from './routes/adminTurneroConfig.js';
+import adminOperativoRoutes from './routes/adminOperativo.js';
 import { requiereRol } from './middlewares/requiereRolMiddleware.js';
 import { getNegocio } from './controllers/gestion.js';
 
@@ -78,8 +80,30 @@ app.get('/api/health', (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RUTAS PÚBLICAS — accesibles sin token (flujos operativos + auth)
+// RUTAS PÚBLICAS — accesibles sin token
+//
+// Criterio de qué queda público:
+//   1. Logins (no puede haber token antes de loguearse).
+//   2. Datos necesarios ANTES del login: lista de barberos para el selector
+//      de la app del barbero, y datos del negocio (logo, nombre) para la
+//      pantalla de login del modo gestión y del barbero.
+//   3. Turnero del cliente: público por diseño (cliente anónimo reservando).
+//   4. Catálogos no-sensibles (servicios, productos, categorías): siguen
+//      públicos porque su contenido es equivalente a una carta de restaurante
+//      —cualquier cliente del local los ve—. Mover a privado es posible una
+//      vez que el modo operativo siempre mande token, pero quedó como
+//      refactor futuro para no inflar el PR de login operativo.
+//
+// DEUDA TÉCNICA conocida (relevante a este bloque):
+//   - Duplicación /api/servicios ↔ /api/turnero/servicios.
+//   - Duplicación /api/barberos  ↔ /api/turnero/barberos.
+//     A futuro: eliminar /api/servicios y /api/barberos, migrar a los
+//     consumidores (modo operativo + app del barbero) a los endpoints
+//     /api/turnero/*, que están semánticamente diseñados para acceso
+//     anónimo. Una vez hecho, el modo operativo autenticado podría incluso
+//     usar versiones protegidas si se quisiera.
 // ─────────────────────────────────────────────────────────────────────────────
+app.use('/api/auth/operativo', authOperativoRoutes);
 app.use('/api/auth/barbero', authBarberoRoutes);
 app.use('/api/auth',       authRoutes);
 app.use('/api/turnero',    turneroRoutes);
@@ -87,18 +111,30 @@ app.use('/api/barberos',   barberoRoutes);
 app.use('/api/servicios',  servicioRoutes);
 app.use('/api/productos',  productoRoutes);
 app.use('/api/categorias', categoriaRoutes);
-app.use('/api/cortes',     corteRoutes);
-// GET /api/turnos — turnos del día de un barbero para el flujo operativo (iPad).
-// Lo consume FlujoCorte para ofrecer registrar un corte vinculado a un turno.
-app.use('/api/turnos',     turnosOperativoRoutes);
 // GET /api/negocio — datos públicos del negocio (nombre, logo).
 // Lo consume App.jsx antes del login para mostrar el logo del tenant.
 app.get('/api/negocio',    getNegocio);
-// /api/ventas y /api/gastos son rutas MIXTAS:
-// POST es público (flujos operativos). GET /mensual y DELETE /:id requieren token.
-// La protección se aplica a nivel de router en routes/ventas.js y routes/gastos.js.
-app.use('/api/ventas',     ventaRoutes);
-app.use('/api/gastos',     gastoRoutes);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RUTAS OPERATIVAS — accesibles con JWT operativo o admin
+//
+// Estas son las rutas que el iPad del local consume después del login
+// operativo. El admin también puede llamarlas desde el panel (es
+// jerárquicamente superior). Mover acá rutas que antes eran públicas cierra
+// el agujero histórico de que /api/cortes y /api/turnos exponían datos
+// (nombres de clientes, movimientos del día) sin autenticación.
+// ─────────────────────────────────────────────────────────────────────────────
+app.use('/api/cortes',    verificarToken, requiereRol('operativo', 'admin'), corteRoutes);
+// GET /api/turnos — turnos del día de un barbero para el flujo operativo (iPad).
+// Lo consume FlujoCorte para ofrecer registrar un corte vinculado a un turno.
+app.use('/api/turnos',    verificarToken, requiereRol('operativo', 'admin'), turnosOperativoRoutes);
+// /api/ventas y /api/gastos son rutas MIXTAS por rol:
+//   - POST  → operativo o admin (crear desde iPad o panel)
+//   - GET /mensual, DELETE, PUT → admin (consulta y gestión de pasado)
+// La distinción fina por rol se aplica dentro del router (routes/ventas.js,
+// routes/gastos.js). Acá solo se exige token válido.
+app.use('/api/ventas',    verificarToken, ventaRoutes);
+app.use('/api/gastos',    verificarToken, gastoRoutes);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS PROTEGIDAS — solo accesibles desde el panel admin con JWT válido
@@ -119,6 +155,7 @@ app.use('/api/admin/servicios',    verificarToken, requiereRol('admin'), adminSe
 app.use('/api/admin/productos',    verificarToken, requiereRol('admin'), adminProductosRoutes);
 app.use('/api/admin/negocio',      verificarToken, requiereRol('admin'), adminNegocioRoutes);
 app.use('/api/admin/turnero/config', verificarToken, requiereRol('admin'), adminTurneroConfigRoutes);
+app.use('/api/admin/operativo',      verificarToken, requiereRol('admin'), adminOperativoRoutes);
 
 console.log('[index] Rutas registradas correctamente');
 

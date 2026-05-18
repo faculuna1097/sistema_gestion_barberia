@@ -15,6 +15,17 @@ const LockIcon = () => (
   </svg>
 );
 
+// Ícono de flecha hacia la izquierda — discreto, indica "salir/atrás".
+// Usado en el botón de logout operativo de la esquina superior izquierda.
+const LogoutArrowIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26"
+    viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="19" y1="12" x2="5" y2="12" />
+    <polyline points="12 19 5 12 12 5" />
+  </svg>
+);
+
 const SpotifyIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"
     viewBox="0 0 24 24" fill="currentColor">
@@ -78,6 +89,7 @@ export default function MainScreen({
   onNuevoGasto,
   onAdminAccess,
   onSpotify,
+  onLogoutOperativo,
   logoUrl,
   bookingUrl,
 }) {
@@ -106,6 +118,24 @@ export default function MainScreen({
     }}>
       <div style={styles.bgAccentTop} />
       <div style={styles.bgAccentBottom} />
+
+      {/* ── Esquina superior izquierda: Logout operativo (discreto) ──────── */}
+      {onLogoutOperativo && (
+        <div style={styles.topLeftStack}>
+          <button
+            style={{
+              ...styles.cornerButton,
+              ...styles.logoutButton,
+              ...(pressed === "logout" ? styles.cornerButtonPressed : {}),
+            }}
+            onPointerDown={() => handlePress("logout", onLogoutOperativo)}
+            aria-label="Cerrar sesión operativo"
+            title="Cerrar sesión"
+          >
+            <LogoutArrowIcon />
+          </button>
+        </div>
+      )}
 
       <div style={styles.centerContent}>
         {logoUrl && (
@@ -332,6 +362,15 @@ const styles = {
   },
 
   // ── Stacks de las esquinas ───────────────────────────────────────────
+  topLeftStack: {
+    position: "absolute",
+    top: 28,
+    left: 32,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 12,
+  },
   bottomLeftStack: {
     position: "absolute",
     bottom: 28,
@@ -373,6 +412,12 @@ const styles = {
   },
   adminButton: {
     color: "#444444",
+  },
+  // Botón de logout: muy gris y borde casi invisible — "que se vea poco"
+  // para no llamar la atención del operativo durante el día.
+  logoutButton: {
+    color: "#bbbbbb",
+    borderColor: "#f0f0f0",
   },
   cornerButtonPressed: {
     backgroundColor: "#f5f5f5",

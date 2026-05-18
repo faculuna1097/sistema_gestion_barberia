@@ -66,7 +66,7 @@ export default function TabTurnero() {
   if (error)    return <p style={styles.errorTexto}>{error}</p>;
 
   return (
-    <div>
+    <div style={styles.contenedor}>
       <div style={styles.card}>
         <p style={styles.cardTitulo}>Duración de slots</p>
         <p style={styles.cardDescripcion}>
@@ -136,12 +136,15 @@ const styles = {
     padding: '48px 0',
     margin: 0,
   },
+  contenedor: {
+    maxWidth: '580px',
+    margin: '0 auto',
+  },
   card: {
     padding: '24px',
     backgroundColor: '#ffffff',
     borderRadius: '12px',
     border: '1.5px solid #eeeeee',
-    maxWidth: '480px',
   },
   cardTitulo: {
     fontSize: '16px',

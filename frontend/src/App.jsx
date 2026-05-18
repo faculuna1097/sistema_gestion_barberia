@@ -5,6 +5,7 @@ import FlujoCorte from "./screens/flows/FlujoCorte";
 import FlujoVenta from "./screens/flows/FlujoVenta";
 import FlujoGasto from "./screens/flows/FlujoGasto";
 import PantallaLoginAdmin from "./screens/PantallaLoginAdmin";
+import PantallaLoginOperativo from "./screens/PantallaLoginOperativo";
 import PanelAdmin from "./screens/admin/PanelAdmin";
 import {
   getBarberos,
@@ -14,7 +15,22 @@ import {
   getNegocio,
   setAuthToken,
   clearAuthToken,
+  clearAuthTokenOperativo,
+  setOnUnauthorizedOperativo,
 } from "./services/api";
+
+// Lee el tokenOperativo guardado en localStorage al boot.
+// Si existe, el usuario entra directo a MainScreen. Si no, va al login operativo.
+// El acceso al localStorage va envuelto en try porque puede estar deshabilitado
+// (modo privado agresivo, etc.) y queremos degradar a "sin token" en lugar de crashear.
+const leerTokenOperativoInicial = () => {
+  try {
+    return localStorage.getItem('token_operativo');
+  } catch (err) {
+    console.warn('[app] localStorage inaccesible al leer tokenOperativo:', err.message);
+    return null;
+  }
+};
 
 const PantallaCargando = () => (
   <div style={stylesEstado.pantalla}>
@@ -95,10 +111,13 @@ const stylesEstado = {
 };
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState("main");
+  // tokenOperativo: hidratado desde localStorage al primer render (lazy init).
+  // Cuando es null, la pantalla inicial es PantallaLoginOperativo en lugar de MainScreen.
+  const [tokenOperativo, setTokenOperativo] = useState(leerTokenOperativoInicial);
+  const [currentScreen, setCurrentScreen] = useState(tokenOperativo ? "main" : "loginOperativo");
   const [token, setToken] = useState(null);
   const [logoUrl, setLogoUrl] = useState(null);
-  const [bookingUrl, setBookingUrl] = useState(null); 
+  const [bookingUrl, setBookingUrl] = useState(null);
   const [avisosPago, setAvisosPago] = useState(false);
   const [datos, setDatos] = useState({
     barberos: [],
@@ -108,6 +127,19 @@ export default function App() {
     cargando: true,
     error: null,
   });
+
+  // Registra el handler que api.js dispara cuando apiFetchOperativo recibe 401.
+  // En ese caso el token operativo está inválido (expirado, revocado, etc.) y
+  // hay que sacar al usuario de cualquier pantalla operativa y mandarlo al login.
+  // El token ya fue limpiado por api.js, así que acá solo tocamos estado de React.
+  useEffect(() => {
+    setOnUnauthorizedOperativo(() => {
+      console.log('[app] 401 operativo detectado — redirigiendo a login operativo');
+      setTokenOperativo(null);
+      setCurrentScreen("loginOperativo");
+    });
+    return () => setOnUnauthorizedOperativo(null);
+  }, []);
 
   /**
    * cargarLogo — obtiene logo y booking_url desde la DB.
@@ -151,9 +183,12 @@ export default function App() {
     }
   }, []);
 
+  // Precarga gateada por tokenOperativo: solo cargamos catálogos cuando hay
+  // sesión operativa activa. Antes del login no hace falta y evita disparar
+  // PantallaError sobre la pantalla de login si la API está caída.
   useEffect(() => {
-    precargarDatos();
-  }, [precargarDatos]);
+    if (tokenOperativo) precargarDatos();
+  }, [tokenOperativo, precargarDatos]);
 
   const reintentar = useCallback(() => {
     console.log('[app] reintentar — iniciado');
@@ -173,6 +208,37 @@ export default function App() {
     precargarDatos();
     setCurrentScreen("main");
   };
+
+  /**
+   * cerrarSesionOperativo
+   * Limpia el tokenOperativo (memoria + localStorage) y manda al login operativo.
+   * No toca el token admin: si por algún motivo había sesión admin activa, eso
+   * vive en otra variable y se mantiene; pero en la práctica el botón solo se
+   * muestra en MainScreen (modo operativo), así que no debería haber admin activo.
+   */
+  const cerrarSesionOperativo = () => {
+    console.log('[app] cerrarSesionOperativo — iniciado');
+    clearAuthTokenOperativo();
+    setTokenOperativo(null);
+    setCurrentScreen("loginOperativo");
+  };
+
+  // Login operativo: pantalla inicial cuando no hay tokenOperativo. Tiene que
+  // ir ANTES de los chequeos de cargando/error porque precargarDatos no corre
+  // sin token, así que datos.barberos quedaría en [] permanentemente acá.
+  if (currentScreen === "loginOperativo") {
+    console.log('[app] Renderizando PantallaLoginOperativo');
+    return (
+      <PantallaLoginOperativo
+        logoUrl={logoUrl}
+        onAcceso={(tokenRecibido) => {
+          console.log('[app] Acceso operativo concedido');
+          setTokenOperativo(tokenRecibido);
+          setCurrentScreen("main");
+        }}
+      />
+    );
+  }
 
   if (datos.cargando && datos.barberos.length === 0) return <PantallaCargando />;
 
@@ -247,8 +313,9 @@ export default function App() {
         console.log('[app] Abriendo Spotify');
         window.open("https://open.spotify.com", "_blank");
       }}
+      onLogoutOperativo={cerrarSesionOperativo}
       logoUrl={logoUrl}
-      bookingUrl={bookingUrl} 
+      bookingUrl={bookingUrl}
     />
   );
 }

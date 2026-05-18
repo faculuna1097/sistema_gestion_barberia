@@ -44,6 +44,8 @@ sistema-gestion-barberia/
 │       ├── controllers/               # Lógica de negocio (consultas a DB, respuestas HTTP)
 │       │   ├── auth.js                # Login admin con PIN, genera JWT con rol='admin' (30d)
 │       │   ├── authBarbero.js         # Login barbero con PIN, genera JWT con rol='barbero' (30d)
+│       │   ├── authOperativo.js       # Login operativo con usuario+password, genera JWT con rol='operativo' (30d)
+│       │   ├── adminOperativo.js      # GET/PUT credenciales operativas desde el panel admin
 │       │   ├── barberos.js            # CRUD de barberos
 │       │   ├── servicios.js           # CRUD de servicios de corte
 │       │   ├── productos.js           # CRUD de productos de venta
@@ -67,6 +69,8 @@ sistema-gestion-barberia/
 │       ├── routes/                    # Definición de rutas HTTP (conectan URL → controller)
 │       │   ├── auth.js                # /api/auth/verificar-pin
 │       │   ├── authBarbero.js         # /api/auth/barbero/login
+│       │   ├── authOperativo.js       # /api/auth/operativo/login
+│       │   ├── adminOperativo.js      # /api/admin/operativo/credenciales (GET/PUT, requiereRol admin)
 │       │   ├── barberos.js            # /api/barberos/*
 │       │   ├── servicios.js           # /api/servicios/*
 │       │   ├── productos.js           # /api/productos/*
@@ -103,6 +107,7 @@ sistema-gestion-barberia/
 │       └── scripts/                   # Scripts CLI de utilidad (no son rutas HTTP)
 │           ├── crearTenant.js         # Alta de nuevo cliente (ejecutar manualmente)
 │           ├── hashearPinAdmin.js     # Hashear PIN de admin (utilidad de setup)
+│           ├── generarHashOperativo.js # Hashear usuario+password operativos (utilidad de setup)
 │           ├── probarGoogleCalendar.js # Validación end-to-end del service de Google Calendar
 │           ├── probarMailer.js        # Validación end-to-end del service de mailer
 │           └── testAdminEndpoints.js  # 34 tests automatizados de endpoints /api/admin/*
@@ -210,10 +215,11 @@ sistema-gestion-barberia/
         │   └── TogglePill.jsx         # Toggle de dos opciones estilo pill
         │
         └── screens/                   # Pantallas / vistas de la aplicación
-            ├── MainScreen.jsx         # Pantalla inicial: 3 botones (Corte, Venta, Gasto)
+            ├── MainScreen.jsx         # Pantalla inicial: 3 botones (Corte, Venta, Gasto) + flecha de logout operativo arriba a la izquierda
             ├── PantallaLoginAdmin.jsx # Login del panel admin con PIN
+            ├── PantallaLoginOperativo.jsx # Login del modo operativo (usuario + password) — pantalla inicial si no hay token_operativo en localStorage
             │
-            ├── flows/                 # Flujos operativos (modo iPad, sin autenticación)
+            ├── flows/                 # Flujos operativos (modo iPad, requieren JWT operativo)
             │   ├── FlujoCorte.jsx     # Registrar corte: barbero → turnos del día → servicio → pago → propina → confirmación
             │   ├── FlujoVenta.jsx     # Registrar venta de producto
             │   └── FlujoGasto.jsx     # Registrar gasto con categoría
@@ -235,7 +241,7 @@ sistema-gestion-barberia/
                         ├── TabServicios.jsx   # ABM de servicios (crear, editar, inactivar)
                         ├── TabProductos.jsx   # ABM de productos (precio, stock, inactivar)
                         ├── TabTurnero.jsx     # Config turnero: duración de slots
-                        └── TabPinAdmin.jsx    # Cambio de PIN del panel admin
+                        └── TabSeguridad.jsx   # Cambio de PIN admin + usuario/password operativo (modales por campo)
 ```
 
 ---
@@ -246,20 +252,21 @@ sistema-gestion-barberia/
 |--------|--------|------|-----------|
 | **Auth admin** | `POST` | `/api/auth/verificar-pin` | Público |
 | **Auth barbero** | `POST` | `/api/auth/barbero/login` | Público |
+| **Auth operativo** | `POST` | `/api/auth/operativo/login` | Público |
 | **Barberos** | `GET` | `/api/barberos` | Público |
 | **Servicios** | `GET` | `/api/servicios` | Público |
 | **Productos** | `GET` | `/api/productos` | Público |
 | **Categorías** | `GET` | `/api/categorias` | Público |
-| **Cortes** | `POST` | `/api/cortes` | Público |
-| **Turnos (operativo)** | `GET` | `/api/turnos` | Público |
-| **Ventas** | `POST` | `/api/ventas` | Público |
-| **Ventas** | `GET` | `/api/ventas/mensual` | JWT |
-| **Ventas** | `PUT` | `/api/ventas/:id` | JWT |
-| **Ventas** | `DELETE` | `/api/ventas/:id` | JWT |
-| **Gastos** | `POST` | `/api/gastos` | Público |
-| **Gastos** | `GET` | `/api/gastos/mensual` | JWT |
-| **Gastos** | `PUT` | `/api/gastos/:id` | JWT |
-| **Gastos** | `DELETE` | `/api/gastos/:id` | JWT |
+| **Cortes** | `POST` | `/api/cortes` | JWT (operativo/admin) |
+| **Turnos (operativo)** | `GET` | `/api/turnos` | JWT (operativo/admin) |
+| **Ventas** | `POST` | `/api/ventas` | JWT (operativo/admin) |
+| **Ventas** | `GET` | `/api/ventas/mensual` | JWT (admin) |
+| **Ventas** | `PUT` | `/api/ventas/:id` | JWT (admin) |
+| **Ventas** | `DELETE` | `/api/ventas/:id` | JWT (admin) |
+| **Gastos** | `POST` | `/api/gastos` | JWT (operativo/admin) |
+| **Gastos** | `GET` | `/api/gastos/mensual` | JWT (admin) |
+| **Gastos** | `PUT` | `/api/gastos/:id` | JWT (admin) |
+| **Gastos** | `DELETE` | `/api/gastos/:id` | JWT (admin) |
 | **Caja** | `GET` | `/api/caja/movimientos-dia` | JWT |
 | **Caja** | `DELETE` | `/api/caja/movimientos/:tipo/:id` | JWT |
 | **Inicio** | `GET` | `/api/inicio/resumen-dia` | JWT |
@@ -299,6 +306,8 @@ sistema-gestion-barberia/
 | **Admin — PIN admin** | `PUT` | `/api/admin/negocio/pin-admin` | JWT (admin) |
 | **Admin — turnero config** | `GET` | `/api/admin/turnero/config` | JWT (admin) |
 | **Admin — turnero config** | `PUT` | `/api/admin/turnero/config` | JWT (admin) |
+| **Admin — credenciales operativo** | `GET` | `/api/admin/operativo/credenciales` | JWT (admin) |
+| **Admin — credenciales operativo** | `PUT` | `/api/admin/operativo/credenciales` | JWT (admin) |
 
 ---
 
@@ -309,6 +318,7 @@ sistema-gestion-barberia/
 | `App.jsx` | Raíz: autenticación, precarga de datos, routing entre pantallas |
 | `MainScreen.jsx` | Pantalla inicial con los 3 botones de flujo operativo |
 | `PantallaLoginAdmin.jsx` | Formulario de PIN para acceder al panel admin |
+| `PantallaLoginOperativo.jsx` | Login del modo operativo (usuario + password). Pantalla inicial si no hay `token_operativo` en localStorage |
 | `FlujoCorte.jsx` | Paso a paso para registrar un corte (6 pasos; el paso 2 permite vincularlo a un turno del día o seguir como walk-in) |
 | `FlujoVenta.jsx` | Paso a paso para registrar venta de un producto |
 | `FlujoGasto.jsx` | Paso a paso para registrar un gasto con categoría |
@@ -326,7 +336,7 @@ sistema-gestion-barberia/
 | `TabTurnero.jsx` | Configuración del turnero (duración de slots) |
 | `TabServicios.jsx` | ABM de servicios |
 | `TabProductos.jsx` | ABM de productos |
-| `TabPinAdmin.jsx` | Cambio de PIN admin |
+| `TabSeguridad.jsx` | Cambio de PIN admin + usuario/password del modo operativo (cada campo abre su propio modal) |
 | `BadgeFormaPago.jsx` | Badge reutilizable: efectivo vs Mercado Pago |
 | `BotonExportarExcel.jsx` | Botón que exporta una tabla a .xlsx |
 | `SelectorDia.jsx` | Selector de día para filtros de fecha |

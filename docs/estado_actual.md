@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-Última actualización: 2026-05-14 (Paso 10 del turnero completo — FlujoCorte con turnos del día).
+Última actualización: 2026-05-18 (Login operativo completo — feature/login-operativo lista para merge tras turnero).
 
 Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convenciones_tecnicas.md).
 
@@ -11,7 +11,7 @@ Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convencio
 - **Frontend:** React + Vite, inline styles, DM Sans, color primario `#1a7a4a`.
 - **Backend:** Node.js + Express, ES Modules (`import/export`).
 - **DB:** PostgreSQL via Supabase Session Pooler.
-- **Auth:** bcrypt + JWT (token en memoria, `useState` en `App.jsx`).
+- **Auth:** bcrypt + JWT. Token admin en memoria (`useState` en `App.jsx`). Token operativo en `localStorage` con clave `token_operativo` (sobrevive al reload del iPad). Token barbero en `localStorage` desde `frontend-barbero`.
 
 ---
 
@@ -177,7 +177,7 @@ de cambios:
 - Gestión (6 tabs) ✅
 
 ### Sistema
-- Auth: bcrypt + JWT ✅ — `usuario_registro` eliminado del schema. `verificarToken` valida `tenant_id` cruzado (cierra agujero multi-tenant) e inyecta `req.rol` + `req.barbero_id`. JWT admin: `{ tenant_id, rol: 'admin' }` con 30d. JWT barbero: `{ tenant_id, rol: 'barbero', barbero_id }` con 30d (login via `POST /api/auth/barbero/login`). Middleware `requiereRol(...roles)` aplicado en `/api/admin/barberos`, `/api/admin/servicios`, `/api/admin/productos` y `/api/admin/negocio`.
+- Auth: bcrypt + JWT ✅ — `usuario_registro` eliminado del schema. `verificarToken` valida `tenant_id` cruzado (cierra agujero multi-tenant) e inyecta `req.rol` + `req.barbero_id`. JWT admin: `{ tenant_id, rol: 'admin' }` con 30d. JWT barbero: `{ tenant_id, rol: 'barbero', barbero_id }` con 30d (login via `POST /api/auth/barbero/login`). JWT operativo: `{ tenant_id, rol: 'operativo' }` con 30d (login via `POST /api/auth/operativo/login`). Middleware `requiereRol(...roles)` aplicado en `/api/admin/barberos`, `/api/admin/servicios`, `/api/admin/productos`, `/api/admin/negocio`, `/api/admin/turnero/config` y `/api/admin/operativo`. Endpoints operativos (`/api/cortes`, `/api/turnos`, `POST /api/ventas`, `POST /api/gastos`) protegidos con `requiereRol('operativo', 'admin')`; `GET /mensual`, `PUT` y `DELETE` de ventas/gastos siguen requiriendo `requiereRol('admin')`. Frontend gestión: pantalla `PantallaLoginOperativo` precede al MainScreen cuando no hay `token_operativo` en localStorage; el helper `apiFetchOperativo` en `services/api.js` inyecta el token operativo y maneja 401 redirigiendo al login. Tab `Seguridad` en SeccionGestion permite cambiar PIN admin, usuario operativo y password operativa desde el panel (controllers `adminOperativo.js` con GET/PUT en `/api/admin/operativo/credenciales`).
 - Bloqueo/aviso por suscripción ✅ mergeado a `main`.
 - Multi-tenancy por subdominio ✅ en producción (`kingsai.barbermanager.app`).
 - Migración de schema `refactor/schema-corte` ✅ mergeado a `main`.
@@ -189,7 +189,6 @@ de cambios:
 - **Endpoint admin de invalidación de caché:** `POST /api/admin/cache/invalidate` que reciba un subdominio y lo borre del caché en memoria del `tenantMiddleware`. Necesario para que cambios sobre `tenant` (alta, baja, modificación de subdominio) se reflejen sin reiniciar Railway. Hoy el caché solo se vacía al reiniciar el servidor.
 - **Caja Tab 2 (Cierre de caja) y Tab 3 (Historial de cierres)** — plan completo en `plan_cierre_caja.txt`. Incluye `ALTER TABLE cierre_caja` con columnas nuevas (`efectivo_inicial`, `mp_inicial`, etc.). Branch sugerido: `feature/cierre-caja`.
 - **Acceso de barberos al panel:** vista reducida con solo sus propios cortes.
-- **Seguridad modo operativo:** PIN de apertura con token de 30 días en `localStorage` (Opción A — el iPad no vuelve a pedir PIN salvo expiración o cierre manual).
 - **Log de actividad:** registrar quién eliminó qué y cuándo (hoy las eliminaciones no dejan rastro).
 - **Generación de QR de Mercado Pago** para cobro en el momento desde el iPad.
 - **Envío de planillas/datos por WhatsApp.**
@@ -202,13 +201,14 @@ de cambios:
 
 - **Columna `tenant.configuracion`:** se setea por default con `{"ciudad": "Buenos Aires", "moneda": "ARS"}` en `crearTenant.js` para mantener consistencia con los tenants existentes, pero falta verificar si efectivamente se usa en algún controller. Si no se usa, evaluar si conviene eliminarla o si es para uso futuro.
 - **Caché del `tenantMiddleware` sin invalidación:** ver pendiente "Endpoint admin de invalidación de caché". Es la mitigación planificada.
-- **Logging global filtra el body completo de cada request** (`index.js`). En las rutas de auth (`/api/auth/verificar-pin`, `/api/auth/barbero/login`) eso significa que el PIN viaja en texto plano a los logs de Railway. A mitigar agregando una lista de rutas cuyo body no se loguea (o de keys sensibles que se reemplazan por `***`).
-- **Inconsistencia de nombres en rutas de auth:** `POST /api/auth/verificar-pin` para admin vs `POST /api/auth/barbero/login` para barbero. Renombrar el del admin a `/login` queda como deuda pendiente.
+- **Inconsistencia de nombres en rutas de auth:** `POST /api/auth/verificar-pin` (admin) vs `POST /api/auth/barbero/login` (barbero) vs `POST /api/auth/operativo/login` (operativo). Renombrar el del admin a `/api/auth/admin/login` y migrar el controller/handler (`verificarPin` → `loginAdmin`) queda como deuda. Igualmente uniformar `controllers/auth.js` (sin JSDoc, devuelve 404 si el tenant no existe, usa el patrón antiguo de TZ con `toLocaleString`) con el patrón prolijo de `authBarbero.js` / `authOperativo.js` (JSDoc, 401 genérico siempre, luxon).
+- **Duplicación de endpoints públicos por audiencia:** `/api/servicios` y `/api/turnero/servicios` devuelven datos similares; `/api/barberos` y `/api/turnero/barberos` también. Mismo para `/api/productos` y `/api/categorias` (consumidos por el modo operativo) que no tienen contraparte en `/api/turnero/*` pero podrían unificarse cuando el modo operativo migre a versiones autenticadas. Refactor futuro: dejar solo `/api/turnero/*` como públicos (semánticamente diseñados para acceso anónimo) y eliminar los `/api/*` viejos. Bloqueado hasta migrar todos los consumidores (modo operativo + app del barbero) — ver pendiente "Privatizar catálogos".
+- **Tokens operativos viejos no se invalidan al cambiar credenciales.** Si el admin cambia la password operativa desde el panel, los tokens emitidos antes siguen siendo válidos hasta su expiración natural de 30 días. Para revocación inmediata habría que mantener una blacklist de JTI o rotar `JWT_SECRET`. Aceptado para MVP (ver plan §10 de `plan_login_operativo.md`).
 - **Mailing del turnero vía Nodemailer + SMTP de Gmail.** Hoy el `services/mailer.js` envía desde `turnos.barbermanager@gmail.com` usando una App Password (16 chars, generada con 2FA activa). Gmail limita a ~500 mails/día por cuenta. Cuando el volumen crezca (varios tenants activos), migrar a Resend (o Postmark) con dominio propio `turnos@barbermanager.app`: requiere verificar el dominio en Vercel DNS con registros SPF/DKIM y reemplazar el transport interno del service. La API pública del service (`enviarConfirmacion`, `enviarCancelacion`, `enviarReprogramacion`, `enviarCancelacionPorSuspension`) no cambia, por eso queda encapsulado.
 - **`controllers/auth.js` no usa luxon todavía.** Calcula el día del mes en TZ Argentina con `new Date(toLocaleString('en-US', {timeZone}))` (patrón previo a la introducción de luxon). Con la dependencia ya instalada para el turnero, conviene migrar ese cálculo en un chat aparte para no mezclar refactors con features.
 - **`POST /api/turnero/turnos`, `/reprogramar` y `POST /api/admin/turnos` no validan que `inicio` caiga en un slot real.** Confían en `/api/turnero/disponibilidad` + el frontend para elegir solo slots válidos. El constraint EXCLUDE GIST protege contra solapamientos con otros turnos, pero un `inicio` fuera de bloque horario o sobre una suspensión se aceptaría si no choca con otro turno reservado. Blindar requeriría reejecutar el algoritmo en cada POST. Postergado.
 - **Upsert de cliente pisa `nombre/telefono`** con los últimos datos enviados. Aceptado para MVP, pantalla de unificación de clientes pendiente.
 - **Título del evento de Google Calendar** está hardcodeado como `${servicio.nombre} — ${cliente.nombre}` en `services/googleCalendar.js#armarCuerpoEvento`. Pedido cambiarlo a solo `cliente.nombre` en el chat aparte de reescritura de templates de mail.
-- **Endpoint `GET /api/turnos` es público.** El flujo operativo (FlujoCorte, modo iPad) no maneja JWT, así que el listado de turnos del día se sirve sin auth — expone los nombres de los clientes del día de un barbero a cualquiera que conozca el subdominio. Aceptado para MVP (es el iPad del propio local y `/api/cortes` ya es público). Cuando se implemente el login del modo operativo (ver pendiente "Seguridad modo operativo"), mover este endpoint detrás de auth.
+- **Privatizar catálogos públicos:** ahora que el modo operativo siempre va autenticado, los endpoints `/api/servicios`, `/api/productos`, `/api/categorias` podrían pasar a `verificarToken` + `requiereRol('operativo', 'admin', 'barbero')`. Hoy siguen públicos porque el contenido no es sensible (servicios y precios son visibles al cliente que entra al local) y migrarlos requería cambiar la app del barbero también. Tarea para un PR aparte.
 
 *— Fin del documento —*
