@@ -5,14 +5,14 @@
 
 import { useState, useEffect } from 'react';
 import { getTenant } from './services/api.js';
-import Landing from './components/Landing.jsx';
-import SeleccionServicio from './components/SeleccionServicio.jsx';
-import SeleccionBarbero from './components/SeleccionBarbero.jsx';
-import SeleccionFecha from './components/SeleccionFecha.jsx';
-import SeleccionHorario from './components/SeleccionHorario.jsx';
-import DatosCliente from './components/DatosCliente.jsx';
-import Confirmacion from './components/Confirmacion.jsx';
-import GestionTurno from './components/GestionTurno.jsx';
+import Landing from './screens/Landing.jsx';
+import SeleccionServicio from './screens/SeleccionServicio.jsx';
+import SeleccionBarbero from './screens/SeleccionBarbero.jsx';
+import SeleccionFecha from './screens/SeleccionFecha.jsx';
+import SeleccionHorario from './screens/SeleccionHorario.jsx';
+import DatosCliente from './screens/DatosCliente.jsx';
+import Confirmacion from './screens/Confirmacion.jsx';
+import GestionTurno from './screens/GestionTurno.jsx';
 
 /**
  * extraerTokenDeURL
@@ -124,8 +124,8 @@ function App() {
     case 4:
       return (
         <SeleccionHorario
-          barberoId={reserva.barbero.id}
-          servicioId={reserva.servicio.id}
+          barbero={reserva.barbero}
+          servicio={reserva.servicio}
           fecha={reserva.fecha}
           seleccionado={reserva.horario}
           onSeleccionar={(h) => { actualizarReserva({ horario: h }); siguiente(); }}
