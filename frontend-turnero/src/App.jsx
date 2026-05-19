@@ -5,6 +5,8 @@
 
 import { useState, useEffect } from 'react';
 import { getTenant } from './services/api.js';
+import { theme } from './theme/tokens.js';
+import { PageContainer, Skeleton, EmptyState, Button } from './components/ui';
 import Landing from './screens/Landing.jsx';
 import SeleccionServicio from './screens/SeleccionServicio.jsx';
 import SeleccionBarbero from './screens/SeleccionBarbero.jsx';
@@ -23,6 +25,22 @@ function extraerTokenDeURL() {
   const path = window.location.pathname;
   const match = path.match(/\/turnos\/gestionar\/([^/]+)/);
   return match ? match[1] : null;
+}
+
+/**
+ * IconoAlerta
+ * SVG inline para el EmptyState de error de carga del tenant.
+ * Duplicado intencional con GestionTurno.jsx — al tercer uso, centralizar
+ * en /components/ui/IconoAlerta.jsx.
+ */
+function IconoAlerta() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M12 8v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <circle cx="12" cy="15.5" r="0.75" fill="currentColor"/>
+    </svg>
+  );
 }
 
 function App() {
@@ -64,8 +82,63 @@ function App() {
     cargar();
   }, []);
 
-  if (cargando) return <p>Cargando...</p>;
-  if (error) return <p>{error}</p>;
+  // ── Render: loading ───────────────────────────────────────
+  // Silueta del Landing (hero + avatar + nombre + meta) para evitar
+  // layout shift cuando llega la data del tenant.
+  if (cargando) {
+    return (
+      <PageContainer>
+        <div style={{ flex: 1, padding: '16px 16px 24px' }}>
+          {/* Hero 16:9 */}
+          <Skeleton
+            height="auto"
+            radius={theme.radiusLg}
+            style={{ aspectRatio: '16 / 9', width: '100%' }}
+          />
+          {/* Avatar circular superpuesto */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            marginTop: -40,
+            marginBottom: 16,
+          }}>
+            <Skeleton height={80} width={80} radius={999} />
+          </div>
+          {/* Nombre + meta */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8,
+          }}>
+            <Skeleton height={24} width={180} />
+            <Skeleton height={14} width={140} />
+            <Skeleton height={14} width={120} />
+          </div>
+        </div>
+      </PageContainer>
+    );
+  }
+
+  // ── Render: error de carga ────────────────────────────────
+  if (error) {
+    return (
+      <PageContainer>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <EmptyState
+            glyph={<IconoAlerta />}
+            title="No pudimos cargar"
+            body={error}
+            action={
+              <Button variant="secondary" onClick={() => window.location.reload()}>
+                Reintentar
+              </Button>
+            }
+          />
+        </div>
+      </PageContainer>
+    );
+  }
 
   // Ruta especial: gestión del turno desde link del mail
   if (tokenGestion) {
