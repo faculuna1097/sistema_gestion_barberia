@@ -15,7 +15,7 @@ export const getServicios = async (req, res) => {
       `SELECT id, nombre, precio
        FROM servicio
        WHERE tenant_id = $1 AND activo = true
-       ORDER BY (nombre = 'Corte') ASC, precio ASC`,
+       ORDER BY precio ASC`,
       [req.tenant_id]
     );
     console.log('[servicios] getServicios — completado:', result.rows.length, 'servicios encontrados');

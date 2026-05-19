@@ -73,7 +73,7 @@ export const getServicios = async (req, res) => {
        FROM servicio s
        JOIN tenant t ON t.id = s.tenant_id
        WHERE s.tenant_id = $1 AND s.activo = true
-       ORDER BY (s.nombre = 'Corte') ASC, s.precio ASC`,
+       ORDER BY s.precio ASC`,
       [req.tenant_id]
     );
     console.log('[turnero] getServicios — completado |', result.rows.length, 'servicios');
