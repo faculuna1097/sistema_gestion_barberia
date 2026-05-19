@@ -4,7 +4,7 @@
 **Fecha de planificación:** Mayo 2026
 **Branch sugerido:** `feature/login-operativo`
 **Resuelve:** punto 6 del audit de pendientes post-turnero (`GET /api/turnos` público + cualquier otro endpoint operativo público). Cierra también el punto 4 (enmascarar credenciales en logs) como subproducto.
-**Estado:** Pendiente de ejecución.
+**Estado:** COMPLETADO 18/05/2026
 
 ---
 
