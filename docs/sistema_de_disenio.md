@@ -4,12 +4,35 @@ Este documento describe cómo construimos UI en este proyecto. Está pensado
 para que **cualquier chat** (existente o nuevo) que vaya a escribir frontend
 arranque alineado con el resto del producto.
 
-Este documento es complementario a:
-- **`CLAUDE-DESIGN.md`** (raíz) — filosofía visual y referencias de inspiración.
-- **`docs/convenciones_tecnicas.md`** — convenciones de código generales.
+Complementario a **`docs/convenciones_tecnicas.md`** (convenciones de código
+generales, no específicas de UI).
 
-Si lo de acá choca con `CLAUDE-DESIGN.md`, gana `CLAUDE-DESIGN.md`. Este doc
-captura el **cómo lo implementamos**, no el **qué buscamos**.
+---
+
+## 0. Norte del producto
+
+SaaS de gestión para barberías. Las decisiones de UI se ordenan por estas
+prioridades, en este orden:
+
+1. Claridad y velocidad de uso.
+2. Sensación profesional y premium.
+3. UI limpia, moderna y simple.
+4. Evitar complejidad visual innecesaria.
+5. Consistencia total entre pantallas.
+
+**Debe sentirse**: profesional, rápido, confiable, moderno, orientado a
+negocios reales.
+
+**NO debe sentirse**: template genérico, dashboard crypto/web3, gaming,
+demasiado corporativo, sobrecargado visualmente, infantil, excesivamente
+colorido.
+
+Inspiraciones de referencia: **Stripe** y **Clerk** (luz, neutros, un único
+acento). Linear / Vercel / Notion / Raycast / Supabase son inspiraciones
+secundarias — sirven como vibe check, no como guía de implementación.
+
+Ante una duda de diseño que el resto del doc no resuelve, **volvé a estas
+prioridades**.
 
 ---
 
@@ -30,16 +53,34 @@ código nuevo.** No re-inventar.
 
 ---
 
-## 2. Tema visual fijado: **Luz**
+## 2. Cosas que NO hacemos
+
+Lista corta de prohibiciones explícitas. Alinea rápido a cualquier chat nuevo.
+
+- ❌ `alert()`, `confirm()`, `prompt()` nativos. Usar `ConfirmDialog`.
+- ❌ CSS classes globales. Excepción: `index.css` para reset / fonts / keyframes.
+- ❌ Múltiples colores de acento. Solo `theme.accent` (indigo).
+- ❌ Sombras pesadas, glow, gradientes.
+- ❌ Glassmorphism, blurs decorativos.
+- ❌ Animaciones decorativas. Solo animaciones funcionales (`om-fade` al cambiar pantalla, `om-pop` en success).
+- ❌ `<p>Cargando...</p>` o `<p>Error</p>`. Usar `Skeleton` / `EmptyState`.
+- ❌ `onPointerDown` en botones. Siempre `onClick`.
+- ❌ Tamaños/colores hardcodeados. Todo desde `theme`.
+- ❌ Centralizar primitivos prematuramente (ver §7.1).
+- ❌ Crear un componente nuevo sin chequear primero si existe algo parecido.
+
+---
+
+## 3. Tema visual fijado: **Luz**
 
 Inspirado en Stripe / Clerk. Neutral claro + acento indigo.
 
-### Colores
+### 3.1 Colores
 - Neutros: `zinc` (`bg`, `surface`, `surfaceAlt`, `ink`, `inkSoft`, `muted`, `mutedSoft`, `hairline`, `hairlineSoft`).
 - Acento: `indigo-600` (`accent`). **Un solo acento. No agregar otros chromaticos**.
 - Estados: `success` (emerald-700), `danger` (red-700), `warning` (amber-700). Discretos.
 
-### Tipografía
+### 3.2 Tipografía
 - **Geist** (body) + **Geist Mono** (eyebrows / micro labels en mayúsculas).
 - 4 tamaños recurrentes capados:
   - `sizeTitle` (24) — h1 de pantalla.
@@ -48,25 +89,56 @@ Inspirado en Stripe / Clerk. Neutral claro + acento indigo.
   - `sizeMicro` (11) — eyebrows, helper text en mono uppercase.
 - 3 pesos: regular (400), medium (500), heading (600). Nada de 700+.
 
-### Spacing
+### 3.3 Spacing
 Escala fija: **4, 8, 12, 16, 24, 32**. No usar paddings arbitrarios.
 
-### Radii
+### 3.4 Radii
 - `radiusSm` (6) — skeletons, pills.
 - `radius` (10) — botones, inputs, cards normales.
 - `radiusLg` (14) — cards "destacadas" (resumen, panel inline grande).
 
-### Sombras
+### 3.5 Sombras
 Mínimas. `shadowSm` para botones primarios, `shadowMd` para cards flotantes
 (ej. modales). **Sin glow, sin gradientes, sin glassmorphism.**
 
+### 3.6 Densidad por superficie
+
+El producto tiene tres superficies con públicos y objetivos distintos.
+La densidad visual debe acompañar.
+
+| Superficie | Público | Densidad | Padding card | Spacing entre bloques |
+|---|---|---|---|---|
+| **Turnero** (cliente final) | Visitante esporádico, mobile-first | **Aireada** | 16–24 | 24–32 |
+| **Panel barbero** (uso diario) | Empleado, mobile + desktop | **Intermedia** | 12–16 | 16–24 |
+| **Panel gestión** (admin) | Dueño, desktop, sesiones largas | **Compacta** | 8–12 | 12–16 |
+
+Reglas que cambian según densidad:
+- **Tipografía**: el turnero puede usar `sizeHeading` (18) generosamente; gestión prioriza `sizeBody` (14) incluso en títulos de card. **No bajar nunca de 14 en texto leíble**.
+- **Tablas**: gestión usa tablas densas (filas de 36–40 px); barbero / turnero priorizan cards.
+- **Whitespace**: aireado en turnero, justo en gestión. Pero **nunca sacrificar legibilidad** por compactar.
+
+Si una pantalla nueva no encaja claramente en una superficie, default = **intermedia**.
+
+### 3.7 Iconografía
+
+**Pendiente de elección formal.** Hasta que se decida, regla provisoria:
+
+- No agregar íconos sueltos hasta tener una librería elegida — evita mezclar trazos.
+- Si una pantalla nueva los necesita ya, usar SVG inline simples (línea fina, `stroke-width: 1.5`, color `currentColor`), pero documentarlo como deuda en §9.
+- Cuando se decida, candidatos a evaluar: **Lucide** (default razonable para Stripe-vibe), **Phosphor**, **Heroicons**. Criterio: peso de bundle + consistencia de trazo.
+
+Reglas que ya valen para íconos:
+- Tamaños fijos: **16, 20, 24** (acompañan tipografía).
+- Color = `currentColor` (heredado del contexto). Nunca hardcodear color del ícono.
+- **Nunca decorativos**. Si un ícono no aporta información o reduce cognición, sacarlo.
+
 ---
 
-## 3. Convenciones de implementación
+## 4. Convenciones de implementación
 
 Decisiones de cómo escribimos los componentes. Si vas a contribuir, seguilas.
 
-### 3.1 Inline styles + theme como módulo JS
+### 4.1 Inline styles + theme como módulo JS
 
 **Ningún componente usa CSS classes globales.** Cada componente importa el
 tema y aplica estilos inline:
@@ -95,7 +167,10 @@ function Botoncito({ children }) {
 **Excepción**: `index.css` define el reset, la carga de Geist, los
 `@keyframes` (que no se pueden expresar inline) y la scrollbar.
 
-### 3.2 Hover con useState (no `:hover`)
+**Caveat conocido**: esta decisión escala bien para mobile/turnero, pero
+no está validada para tablas densas del panel de gestión. Ver §9.8.
+
+### 4.2 Hover con useState (no `:hover`)
 
 Cada componente con feedback de hover lleva un `useState` local:
 
@@ -107,9 +182,9 @@ const [hover, setHover] = useState(false);
 **Por qué**: consistencia con el resto del sistema, no requiere CSS.
 **Cuidado**: en listas con 50+ items hover-able, el re-render por hover
 puede notarse. Si pasa, refactorizar ese caso puntual a `:hover` via
-`<style>` scoped. **Por ahora no es un problema medible.**
+`<style>` scoped. **Por ahora no es un problema medible**, pero ver §9.8.
 
-### 3.3 Click handlers: `onClick`, NO `onPointerDown`
+### 4.3 Click handlers: `onClick`, NO `onPointerDown`
 
 `onPointerDown` parece más rápido pero:
 - Dispara al apretar (no al soltar) → no se puede cancelar deslizando afuera.
@@ -118,7 +193,7 @@ puede notarse. Si pasa, refactorizar ese caso puntual a `:hover` via
 
 **Siempre `onClick`.**
 
-### 3.4 Cards clickables → accesibles con teclado
+### 4.4 Cards clickables → accesibles con teclado
 
 Si una `<div>` o `<Card>` es clickable, debe ser navegable con `Enter` y
 `Space`. El primitivo `Card` ya lo hace. Si construís otro contenedor
@@ -135,7 +210,7 @@ clickable, replicá el patrón:
 >
 ```
 
-### 3.5 Errores y empty states
+### 4.5 Errores y empty states
 
 **Nunca** mostrar `<p>Cargando...</p>`, `<p>Error</p>`, ni `alert()`/`confirm()`
 nativos del navegador. En su lugar:
@@ -143,7 +218,7 @@ nativos del navegador. En su lugar:
 - Empty / error → `EmptyState` con icon + title + body.
 - Confirmación destructiva → `ConfirmDialog`.
 
-### 3.6 Layout responsive
+### 4.6 Layout responsive
 
 **Mobile-first.** Todos los layouts arrancan asumiendo ~390 px de ancho.
 Cuando el ancho permita, se centra en columna con `PageContainer`
@@ -153,7 +228,7 @@ Cuando el ancho permita, se centra en columna con `PageContainer`
 falta (ej. una `DataTable` ancha en desktop pasa a ser una lista de cards
 en mobile).
 
-### 3.7 Comentarios obligatorios
+### 4.7 Comentarios obligatorios
 
 Cada función, componente y helper lleva JSDoc explicando **qué hace, qué
 recibe, qué devuelve**. Está en `CLAUDE.md` global pero lo repito porque
@@ -161,9 +236,73 @@ es importante en UI también — un primitivo mal documentado se va a usar mal.
 
 ---
 
-## 4. Inventario de primitivas
+## 5. Accesibilidad
 
-### 4.1 Universales (cualquier front del proyecto)
+El producto se vende como "profesional y premium". Eso obliga a un piso de
+accesibilidad. **No es opcional ni se trata de "agregarlo después"**.
+
+### 5.1 Focus visible
+
+Todo elemento navegable por teclado (botón, input, card clickable, link)
+debe mostrar un anillo de foco visible cuando recibe foco por teclado.
+
+Patrón estándar (aplicar como `:focus-visible` via `index.css` o estilo
+inline condicional con `useState` + `onFocus/onBlur`):
+
+```css
+outline: 2px solid var(--accent);  /* o theme.accent vía JS */
+outline-offset: 2px;
+```
+
+**Nunca** `outline: none` sin un reemplazo equivalente. Si el componente
+ya tiene un border que cambia de color en foco, eso cuenta como reemplazo.
+
+### 5.2 Campos de formulario
+
+El primitivo `Field` debe garantizar:
+- `<label htmlFor={id}>` asociado al input.
+- `aria-invalid="true"` cuando hay error.
+- `aria-describedby={helperId}` apuntando al texto de helper / error.
+- El mensaje de error debe ser **texto**, no solo cambio de color del border.
+
+Si construís un input que no usa `Field`, replicá estas tres reglas.
+
+### 5.3 Contraste
+
+Objetivo mínimo: **WCAG AA** (4.5:1 para texto normal, 3:1 para texto ≥18 px
+o ≥14 px bold).
+
+Combinaciones a chequear con cuidado (deuda activa — ver §9):
+- `mutedSoft` sobre `surfaceAlt`.
+- `inkSoft` sobre `bg`.
+- Texto blanco sobre `accent` (indigo-600).
+
+Cuando agregues una combinación nueva de texto/fondo, verificá contraste
+antes de mergear. Herramienta: WebAIM Contrast Checker.
+
+### 5.4 Tamaño mínimo de touch target
+
+**44×44 px** mínimo en cualquier elemento tocable en mobile (turnero
+especialmente). Chips, botones, items de lista — todos deben cumplirlo.
+Si el ícono es chico, el padding del contenedor compensa.
+
+### 5.5 Atributos semánticos
+
+- Botones que parecen botones → `<button>`, no `<div onClick>`.
+- Links que navegan → `<a href>`, no `<button>` con `navigate()`.
+- Listas → `<ul>` / `<ol>` con `<li>`.
+- Headings con jerarquía (h1 > h2 > h3) sin saltarse niveles.
+
+### 5.6 Idioma del documento
+
+`<html lang="es">` en `index.html`. Lectores de pantalla lo necesitan para
+elegir la voz correcta.
+
+---
+
+## 6. Inventario de primitivas
+
+### 6.1 Universales (cualquier front del proyecto)
 
 Estos primitivos son agnósticos del producto y van bien en cualquier
 pantalla.
@@ -184,7 +323,7 @@ pantalla.
 | `AvatarIniciales` | Círculo con iniciales y tono determinístico por nombre. |
 | `SummaryRow` | Fila label/value con border-bottom sutil. |
 
-### 4.2 Específicas del wizard de reserva (NO usar en otros fronts)
+### 6.2 Específicas del wizard de reserva (NO usar en otros fronts)
 
 | Componente | Por qué es exclusivo |
 |---|---|
@@ -194,9 +333,9 @@ pantalla.
 
 ---
 
-## 5. Reglas para extender el sistema
+## 7. Reglas para extender el sistema
 
-### 5.1 Antes de crear un componente nuevo
+### 7.1 Antes de crear un componente nuevo
 
 **Preguntate**:
 1. ¿Ya existe algo parecido en `/components/ui/`? → reusar.
@@ -206,34 +345,35 @@ pantalla.
 Tres líneas similares es mejor que una abstracción prematura. Pero al tercer
 uso similar, abstraer es mandatorio.
 
-### 5.2 Agregar un primitivo nuevo
+### 7.2 Agregar un primitivo nuevo
 
 1. Crearlo en `/components/ui/NombreComponente.jsx`.
 2. JSDoc de la función y sus props.
 3. Importar `theme` desde `'../../theme/tokens.js'`. Nunca hardcodear colores/sizes.
 4. Estilos inline. Hover con `useState` si aplica.
-5. Exportar en `/components/ui/index.js` (barrel).
+5. Cumplir §5 (focus visible, aria, contraste, touch target).
+6. Exportar en `/components/ui/index.js` (barrel).
 
-### 5.3 Necesito cambiar un token (color, tamaño, etc.)
+### 7.3 Necesito cambiar un token (color, tamaño, etc.)
 
 **Mover el cambio a `theme/tokens.js`.** Nunca hardcodear el valor nuevo en
 un componente. Si lo necesitás solo para un caso, agregá un token nuevo
 en lugar de "magic numbers".
 
-### 5.4 Necesito una variante de un primitivo que ya existe
+### 7.4 Necesito una variante de un primitivo que ya existe
 
 Ejemplo: ya hay `Button` con `variant: primary | secondary | ghost | danger`,
 y querés "warning". **Agregá la variante al primitivo**, no crees `WarningButton`.
 
-### 5.5 Necesito un componente que no existe en ningún front (ej. `DataTable`)
+### 7.5 Necesito un componente que no existe en ningún front (ej. `DataTable`)
 
 1. Lo construís en el front que lo necesita primero, en `/components/ui/` de
    ese front (no en turnero).
-2. Si después otro front lo necesita, copialo (o evalúa monorepo, ver §6).
+2. Si después otro front lo necesita, ver §8 (estrategia de duplicado).
 
 ---
 
-## 6. ¿Qué se comparte entre fronts?
+## 8. ¿Qué se comparte entre fronts?
 
 Hoy cada front tiene su propio `/src/components/ui/`. **Hasta nuevo aviso,
 la estrategia es duplicar**:
@@ -242,7 +382,7 @@ la estrategia es duplicar**:
 - `theme/tokens.js` *(idéntico)*.
 - `utils/formato.js`, `utils/fecha.js` *(idénticos)*.
 - `index.css` *(idéntico)*.
-- Los 13 primitivos universales (sección 4.1).
+- Los 13 primitivos universales (sección 6.1).
 
 **Lo que NO se copia**:
 - `Progress`, `MiniCalendario`, `SlotChip` (wizard-only).
@@ -254,33 +394,24 @@ workspaces. Hoy es **premature abstraction**.
 
 ---
 
-## 7. Cosas que NO hacemos
-
-- ❌ `alert()`, `confirm()`, `prompt()` nativos. Usar `ConfirmDialog`.
-- ❌ CSS classes globales. Excepción: `index.css` para reset / fonts / keyframes.
-- ❌ Múltiples colores de acento. Solo `theme.accent` (indigo).
-- ❌ Sombras pesadas, glow, gradientes.
-- ❌ Glassmorphism, blurs decorativos.
-- ❌ Animaciones decorativas. Solo animaciones funcionales (om-fade al cambiar pantalla, om-pop en success).
-- ❌ `<p>Cargando...</p>` o `<p>Error</p>`. Usar `Skeleton` / `EmptyState`.
-- ❌ `onPointerDown` en botones.
-- ❌ Tamaños/colores hardcodeados. Todo desde `theme`.
-
----
-
-## 8. Deudas técnicas conocidas
+## 9. Deudas técnicas conocidas
 
 Pendientes detectados durante el rediseño del turnero. **Si tomás alguno,
 actualizá este doc.**
 
-1. `App.jsx` del turnero — loading/error states pelados (`<p>Cargando...</p>`).
+1. `App.jsx` del turnero — loading/error states pelados (`<p>Cargando...</p>`). *(parcialmente atacado en `b95ae89`)*
 2. `esDomingo` hardcodeado en `utils/fecha.js` — cada tenant debería definir qué días abre.
 3. Falta endpoint `/disponibilidad/dias` — para no mostrar fechas con 0 slots.
 4. Cortes de turno (13:00 y 20:00) hardcodeados en `SeleccionHorario.jsx` — debería ser por tenant.
 5. Validación de teléfono solo AR (10 dígitos) hardcodeada en `DatosCliente.jsx`.
 6. Catálogos (`servicios`, `barberos`) sin `ORDER BY` explícito en backend.
 7. `MiniCalendario` muestra "2 semanas" hardcodeado en el header — si en otro lugar lo usamos para más/menos días, el sublabel queda errado.
+8. **Inline styles + `useState` para hover** (§4.1, §4.2) — validado solo para mobile/turnero. **Antes de arrancar el front de gestión**, revisar: las tablas densas con muchas filas hover-ables pueden hacer ruidoso el re-render. Considerar híbrido: tokens en JS + `:hover` puntual via `<style>` scoped donde la performance importe.
+9. **Contraste WCAG no verificado** — `mutedSoft` sobre `surfaceAlt`, `inkSoft` sobre `bg`, blanco sobre `accent`. Auditar con WebAIM antes de release público.
+10. **Iconografía sin librería elegida** — definir Lucide vs Phosphor vs Heroicons antes de que aparezca el primer ícono "real" en gestión.
+11. **`<html lang="es">`** — verificar que esté en `index.html` de cada front.
+12. **Focus visible global** — auditar que todos los primitivos tengan estilo de `:focus-visible`. Hoy `Card` y `Button` sí; el resto, sin verificar.
 
 ---
 
-*Última actualización: 2026-05-19 — rediseño completo del turnero (Fase 1 + Fase 2).*
+*Última actualización: 2026-05-19 — fusión con CLAUDE-DESIGN.md, reordenado, agregado densidad / iconografía / accesibilidad / deudas 8-12.*
