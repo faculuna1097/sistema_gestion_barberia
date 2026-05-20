@@ -296,36 +296,43 @@ export const enviarReprogramacion = async (turno, barbero, servicio, cliente, li
 };
 
 /**
- * Mail de cancelación automática disparada por una suspensión del barbero.
+ * Mail de cancelación automática de un turno (disparada por el sistema, no
+ * por el cliente). Cubre tanto suspensiones de barbero como cambios del
+ * horario de atención del local. El texto del cuerpo y la fila "Motivo" se
+ * pasan por parámetro para que el cliente vea un mensaje acorde a la causa.
  *
  * @param {Object} turno - { inicio }
  * @param {Object} barbero - { nombre }
  * @param {Object} servicio - { nombre }
  * @param {Object} cliente - { nombre, email }
- * @param {string|null} motivoSuspension
+ * @param {Object} opciones - { intro: string, motivo: string }
+ *   intro:  párrafo introductorio del mail (qué pasó, en tono al cliente).
+ *   motivo: valor mostrado en la fila "Motivo" de la tabla.
  * @param {string} linkTurnero - URL para reservar de nuevo
  * @returns {Promise<boolean>}
  */
-export const enviarCancelacionPorSuspension = async (turno, barbero, servicio, cliente, motivoSuspension, linkTurnero) => {
-  console.log('[mailer] enviarCancelacionPorSuspension — request recibido | cliente_email:', cliente?.email ?? '(null)');
-  if (debeSaltarseEnvio('enviarCancelacionPorSuspension', cliente)) return false;
+export const enviarCancelacionAutomatica = async (turno, barbero, servicio, cliente, opciones, linkTurnero) => {
+  console.log('[mailer] enviarCancelacionAutomatica — request recibido | cliente_email:', cliente?.email ?? '(null)');
+  if (debeSaltarseEnvio('enviarCancelacionAutomatica', cliente)) return false;
 
   const fechaTexto = formatearFecha(turno.inicio);
+  const motivo = opciones?.motivo ?? '(sin motivo)';
+  const intro = opciones?.intro ?? `Hola ${cliente.nombre ?? ''}, tuvimos que cancelar este turno.`;
   const asunto = `Turno cancelado — ${fechaTexto}`;
-  const texto = `Turno cancelado por suspensión del barbero.\n\nServicio: ${servicio.nombre}\nBarbero: ${barbero.nombre}\nFecha: ${fechaTexto}\nMotivo: ${motivoSuspension ?? '(sin motivo)'}\n\nReservar de nuevo: ${linkTurnero}`;
+  const texto = `${intro}\n\nServicio: ${servicio.nombre}\nBarbero: ${barbero.nombre}\nFecha: ${fechaTexto}\nMotivo: ${motivo}\n\nReservar de nuevo: ${linkTurnero}`;
   const html = construirHtml({
     eyebrow: 'Turno cancelado',
     eyebrowColor: paleta.danger,
     titulo: 'Tu turno fue cancelado',
-    intro: `Hola ${cliente.nombre ?? ''}, el barbero suspendió su agenda y tuvimos que cancelar este turno. Podés reservar uno nuevo cuando quieras.`,
+    intro,
     filas: [
       { label: 'Servicio', valor: servicio.nombre },
       { label: 'Barbero', valor: barbero.nombre },
       { label: 'Fecha', valor: fechaTexto },
-      { label: 'Motivo', valor: motivoSuspension ?? '(sin motivo)' },
+      { label: 'Motivo', valor: motivo },
     ],
     cta: { label: 'Reservar de nuevo', url: linkTurnero },
   });
 
-  return enviarMail({ destino: cliente.email, asunto, texto, html, nombreFuncion: 'enviarCancelacionPorSuspension' });
+  return enviarMail({ destino: cliente.email, asunto, texto, html, nombreFuncion: 'enviarCancelacionAutomatica' });
 };

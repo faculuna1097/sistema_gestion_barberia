@@ -64,7 +64,8 @@ sistema-gestion-barberia/
 │       │   ├── suspensiones.js        # CRUD suspensiones backoffice (scope según rol)
 │       │   ├── clientes.js            # Búsqueda y listado de clientes backoffice
 │       │   ├── planilla.js            # Planilla semanal backoffice (scope según rol)
-│       │   └── turneroConfig.js       # Config turnero: GET/PUT duracion_slot_minutos (admin)
+│       │   ├── turneroConfig.js       # Config turnero: GET/PUT duracion_slot_minutos (admin)
+│       │   └── horarioAtencion.js     # Horario semanal de atención del tenant (GET/PUT con cascada)
 │       │
 │       ├── routes/                    # Definición de rutas HTTP (conectan URL → controller)
 │       │   ├── authAdmin.js           # /api/auth/admin/login
@@ -93,6 +94,7 @@ sistema-gestion-barberia/
 │       │   ├── adminProductos.js      # /api/admin/productos/* (requiereRol admin)
 │       │   ├── adminNegocio.js        # /api/admin/negocio/* (requiereRol admin)
 │       │   ├── adminTurneroConfig.js  # /api/admin/turnero/config (requiereRol admin)
+│       │   ├── adminHorarioAtencion.js # /api/admin/horario-atencion (requiereRol admin)
 │       │   └── health.js              # /api/health (health check)
 │       │
 │       ├── services/                  # Lógica de negocio reutilizable (integraciones externas, algoritmos)
@@ -102,7 +104,8 @@ sistema-gestion-barberia/
 │       │   ├── turnosService.js       # Helpers compartidos + operaciones backoffice de turnos
 │       │   ├── horariosService.js     # CRUD de horarios de barberos
 │       │   ├── suspensionesService.js # CRUD suspensiones (flujo 409 → confirmar_cancelacion → 201)
-│       │   └── planillaService.js     # Detalle y resumen semanal con scoping por barbero
+│       │   ├── planillaService.js     # Detalle y resumen semanal con scoping por barbero
+│       │   └── horarioAtencionService.js # Horario de atención del tenant: delta + cascada (luxon)
 │       │
 │       └── scripts/                   # Scripts CLI de utilidad (no son rutas HTTP)
 │           ├── crearTenant.js         # Alta de nuevo cliente (ejecutar manualmente)
@@ -307,6 +310,8 @@ sistema-gestion-barberia/
 | **Admin — suspensiones** | `GET` | `/api/admin/suspensiones` | JWT (admin/barbero) |
 | **Admin — suspensiones** | `POST` | `/api/admin/suspensiones` | JWT (admin/barbero) |
 | **Admin — suspensiones** | `DELETE` | `/api/admin/suspensiones/:id` | JWT (admin/barbero) |
+| **Admin — horario atención** | `GET` | `/api/admin/horario-atencion` | JWT (admin) |
+| **Admin — horario atención** | `PUT` | `/api/admin/horario-atencion` | JWT (admin) |
 | **Admin — planilla** | `GET` | `/api/admin/planilla` | JWT (admin/barbero) |
 | **Admin — planilla** | `GET` | `/api/admin/planilla/resumen` | JWT (admin/barbero) |
 | **Admin — clientes** | `GET` | `/api/admin/clientes/mis-clientes` | JWT (admin/barbero) |

@@ -15,8 +15,8 @@ Branch: `feature/horario-atencion` (hija de `feature/turnero`).
 |---|---|---|
 | 3.1 Schema SQL `tenant_horario_atencion` | ✅ Hecho (2026-05-20) | Tabla creada y seed ejecutado en Supabase. Kingsai 5 filas, Demo 6 filas. `SQL_Schema.md` actualizado. |
 | 3.2 Seed inicial | ✅ Hecho (2026-05-20) | Incluido en el SQL del paso 3.1. |
-| 3.3 Endpoints admin | ⬜ Pendiente | |
-| 3.4 Endpoint público | ⬜ Pendiente | |
+| 3.3 Endpoints admin | ✅ Hecho (2026-05-20) | GET + PUT con cascada. Service/controller/route nuevos. `cancelado_por='admin'` (sin migración). Mail `enviarCancelacionPorSuspension` generalizado → `enviarCancelacionAutomatica`. |
+| 3.4 Endpoint público | ✅ Hecho (2026-05-20) | `getTenant` ahora devuelve `horario_atencion` (días abiertos) y `feriados: []` (placeholder Fase 2). |
 | 3.5 Validaciones write-time | ⬜ Pendiente | |
 | 3.6 Cortocircuito en slots | ⬜ Pendiente | |
 | 3.7 Cascada | ⬜ Pendiente | |
@@ -269,10 +269,14 @@ Calcular para cada turno futuro (`estado = 'reservado' AND inicio > NOW()`):
 **Paso 3 — Ejecutar la cascada**:
 - `DELETE` / `UPDATE` sobre `barbero_horario` según el paso 1.
 - Para cada turno marcado en paso 2:
-  - `UPDATE turno SET estado='cancelado', cancelado_at=NOW(), cancelado_por='sistema', motivo_cancelacion='cambio de horario'`.
+  - `UPDATE turno SET estado='cancelado', cancelado_en=NOW(), cancelado_por='admin'`.
+    (La columna `cancelado_por` tiene un CHECK que sólo admite
+    `cliente|barbero|admin|suspension`; no existe `motivo_cancelacion`.
+    El motivo viaja sólo en el mail.)
   - Best-effort: `cancelarEvento(turno.google_event_id)` (no bloqueante).
-  - Best-effort: `enviarCancelacionPorSuspension(...)` con motivo personalizado
-    "Cambio del horario de atención del local. Tu turno fue cancelado.".
+  - Best-effort: `enviarCancelacionAutomatica(...)` (función generalizada a
+    partir de `enviarCancelacionPorSuspension`) con `intro` que explica el
+    cambio de horario y `motivo: 'Cierre'`.
 - `DELETE FROM tenant_horario_atencion WHERE tenant_id=$1` + `INSERT` del payload.
 
 **Nota sobre transaccionalidad**:

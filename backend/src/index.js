@@ -37,6 +37,7 @@ import adminProductosRoutes   from './routes/adminProductos.js';
 import adminNegocioRoutes     from './routes/adminNegocio.js';
 import adminTurneroConfigRoutes from './routes/adminTurneroConfig.js';
 import adminOperativoRoutes from './routes/adminOperativo.js';
+import adminHorarioAtencionRoutes from './routes/adminHorarioAtencion.js';
 import { requiereRol } from './middlewares/requiereRolMiddleware.js';
 import { getNegocio } from './controllers/gestion.js';
 
@@ -156,6 +157,7 @@ app.use('/api/admin/productos',    verificarToken, requiereRol('admin'), adminPr
 app.use('/api/admin/negocio',      verificarToken, requiereRol('admin'), adminNegocioRoutes);
 app.use('/api/admin/turnero/config', verificarToken, requiereRol('admin'), adminTurneroConfigRoutes);
 app.use('/api/admin/operativo',      verificarToken, requiereRol('admin'), adminOperativoRoutes);
+app.use('/api/admin/horario-atencion', verificarToken, requiereRol('admin'), adminHorarioAtencionRoutes);
 
 console.log('[index] Rutas registradas correctamente');
 

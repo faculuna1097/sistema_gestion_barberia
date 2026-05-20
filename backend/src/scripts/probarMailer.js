@@ -8,7 +8,7 @@ import {
   enviarConfirmacion,
   enviarCancelacion,
   enviarReprogramacion,
-  enviarCancelacionPorSuspension,
+  enviarCancelacionAutomatica,
 } from '../services/mailer.js';
 
 const main = async () => {
@@ -35,8 +35,12 @@ const main = async () => {
   console.log('--- 3) enviarReprogramacion ---');
   await enviarReprogramacion(turno, barbero, servicio, cliente, linkGestion);
 
-  console.log('--- 4) enviarCancelacionPorSuspension ---');
-  await enviarCancelacionPorSuspension(turno, barbero, servicio, cliente, 'Vacaciones', linkTurnero);
+  console.log('--- 4) enviarCancelacionAutomatica ---');
+  await enviarCancelacionAutomatica(
+    turno, barbero, servicio, cliente,
+    { intro: 'Hola Cliente Test, el barbero suspendió su agenda y tuvimos que cancelar este turno.', motivo: 'Vacaciones' },
+    linkTurnero,
+  );
 
   console.log('--- script terminado ---');
 };

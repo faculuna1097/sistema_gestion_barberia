@@ -4,7 +4,7 @@
 
 import { query } from '../config/db.js';
 import { cancelarEvento } from './googleCalendar.js';
-import { enviarCancelacionPorSuspension } from './mailer.js';
+import { enviarCancelacionAutomatica } from './mailer.js';
 
 /**
  * Lista suspensiones futuras de un barbero (o de todos si barberoId es null).
@@ -104,7 +104,14 @@ export const crearSuspension = async ({
       const barbero   = { nombre: t.barbero_nombre, email: t.barbero_email };
       const servicio  = { nombre: t.servicio_nombre };
       const cliente   = { nombre: t.cliente_nombre, email: t.cliente_email, telefono: t.cliente_telefono };
-      await enviarCancelacionPorSuspension(turnoData, barbero, servicio, cliente, motivo || 'Sin motivo especificado', linkTurnero);
+      await enviarCancelacionAutomatica(
+        turnoData, barbero, servicio, cliente,
+        {
+          intro: `Hola ${cliente.nombre ?? ''}, el barbero suspendió su agenda y tuvimos que cancelar este turno. Podés reservar uno nuevo cuando quieras.`,
+          motivo: motivo || 'Sin motivo especificado',
+        },
+        linkTurnero,
+      );
     }
   }
 

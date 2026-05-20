@@ -16,6 +16,7 @@ import {
   armarLinkGestion, sincronizarCalendarCreacion, notificarConfirmacion,
   inicioPosteriorAhora,
 } from '../services/turnosService.js';
+import { obtenerHorarioCrudo } from '../services/horarioAtencionService.js';
 import { TZ } from '../utils/constantes.js';
 
 // Regex YYYY-MM-DD para validar el query param ?fecha.
@@ -30,7 +31,7 @@ const REGEX_EMAIL = /.+@.+\..+/;
  * No incluye PIN, suscripción ni datos sensibles.
  *
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
- * @returns {JSON} { id, nombre, logo_url }
+ * @returns {JSON} { id, nombre, logo_url, horario_atencion, feriados }
  */
 export const getTenant = async (req, res) => {
   console.log('[turnero] getTenant — request recibido | tenant:', req.tenant_id);
@@ -46,8 +47,18 @@ export const getTenant = async (req, res) => {
       return res.status(404).json({ error: 'Tenant no encontrado' });
     }
     const row = result.rows[0];
-    console.log('[turnero] getTenant — completado | nombre:', row.nombre_negocio);
-    res.json({ id: row.id, nombre: row.nombre_negocio, logo_url: row.logo });
+    // Horario semanal de atención: sólo los días abiertos. El cliente lo usa
+    // para grisar días cerrados sin pegarle al endpoint de disponibilidad.
+    const horarioAtencion = await obtenerHorarioCrudo(req.tenant_id);
+    console.log('[turnero] getTenant — completado | nombre:', row.nombre_negocio,
+      '| días abiertos:', horarioAtencion.length);
+    res.json({
+      id: row.id,
+      nombre: row.nombre_negocio,
+      logo_url: row.logo,
+      horario_atencion: horarioAtencion,
+      feriados: [], // se llena en Fase 2 (tenant_feriado)
+    });
   } catch (err) {
     console.error('[turnero] Error en getTenant:', err.message);
     res.status(500).json({ error: 'Error al obtener tenant' });
