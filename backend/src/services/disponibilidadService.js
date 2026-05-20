@@ -77,7 +77,7 @@ export const calcularSlotsDisponibles = async ({ tenantId, barberoId, servicioId
 
   // 5 queries en paralelo. Todas filtran por tenant_id para impedir
   // cruce de datos entre tenants.
-  const [tenantRes, servicioRes, horariosRes, turnosRes, suspensionesRes] = await Promise.all([
+  const [tenantRes, servicioRes, horariosRes, turnosRes, suspensionesRes, horarioTenantRes] = await Promise.all([
     query(
       `SELECT duracion_slot_minutos FROM tenant WHERE id = $1 AND activo = true`,
       [tenantId]
@@ -112,6 +112,12 @@ export const calcularSlotsDisponibles = async ({ tenantId, barberoId, servicioId
          AND hasta > $3`,
       [tenantId, barberoId, inicioDia.toISO(), finDia.toISO()]
     ),
+    query(
+      `SELECT hora_inicio, hora_fin
+       FROM tenant_horario_atencion
+       WHERE tenant_id = $1 AND dia_semana = $2`,
+      [tenantId, diaSemana]
+    ),
   ]);
 
   if (tenantRes.rows.length === 0) {
@@ -119,6 +125,12 @@ export const calcularSlotsDisponibles = async ({ tenantId, barberoId, servicioId
   }
   if (servicioRes.rows.length === 0) {
     throw new DisponibilidadError('servicio_no_encontrado', 'Servicio no encontrado o inactivo');
+  }
+
+  // El negocio no abre ese día (sin fila en tenant_horario_atencion) → no hay slots.
+  if (horarioTenantRes.rows.length === 0) {
+    console.log('[disponibilidadService] calcularSlotsDisponibles — día cerrado para el negocio, devuelvo array vacío');
+    return [];
   }
   // No hace falta verificar que el barbero exista: si no tiene horarios para
   // ese día (o no existe), horariosRes.rows estará vacío y la respuesta será [].

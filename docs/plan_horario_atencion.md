@@ -18,7 +18,7 @@ Branch: `feature/horario-atencion` (hija de `feature/turnero`).
 | 3.3 Endpoints admin | ✅ Hecho (2026-05-20) | GET + PUT con cascada. Service/controller/route nuevos. `cancelado_por='admin'` (sin migración). Mail `enviarCancelacionPorSuspension` generalizado → `enviarCancelacionAutomatica`. |
 | 3.4 Endpoint público | ✅ Hecho (2026-05-20) | `getTenant` ahora devuelve `horario_atencion` (días abiertos) y `feriados: []` (placeholder Fase 2). |
 | 3.5 Validaciones write-time | ✅ Hecho (2026-05-20) | Helpers `validarRangoEnHorario` (pura) y `validarTurnoEnHorario` en `horarioAtencionService.js`. 422 en `putHorarios` (bloques de barbero) y en los 3 endpoints de turno (crear público, reprogramar, crear admin). |
-| 3.6 Cortocircuito en slots | ⬜ Pendiente | |
+| 3.6 Cortocircuito en slots | ✅ Hecho (2026-05-20) | Sexta query en el `Promise.all` de `calcularSlotsDisponibles`. Si no hay fila en `tenant_horario_atencion` para el día → `return []`. |
 | 3.7 Cascada | ⬜ Pendiente | |
 | 3.8 Admin UI (`TabNegocio`) | ⬜ Pendiente | |
 | 3.9 Frontend-barbero alerta | ⬜ Pendiente | |
