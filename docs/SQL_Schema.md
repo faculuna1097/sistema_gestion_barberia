@@ -141,6 +141,17 @@ CREATE TABLE public.tenant (
   operativo_token_version integer NOT NULL DEFAULT 0,
   CONSTRAINT tenant_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.tenant_horario_atencion (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tenant_id uuid NOT NULL,
+  dia_semana smallint NOT NULL CHECK (dia_semana >= 0 AND dia_semana <= 6),
+  hora_inicio time without time zone NOT NULL,
+  hora_fin time without time zone NOT NULL,
+  CONSTRAINT tenant_horario_atencion_pkey PRIMARY KEY (id),
+  CONSTRAINT tenant_horario_atencion_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  CONSTRAINT tenant_horario_atencion_dia_unico UNIQUE (tenant_id, dia_semana),
+  CONSTRAINT tenant_horario_atencion_horas_validas CHECK (hora_inicio < hora_fin)
+);
 CREATE TABLE public.turno (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   tenant_id uuid NOT NULL,

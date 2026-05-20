@@ -4,8 +4,24 @@ Plan para introducir el concepto de **horario de atención del negocio** y
 **feriados** a nivel tenant, con sus validaciones, cascadas y UI de
 gestión. Toda la administración la hace el dueño desde el panel admin.
 
-Última actualización: 2026-05-19.
-Branch sugerido: `feature/horario-atencion`.
+Última actualización: 2026-05-20.
+Branch: `feature/horario-atencion` (hija de `feature/turnero`).
+
+---
+
+## 0. Registro de avance
+
+| Paso | Estado | Notas |
+|---|---|---|
+| 3.1 Schema SQL `tenant_horario_atencion` | ✅ Hecho (2026-05-20) | Tabla creada y seed ejecutado en Supabase. Kingsai 5 filas, Demo 6 filas. `SQL_Schema.md` actualizado. |
+| 3.2 Seed inicial | ✅ Hecho (2026-05-20) | Incluido en el SQL del paso 3.1. |
+| 3.3 Endpoints admin | ⬜ Pendiente | |
+| 3.4 Endpoint público | ⬜ Pendiente | |
+| 3.5 Validaciones write-time | ⬜ Pendiente | |
+| 3.6 Cortocircuito en slots | ⬜ Pendiente | |
+| 3.7 Cascada | ⬜ Pendiente | |
+| 3.8 Admin UI (`TabNegocio`) | ⬜ Pendiente | |
+| 3.9 Frontend-barbero alerta | ⬜ Pendiente | |
 
 ---
 
@@ -335,7 +351,7 @@ tenant.hora_fin]` por día. Mismo patrón que el admin.
 
 ### 3.10 Criterios de aceptación — Fase 1
 
-- [ ] Migración SQL ejecutada en Supabase (tabla + seed Kingsai/demo).
+- [x] Migración SQL ejecutada en Supabase (tabla + seed Kingsai/demo).
 - [ ] `GET /api/turnero/tenant` devuelve `horario_atencion` (array de 7 o menos).
 - [ ] `GET /api/admin/horario-atencion` devuelve los 7 días.
 - [ ] `PUT /api/admin/horario-atencion` con cambio inocuo → 200, sin cascada.
