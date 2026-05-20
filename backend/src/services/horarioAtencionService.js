@@ -65,6 +65,55 @@ export const obtenerHorarioCompleto = async (tenantId) => {
 };
 
 /**
+ * Valida que un rango horario [horaInicio, horaFin] de un día caiga dentro
+ * del horario de atención del tenant. Función pura: recibe el horario ya
+ * consultado (obtenerHorarioCrudo) para poder validar varios rangos sin
+ * repetir la query. Las horas se comparan como strings 'HH:MM' (zero-padded).
+ *
+ * @param {Array} horarioCrudo - filas de obtenerHorarioCrudo [{ dia_semana, hora_inicio, hora_fin }]
+ * @param {number} diaSemana - día a validar, 0..6 (0=domingo)
+ * @param {string} horaInicio - inicio del rango en 'HH:MM'
+ * @param {string} horaFin - fin del rango en 'HH:MM'
+ * @returns {{ valido: boolean, codigo?: string, mensaje?: string, limite?: { hora_inicio, hora_fin } }}
+ */
+export const validarRangoEnHorario = (horarioCrudo, diaSemana, horaInicio, horaFin) => {
+  const dia = horarioCrudo.find((h) => h.dia_semana === diaSemana);
+  if (!dia) {
+    return { valido: false, codigo: 'dia_cerrado', mensaje: 'El negocio no abre ese día' };
+  }
+  if (horaInicio < dia.hora_inicio || horaFin > dia.hora_fin) {
+    return {
+      valido: false,
+      codigo: 'fuera_de_rango',
+      mensaje: 'El rango cae fuera del horario de atención del negocio',
+      limite: { hora_inicio: dia.hora_inicio, hora_fin: dia.hora_fin },
+    };
+  }
+  return { valido: true };
+};
+
+/**
+ * Valida que un turno [inicioDT, finDT] caiga dentro del horario de atención
+ * del tenant. Consulta el horario y delega en validarRangoEnHorario. El día
+ * se calcula desde inicioDT en convención 0..6 (luxon usa 1..7).
+ *
+ * @param {string} tenantId - UUID del tenant
+ * @param {DateTime} inicioDT - inicio del turno (luxon DateTime en TZ Argentina)
+ * @param {DateTime} finDT - fin del turno (luxon DateTime en TZ Argentina)
+ * @returns {Promise<{ valido: boolean, codigo?, mensaje?, limite? }>}
+ */
+export const validarTurnoEnHorario = async (tenantId, inicioDT, finDT) => {
+  const horario = await obtenerHorarioCrudo(tenantId);
+  const diaSemana = inicioDT.weekday % 7;
+  return validarRangoEnHorario(
+    horario,
+    diaSemana,
+    inicioDT.toFormat('HH:mm'),
+    finDT.toFormat('HH:mm'),
+  );
+};
+
+/**
  * Calcula el impacto ("delta") de aplicar un nuevo horario semanal:
  * qué bloques de barbero quedan afuera y qué turnos reservados hay que
  * cancelar. Es una lectura pura: no escribe nada en la DB.

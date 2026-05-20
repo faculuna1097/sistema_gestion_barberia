@@ -10,6 +10,7 @@ import {
   notificarConfirmacion, cambiarEstado, cancelarTurnoPorId,
   inicioPosteriorAhora,
 } from '../services/turnosService.js';
+import { validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { TZ } from '../utils/constantes.js';
 
 const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -92,6 +93,17 @@ export const crearTurnoAdmin = async (req, res) => {
       return res.status(404).json({ error: 'Servicio no encontrado o inactivo' });
     }
     const finDT = inicioDT.plus({ minutes: duracionMin });
+
+    // ── Validar que el turno caiga dentro del horario de atención ───────────
+    const valHorario = await validarTurnoEnHorario(req.tenant_id, inicioDT, finDT);
+    if (!valHorario.valido) {
+      console.warn('[turnos] crearTurnoAdmin — turno fuera del horario del negocio | codigo:', valHorario.codigo);
+      return res.status(422).json({
+        codigo: valHorario.codigo,
+        mensaje: valHorario.mensaje,
+        ...(valHorario.limite && { limite: valHorario.limite }),
+      });
+    }
 
     // ── Upsert cliente ──────────────────────────────────────────────────────
     const cliente_id = await upsertCliente(req.tenant_id, { nombre, telefono, email });

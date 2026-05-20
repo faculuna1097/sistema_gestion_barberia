@@ -3,6 +3,7 @@
 // Thin wrapper con scoping por rol. Cobertura: plan_turnero_v2.md sección 5.
 
 import { obtenerHorarios, validarNoSolapamiento, reemplazarHorarios } from '../services/horariosService.js';
+import { obtenerHorarioCrudo, validarRangoEnHorario } from '../services/horarioAtencionService.js';
 
 /**
  * GET /api/admin/horarios/:barbero_id
@@ -73,6 +74,26 @@ export const putHorarios = async (req, res) => {
   }
 
   try {
+    // Validar que cada bloque caiga dentro del horario de atención del tenant.
+    // Una sola query del horario; validación pura por bloque.
+    const horarioTenant = await obtenerHorarioCrudo(req.tenant_id);
+    for (let i = 0; i < bloques.length; i++) {
+      const b = bloques[i];
+      const val = validarRangoEnHorario(
+        horarioTenant, b.dia_semana,
+        b.hora_inicio.slice(0, 5), b.hora_fin.slice(0, 5),
+      );
+      if (!val.valido) {
+        console.warn('[horarios] putHorarios — bloque', i,
+          'fuera del horario del negocio | codigo:', val.codigo);
+        return res.status(422).json({
+          codigo: val.codigo,
+          mensaje: val.mensaje,
+          ...(val.limite && { limite: val.limite }),
+        });
+      }
+    }
+
     const insertados = await reemplazarHorarios(barbero_id, req.tenant_id, bloques);
     console.log('[horarios] putHorarios — completado |', insertados.length, 'bloques insertados');
     res.json(insertados);

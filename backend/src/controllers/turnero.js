@@ -16,7 +16,7 @@ import {
   armarLinkGestion, sincronizarCalendarCreacion, notificarConfirmacion,
   inicioPosteriorAhora,
 } from '../services/turnosService.js';
-import { obtenerHorarioCrudo } from '../services/horarioAtencionService.js';
+import { obtenerHorarioCrudo, validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { TZ } from '../utils/constantes.js';
 
 // Regex YYYY-MM-DD para validar el query param ?fecha.
@@ -216,6 +216,17 @@ export const crearTurno = async (req, res) => {
       return res.status(404).json({ error: 'Servicio no encontrado o inactivo' });
     }
     const finDT = inicioDT.plus({ minutes: duracionMin });
+
+    // ── Validar que el turno caiga dentro del horario de atención ───────────
+    const valHorario = await validarTurnoEnHorario(req.tenant_id, inicioDT, finDT);
+    if (!valHorario.valido) {
+      console.warn('[turnero] crearTurno — turno fuera del horario del negocio | codigo:', valHorario.codigo);
+      return res.status(422).json({
+        codigo: valHorario.codigo,
+        mensaje: valHorario.mensaje,
+        ...(valHorario.limite && { limite: valHorario.limite }),
+      });
+    }
 
     // ── Upsert cliente ──────────────────────────────────────────────────────
     const cliente_id = await upsertCliente(req.tenant_id, { nombre, telefono, email });
@@ -424,6 +435,17 @@ export const reprogramarTurno = async (req, res) => {
     }
 
     const finDT = inicioDT.plus({ minutes: r.duracion_minutos });
+
+    // ── Validar que el nuevo horario caiga dentro del horario de atención ──
+    const valHorario = await validarTurnoEnHorario(req.tenant_id, inicioDT, finDT);
+    if (!valHorario.valido) {
+      console.warn('[turnero] reprogramarTurno — turno fuera del horario del negocio | codigo:', valHorario.codigo);
+      return res.status(422).json({
+        codigo: valHorario.codigo,
+        mensaje: valHorario.mensaje,
+        ...(valHorario.limite && { limite: valHorario.limite }),
+      });
+    }
 
     // ── UPDATE con captura de 23P01 ────────────────────────────────────────
     try {
