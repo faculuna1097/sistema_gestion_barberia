@@ -126,10 +126,10 @@ export const enriquecerTurno = async (turnoId) => {
 export const armarLinkGestion = (req, token) => {
   const subdominio = req.headers['x-tenant-subdomain'];
   if (subdominio) {
-    return `https://${subdominio}.barbermanager.app/turnos/${token}`;
+    return `https://${subdominio}.barbermanager.app/turnos/gestionar/${token}`;
   }
   const base = process.env.PUBLIC_BASE_URL ?? 'http://localhost:5173';
-  return `${base}/turnos/${token}`;
+  return `${base}/turnos/gestionar/${token}`;
 };
 
 /**

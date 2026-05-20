@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-Última actualización: 2026-05-20 (Setup para probar los frontends desde dispositivos de la red local; fix del bug que interpretaba IPs como subdominio de tenant).
+Última actualización: 2026-05-20 (Fix del link de gestión que llega por mail: apuntaba al wizard de reserva en vez de a la pantalla de gestión del turno).
 
 Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convenciones_tecnicas.md).
 
@@ -229,5 +229,6 @@ de cambios:
 - **Validación de `tv` operativo hace 1 SELECT por request.** `verificarToken`, cuando `rol === 'operativo'`, consulta `tenant.operativo_token_version` para compararlo con el `tv` del payload. Es un SELECT por PK indexada (costo bajo) pero evitable: la mitigación planificada es extender el caché del `tenantMiddleware` para que también guarde `operativo_token_version`, bloqueada hasta que exista el endpoint de invalidación de caché (ver pendiente). El patrón se replicaría sin costo extra si más adelante se invalidan tokens admin/barbero también.
 - **`adminOperativo.actualizarCredencialesOperativas` no chequea `rowCount`.** El UPDATE devuelve 204 incluso si el `tenant_id` no existe (en la práctica `tenantMiddleware` ya lo blinda, pero el endpoint sería más honesto con un `rowCount === 0 → 404`). Cosmético.
 - **`process.env.JWT_SECRET` accedido directo** en `authOperativo.js`, `authMiddleware.js` y `controllers/auth*.js`. Si la env var falta en Railway, `jwt.sign` firma con `undefined` sin error explícito al arrancar. Centralizar en `config/jwt.js` con validación al boot evitaría sorpresas silenciosas. Cosmético.
+- **El path `/turnos/gestionar/` está hardcodeado en tres lugares.** Backend (`turnosService.js#armarLinkGestion`), `frontend-turnero/src/App.jsx` (regex `extraerTokenDeURL`) y `frontend-turnero/src/screens/Confirmacion.jsx` (redirección post-reserva). Si la ruta cambia hay que tocar dos repos. Origen: un fix de 2026-05-20 — `armarLinkGestion` generaba `/turnos/:token` pero el frontend solo monta la pantalla de gestión con `/turnos/gestionar/:token`, así que el mail caía al wizard de reserva. Bajo riesgo, queda anotado.
 - **La restricción "no completar turnos futuros" es solo client-side.** `frontend-barbero` oculta las acciones "completar"/"no asistió" para turnos cuyo `inicio` todavía no pasó, pero `PATCH /api/admin/turnos/:id/estado` no valida la antelación: una request directa podría marcar `completado` un turno futuro. Blindar requeriría un check de `inicio <= now()` en `turnosService`. Bajo riesgo (la UI ya lo previene), pero queda anotado.
 *— Fin del documento —*
