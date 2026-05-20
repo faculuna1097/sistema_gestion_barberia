@@ -159,21 +159,35 @@ sistema-gestion-barberia/
 │   │
 │   └── src/
 │       ├── main.jsx
-│       ├── App.jsx                    # Router: login → navegación por sección (dashboard, agenda, etc.)
-│       ├── App.css                    # Placeholder — estilos en chat dedicado
-│       ├── index.css                  # Reset mínimo
+│       ├── App.jsx                    # Router: login → navegación por bottom nav (Hoy/Agenda/Planilla/Más)
+│       ├── index.css                  # Reset + Geist + keyframes + focus-visible (copia del turnero)
+│       │
+│       ├── theme/
+│       │   └── tokens.js              # Tokens del sistema "Luz" (copia del turnero)
+│       │
+│       ├── utils/
+│       │   ├── formato.js             # fmtPesos (copia del turnero)
+│       │   └── fecha.js               # Helpers de fecha/hora (copia del turnero)
 │       │
 │       ├── services/
 │       │   └── api.js                 # 17 funciones: 4 públicas + 13 protegidas vía apiFetch con JWT
 │       │
 │       └── components/
-│           ├── Login.jsx              # Selector de barbero + teclado PIN (mismo formato que gestión)
-│           ├── Dashboard.jsx          # Turnos del día como lista + gestión de estados
-│           ├── CrearTurno.jsx         # Wizard: servicio → fecha → horario → datos cliente
-│           ├── Agenda.jsx             # Timeline vertical tipo Google Calendar mobile
-│           ├── MiPlanilla.jsx         # Detalle + resumen semanal navegable por semana
-│           ├── Gestion.jsx            # Tabs: Mis Horarios (editor bloques) + Mis Suspensiones
-│           └── Clientes.jsx           # Lista de clientes históricos del barbero con filtro
+│           ├── Login.jsx              # Selector de barbero + teclado PIN
+│           ├── Dashboard.jsx          # "Hoy": próximo turno + KPIs + lista de turnos con acciones
+│           ├── CrearTurno.jsx         # Wizard 4 pasos: servicio → fecha → horario → datos cliente
+│           ├── Agenda.jsx             # Timeline vertical tipo calendario, navegable por día
+│           ├── MiPlanilla.jsx         # Hero comisión + desglose + cortes agrupados por día
+│           ├── Gestion.jsx            # Drilldown con tabs: Mis Horarios + Mis Suspensiones
+│           ├── Clientes.jsx           # Drilldown: lista de clientes históricos con filtro
+│           ├── Mas.jsx                # Pantalla "Más": acceso a Clientes, Gestión, Cerrar sesión
+│           │
+│           └── ui/                    # Primitivos del sistema de diseño (13 universales + 4 propios)
+│               ├── index.js           # Barrel export
+│               ├── Button.jsx, Card.jsx, Field.jsx, TopBar.jsx, ScreenHeader.jsx
+│               ├── StickyFooter.jsx, EmptyState.jsx, Skeleton.jsx, StatusPill.jsx
+│               ├── PageContainer.jsx, ConfirmDialog.jsx, AvatarIniciales.jsx, SummaryRow.jsx
+│               └── BottomNav.jsx, KPI.jsx, TurnoListItem.jsx, SearchInput.jsx  # propios de este front
 │
 └── frontend/                          # Cliente React + Vite
     ├── package.json                   # Dependencias y scripts del frontend

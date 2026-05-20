@@ -121,15 +121,16 @@ Si una pantalla nueva no encaja claramente en una superficie, default = **interm
 
 ### 3.7 Iconografía
 
-**Pendiente de elección formal.** Hasta que se decida, regla provisoria:
+**Librería elegida: Lucide** (`lucide-react`). Decidida durante el rediseño de
+`frontend-barbero` — primer front que necesitó íconos de forma sistemática
+(bottom nav, estados de turno, acciones). Trazo fino coherente con el vibe
+Stripe/Clerk y tree-shakeable por import directo (`import { Calendar } from 'lucide-react'`).
 
-- No agregar íconos sueltos hasta tener una librería elegida — evita mezclar trazos.
-- Si una pantalla nueva los necesita ya, usar SVG inline simples (línea fina, `stroke-width: 1.5`, color `currentColor`), pero documentarlo como deuda en §9.
-- Cuando se decida, candidatos a evaluar: **Lucide** (default razonable para Stripe-vibe), **Phosphor**, **Heroicons**. Criterio: peso de bundle + consistencia de trazo.
-
-Reglas que ya valen para íconos:
+Reglas para íconos:
+- Cuando otro front necesite íconos, **usar Lucide también** — no mezclar librerías.
 - Tamaños fijos: **16, 20, 24** (acompañan tipografía).
-- Color = `currentColor` (heredado del contexto). Nunca hardcodear color del ícono.
+- Color = `currentColor` o un token de `theme`. Nunca hardcodear el color.
+- `strokeWidth` típico **1.5–1.75**; `2` para íconos que deben pesar (acción primaria).
 - **Nunca decorativos**. Si un ícono no aporta información o reduce cognición, sacarlo.
 
 ---
@@ -331,6 +332,19 @@ pantalla.
 | `MiniCalendario` | Calendario 7× para elegir UNA fecha de N próximos días. Para gestión/dashboard, hace falta otro picker (con navegación de mes, multi-selección, etc). |
 | `SlotChip` | Chip de horario. Si el contexto cambia, repensar. |
 
+### 6.3 Propias de `frontend-barbero` (todavía no compartidas)
+
+Construidas en `frontend-barbero` durante su rediseño. Viven en su propio
+`components/ui/` y **aún no se promovieron** a la fuente de verdad del turnero
+(§7.5: un componente se comparte recién cuando un segundo front lo necesita).
+
+| Componente | Para qué |
+|---|---|
+| `BottomNav` | Barra de navegación inferior fija, mobile. |
+| `KPI` | Tarjeta de métrica (label + valor grande + tono semántico). |
+| `TurnoListItem` | Card de turno: hora/cliente/servicio + acciones según estado. |
+| `SearchInput` | Input de búsqueda con lupa + botón limpiar. |
+
 ---
 
 ## 7. Reglas para extender el sistema
@@ -408,10 +422,13 @@ actualizá este doc.**
 7. `MiniCalendario` muestra "2 semanas" hardcodeado en el header — si en otro lugar lo usamos para más/menos días, el sublabel queda errado.
 8. **Inline styles + `useState` para hover** (§4.1, §4.2) — validado solo para mobile/turnero. **Antes de arrancar el front de gestión**, revisar: las tablas densas con muchas filas hover-ables pueden hacer ruidoso el re-render. Considerar híbrido: tokens en JS + `:hover` puntual via `<style>` scoped donde la performance importe.
 9. **Contraste WCAG no verificado** — `mutedSoft` sobre `surfaceAlt`, `inkSoft` sobre `bg`, blanco sobre `accent`. Auditar con WebAIM antes de release público.
-10. **Iconografía sin librería elegida** — definir Lucide vs Phosphor vs Heroicons antes de que aparezca el primer ícono "real" en gestión.
-11. **`<html lang="es">`** — verificar que esté en `index.html` de cada front.
+10. ~~**Iconografía sin librería elegida**~~ — **Resuelto**: se eligió Lucide (`lucide-react`). Ver §3.7.
+11. **`<html lang="es">`** — verificar que esté en `index.html` de cada front. (Ya OK en `frontend-barbero`.)
 12. **Focus visible global** — auditar que todos los primitivos tengan estilo de `:focus-visible`. Hoy `Card` y `Button` sí; el resto, sin verificar.
+13. **Regla ESLint `react-hooks/set-state-in-effect` desactivada en `frontend-barbero/eslint.config.js`.** Llegó por el scaffolding de Vite (`eslint-plugin-react-hooks` v7); los otros fronts usan versiones más viejas sin ella. En este código son falsos positivos sobre el patrón de fetching del proyecto (`setCargando(true)` al montar, cuando `cargando` ya es `true`). Si se actualiza react-hooks en los demás fronts, tomar una **postura unificada**: desactivarla en todos, o refactorizar el patrón de fetch a "sin setState síncrono en el efecto".
+14. **Rango horario del timeline hardcodeado** — `Agenda.jsx` de `frontend-barbero` dibuja de `7:00` a `22:00` fijo. Debería venir del horario del local por tenant. (Emparenta con la deuda 4.)
+15. **`getMisClientes` sin paginación** — la pantalla Clientes de `frontend-barbero` trae todos los clientes históricos del barbero y filtra en cliente. Con 500+ clientes, el render de cards con hover-state (ver deuda 8) puede sentirse lento. Mitigación: paginar el endpoint o virtualizar la lista.
 
 ---
 
-*Última actualización: 2026-05-19 — fusión con CLAUDE-DESIGN.md, reordenado, agregado densidad / iconografía / accesibilidad / deudas 8-12.*
+*Última actualización: 2026-05-19 — agregada §6.3 (primitivos propios de frontend-barbero), §3.7 actualizada (Lucide elegida), deudas 13-15.*

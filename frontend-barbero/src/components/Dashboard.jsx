@@ -1,13 +1,37 @@
 // /frontend-barbero/src/components/Dashboard.jsx
-// Pantalla principal post-login. Muestra los turnos del día como lista
-// con acciones para cambiar estado (completado, no_asistio, cancelar).
+// Pantalla principal post-login ("Hoy").
+// Muestra:
+//   - Header con fecha del día.
+//   - Card destacada con el próximo turno (si existe).
+//   - 3 KPIs: pendientes, completados, no asistieron (+ nota chica de cancelados).
+//   - Botón primario "Nuevo turno".
+//   - Lista de turnos del día con acciones (todas con ConfirmDialog).
+//
 // Props:
 //   barbero       — { id, nombre }
-//   onCrearTurno  — callback para navegar al wizard de crear turno
-//   onVerAgenda   — callback para navegar a la agenda
+//   onCrearTurno  — callback al wizard de crear turno
+//   onVerAgenda   — callback a la agenda (se usa desde la card "próximo")
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { Plus, RefreshCw, CalendarX } from 'lucide-react';
+
 import { getTurnos, patchEstadoTurno, cancelarTurno } from '../services/api.js';
+import { fmtHora, fmtFechaLarga } from '../utils/fecha.js';
+import { theme } from '../theme/tokens.js';
+
+import {
+  ScreenHeader,
+  Card,
+  Skeleton,
+  EmptyState,
+  Button,
+  ConfirmDialog,
+  KPI,
+  TurnoListItem,
+  AvatarIniciales,
+} from './ui';
+
+// ─── Helpers locales ────────────────────────────────────────────────────────
 
 /**
  * fechaHoyISO
@@ -17,177 +41,330 @@ import { getTurnos, patchEstadoTurno, cancelarTurno } from '../services/api.js';
 function fechaHoyISO() {
   const ahora = new Date();
   const anio = ahora.getFullYear();
-  const mes = String(ahora.getMonth() + 1).padStart(2, '0');
-  const dia = String(ahora.getDate()).padStart(2, '0');
+  const mes  = String(ahora.getMonth() + 1).padStart(2, '0');
+  const dia  = String(ahora.getDate()).padStart(2, '0');
   return `${anio}-${mes}-${dia}`;
 }
 
-/**
- * formatearHora
- * Extrae HH:MM de un timestamp ISO.
- * @param {string} iso - timestamp ISO
- * @returns {string} 'HH:MM'
- */
-function formatearHora(iso) {
-  const d = new Date(iso);
-  return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
-}
+// Configuración del ConfirmDialog según la acción a ejecutar.
+// Centralizar acá evita 3 if/else en el render.
+const ACCIONES = {
+  completar: {
+    title: 'Marcar como completado',
+    message: '¿Confirmás que ya atendiste este turno?',
+    confirmLabel: 'Sí, completar',
+    confirmVariant: 'primary',
+  },
+  no_asistio: {
+    title: 'Marcar como no asistió',
+    message: 'El cliente no se presentó al turno. ¿Confirmás?',
+    confirmLabel: 'Sí, no asistió',
+    confirmVariant: 'primary',
+  },
+  cancelar: {
+    title: 'Cancelar turno',
+    message: 'El turno se cancela y el cliente queda libre. Esta acción no se puede deshacer.',
+    confirmLabel: 'Sí, cancelar',
+    confirmVariant: 'danger',
+  },
+};
 
+// ─── Componente principal ───────────────────────────────────────────────────
+
+/**
+ * Dashboard
+ * Pantalla "Hoy" — orquesta la carga de turnos, KPIs, próximo turno y acciones.
+ */
 export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
   const [turnos, setTurnos] = useState([]);
   const [cargando, setCargando] = useState(true);
-  const [error, setError] = useState(null);
-  const [accionando, setAccionando] = useState(null);
+  const [errorCarga, setErrorCarga] = useState(null);
+
+  // Banner inline para errores de acción (reemplaza alert() del MD §2).
+  const [errorAccion, setErrorAccion] = useState(null);
+
+  // Estado del modal de confirmación. accion ∈ ACCIONES, turno = objeto turno.
+  const [confirma, setConfirma] = useState({ open: false, accion: null, turno: null });
+  const [procesando, setProcesando] = useState(false);
+
+  const hoy = fechaHoyISO();
 
   /**
    * cargarTurnos
    * Carga los turnos del día del barbero autenticado.
    */
-  const cargarTurnos = async () => {
+  const cargarTurnos = useCallback(async () => {
     try {
-      const data = await getTurnos({ fecha: fechaHoyISO() });
+      const data = await getTurnos({ fecha: hoy });
       setTurnos(data);
+      setErrorCarga(null);
       console.log('[Dashboard] cargarTurnos — completado |', data.length, 'turnos');
     } catch (err) {
       console.error('[Dashboard] Error cargando turnos:', err.message);
-      setError('No se pudieron cargar los turnos');
+      setErrorCarga('No se pudieron cargar los turnos.');
     } finally {
       setCargando(false);
     }
-  };
+  }, [hoy]);
 
-  useEffect(() => {
-    cargarTurnos();
+  useEffect(() => { cargarTurnos(); }, [cargarTurnos]);
+
+  /**
+   * mostrarErrorAccion
+   * Setea un mensaje temporal arriba de la lista (4s). Reemplaza alert().
+   */
+  const mostrarErrorAccion = useCallback((msg) => {
+    setErrorAccion(msg);
+    setTimeout(() => setErrorAccion(null), 4000);
   }, []);
 
   /**
-   * cambiarEstado
-   * Cambia el estado de un turno y recarga la lista.
-   * @param {string} turnoId
-   * @param {string} nuevoEstado - 'completado' | 'no_asistio'
+   * pedirConfirmacion
+   * Abre el ConfirmDialog con la acción y el turno seleccionados.
    */
-  const cambiarEstado = async (turnoId, nuevoEstado) => {
-    setAccionando(turnoId);
-    try {
-      await patchEstadoTurno(turnoId, nuevoEstado);
-      console.log('[Dashboard] cambiarEstado — completado |', turnoId, '→', nuevoEstado);
-      await cargarTurnos();
-    } catch (err) {
-      console.error('[Dashboard] Error en cambiarEstado:', err.message);
-      alert('Error al cambiar estado: ' + err.message);
-    } finally {
-      setAccionando(null);
-    }
+  const pedirConfirmacion = (turno, accion) => {
+    setConfirma({ open: true, accion, turno });
   };
 
   /**
-   * cancelar
-   * Cancela un turno previa confirmación y recarga la lista.
-   * @param {string} turnoId
+   * ejecutarAccion
+   * Handler del onConfirm del modal. Despacha al endpoint correcto según `accion`.
    */
-  const cancelar = async (turnoId) => {
-    if (!confirm('¿Cancelar este turno?')) return;
-    setAccionando(turnoId);
+  const ejecutarAccion = async () => {
+    const { accion, turno } = confirma;
+    setProcesando(true);
     try {
-      await cancelarTurno(turnoId);
-      console.log('[Dashboard] cancelar — completado |', turnoId);
+      if (accion === 'cancelar') {
+        await cancelarTurno(turno.id);
+      } else {
+        // 'completar' → 'completado', 'no_asistio' → 'no_asistio'
+        const nuevoEstado = accion === 'completar' ? 'completado' : 'no_asistio';
+        await patchEstadoTurno(turno.id, nuevoEstado);
+      }
+      console.log('[Dashboard] ejecutarAccion — OK |', turno.id, '→', accion);
+      setConfirma({ open: false, accion: null, turno: null });
       await cargarTurnos();
     } catch (err) {
-      console.error('[Dashboard] Error al cancelar:', err.message);
-      alert('Error al cancelar: ' + err.message);
+      console.error('[Dashboard] Error en ejecutarAccion:', err.message);
+      setConfirma({ open: false, accion: null, turno: null });
+      mostrarErrorAccion(`Error: ${err.message}`);
     } finally {
-      setAccionando(null);
+      setProcesando(false);
     }
   };
 
-  // Resumen del día
-  const reservados = turnos.filter(t => t.estado === 'reservado');
-  const completados = turnos.filter(t => t.estado === 'completado');
-  const noAsistieron = turnos.filter(t => t.estado === 'no_asistio');
-  const cancelados = turnos.filter(t => t.estado === 'cancelado');
+  // ─── Datos derivados ──────────────────────────────────────────────────────
+  const turnosOrdenados = [...turnos].sort(
+    (a, b) => new Date(a.inicio) - new Date(b.inicio)
+  );
 
+  const reservados   = turnos.filter((t) => t.estado === 'reservado');
+  const completados  = turnos.filter((t) => t.estado === 'completado');
+  const noAsistieron = turnos.filter((t) => t.estado === 'no_asistio');
+  const cancelados   = turnos.filter((t) => t.estado === 'cancelado');
+
+  const ahora = new Date();
   const proximo = reservados
-    .filter(t => new Date(t.inicio) > new Date())
+    .filter((t) => new Date(t.inicio) > ahora)
     .sort((a, b) => new Date(a.inicio) - new Date(b.inicio))[0];
 
-  if (cargando) return <p>Cargando turnos del día...</p>;
-  if (error) return <p>{error}</p>;
-
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div>
-      <h2>Hoy — {fechaHoyISO()}</h2>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 16,
+      padding: '16px 16px 24px',
+    }}>
+      <ScreenHeader
+        eyebrow="Hoy"
+        title={fmtFechaLarga(hoy)}
+        subtitle={
+          cargando
+            ? 'Cargando turnos del día…'
+            : `${turnos.length} turnos · Hola, ${barbero?.nombre?.split(' ')[0] ?? ''}`
+        }
+      />
 
-      <div>
-        <button onPointerDown={onCrearTurno}>+ Crear turno</button>
-        {' '}
-        <button onPointerDown={onVerAgenda}>Ver agenda</button>
-        {' '}
-        <button onPointerDown={cargarTurnos}>Actualizar</button>
-      </div>
-
-      <div>
-        <p>
-          <strong>Resumen:</strong>{' '}
-          {reservados.length} pendientes | {completados.length} completados | {noAsistieron.length} no asistieron
-          {cancelados.length > 0 && ` | ${cancelados.length} cancelados`}
-        </p>
-        {proximo && (
-          <p>
-            <strong>Próximo turno:</strong> {formatearHora(proximo.inicio)} — {proximo.cliente_nombre || 'Sin nombre'}
-            {proximo.servicio_nombre && ` (${proximo.servicio_nombre})`}
-          </p>
-        )}
-      </div>
-
-      <h3>Turnos del día ({turnos.length})</h3>
-
-      {turnos.length === 0 ? (
-        <p>No hay turnos para hoy.</p>
-      ) : (
-        <ul style={{ listStyle: 'none', padding: 0 }}>
-          {turnos
-            .sort((a, b) => new Date(a.inicio) - new Date(b.inicio))
-            .map((turno) => (
-              <li key={turno.id} style={{ marginBottom: '16px', padding: '12px', border: '1px solid #ccc' }}>
-                <div>
-                  <strong>{formatearHora(turno.inicio)}</strong>
-                  {' — '}
-                  {turno.cliente_nombre || 'Sin nombre'}
-                  {turno.servicio_nombre && ` | ${turno.servicio_nombre}`}
-                  {' | '}
-                  <em>{turno.estado}</em>
-                </div>
-                {turno.cliente_telefono && <div>Tel: {turno.cliente_telefono}</div>}
-                {turno.cliente_email && <div>Email: {turno.cliente_email}</div>}
-
-                {turno.estado === 'reservado' && (
-                  <div style={{ marginTop: '8px' }}>
-                    <button
-                      onPointerDown={() => cambiarEstado(turno.id, 'completado')}
-                      disabled={accionando === turno.id}
-                    >
-                      Completado
-                    </button>
-                    {' '}
-                    <button
-                      onPointerDown={() => cambiarEstado(turno.id, 'no_asistio')}
-                      disabled={accionando === turno.id}
-                    >
-                      No asistió
-                    </button>
-                    {' '}
-                    <button
-                      onPointerDown={() => cancelar(turno.id)}
-                      disabled={accionando === turno.id}
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                )}
-              </li>
-            ))}
-        </ul>
+      {/* Banner inline de errores de acción (reemplaza alert) */}
+      {errorAccion && (
+        <div
+          role="alert"
+          style={{
+            background: theme.dangerSoft,
+            border: `1px solid ${theme.danger}`,
+            borderRadius: theme.radius,
+            padding: '10px 12px',
+            color: theme.danger,
+            fontSize: theme.sizeBody,
+          }}
+        >
+          {errorAccion}
+        </div>
       )}
+
+      {/* Card destacada: próximo turno */}
+      {!cargando && proximo && (
+        <Card padding={14} style={{ borderRadius: theme.radiusLg }}>
+          <div style={{
+            fontFamily: theme.mono,
+            fontWeight: theme.weightMedium,
+            fontSize: theme.sizeMicro,
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            color: theme.accent,
+            marginBottom: 8,
+          }}>
+            Próximo turno
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <AvatarIniciales nombre={proximo.cliente_nombre || '?'} size={44} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontFamily: theme.body,
+                fontWeight: theme.weightHeading,
+                fontSize: theme.sizeTitle,
+                letterSpacing: '-0.02em',
+                color: theme.ink,
+                lineHeight: 1.1,
+              }}>
+                {fmtHora(proximo.inicio)}
+              </div>
+              <div style={{
+                fontFamily: theme.body,
+                fontSize: theme.sizeBody,
+                color: theme.inkSoft,
+                marginTop: 2,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>
+                {proximo.cliente_nombre || 'Sin nombre'}
+                {proximo.servicio_nombre && (
+                  <span style={{ color: theme.muted }}> · {proximo.servicio_nombre}</span>
+                )}
+              </div>
+            </div>
+            <Button variant="ghost" full={false} onClick={onVerAgenda}>
+              Ver agenda
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Grilla 3 KPIs */}
+      {!cargando && !errorCarga && turnos.length > 0 && (
+        <>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr 1fr',
+            gap: 8,
+          }}>
+            <KPI label="Pendientes"  value={reservados.length}   tone="accent" />
+            <KPI label="Completados" value={completados.length}  tone="success" />
+            <KPI label="No vinieron" value={noAsistieron.length} tone="warning" />
+          </div>
+          {cancelados.length > 0 && (
+            <div style={{
+              fontFamily: theme.body,
+              fontSize: theme.sizeMicro + 1,
+              color: theme.muted,
+              marginTop: -8,
+            }}>
+              {cancelados.length} cancelado{cancelados.length === 1 ? '' : 's'}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Acción primaria */}
+      <Button variant="primary" onClick={onCrearTurno}>
+        <Plus size={16} strokeWidth={2} aria-hidden="true" />
+        Nuevo turno
+      </Button>
+
+      {/* Header de la lista + botón refresh */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginTop: 8,
+      }}>
+        <div style={{
+          fontFamily: theme.body,
+          fontWeight: theme.weightHeading,
+          fontSize: theme.sizeHeading,
+          color: theme.ink,
+        }}>
+          Turnos del día
+        </div>
+        <Button variant="ghost" full={false} onClick={cargarTurnos}>
+          <RefreshCw size={14} strokeWidth={1.75} aria-hidden="true" />
+          Actualizar
+        </Button>
+      </div>
+
+      {/* Lista */}
+      {cargando && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} height={80} radius={theme.radius} />
+          ))}
+        </div>
+      )}
+
+      {!cargando && errorCarga && (
+        <EmptyState
+          glyph={<CalendarX size={28} strokeWidth={1.5} aria-hidden="true" />}
+          title="No pudimos cargar la agenda"
+          body={errorCarga}
+          action={
+            <Button variant="secondary" full={false} onClick={cargarTurnos}>
+              Reintentar
+            </Button>
+          }
+        />
+      )}
+
+      {!cargando && !errorCarga && turnos.length === 0 && (
+        <EmptyState
+          glyph={<CalendarX size={28} strokeWidth={1.5} aria-hidden="true" />}
+          title="No hay turnos para hoy"
+          body="Aprovechá y descansá un rato, o creá uno manualmente con el botón de arriba."
+        />
+      )}
+
+      {!cargando && !errorCarga && turnos.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {turnosOrdenados.map((turno) => {
+            // Un turno que todavía no empezó no puede marcarse como completado
+            // ni como "no vino" — esas acciones sólo aplican a turnos ya transcurridos.
+            const esFuturo = new Date(turno.inicio) > new Date();
+            return (
+              <TurnoListItem
+                key={turno.id}
+                turno={turno}
+                onCompletar={esFuturo ? undefined : () => pedirConfirmacion(turno, 'completar')}
+                onNoAsistio={esFuturo ? undefined : () => pedirConfirmacion(turno, 'no_asistio')}
+                onCancelar={() => pedirConfirmacion(turno, 'cancelar')}
+                bloqueado={procesando && confirma.turno?.id === turno.id}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal de confirmación — config por acción */}
+      <ConfirmDialog
+        open={confirma.open}
+        title={ACCIONES[confirma.accion]?.title || ''}
+        message={ACCIONES[confirma.accion]?.message || ''}
+        confirmLabel={ACCIONES[confirma.accion]?.confirmLabel || 'Confirmar'}
+        confirmVariant={ACCIONES[confirma.accion]?.confirmVariant || 'primary'}
+        loading={procesando}
+        onConfirm={ejecutarAccion}
+        onCancel={() => setConfirma({ open: false, accion: null, turno: null })}
+      />
     </div>
   );
 }
