@@ -46,12 +46,18 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // --- Middlewares globales ---
-// DESPUÉS
+const esDesarrollo = process.env.NODE_ENV !== 'production';
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (origin === 'http://localhost:5173') return callback(null, true);
     if (origin.endsWith('.barbermanager.app')) return callback(null, true);
+    // En desarrollo aceptamos cualquier origen de red local (localhost o
+    // IP privada) para poder probar los frontends desde otros dispositivos
+    // de la red, como un celular. En producción esta rama no aplica.
+    if (esDesarrollo && /^http:\/\/(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin)) {
+      return callback(null, true);
+    }
     callback(new Error(`CORS bloqueado para origin: ${origin}`));
   },
   credentials: true,

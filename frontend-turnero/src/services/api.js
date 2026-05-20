@@ -7,10 +7,13 @@ const BASE_URL = import.meta.env.VITE_API_URL
   : 'http://localhost:3001/api/turnero';
 
 // Extraer subdominio del hostname actual.
-// En localhost devuelve undefined → el backend usa el fallback del .env
+// Solo se considera subdominio si estamos en el dominio de producción.
+// En localhost o en una IP de red local devuelve undefined → el backend
+// usa el fallback de TENANT_ID del .env.
 const hostname = window.location.hostname;
-const partes = hostname.split('.');
-const subdominio = partes.length >= 3 ? partes[0] : undefined;
+const subdominio = hostname.endsWith('.barbermanager.app')
+  ? hostname.split('.')[0]
+  : undefined;
 
 // Headers base — incluye el subdominio si está disponible
 const publicHeaders = {

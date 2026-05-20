@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-Última actualización: 2026-05-19 (Rediseño completo de la UI de `frontend-barbero` con el sistema de diseño "Luz", en branch `feature/frontend-barbero-ui`).
+Última actualización: 2026-05-20 (Setup para probar los frontends desde dispositivos de la red local; fix del bug que interpretaba IPs como subdominio de tenant).
 
 Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convenciones_tecnicas.md).
 
@@ -62,6 +62,26 @@ solamente; los otros dos se acceden vía rewrites del primero.
 
 ### CORS
 Función dinámica en `index.js`: acepta `localhost:5173` y cualquier `*.barbermanager.app`.
+Además, **cuando `NODE_ENV !== 'production'`** acepta cualquier origen de red
+local (localhost, `127.x`, `10.x`, `192.168.x`, `172.16–31.x`) para poder
+probar los frontends desde otros dispositivos de la red (ej. un celular). En
+producción esa rama no aplica y el CORS sigue tan estricto como antes.
+
+### Probar los frontends en un dispositivo de la red local
+
+Para abrir el turnero o la app del barbero desde un celular en la misma WiFi:
+
+1. **`vite.config.js` de cada frontend** tiene `server: { host: true, port: N }`
+   — `5173` turnero, `5174` barbero. El `host: true` expone el dev server a la
+   red local; los puertos fijos hacen las URLs predecibles.
+2. **`VITE_API_URL`** debe apuntar a la IP de red local de la PC (no a
+   `localhost`, que para el celular sería el celular mismo). Se setea en el
+   `.env` de cada frontend (gitignored): `VITE_API_URL=http://<IP-PC>:3001`.
+   La IP se obtiene con `ipconfig`; es DHCP, puede cambiar.
+3. Backend corriendo localmente (`node src/index.js`), `NODE_ENV=development`.
+4. En el celular: `http://<IP-PC>:5173/turnos/` y `http://<IP-PC>:5174/barbero/`
+   (con la barra final del `base` path, sin ella da 404).
+5. Firewall de Windows debe permitir el acceso de Node a la red privada.
 
 ---
 
@@ -121,7 +141,7 @@ de cambios:
 ### Multi-tenancy por subdominio
 - `tenantMiddleware.js` lee el header `X-Tenant-Subdomain`, resuelve `tenant_id` desde DB con caché en memoria, e inyecta `req.tenant_id`.
 - Fallback a `TENANT_ID` en `.env` para desarrollo local (localhost no tiene subdominio).
-- El frontend extrae el subdominio de `window.location.hostname` al arrancar.
+- El frontend extrae el subdominio de `window.location.hostname` al arrancar: solo lo considera subdominio si el hostname termina en `.barbermanager.app`; cualquier otro host (localhost, una IP de red local) devuelve `undefined` y cae al fallback de `TENANT_ID`. La heurística anterior ("≥3 partes separadas por punto") tomaba un octeto de una IP como subdominio.
 - `publicHeaders` en `api.js` incluye `X-Tenant-Subdomain` en todas las funciones públicas.
 - `apiFetch` incluye `X-Tenant-Subdomain` en todas las llamadas del panel admin.
 - **Caché del middleware:** las entradas resueltas se guardan en memoria y solo se invalidan al reiniciar el servidor. Cambios sobre la tabla `tenant` (alta, baja, modificación de subdominio) no se reflejan hasta el próximo reinicio. Ver pendientes: endpoint de invalidación.
