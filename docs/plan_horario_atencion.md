@@ -369,7 +369,7 @@ tenant.hora_fin]` por día. Mismo patrón que el admin.
 - [x] `Gestion.jsx` de frontend-barbero muestra banner amarillo si hay bloques fuera de rango.
 - [x] `/docs/SQL_Schema.md` actualizado con la nueva tabla.
 - [x] `/docs/ruta_proyecto.md` actualizado con el nuevo controller/route/service.
-- [ ] `/docs/estado_actual.md` actualizado con la feature mergeada.
+- [x] `/docs/estado_actual.md` actualizado (Fase 1 documentada; nota de "sin mergear" hasta el merge).
 
 ---
 
