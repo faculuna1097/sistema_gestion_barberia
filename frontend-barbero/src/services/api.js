@@ -127,6 +127,19 @@ export const getDisponibilidad = async (barberoId, servicioId, fecha) => {
   return res.json();
 };
 
+/**
+ * getTenant
+ * Obtiene los datos públicos del negocio, incluido el horario de atención
+ * semanal. Se usa para validar los bloques del barbero contra el horario
+ * real del local.
+ * @returns {Promise<Object>} { id, nombre, logo_url, horario_atencion, feriados }
+ */
+export const getTenant = async () => {
+  const res = await fetch(`${BASE_URL}/turnero/tenant`, { headers: publicHeaders });
+  if (!res.ok) throw new Error('Error al obtener datos del negocio');
+  return res.json();
+};
+
 // ─── RUTAS PROTEGIDAS (con JWT vía apiFetch) ─────────────────────────────────
 
 /**

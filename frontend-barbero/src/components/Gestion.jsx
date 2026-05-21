@@ -4,12 +4,13 @@
 //   - Mis Suspensiones: listar, crear y eliminar suspensiones.
 // Maneja el flujo de conflicto 409 (turnos afectados) con ConfirmDialog extendido.
 
-import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, CalendarOff } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Plus, Trash2, CalendarOff, AlertTriangle } from 'lucide-react';
 
 import {
   getHorarios,
   putHorarios,
+  getTenant,
   getSuspensiones,
   crearSuspension,
   eliminarSuspension,
@@ -147,6 +148,37 @@ function SegmentedTabs({ activo, opciones, onChange }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
+ * normalizarHora
+ * Recorta una hora 'HH:MM:SS' o 'HH:MM' a 'HH:MM' para comparar como string.
+ * Los bloques del barbero llegan del backend como 'HH:MM:SS' (campo time crudo);
+ * el horario del tenant llega ya como 'HH:MM'.
+ * @param {string} hora
+ * @returns {string} hora en formato 'HH:MM'
+ */
+function normalizarHora(hora) {
+  return (hora || '').slice(0, 5);
+}
+
+/**
+ * bloqueFueraDeRango
+ * Determina si un bloque del barbero cae fuera del horario de atención del
+ * negocio: el día está cerrado, o el rango del bloque excede el horario del
+ * tenant ese día. Replica client-side la validación write-time del backend
+ * (validarRangoEnHorario en horarioAtencionService.js).
+ * @param {{dia_semana, hora_inicio, hora_fin}} bloque
+ * @param {Array<{dia_semana, hora_inicio, hora_fin}>} horarioTenant - días abiertos
+ * @returns {boolean} true si el bloque está fuera del horario del negocio
+ */
+function bloqueFueraDeRango(bloque, horarioTenant) {
+  const dia = horarioTenant.find((h) => h.dia_semana === bloque.dia_semana);
+  if (!dia) return true; // el negocio no abre ese día
+  return (
+    normalizarHora(bloque.hora_inicio) < dia.hora_inicio ||
+    normalizarHora(bloque.hora_fin) > dia.hora_fin
+  );
+}
+
+/**
  * TabHorarios
  * Editor del horario semanal. Cada día puede tener N bloques (hora_inicio, hora_fin).
  * Cambios viven en state local hasta que se toca "Guardar".
@@ -157,17 +189,22 @@ function TabHorarios({ barbero }) {
   const [errorCarga, setErrorCarga] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [feedback, setFeedback] = useState(null); // { tipo: 'ok'|'error', msg: string }
+  const [horarioTenant, setHorarioTenant] = useState([]); // días abiertos del negocio
 
   /**
    * cargar
-   * Trae el horario semanal desde el backend.
+   * Trae el horario semanal del barbero y el horario de atención del negocio.
    */
   const cargar = useCallback(async () => {
     setCargando(true);
     setErrorCarga(null);
     try {
-      const data = await getHorarios(barbero.id);
+      const [data, tenant] = await Promise.all([
+        getHorarios(barbero.id),
+        getTenant(),
+      ]);
       setBloques(data);
+      setHorarioTenant(tenant.horario_atencion || []);
       console.log('[Gestion/Horarios] cargar — completado |', data.length, 'bloques');
     } catch (err) {
       console.error('[Gestion/Horarios] Error cargando horarios:', err.message);
@@ -190,15 +227,29 @@ function TabHorarios({ barbero }) {
 
   /**
    * agregarBloque
-   * Agrega un bloque con horario default 09:00 a 18:00 al día dado.
+   * Agrega un bloque al día dado. El horario default es el rango de atención
+   * del negocio ese día, para que el bloque nazca dentro de rango; si el día
+   * está cerrado, cae al fallback 09:00-18:00 (el backend lo rechaza igual).
    * @param {number} dia - 0-6
    */
   const agregarBloque = (dia) => {
+    const horarioDia = horarioTenant.find((h) => h.dia_semana === dia);
     setBloques((prev) => [
       ...prev,
-      { dia_semana: dia, hora_inicio: '09:00', hora_fin: '18:00' },
+      {
+        dia_semana: dia,
+        hora_inicio: horarioDia ? horarioDia.hora_inicio : '09:00',
+        hora_fin: horarioDia ? horarioDia.hora_fin : '18:00',
+      },
     ]);
   };
+
+  // Cantidad de bloques fuera del horario de atención del negocio. Se recalcula
+  // en vivo a medida que el barbero edita, para que el banner sea reactivo.
+  const cantFueraDeRango = useMemo(
+    () => bloques.filter((b) => bloqueFueraDeRango(b, horarioTenant)).length,
+    [bloques, horarioTenant],
+  );
 
   /**
    * actualizarBloque
@@ -261,12 +312,15 @@ function TabHorarios({ barbero }) {
     <>
       {feedback && <BannerFeedback feedback={feedback} />}
 
+      {cantFueraDeRango > 0 && <BannerHorarioFueraDeRango />}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {ORDEN_DIAS.map((dia) => (
           <FilaDia
             key={dia}
             dia={dia}
             bloques={bloques}
+            horarioTenant={horarioTenant}
             onAgregar={() => agregarBloque(dia)}
             onActualizar={actualizarBloque}
             onEliminar={eliminarBloque}
@@ -286,8 +340,9 @@ function TabHorarios({ barbero }) {
 /**
  * FilaDia
  * Una fila por día con nombre + botón "+" + N bloques editables.
+ * @param {Array} props.horarioTenant - días abiertos del negocio (para validar)
  */
-function FilaDia({ dia, bloques, onAgregar, onActualizar, onEliminar }) {
+function FilaDia({ dia, bloques, horarioTenant, onAgregar, onActualizar, onEliminar }) {
   // Mantenemos el índice GLOBAL del bloque dentro del array padre para que
   // las callbacks de update/eliminar no necesiten lookup adicional.
   const bloquesDelDia = bloques
@@ -295,6 +350,9 @@ function FilaDia({ dia, bloques, onAgregar, onActualizar, onEliminar }) {
     .filter((b) => b.dia_semana === dia);
 
   const sinHorario = bloquesDelDia.length === 0;
+  // Horario de atención del negocio para este día. Sin fila = el local cierra.
+  const horarioDia = horarioTenant.find((h) => h.dia_semana === dia);
+  const diaCerrado = !horarioDia;
 
   return (
     <Card padding={12}>
@@ -316,6 +374,7 @@ function FilaDia({ dia, bloques, onAgregar, onActualizar, onEliminar }) {
         <button
           type="button"
           onClick={onAgregar}
+          disabled={diaCerrado}
           aria-label={`Agregar bloque a ${NOMBRE_DIA[dia]}`}
           style={{
             display: 'flex',
@@ -325,7 +384,8 @@ function FilaDia({ dia, bloques, onAgregar, onActualizar, onEliminar }) {
             background: 'transparent',
             border: `1px solid ${theme.hairline}`,
             borderRadius: 999,
-            cursor: 'pointer',
+            cursor: diaCerrado ? 'not-allowed' : 'pointer',
+            opacity: diaCerrado ? 0.5 : 1,
             color: theme.inkSoft,
             fontFamily: theme.body,
             fontSize: theme.sizeMicro + 1,
@@ -344,7 +404,7 @@ function FilaDia({ dia, bloques, onAgregar, onActualizar, onEliminar }) {
           color: theme.muted,
           marginTop: 4,
         }}>
-          Sin horario asignado
+          {diaCerrado ? 'El negocio no abre este día' : 'Sin horario asignado'}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -352,6 +412,8 @@ function FilaDia({ dia, bloques, onAgregar, onActualizar, onEliminar }) {
             <FilaBloque
               key={bloque._index}
               bloque={bloque}
+              horarioDia={horarioDia}
+              fuera={bloqueFueraDeRango(bloque, horarioTenant)}
               onActualizar={onActualizar}
               onEliminar={() => onEliminar(bloque._index)}
             />
@@ -365,8 +427,15 @@ function FilaDia({ dia, bloques, onAgregar, onActualizar, onEliminar }) {
 /**
  * FilaBloque
  * Dos time pickers inline + botón eliminar.
+ * @param {Object} props.horarioDia - rango del negocio ese día, o undefined si cierra
+ * @param {boolean} props.fuera - true si el bloque cae fuera del horario del negocio
  */
-function FilaBloque({ bloque, onActualizar, onEliminar }) {
+function FilaBloque({ bloque, horarioDia, fuera, onActualizar, onEliminar }) {
+  // Limitar los pickers al rango del negocio. Si el día está cerrado no hay
+  // límite que aplicar — el bloque ya está marcado como fuera de rango.
+  const min = horarioDia ? horarioDia.hora_inicio : undefined;
+  const max = horarioDia ? horarioDia.hora_fin : undefined;
+
   return (
     <div style={{
       display: 'flex',
@@ -376,6 +445,9 @@ function FilaBloque({ bloque, onActualizar, onEliminar }) {
       <InputHora
         value={bloque.hora_inicio}
         onChange={(v) => onActualizar(bloque._index, 'hora_inicio', v)}
+        min={min}
+        max={max}
+        invalido={fuera}
         aria="Hora de inicio"
       />
       <span style={{
@@ -386,6 +458,9 @@ function FilaBloque({ bloque, onActualizar, onEliminar }) {
       <InputHora
         value={bloque.hora_fin}
         onChange={(v) => onActualizar(bloque._index, 'hora_fin', v)}
+        min={min}
+        max={max}
+        invalido={fuera}
         aria="Hora de fin"
       />
       <button
@@ -415,18 +490,24 @@ function FilaBloque({ bloque, onActualizar, onEliminar }) {
  * InputHora
  * Input type=time mínimo, estilizado con tokens.
  * No usa Field porque acá las horas viven inline (sin label propio por input).
+ * @param {string} props.min - hora mínima seleccionable ('HH:MM'), opcional
+ * @param {string} props.max - hora máxima seleccionable ('HH:MM'), opcional
+ * @param {boolean} props.invalido - true pinta el borde de error (fuera de rango)
  */
-function InputHora({ value, onChange, aria }) {
+function InputHora({ value, onChange, min, max, invalido, aria }) {
   return (
     <input
       type="time"
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      min={min}
+      max={max}
       aria-label={aria}
+      aria-invalid={invalido || undefined}
       style={{
         padding: '8px 10px',
         background: theme.surface,
-        border: `1px solid ${theme.hairline}`,
+        border: `1px solid ${invalido ? theme.danger : theme.hairline}`,
         borderRadius: theme.radiusSm,
         fontFamily: theme.body,
         fontSize: theme.sizeBody,
@@ -830,6 +911,42 @@ function BannerFeedback({ feedback }) {
       }}
     >
       {feedback.msg}
+    </div>
+  );
+}
+
+/**
+ * BannerHorarioFueraDeRango
+ * Aviso amarillo: el barbero tiene bloques fuera del horario de atención del
+ * negocio (caso transición tras un cambio de horario del local). Esos bloques
+ * no generan turnos disponibles hasta que los ajuste.
+ */
+function BannerHorarioFueraDeRango() {
+  return (
+    <div
+      role="alert"
+      style={{
+        display: 'flex',
+        gap: 8,
+        background: theme.warningSoft,
+        border: `1px solid ${theme.warning}`,
+        borderRadius: theme.radius,
+        padding: '10px 12px',
+        color: theme.warning,
+        fontSize: theme.sizeBody,
+      }}
+    >
+      <AlertTriangle
+        size={18}
+        strokeWidth={1.75}
+        aria-hidden="true"
+        style={{ flexShrink: 0, marginTop: 1 }}
+      />
+      <span>
+        Tenés bloques de horario fuera del horario actual del negocio. Esos
+        bloques no aparecerán como disponibles. Ajustalos para reflejar tu
+        disponibilidad real.
+      </span>
     </div>
   );
 }

@@ -21,7 +21,7 @@ Branch: `feature/horario-atencion` (hija de `feature/turnero`).
 | 3.6 Cortocircuito en slots | ✅ Hecho (2026-05-20) | Sexta query en el `Promise.all` de `calcularSlotsDisponibles`. Si no hay fila en `tenant_horario_atencion` para el día → `return []`. |
 | 3.7 Cascada | ✅ Hecho (2026-05-20) | El grueso (`calcularDelta`, `ejecutarCascada`, `reemplazarHorario`) ya quedó en 3.3. Verificado contra el plan línea por línea: implementación completa. Best-effort de `cancelarEvento` y `enviarCancelacionAutomatica` garantizado — ambas atrapan su error internamente y devuelven `false`, nunca lanzan, así que un fallo de Calendar/mail no aborta la cascada. 409 sin confirmar no muta estado. Escenarios destructivos (409 sin confirmar / 200 con cascada / truncado / día cerrado / idempotencia) probados en Bruno. |
 | 3.8 Admin UI (`TabNegocio`) | ✅ Hecho (2026-05-21) | Componente nuevo `BloqueHorarioAtencion.jsx` renderizado dentro de `TabNegocio`. 7 días con toggle + pickers `<input type="time" step="1800">`, validación cliente de rango, flujo de confirmación de cascada vía modal local (estilo `SeccionGastos`, no primitivo extraído). Mantiene el estilo viejo del panel admin (`onPointerDown`, verde, `DM Sans`). |
-| 3.9 Frontend-barbero alerta | ⬜ Pendiente | |
+| 3.9 Frontend-barbero alerta | ✅ Hecho (2026-05-21) | `getTenant` agregado a `services/api.js`. `TabHorarios` carga el horario del tenant en paralelo. Banner amarillo (`theme.warning`) cuando hay bloques fuera de rango, recalculado en vivo con `useMemo`. Pickers de hora limitados con `min`/`max` al rango del negocio + borde rojo en bloques fuera. Días cerrados: botón "Agregar" deshabilitado y texto "El negocio no abre este día". Helpers puros `normalizarHora` y `bloqueFueraDeRango`. |
 
 ---
 
@@ -362,11 +362,11 @@ tenant.hora_fin]` por día. Mismo patrón que el admin.
 - [x] `PUT /api/admin/horario-atencion` con cambio destructivo + `confirmar_cascada=false` → 409 con delta.
 - [x] `PUT /api/admin/horario-atencion` con cambio destructivo + `confirmar_cascada=true` → cascada ejecuta, turnos cancelados, mails enviados, eventos de calendar cancelados.
 - [x] `POST /api/admin/horarios/:barbero_id` con bloque fuera del rango del tenant → 422.
-- [ ] Idem desde `frontend-barbero` (pendiente: depende de 3.9 / pickers limitados).
+- [x] Idem desde `frontend-barbero` (pickers limitados con `min`/`max`).
 - [x] `POST /api/turnero/turnos` con inicio fuera del horario del tenant → 422.
 - [x] Algoritmo de slots devuelve `[]` cuando la fecha cae en día cerrado.
 - [x] `TabNegocio.jsx` muestra el bloque, edita los 7 días, llama al PUT con confirmación.
-- [ ] `Gestion.jsx` de frontend-barbero muestra banner amarillo si hay bloques fuera de rango.
+- [x] `Gestion.jsx` de frontend-barbero muestra banner amarillo si hay bloques fuera de rango.
 - [x] `/docs/SQL_Schema.md` actualizado con la nueva tabla.
 - [x] `/docs/ruta_proyecto.md` actualizado con el nuevo controller/route/service.
 - [ ] `/docs/estado_actual.md` actualizado con la feature mergeada.
