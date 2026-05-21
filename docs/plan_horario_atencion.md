@@ -27,7 +27,7 @@ Branch: `feature/horario-atencion` (hija de `feature/turnero`).
 | 4.3 Endpoint público | ✅ Hecho (2026-05-21) | `getTenant` ahora devuelve `feriados` (futuros, `fecha >= hoy` en TZ Argentina) reemplazando el placeholder `[]` de la Fase 1. |
 | 4.4 Cortocircuito en slots | ✅ Hecho (2026-05-21) | Séptima query en el `Promise.all` de `calcularSlotsDisponibles`. Si la fecha tiene fila en `tenant_feriado` → `return []`, después del check de día cerrado. Validación 422 `feriado` agregada en los 3 endpoints de creación/reprogramación de turno (público, reprogramar, admin) reusando `existeFeriado`. |
 | 4.5 Cascada al cargar feriado | ✅ Hecho (2026-05-21) | Implementada en el paso 4.2 dentro de `feriadosService.js` (`calcularDeltaFeriado` + `ejecutarCascadaFeriado`). Sólo cancela turnos; no toca `barbero_horario` (un feriado no altera el horario semanal del barbero). |
-| 4.6 Admin UI (`TabNegocio`) | ⏳ Pendiente | |
+| 4.6 Admin UI (`TabNegocio`) | ✅ Hecho (2026-05-21) | Componente nuevo `BloqueFeriados.jsx` renderizado dentro de `TabNegocio`, debajo del horario de atención. Botón "Agregar feriado" → modal de alta (`<input type="date">` con `min`=hoy + descripción opcional); flujo 409 (`feriado_ya_existe` → error inline en el modal; `requiere_confirmacion` → modal de confirmación de cascada). Lista de feriados futuros con botón `×` por fila → `ConfirmDialog` de eliminación. Modales locales (estilo `SeccionGastos`, no primitivos extraídos). Mantiene el estilo viejo del panel admin (`onPointerDown`, verde, `DM Sans`). |
 
 ---
 
@@ -499,8 +499,8 @@ Justo debajo del bloque de Horario de atención:
 - [x] `DELETE /api/admin/feriados/:id` elimina el feriado. Verificado con Bruno.
 - [x] Algoritmo de slots devuelve `[]` para una fecha que es feriado. Verificado con Bruno.
 - [x] `POST /api/turnero/turnos` con `inicio` que cae en feriado → 422. Verificado con Bruno.
-- [ ] `TabNegocio.jsx` muestra el bloque de feriados, agrega/elimina.
-- [ ] `/docs/SQL_Schema.md`, `/docs/ruta_proyecto.md`, `/docs/estado_actual.md` actualizados.
+- [x] `TabNegocio.jsx` muestra el bloque de feriados, agrega/elimina.
+- [x] `/docs/SQL_Schema.md`, `/docs/ruta_proyecto.md`, `/docs/estado_actual.md` actualizados.
 
 ---
 

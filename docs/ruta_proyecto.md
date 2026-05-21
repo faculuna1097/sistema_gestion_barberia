@@ -256,8 +256,9 @@ sistema-gestion-barberia/
                     ├── SeccionTurnero.jsx     # Vista global de turnos del día (todos los barberos)
                     ├── SeccionGestion.jsx     # Contenedor de gestión con tabs
                     └── gestion/               # Tabs dentro de SeccionGestion
-                        ├── TabNegocio.jsx     # Datos del negocio (nombre, URL turnos) + bloque de horario de atención
+                        ├── TabNegocio.jsx     # Datos del negocio (nombre, URL turnos) + bloques de horario de atención y feriados
                         ├── BloqueHorarioAtencion.jsx  # Bloque dentro de TabNegocio: edita el horario semanal del tenant
+                        ├── BloqueFeriados.jsx        # Bloque dentro de TabNegocio: ABM de feriados del tenant
                         ├── TabBarberos.jsx    # ABM de barberos + filas expandibles (horarios/suspensiones)
                         ├── TabServicios.jsx   # ABM de servicios (crear, editar, inactivar)
                         ├── TabProductos.jsx   # ABM de productos (precio, stock, inactivar)
@@ -356,6 +357,7 @@ sistema-gestion-barberia/
 | `SeccionGestion.jsx` | Contenedor de las 6 tabs de configuración |
 | `TabNegocio.jsx` | Editar datos del negocio + bloque de horario de atención |
 | `BloqueHorarioAtencion.jsx` | Bloque de TabNegocio: edita el horario semanal del tenant con flujo de confirmación de cascada |
+| `BloqueFeriados.jsx` | Bloque de TabNegocio: ABM de feriados del tenant con flujo de confirmación de cascada |
 | `TabBarberos.jsx` | ABM de barberos + filas expandibles con horarios y suspensiones |
 | `TabTurnero.jsx` | Configuración del turnero (duración de slots) |
 | `TabServicios.jsx` | ABM de servicios |
