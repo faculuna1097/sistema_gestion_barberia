@@ -22,6 +22,12 @@ Branch: `feature/horario-atencion` (hija de `feature/turnero`).
 | 3.7 Cascada | ✅ Hecho (2026-05-20) | El grueso (`calcularDelta`, `ejecutarCascada`, `reemplazarHorario`) ya quedó en 3.3. Verificado contra el plan línea por línea: implementación completa. Best-effort de `cancelarEvento` y `enviarCancelacionAutomatica` garantizado — ambas atrapan su error internamente y devuelven `false`, nunca lanzan, así que un fallo de Calendar/mail no aborta la cascada. 409 sin confirmar no muta estado. Escenarios destructivos (409 sin confirmar / 200 con cascada / truncado / día cerrado / idempotencia) probados en Bruno. |
 | 3.8 Admin UI (`TabNegocio`) | ✅ Hecho (2026-05-21) | Componente nuevo `BloqueHorarioAtencion.jsx` renderizado dentro de `TabNegocio`. 7 días con toggle + pickers `<input type="time" step="1800">`, validación cliente de rango, flujo de confirmación de cascada vía modal local (estilo `SeccionGastos`, no primitivo extraído). Mantiene el estilo viejo del panel admin (`onPointerDown`, verde, `DM Sans`). |
 | 3.9 Frontend-barbero alerta | ✅ Hecho (2026-05-21) | `getTenant` agregado a `services/api.js`. `TabHorarios` carga el horario del tenant en paralelo. Banner amarillo (`theme.warning`) cuando hay bloques fuera de rango, recalculado en vivo con `useMemo`. Pickers de hora limitados con `min`/`max` al rango del negocio + borde rojo en bloques fuera. Días cerrados: botón "Agregar" deshabilitado y texto "El negocio no abre este día". Helpers puros `normalizarHora` y `bloqueFueraDeRango`. |
+| 4.1 Schema SQL `tenant_feriado` | ✅ Hecho (2026-05-21) | Tabla creada en Supabase. Se omitió el `CREATE INDEX` explícito: el constraint `UNIQUE (tenant_id, fecha)` ya provee el índice equivalente. `SQL_Schema.md` actualizado. Sin seed (los feriados son ABM puro). |
+| 4.2 Endpoints admin | ⏳ Pendiente | |
+| 4.3 Endpoint público | ⏳ Pendiente | |
+| 4.4 Cortocircuito en slots | ⏳ Pendiente | |
+| 4.5 Cascada al cargar feriado | ⏳ Pendiente | |
+| 4.6 Admin UI (`TabNegocio`) | ⏳ Pendiente | |
 
 ---
 
@@ -484,7 +490,7 @@ Justo debajo del bloque de Horario de atención:
 
 ### 4.7 Criterios de aceptación — Fase 2
 
-- [ ] Migración SQL ejecutada (tabla + índice).
+- [x] Migración SQL ejecutada (tabla `tenant_feriado`; índice explícito omitido, el constraint UNIQUE lo cubre).
 - [ ] `GET /api/turnero/tenant` ahora también devuelve `feriados` (futuros).
 - [ ] `GET /api/admin/feriados` lista los feriados.
 - [ ] `POST /api/admin/feriados` con día sin turnos → 201, feriado guardado.

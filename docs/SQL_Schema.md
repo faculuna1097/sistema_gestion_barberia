@@ -152,6 +152,16 @@ CREATE TABLE public.tenant_horario_atencion (
   CONSTRAINT tenant_horario_atencion_dia_unico UNIQUE (tenant_id, dia_semana),
   CONSTRAINT tenant_horario_atencion_horas_validas CHECK (hora_inicio < hora_fin)
 );
+CREATE TABLE public.tenant_feriado (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tenant_id uuid NOT NULL,
+  fecha date NOT NULL,
+  descripcion text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT tenant_feriado_pkey PRIMARY KEY (id),
+  CONSTRAINT tenant_feriado_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  CONSTRAINT tenant_feriado_fecha_unica UNIQUE (tenant_id, fecha)
+);
 CREATE TABLE public.turno (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   tenant_id uuid NOT NULL,
