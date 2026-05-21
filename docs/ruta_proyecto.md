@@ -65,7 +65,8 @@ sistema-gestion-barberia/
 │       │   ├── clientes.js            # Búsqueda y listado de clientes backoffice
 │       │   ├── planilla.js            # Planilla semanal backoffice (scope según rol)
 │       │   ├── turneroConfig.js       # Config turnero: GET/PUT duracion_slot_minutos (admin)
-│       │   └── horarioAtencion.js     # Horario semanal de atención del tenant (GET/PUT con cascada)
+│       │   ├── horarioAtencion.js     # Horario semanal de atención del tenant (GET/PUT con cascada)
+│       │   └── feriados.js            # Feriados puntuales del tenant (GET/POST/DELETE con cascada)
 │       │
 │       ├── routes/                    # Definición de rutas HTTP (conectan URL → controller)
 │       │   ├── authAdmin.js           # /api/auth/admin/login
@@ -95,6 +96,7 @@ sistema-gestion-barberia/
 │       │   ├── adminNegocio.js        # /api/admin/negocio/* (requiereRol admin)
 │       │   ├── adminTurneroConfig.js  # /api/admin/turnero/config (requiereRol admin)
 │       │   ├── adminHorarioAtencion.js # /api/admin/horario-atencion (requiereRol admin)
+│       │   ├── adminFeriados.js       # /api/admin/feriados (requiereRol admin)
 │       │   └── health.js              # /api/health (health check)
 │       │
 │       ├── services/                  # Lógica de negocio reutilizable (integraciones externas, algoritmos)
@@ -105,7 +107,8 @@ sistema-gestion-barberia/
 │       │   ├── horariosService.js     # CRUD de horarios de barberos
 │       │   ├── suspensionesService.js # CRUD suspensiones (flujo 409 → confirmar_cancelacion → 201)
 │       │   ├── planillaService.js     # Detalle y resumen semanal con scoping por barbero
-│       │   └── horarioAtencionService.js # Horario de atención del tenant: delta + cascada (luxon)
+│       │   ├── horarioAtencionService.js # Horario de atención del tenant: delta + cascada (luxon)
+│       │   └── feriadosService.js     # Feriados del tenant: ABM + cascada de cancelación (luxon)
 │       │
 │       └── scripts/                   # Scripts CLI de utilidad (no son rutas HTTP)
 │           ├── crearTenant.js         # Alta de nuevo cliente (ejecutar manualmente)

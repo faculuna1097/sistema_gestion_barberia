@@ -75,9 +75,9 @@ export const calcularSlotsDisponibles = async ({ tenantId, barberoId, servicioId
   // Luxon devuelve 1=lunes...7=domingo, por eso el módulo 7.
   const diaSemana = fechaArg.weekday % 7;
 
-  // 5 queries en paralelo. Todas filtran por tenant_id para impedir
+  // 7 queries en paralelo. Todas filtran por tenant_id para impedir
   // cruce de datos entre tenants.
-  const [tenantRes, servicioRes, horariosRes, turnosRes, suspensionesRes, horarioTenantRes] = await Promise.all([
+  const [tenantRes, servicioRes, horariosRes, turnosRes, suspensionesRes, horarioTenantRes, feriadoRes] = await Promise.all([
     query(
       `SELECT duracion_slot_minutos FROM tenant WHERE id = $1 AND activo = true`,
       [tenantId]
@@ -118,6 +118,10 @@ export const calcularSlotsDisponibles = async ({ tenantId, barberoId, servicioId
        WHERE tenant_id = $1 AND dia_semana = $2`,
       [tenantId, diaSemana]
     ),
+    query(
+      `SELECT 1 FROM tenant_feriado WHERE tenant_id = $1 AND fecha = $2::date`,
+      [tenantId, fecha]
+    ),
   ]);
 
   if (tenantRes.rows.length === 0) {
@@ -130,6 +134,12 @@ export const calcularSlotsDisponibles = async ({ tenantId, barberoId, servicioId
   // El negocio no abre ese día (sin fila en tenant_horario_atencion) → no hay slots.
   if (horarioTenantRes.rows.length === 0) {
     console.log('[disponibilidadService] calcularSlotsDisponibles — día cerrado para el negocio, devuelvo array vacío');
+    return [];
+  }
+
+  // La fecha es feriado → el negocio cierra el día completo, no hay slots.
+  if (feriadoRes.rows.length > 0) {
+    console.log('[disponibilidadService] calcularSlotsDisponibles — fecha feriado, devuelvo array vacío');
     return [];
   }
   // No hace falta verificar que el barbero exista: si no tiene horarios para

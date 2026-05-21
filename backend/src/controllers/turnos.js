@@ -11,6 +11,7 @@ import {
   inicioPosteriorAhora,
 } from '../services/turnosService.js';
 import { validarTurnoEnHorario } from '../services/horarioAtencionService.js';
+import { existeFeriado } from '../services/feriadosService.js';
 import { TZ } from '../utils/constantes.js';
 
 const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -103,6 +104,12 @@ export const crearTurnoAdmin = async (req, res) => {
         mensaje: valHorario.mensaje,
         ...(valHorario.limite && { limite: valHorario.limite }),
       });
+    }
+
+    // ── Validar que el turno no caiga en un feriado ─────────────────────────
+    if (await existeFeriado(req.tenant_id, inicioDT.toISODate())) {
+      console.warn('[turnos] crearTurnoAdmin — turno en día feriado');
+      return res.status(422).json({ codigo: 'feriado', mensaje: 'El negocio está cerrado por feriado ese día' });
     }
 
     // ── Upsert cliente ──────────────────────────────────────────────────────

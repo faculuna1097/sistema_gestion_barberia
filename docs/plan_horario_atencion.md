@@ -23,10 +23,10 @@ Branch: `feature/horario-atencion` (hija de `feature/turnero`).
 | 3.8 Admin UI (`TabNegocio`) | ✅ Hecho (2026-05-21) | Componente nuevo `BloqueHorarioAtencion.jsx` renderizado dentro de `TabNegocio`. 7 días con toggle + pickers `<input type="time" step="1800">`, validación cliente de rango, flujo de confirmación de cascada vía modal local (estilo `SeccionGastos`, no primitivo extraído). Mantiene el estilo viejo del panel admin (`onPointerDown`, verde, `DM Sans`). |
 | 3.9 Frontend-barbero alerta | ✅ Hecho (2026-05-21) | `getTenant` agregado a `services/api.js`. `TabHorarios` carga el horario del tenant en paralelo. Banner amarillo (`theme.warning`) cuando hay bloques fuera de rango, recalculado en vivo con `useMemo`. Pickers de hora limitados con `min`/`max` al rango del negocio + borde rojo en bloques fuera. Días cerrados: botón "Agregar" deshabilitado y texto "El negocio no abre este día". Helpers puros `normalizarHora` y `bloqueFueraDeRango`. |
 | 4.1 Schema SQL `tenant_feriado` | ✅ Hecho (2026-05-21) | Tabla creada en Supabase. Se omitió el `CREATE INDEX` explícito: el constraint `UNIQUE (tenant_id, fecha)` ya provee el índice equivalente. `SQL_Schema.md` actualizado. Sin seed (los feriados son ABM puro). |
-| 4.2 Endpoints admin | ⏳ Pendiente | |
-| 4.3 Endpoint público | ⏳ Pendiente | |
-| 4.4 Cortocircuito en slots | ⏳ Pendiente | |
-| 4.5 Cascada al cargar feriado | ⏳ Pendiente | |
+| 4.2 Endpoints admin | ✅ Hecho (2026-05-21) | GET/POST/DELETE `/api/admin/feriados`. Service/controller/route nuevos. POST con flujo 409 (`feriado_ya_existe` / `requiere_confirmacion`) + cascada de cancelación de turnos (sólo turnos, no toca `barbero_horario`). Mail con `motivo: 'Feriado'` y descripción en el `intro`. Se permite feriado de hoy (cierre de imprevisto); se rechaza fecha pasada. Ruta registrada en `index.js`. |
+| 4.3 Endpoint público | ✅ Hecho (2026-05-21) | `getTenant` ahora devuelve `feriados` (futuros, `fecha >= hoy` en TZ Argentina) reemplazando el placeholder `[]` de la Fase 1. |
+| 4.4 Cortocircuito en slots | ✅ Hecho (2026-05-21) | Séptima query en el `Promise.all` de `calcularSlotsDisponibles`. Si la fecha tiene fila en `tenant_feriado` → `return []`, después del check de día cerrado. Validación 422 `feriado` agregada en los 3 endpoints de creación/reprogramación de turno (público, reprogramar, admin) reusando `existeFeriado`. |
+| 4.5 Cascada al cargar feriado | ✅ Hecho (2026-05-21) | Implementada en el paso 4.2 dentro de `feriadosService.js` (`calcularDeltaFeriado` + `ejecutarCascadaFeriado`). Sólo cancela turnos; no toca `barbero_horario` (un feriado no altera el horario semanal del barbero). |
 | 4.6 Admin UI (`TabNegocio`) | ⏳ Pendiente | |
 
 ---
@@ -491,14 +491,14 @@ Justo debajo del bloque de Horario de atención:
 ### 4.7 Criterios de aceptación — Fase 2
 
 - [x] Migración SQL ejecutada (tabla `tenant_feriado`; índice explícito omitido, el constraint UNIQUE lo cubre).
-- [ ] `GET /api/turnero/tenant` ahora también devuelve `feriados` (futuros).
-- [ ] `GET /api/admin/feriados` lista los feriados.
-- [ ] `POST /api/admin/feriados` con día sin turnos → 201, feriado guardado.
-- [ ] `POST /api/admin/feriados` con día con turnos + `confirmar_cascada=false` → 409.
-- [ ] `POST /api/admin/feriados` con día con turnos + `confirmar_cascada=true` → cascada ejecuta.
-- [ ] `DELETE /api/admin/feriados/:id` elimina el feriado.
-- [ ] Algoritmo de slots devuelve `[]` para una fecha que es feriado.
-- [ ] `POST /api/turnero/turnos` con `inicio` que cae en feriado → 422.
+- [x] `GET /api/turnero/tenant` ahora también devuelve `feriados` (futuros). Verificado con Bruno.
+- [x] `GET /api/admin/feriados` lista los feriados. Verificado con Bruno.
+- [x] `POST /api/admin/feriados` con día sin turnos → 201, feriado guardado. Verificado con Bruno.
+- [x] `POST /api/admin/feriados` con día con turnos + `confirmar_cascada=false` → 409. Verificado con Bruno.
+- [x] `POST /api/admin/feriados` con día con turnos + `confirmar_cascada=true` → cascada ejecuta. Verificado con Bruno.
+- [x] `DELETE /api/admin/feriados/:id` elimina el feriado. Verificado con Bruno.
+- [x] Algoritmo de slots devuelve `[]` para una fecha que es feriado. Verificado con Bruno.
+- [x] `POST /api/turnero/turnos` con `inicio` que cae en feriado → 422. Verificado con Bruno.
 - [ ] `TabNegocio.jsx` muestra el bloque de feriados, agrega/elimina.
 - [ ] `/docs/SQL_Schema.md`, `/docs/ruta_proyecto.md`, `/docs/estado_actual.md` actualizados.
 

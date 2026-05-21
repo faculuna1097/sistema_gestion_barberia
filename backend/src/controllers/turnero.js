@@ -17,6 +17,7 @@ import {
   inicioPosteriorAhora,
 } from '../services/turnosService.js';
 import { obtenerHorarioCrudo, validarTurnoEnHorario } from '../services/horarioAtencionService.js';
+import { obtenerFeriados, existeFeriado } from '../services/feriadosService.js';
 import { TZ } from '../utils/constantes.js';
 
 // Regex YYYY-MM-DD para validar el query param ?fecha.
@@ -50,14 +51,17 @@ export const getTenant = async (req, res) => {
     // Horario semanal de atención: sólo los días abiertos. El cliente lo usa
     // para grisar días cerrados sin pegarle al endpoint de disponibilidad.
     const horarioAtencion = await obtenerHorarioCrudo(req.tenant_id);
+    // Feriados futuros (fecha >= hoy): el cliente los usa para grisar días.
+    const hoy = DateTime.now().setZone(TZ).toISODate();
+    const feriados = await obtenerFeriados(req.tenant_id, hoy);
     console.log('[turnero] getTenant — completado | nombre:', row.nombre_negocio,
-      '| días abiertos:', horarioAtencion.length);
+      '| días abiertos:', horarioAtencion.length, '| feriados:', feriados.length);
     res.json({
       id: row.id,
       nombre: row.nombre_negocio,
       logo_url: row.logo,
       horario_atencion: horarioAtencion,
-      feriados: [], // se llena en Fase 2 (tenant_feriado)
+      feriados,
     });
   } catch (err) {
     console.error('[turnero] Error en getTenant:', err.message);
@@ -226,6 +230,12 @@ export const crearTurno = async (req, res) => {
         mensaje: valHorario.mensaje,
         ...(valHorario.limite && { limite: valHorario.limite }),
       });
+    }
+
+    // ── Validar que el turno no caiga en un feriado ─────────────────────────
+    if (await existeFeriado(req.tenant_id, inicioDT.toISODate())) {
+      console.warn('[turnero] crearTurno — turno en día feriado');
+      return res.status(422).json({ codigo: 'feriado', mensaje: 'El negocio está cerrado por feriado ese día' });
     }
 
     // ── Upsert cliente ──────────────────────────────────────────────────────
@@ -445,6 +455,12 @@ export const reprogramarTurno = async (req, res) => {
         mensaje: valHorario.mensaje,
         ...(valHorario.limite && { limite: valHorario.limite }),
       });
+    }
+
+    // ── Validar que el nuevo horario no caiga en un feriado ─────────────────
+    if (await existeFeriado(req.tenant_id, inicioDT.toISODate())) {
+      console.warn('[turnero] reprogramarTurno — turno en día feriado');
+      return res.status(422).json({ codigo: 'feriado', mensaje: 'El negocio está cerrado por feriado ese día' });
     }
 
     // ── UPDATE con captura de 23P01 ────────────────────────────────────────
