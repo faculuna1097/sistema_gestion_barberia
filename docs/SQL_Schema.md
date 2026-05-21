@@ -162,6 +162,17 @@ CREATE TABLE public.tenant_feriado (
   CONSTRAINT tenant_feriado_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
   CONSTRAINT tenant_feriado_fecha_unica UNIQUE (tenant_id, fecha)
 );
+CREATE TABLE public.tenant_imagen (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tenant_id uuid NOT NULL,
+  tipo text NOT NULL CHECK (tipo = ANY (ARRAY['local'::text, 'corte'::text, 'logo'::text])),
+  orden smallint NOT NULL DEFAULT 1 CHECK (orden >= 1),
+  storage_path text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT tenant_imagen_pkey PRIMARY KEY (id),
+  CONSTRAINT tenant_imagen_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  CONSTRAINT tenant_imagen_unico UNIQUE (tenant_id, tipo, orden)
+);
 CREATE TABLE public.turno (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   tenant_id uuid NOT NULL,

@@ -39,6 +39,7 @@ import adminTurneroConfigRoutes from './routes/adminTurneroConfig.js';
 import adminOperativoRoutes from './routes/adminOperativo.js';
 import adminHorarioAtencionRoutes from './routes/adminHorarioAtencion.js';
 import adminFeriadosRoutes from './routes/adminFeriados.js';
+import adminImagenesRoutes from './routes/adminImagenes.js';
 import { requiereRol } from './middlewares/requiereRolMiddleware.js';
 import { getNegocio } from './controllers/gestion.js';
 
@@ -160,6 +161,7 @@ app.use('/api/admin/turnero/config', verificarToken, requiereRol('admin'), admin
 app.use('/api/admin/operativo',      verificarToken, requiereRol('admin'), adminOperativoRoutes);
 app.use('/api/admin/horario-atencion', verificarToken, requiereRol('admin'), adminHorarioAtencionRoutes);
 app.use('/api/admin/feriados',         verificarToken, requiereRol('admin'), adminFeriadosRoutes);
+app.use('/api/admin/imagenes',         verificarToken, requiereRol('admin'), adminImagenesRoutes);
 
 console.log('[index] Rutas registradas correctamente');
 
