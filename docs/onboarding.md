@@ -48,7 +48,10 @@ node src/scripts/crearTenant.js "Nombre Barbería" subdominio 1234
 - Setea `suscripcion_vigente_hasta` al último día del mes actual.
 - Setea `configuracion` con el default `{ "ciudad": "Buenos Aires", "moneda": "ARS" }`.
 - Inserta el tenant con `activo = true`.
-- Imprime el UUID, nombre, subdominio, fecha de suscripción y URL.
+- Seedea el horario de atención default en `tenant_horario_atencion`: **Lunes a Sábado 10:00-19:00** (domingo cerrado). El dueño lo ajusta desde el panel admin (Gestión → Negocio) al activar la cuenta.
+- Imprime el UUID, nombre, subdominio, fecha de suscripción, horario y URL.
+
+> Si el seed del horario falla (caso raro), el script igual termina con éxito: el tenant queda creado y se avisa por consola para cargar el horario manualmente desde el admin.
 
 **Output esperado:**
 
@@ -58,6 +61,7 @@ node src/scripts/crearTenant.js "Nombre Barbería" subdominio 1234
   Nombre:       Nombre Barbería
   Subdominio:   subdominio
   Suscripción:  vigente hasta YYYY-MM-DD
+  Horario:      L-S 10:00-19:00 (default, ajustable desde el admin)
   URL:          subdominio.barbermanager.app
 ```
 
@@ -101,6 +105,7 @@ Pasarle al cliente:
 - [ ] Subdominio responde correctamente.
 - [ ] PIN entra al panel admin.
 - [ ] Suscripción vigente hasta fin del mes actual (default automático del script).
+- [ ] Horario de atención seedeado (L-S 10:00-19:00) — recordarle al cliente que lo ajuste a su horario real desde Gestión → Negocio.
 - [ ] Cliente recibió URL, PIN y manual.
 
 ---
