@@ -1,5 +1,7 @@
 # Plan — Horario de atención y feriados
 
+**Estado:** COMPLETADO 21/05/2026
+
 Plan para introducir el concepto de **horario de atención del negocio** y
 **feriados** a nivel tenant, con sus validaciones, cascadas y UI de
 gestión. Toda la administración la hace el dueño desde el panel admin.
@@ -508,9 +510,9 @@ Justo debajo del bloque de Horario de atención:
 
 - **`/docs/onboarding.md`**: agregar paso "El script `crearTenant.js`
   ahora seedea horario L-S 10:00-19:00 por default. El dueño lo ajusta
-  desde el admin al activar la cuenta."
+  desde el admin al activar la cuenta.✅ resuelto.
 - **`scripts/crearTenant.js`**: que inserte las 6 filas default
-  (`tenant_horario_atencion`) tras crear el tenant.
+  (`tenant_horario_atencion`) tras crear el tenant. ✅ resuelto.
 - ~~**`scripts/testAdminEndpoints.js`**: agregar tests de horario/feriados~~
   — descartado. El script `testAdminEndpoints.js` fue eliminado
   intencionalmente (commit `101e98c`); no se agregan estos tests.
