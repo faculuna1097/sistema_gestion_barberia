@@ -19,8 +19,8 @@ Branch: `feature/horario-atencion` (hija de `feature/turnero`).
 | 3.4 Endpoint público | ✅ Hecho (2026-05-20) | `getTenant` ahora devuelve `horario_atencion` (días abiertos) y `feriados: []` (placeholder Fase 2). |
 | 3.5 Validaciones write-time | ✅ Hecho (2026-05-20) | Helpers `validarRangoEnHorario` (pura) y `validarTurnoEnHorario` en `horarioAtencionService.js`. 422 en `putHorarios` (bloques de barbero) y en los 3 endpoints de turno (crear público, reprogramar, crear admin). |
 | 3.6 Cortocircuito en slots | ✅ Hecho (2026-05-20) | Sexta query en el `Promise.all` de `calcularSlotsDisponibles`. Si no hay fila en `tenant_horario_atencion` para el día → `return []`. |
-| 3.7 Cascada | ⬜ Pendiente | |
-| 3.8 Admin UI (`TabNegocio`) | ⬜ Pendiente | |
+| 3.7 Cascada | ✅ Hecho (2026-05-20) | El grueso (`calcularDelta`, `ejecutarCascada`, `reemplazarHorario`) ya quedó en 3.3. Verificado contra el plan línea por línea: implementación completa. Best-effort de `cancelarEvento` y `enviarCancelacionAutomatica` garantizado — ambas atrapan su error internamente y devuelven `false`, nunca lanzan, así que un fallo de Calendar/mail no aborta la cascada. 409 sin confirmar no muta estado. Escenarios destructivos (409 sin confirmar / 200 con cascada / truncado / día cerrado / idempotencia) probados en Bruno. |
+| 3.8 Admin UI (`TabNegocio`) | ✅ Hecho (2026-05-21) | Componente nuevo `BloqueHorarioAtencion.jsx` renderizado dentro de `TabNegocio`. 7 días con toggle + pickers `<input type="time" step="1800">`, validación cliente de rango, flujo de confirmación de cascada vía modal local (estilo `SeccionGastos`, no primitivo extraído). Mantiene el estilo viejo del panel admin (`onPointerDown`, verde, `DM Sans`). |
 | 3.9 Frontend-barbero alerta | ⬜ Pendiente | |
 
 ---
@@ -356,19 +356,19 @@ tenant.hora_fin]` por día. Mismo patrón que el admin.
 ### 3.10 Criterios de aceptación — Fase 1
 
 - [x] Migración SQL ejecutada en Supabase (tabla + seed Kingsai/demo).
-- [ ] `GET /api/turnero/tenant` devuelve `horario_atencion` (array de 7 o menos).
-- [ ] `GET /api/admin/horario-atencion` devuelve los 7 días.
-- [ ] `PUT /api/admin/horario-atencion` con cambio inocuo → 200, sin cascada.
-- [ ] `PUT /api/admin/horario-atencion` con cambio destructivo + `confirmar_cascada=false` → 409 con delta.
-- [ ] `PUT /api/admin/horario-atencion` con cambio destructivo + `confirmar_cascada=true` → cascada ejecuta, turnos cancelados, mails enviados, eventos de calendar cancelados.
-- [ ] `POST /api/admin/horarios/:barbero_id` con bloque fuera del rango del tenant → 422.
-- [ ] Idem desde `frontend-barbero`.
-- [ ] `POST /api/turnero/turnos` con inicio fuera del horario del tenant → 422.
-- [ ] Algoritmo de slots devuelve `[]` cuando la fecha cae en día cerrado.
-- [ ] `TabNegocio.jsx` muestra el bloque, edita los 7 días, llama al PUT con confirmación.
+- [x] `GET /api/turnero/tenant` devuelve `horario_atencion` (array de 7 o menos).
+- [x] `GET /api/admin/horario-atencion` devuelve los 7 días.
+- [x] `PUT /api/admin/horario-atencion` con cambio inocuo → 200, sin cascada.
+- [x] `PUT /api/admin/horario-atencion` con cambio destructivo + `confirmar_cascada=false` → 409 con delta.
+- [x] `PUT /api/admin/horario-atencion` con cambio destructivo + `confirmar_cascada=true` → cascada ejecuta, turnos cancelados, mails enviados, eventos de calendar cancelados.
+- [x] `POST /api/admin/horarios/:barbero_id` con bloque fuera del rango del tenant → 422.
+- [ ] Idem desde `frontend-barbero` (pendiente: depende de 3.9 / pickers limitados).
+- [x] `POST /api/turnero/turnos` con inicio fuera del horario del tenant → 422.
+- [x] Algoritmo de slots devuelve `[]` cuando la fecha cae en día cerrado.
+- [x] `TabNegocio.jsx` muestra el bloque, edita los 7 días, llama al PUT con confirmación.
 - [ ] `Gestion.jsx` de frontend-barbero muestra banner amarillo si hay bloques fuera de rango.
-- [ ] `/docs/SQL_Schema.md` actualizado con la nueva tabla.
-- [ ] `/docs/ruta_proyecto.md` actualizado con el nuevo controller/route/service.
+- [x] `/docs/SQL_Schema.md` actualizado con la nueva tabla.
+- [x] `/docs/ruta_proyecto.md` actualizado con el nuevo controller/route/service.
 - [ ] `/docs/estado_actual.md` actualizado con la feature mergeada.
 
 ---

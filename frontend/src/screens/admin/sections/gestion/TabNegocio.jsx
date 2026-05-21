@@ -1,6 +1,7 @@
 // /frontend/src/screens/admin/sections/gestion/TabNegocio.jsx
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../../../../services/api';
+import BloqueHorarioAtencion from './BloqueHorarioAtencion';
 
 export default function TabNegocio() {
   const [nombreNegocio, setNombreNegocio]     = useState('');
@@ -131,6 +132,8 @@ export default function TabNegocio() {
         </button>
 
       </div>
+
+      <BloqueHorarioAtencion />
     </div>
   );
 }
@@ -139,6 +142,9 @@ const styles = {
   contenedor: {
     maxWidth: '580px',
     margin: '0 auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
   },
   card: {
     backgroundColor: '#fafafa',
