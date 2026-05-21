@@ -511,11 +511,9 @@ Justo debajo del bloque de Horario de atención:
   desde el admin al activar la cuenta."
 - **`scripts/crearTenant.js`**: que inserte las 6 filas default
   (`tenant_horario_atencion`) tras crear el tenant.
-- **`scripts/testAdminEndpoints.js`**: agregar tests de
-  - PUT horario-atencion inocuo / con cascada
-  - validación 422 al crear bloque de barbero fuera de rango
-  - validación 422 al crear turno fuera de horario
-  - POST feriado / cascada
+- ~~**`scripts/testAdminEndpoints.js`**: agregar tests de horario/feriados~~
+  — descartado. El script `testAdminEndpoints.js` fue eliminado
+  intencionalmente (commit `101e98c`); no se agregan estos tests.
 - ~~**Deuda 1+2 del rediseño del turnero**~~ ✅ resuelto: `MiniCalendario`
   grisa días cerrados y feriados con `tenant.horario_atencion` +
   `tenant.feriados`, sin endpoint `/disponibilidad/dias`. Queda pendiente
