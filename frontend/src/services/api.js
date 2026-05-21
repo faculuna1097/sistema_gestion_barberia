@@ -589,3 +589,55 @@ export const putAdminTurneroConfig = async (datos) => {
   }
   return res.json();
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN — Imágenes del negocio (fotos del local, cortes de ejemplo, logos)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * getImagenesAdmin
+ * Obtiene todas las imágenes del tenant para administrarlas en el panel.
+ * @returns {Promise<Array>} [{ id, tipo, orden, url }]
+ */
+export const getImagenesAdmin = async () => {
+  const res = await apiFetch('/admin/imagenes');
+  if (!res.ok) throw new Error('Error al obtener las imágenes');
+  return res.json();
+};
+
+/**
+ * subirImagen
+ * Sube (o reemplaza) la imagen de un slot. El blob ya viene comprimido a WebP
+ * desde el componente; se envía como binario crudo, no como JSON.
+ * @param {string} tipo - 'local' | 'corte' | 'logo'
+ * @param {number} orden - slot dentro del tipo
+ * @param {Blob} blob - imagen WebP ya comprimida
+ * @returns {Promise<Object>} { id, tipo, orden, url }
+ */
+export const subirImagen = async (tipo, orden, blob) => {
+  const res = await apiFetch(`/admin/imagenes?tipo=${tipo}&orden=${orden}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'image/webp' },
+    body: blob,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Error al subir la imagen');
+  }
+  return res.json();
+};
+
+/**
+ * eliminarImagen
+ * Borra una imagen (la fila y el archivo de Storage).
+ * @param {string} id - UUID de la imagen
+ * @returns {Promise<Object>} { ok: true }
+ */
+export const eliminarImagen = async (id) => {
+  const res = await apiFetch(`/admin/imagenes/${id}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Error al eliminar la imagen');
+  }
+  return res.json();
+};

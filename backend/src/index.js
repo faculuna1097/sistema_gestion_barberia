@@ -42,6 +42,7 @@ import adminFeriadosRoutes from './routes/adminFeriados.js';
 import adminImagenesRoutes from './routes/adminImagenes.js';
 import { requiereRol } from './middlewares/requiereRolMiddleware.js';
 import { getNegocio } from './controllers/gestion.js';
+import { getImagenes } from './controllers/imagenes.js';
 
 console.log('[index] Iniciando Barbershop Manager API...');
 
@@ -107,6 +108,10 @@ app.use('/api/turnero',    turneroRoutes);
 // GET /api/negocio — datos públicos del negocio (nombre, logo).
 // Lo consume App.jsx antes del login para mostrar el logo del tenant.
 app.get('/api/negocio',    getNegocio);
+// GET /api/negocio/imagenes — imágenes públicas del tenant (local, cortes, logo).
+// Mismo handler que la versión admin (solo lee, usa req.tenant_id); acá sin
+// token para que frontend-turnero y frontend-barbero las consuman.
+app.get('/api/negocio/imagenes', getImagenes);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS OPERATIVAS — accesibles con JWT operativo o admin

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { apiFetch } from '../../../../services/api';
 import BloqueHorarioAtencion from './BloqueHorarioAtencion';
 import BloqueFeriados from './BloqueFeriados';
+import BloqueImagenes from './BloqueImagenes';
 
 export default function TabNegocio() {
   const [nombreNegocio, setNombreNegocio]     = useState('');
@@ -137,6 +138,8 @@ export default function TabNegocio() {
       <BloqueHorarioAtencion />
 
       <BloqueFeriados />
+
+      <BloqueImagenes />
     </div>
   );
 }
