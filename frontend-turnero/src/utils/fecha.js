@@ -111,12 +111,13 @@ export function esHoy(fechaStr) {
 }
 
 /**
- * esDomingo
- * True si la fecha cae en domingo (asumiendo barbería cerrada los domingos).
+ * diaDeSemana
+ * Devuelve el índice del día de la semana para un YYYY-MM-DD.
+ * Convención 0-6 (0=domingo), la misma que usa el backend en `horario_atencion`.
  * @param {string} fechaStr - 'YYYY-MM-DD'
- * @returns {boolean}
+ * @returns {number} 0=domingo, 1=lunes, ..., 6=sábado
  */
-export function esDomingo(fechaStr) {
+export function diaDeSemana(fechaStr) {
   const [y, m, d] = fechaStr.split('-').map(Number);
-  return new Date(y, m - 1, d).getDay() === 0;
+  return new Date(y, m - 1, d).getDay();
 }

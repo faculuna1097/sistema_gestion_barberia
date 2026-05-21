@@ -189,6 +189,7 @@ function App() {
     case 3:
       return (
         <SeleccionFecha
+          tenant={tenant}
           seleccionada={reserva.fecha}
           onSeleccionar={(f) => { actualizarReserva({ fecha: f, horario: null }); siguiente(); }}
           onVolver={volver}

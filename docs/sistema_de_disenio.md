@@ -414,12 +414,12 @@ Pendientes detectados durante el rediseño del turnero. **Si tomás alguno,
 actualizá este doc.**
 
 1. `App.jsx` del turnero — loading/error states pelados (`<p>Cargando...</p>`). *(parcialmente atacado en `b95ae89`)*
-2. `esDomingo` hardcodeado en `utils/fecha.js` — cada tenant debería definir qué días abre.
-3. Falta endpoint `/disponibilidad/dias` — para no mostrar fechas con 0 slots.
+2. ~~`esDomingo` hardcodeado~~ — **Resuelto**: `MiniCalendario` grisa los días que el negocio no atiende y los feriados, leyendo `horario_atencion` + `feriados` de `GET /api/turnero/tenant`.
+3. **Falta endpoint de disponibilidad por día (precisión por barbero).** Hoy `MiniCalendario` ya grisa los días cerrados del *negocio* (día de semana sin atención + feriados). Lo que NO cubre: días en que el negocio abre pero el *barbero elegido* no tiene slots (sin horario ese día, suspendido, o todo reservado) — esos días siguen clickeables y llevan a una pantalla de horarios vacía. Resolverlo requiere un endpoint que, dado `barbero_id` + `servicio_id` + un rango de fechas, devuelva qué días tienen ≥1 slot, para que `MiniCalendario` también los grise. Construir sólo cuando se quiera esa precisión; para el MVP, grisar los días cerrados del negocio alcanza.
 4. Cortes de turno (13:00 y 20:00) hardcodeados en `SeleccionHorario.jsx` — debería ser por tenant.
 5. Validación de teléfono solo AR (10 dígitos) hardcodeada en `DatosCliente.jsx`.
 6. Catálogos (`servicios`, `barberos`) sin `ORDER BY` explícito en backend.
-7. `MiniCalendario` muestra "2 semanas" hardcodeado en el header — si en otro lugar lo usamos para más/menos días, el sublabel queda errado.
+7. ~~`MiniCalendario` "2 semanas" hardcodeado~~ — **Resuelto**: el sublabel se deriva de `dias.length` como "N días".
 8. **Inline styles + `useState` para hover** (§4.1, §4.2) — validado solo para mobile/turnero. **Antes de arrancar el front de gestión**, revisar: las tablas densas con muchas filas hover-ables pueden hacer ruidoso el re-render. Considerar híbrido: tokens en JS + `:hover` puntual via `<style>` scoped donde la performance importe.
 9. **Contraste WCAG no verificado** — `mutedSoft` sobre `surfaceAlt`, `inkSoft` sobre `bg`, blanco sobre `accent`. Auditar con WebAIM antes de release público.
 10. ~~**Iconografía sin librería elegida**~~ — **Resuelto**: se eligió Lucide (`lucide-react`). Ver §3.7.
@@ -431,4 +431,4 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-05-19 — agregada §6.3 (primitivos propios de frontend-barbero), §3.7 actualizada (Lucide elegida), deudas 13-15.*
+*Última actualización: 2026-05-21 — deudas 2 y 7 resueltas (MiniCalendario grisa días cerrados/feriados, sublabel derivado), deuda 3 reescrita como pendiente de precisión por barbero.*

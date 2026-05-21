@@ -300,6 +300,7 @@ function GestionTurno({ token, tenant }) {
         {/* ── Sub-flow de reprogramación ───────────────────── */}
         {reprogramando && (
           <ReprogramarPanel
+            tenant={tenant}
             fechaReprog={fechaReprog}
             slotsReprog={slotsReprog}
             cargandoSlots={cargandoSlots}
@@ -352,6 +353,7 @@ function GestionTurno({ token, tenant }) {
  * Flujo: elegir fecha → elegir slot (pre-selección) → confirmar reprogramación.
  */
 function ReprogramarPanel({
+  tenant,
   fechaReprog,
   slotsReprog,
   cargandoSlots,
@@ -394,6 +396,8 @@ function ReprogramarPanel({
         dias={dias}
         seleccionada={fechaReprog}
         onSeleccionar={onSeleccionarFecha}
+        horarioAtencion={tenant.horario_atencion}
+        feriados={tenant.feriados}
       />
 
       {/* Slots de la fecha elegida */}

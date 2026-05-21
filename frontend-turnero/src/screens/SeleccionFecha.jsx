@@ -7,16 +7,17 @@ import {
 } from '../components/ui';
 
 // Cuántos días hacia adelante mostramos en el calendario.
-const DIAS_VISIBLES = 14;
+const DIAS_VISIBLES = 15;
 
 /**
  * SeleccionFecha
- * Muestra un mini-calendario 7× con los próximos 14 días.
+ * Muestra un mini-calendario 7× con los próximos DIAS_VISIBLES días.
+ * @param {Object} props.tenant - Datos del tenant (horario_atencion, feriados)
  * @param {string|null} props.seleccionada - Fecha previamente seleccionada (YYYY-MM-DD)
  * @param {Function} props.onSeleccionar - Callback con la fecha elegida
  * @param {Function} props.onVolver - Callback para retroceder
  */
-function SeleccionFecha({ seleccionada, onSeleccionar, onVolver }) {
+function SeleccionFecha({ tenant, seleccionada, onSeleccionar, onVolver }) {
   const dias = generarProximosDias(DIAS_VISIBLES);
 
   return (
@@ -25,7 +26,7 @@ function SeleccionFecha({ seleccionada, onSeleccionar, onVolver }) {
       <ScreenHeader
         eyebrow="Paso 3 de 6"
         title="Elegí una fecha"
-        subtitle="Próximos 14 días."
+        subtitle={`Próximos ${DIAS_VISIBLES} días.`}
       />
       <Progress step={3}/>
 
@@ -34,6 +35,8 @@ function SeleccionFecha({ seleccionada, onSeleccionar, onVolver }) {
           dias={dias}
           seleccionada={seleccionada}
           onSeleccionar={onSeleccionar}
+          horarioAtencion={tenant.horario_atencion}
+          feriados={tenant.feriados}
         />
       </div>
     </PageContainer>

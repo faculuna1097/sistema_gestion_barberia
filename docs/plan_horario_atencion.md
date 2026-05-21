@@ -516,12 +516,11 @@ Justo debajo del bloque de Horario de atención:
   - validación 422 al crear bloque de barbero fuera de rango
   - validación 422 al crear turno fuera de horario
   - POST feriado / cascada
-- **Deuda 1+2 del rediseño del turnero** (postergada): cuando se retome,
-  `MiniCalendario` puede usar `tenant.horario_atencion` + `tenant.feriados`
-  para grisar días directamente sin endpoint `/disponibilidad/dias`.
-  Si después se quiere ser preciso (días donde el barbero específico no
-  tiene slots, no sólo días cerrados del tenant), el endpoint de dias
-  vuelve a ser útil.
+- ~~**Deuda 1+2 del rediseño del turnero**~~ ✅ resuelto: `MiniCalendario`
+  grisa días cerrados y feriados con `tenant.horario_atencion` +
+  `tenant.feriados`, sin endpoint `/disponibilidad/dias`. Queda pendiente
+  sólo la precisión por barbero (días donde el barbero específico no tiene
+  slots) — ver `sistema_de_disenio.md` §9 #3.
 
 ---
 

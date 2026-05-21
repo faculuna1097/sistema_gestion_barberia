@@ -3,7 +3,7 @@
 // Usado en SeleccionFecha (wizard inicial) y GestionTurno (reprogramación).
 
 import { theme } from '../../theme/tokens.js';
-import { diaNumero, esHoy, esDomingo } from '../../utils/fecha.js';
+import { diaNumero, esHoy, diaDeSemana } from '../../utils/fecha.js';
 
 // Días de la semana en orden lunes-primero (convención AR).
 const DIAS_SEMANA = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
@@ -11,14 +11,25 @@ const DIAS_SEMANA = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 /**
  * MiniCalendario
  * Renderiza un grid 7-columnas con el mes/año arriba y celdas cuadradas.
- * Marca "hoy" con dot accent, domingos como cerrados (deshabilitados), seleccionada con fill accent.
+ * Marca "hoy" con dot accent, días cerrados del negocio y feriados como
+ * deshabilitados, y la fecha seleccionada con fill accent.
  * @param {Array<string>} props.dias - Array de YYYY-MM-DD (mínimo 1)
  * @param {string|null} props.seleccionada - YYYY-MM-DD de la fecha seleccionada
  * @param {Function} props.onSeleccionar - Callback con la fecha clickeada
- * @param {string} [props.subLabel='2 semanas'] - Texto pequeño arriba a la derecha
+ * @param {Array<Object>} [props.horarioAtencion=[]] - Días abiertos del tenant: [{ dia_semana, ... }]
+ * @param {Array<Object>} [props.feriados=[]] - Feriados del tenant: [{ fecha, ... }]
  */
-function MiniCalendario({ dias, seleccionada, onSeleccionar, subLabel = '2 semanas' }) {
+function MiniCalendario({ dias, seleccionada, onSeleccionar, horarioAtencion = [], feriados = [] }) {
   const primerDia = dias[0];
+
+  // Sublabel derivado de la cantidad de días visibles: la pantalla controla
+  // cuántos días mostrar y el label se ajusta solo.
+  const subLabel = `${dias.length} días`;
+
+  // Conjuntos para resolver "¿está cerrado este día?" sin recorrer arrays
+  // por cada celda. Día cerrado = su día-de-semana no abre, o es feriado.
+  const diasAbiertos = new Set(horarioAtencion.map(h => h.dia_semana));
+  const fechasFeriado = new Set(feriados.map(f => f.fecha));
 
   // Mes del primer día visible.
   const [y, m] = primerDia.split('-').map(Number);
@@ -48,16 +59,14 @@ function MiniCalendario({ dias, seleccionada, onSeleccionar, subLabel = '2 seman
           textTransform: 'capitalize',
         }}>{mesLabel}</div>
 
-        {subLabel && (
-          <div style={{
-            fontFamily: theme.mono,
-            fontWeight: theme.weightMedium,
-            fontSize: theme.sizeMicro,
-            color: theme.muted,
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-          }}>{subLabel}</div>
-        )}
+        <div style={{
+          fontFamily: theme.mono,
+          fontWeight: theme.weightMedium,
+          fontSize: theme.sizeMicro,
+          color: theme.muted,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+        }}>{subLabel}</div>
       </div>
 
       {/* Grid 7 columnas */}
@@ -92,6 +101,7 @@ function MiniCalendario({ dias, seleccionada, onSeleccionar, subLabel = '2 seman
           <CeldaDia
             key={f}
             fecha={f}
+            cerrado={!diasAbiertos.has(diaDeSemana(f)) || fechasFeriado.has(f)}
             seleccionada={f === seleccionada}
             onClick={() => onSeleccionar(f)}
           />
@@ -103,13 +113,14 @@ function MiniCalendario({ dias, seleccionada, onSeleccionar, subLabel = '2 seman
 
 /**
  * CeldaDia
- * Celda cuadrada de un día. Estados: normal, hoy, seleccionado, cerrado (domingo).
+ * Celda cuadrada de un día. Estados: normal, hoy, seleccionado, cerrado.
+ * "Cerrado" = día sin atención del negocio o feriado; lo resuelve el padre.
  * @param {string} props.fecha - YYYY-MM-DD
+ * @param {boolean} props.cerrado - True si el negocio no atiende ese día
  * @param {boolean} props.seleccionada
  * @param {Function} props.onClick
  */
-function CeldaDia({ fecha, seleccionada, onClick }) {
-  const cerrado = esDomingo(fecha);
+function CeldaDia({ fecha, cerrado, seleccionada, onClick }) {
   const hoy = esHoy(fecha);
 
   // Resolución de estilo por prioridad: seleccionada > cerrado > normal.
