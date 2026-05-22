@@ -7,8 +7,10 @@
 //   - tipo 'local' orden 1 → hero horizontal.
 // Si un slot no tiene imagen cargada, se renderiza un placeholder neutro.
 //
-// `tenant.direccion` y `tenant.telefono` son columnas futuras en DB; mientras
-// no existan se muestran placeholders de texto.
+// `tenant.direccion` y `tenant.telefono` son columnas opcionales del tenant.
+// Si están cargadas se muestran como links (dirección → Google Maps,
+// teléfono → llamada `tel:`); si ambas faltan, el bloque de contacto no se
+// renderiza.
 
 import { useState } from 'react';
 import { theme } from '../theme/tokens.js';
@@ -154,25 +156,26 @@ function Landing({ tenant, imagenes = [], onReservar }) {
           {/* Estado del negocio + horario semanal desplegable */}
           <HorarioSemanal estado={estado} horarioAtencion={tenant.horario_atencion} />
 
-          <div style={{
-            fontFamily: theme.body,
-            fontSize: theme.sizeBody,
-            color: theme.muted,
-            lineHeight: 1.5,
-            marginTop: 4,
-          }}>
-            {tenant.direccion || 'Dirección del local'}
-          </div>
-
-          <div style={{
-            fontFamily: theme.body,
-            fontSize: theme.sizeBody,
-            color: theme.muted,
-            lineHeight: 1.5,
-            marginTop: 4,
-          }}>
-            {tenant.telefono || 'Teléfono de contacto'}
-          </div>
+          {/* Bloque de contacto — solo si hay al menos un dato cargado */}
+          {(tenant.direccion || tenant.telefono) && (
+            <div style={{ marginTop: 8 }}>
+              {tenant.direccion && (
+                <LineaContacto
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(tenant.direccion)}`}
+                  externo
+                  icono={<IconoPin size={16} />}
+                  texto={tenant.direccion}
+                />
+              )}
+              {tenant.telefono && (
+                <LineaContacto
+                  href={`tel:${tenant.telefono.replace(/[^\d+]/g, '')}`}
+                  icono={<IconoTelefono size={16} />}
+                  texto={tenant.telefono}
+                />
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -342,6 +345,45 @@ function HorarioSemanal({ estado, horarioAtencion = [] }) {
 }
 
 /**
+ * LineaContacto
+ * Fila de contacto clickable: ícono + texto, renderizada como `<a>`. Cumple
+ * el touch target mínimo de 44 px y muestra anillo de foco por teclado.
+ * @param {string} props.href - Destino del link (`tel:` o URL de mapa)
+ * @param {boolean} props.externo - True si el link abre en otra pestaña (mapa)
+ * @param {JSX.Element} props.icono - Ícono a la izquierda
+ * @param {string} props.texto - Texto visible (dirección o teléfono)
+ */
+function LineaContacto({ href, externo = false, icono, texto }) {
+  const [foco, setFoco] = useState(false);
+
+  return (
+    <a
+      href={href}
+      target={externo ? '_blank' : undefined}
+      rel={externo ? 'noopener noreferrer' : undefined}
+      onFocus={() => setFoco(true)}
+      onBlur={() => setFoco(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        minHeight: 44,
+        fontFamily: theme.body,
+        fontSize: theme.sizeBody,
+        color: theme.inkSoft,
+        textDecoration: 'none',
+        outline: foco ? `2px solid ${theme.accent}` : 'none',
+        outlineOffset: 2,
+        borderRadius: theme.radiusSm,
+      }}
+    >
+      <span style={{ display: 'flex', flexShrink: 0, color: theme.mutedSoft }}>{icono}</span>
+      <span>{texto}</span>
+    </a>
+  );
+}
+
+/**
  * IconoReloj
  * SVG inline de un reloj, para la fila de estado del negocio.
  * @param {number} props.size - Tamaño en px (ancho y alto)
@@ -352,6 +394,43 @@ function IconoReloj({ size = 16, color = 'currentColor' }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="12" cy="12" r="9" stroke={color} strokeWidth="1.5"/>
       <path d="M12 7v5l3.5 2" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+/**
+ * IconoPin
+ * SVG inline de un pin de ubicación, para la línea de dirección.
+ * @param {number} props.size - Tamaño en px (ancho y alto)
+ */
+function IconoPin({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 21s7-5.686 7-11a7 7 0 1 0-14 0c0 5.314 7 11 7 11z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5"/>
+    </svg>
+  );
+}
+
+/**
+ * IconoTelefono
+ * SVG inline de un teléfono, para la línea de contacto telefónico.
+ * @param {number} props.size - Tamaño en px (ancho y alto)
+ */
+function IconoTelefono({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M6.5 3h3l1.5 4-2 1.5a12 12 0 0 0 5 5l1.5-2 4 1.5v3a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.5 5.2 2 2 0 0 1 6.5 3z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

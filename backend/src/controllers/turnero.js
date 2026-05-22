@@ -35,13 +35,13 @@ const REGEX_EMAIL = /.+@.+\..+/;
  * GET /api/negocio/imagenes (los frontends los consumen desde ese endpoint).
  *
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
- * @returns {JSON} { id, nombre, horario_atencion, feriados }
+ * @returns {JSON} { id, nombre, telefono, direccion, horario_atencion, feriados }
  */
 export const getTenant = async (req, res) => {
   console.log('[turnero] getTenant — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
-      `SELECT id, nombre_negocio
+      `SELECT id, nombre_negocio, telefono, direccion
        FROM tenant
        WHERE id = $1 AND activo = true`,
       [req.tenant_id]
@@ -62,6 +62,8 @@ export const getTenant = async (req, res) => {
     res.json({
       id: row.id,
       nombre: row.nombre_negocio,
+      telefono: row.telefono,
+      direccion: row.direccion,
       horario_atencion: horarioAtencion,
       feriados,
     });
