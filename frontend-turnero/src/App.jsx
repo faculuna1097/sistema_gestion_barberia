@@ -4,7 +4,7 @@
 // Si no → muestra el wizard de reserva (pasos 1-7).
 
 import { useState, useEffect } from 'react';
-import { getTenant } from './services/api.js';
+import { getTenant, getImagenesNegocio } from './services/api.js';
 import { theme } from './theme/tokens.js';
 import { PageContainer, Skeleton, EmptyState, Button } from './components/ui';
 import Landing from './screens/Landing.jsx';
@@ -45,6 +45,7 @@ function IconoAlerta() {
 
 function App() {
   const [tenant, setTenant] = useState(null);
+  const [imagenes, setImagenes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
 
@@ -69,9 +70,20 @@ function App() {
   useEffect(() => {
     async function cargar() {
       try {
-        const data = await getTenant();
-        setTenant(data);
-        console.log('[App] getTenant — cargado | nombre:', data.nombre);
+        // El tenant es obligatorio: si falla, se muestra el error de carga.
+        // Las imágenes son best-effort: si fallan, la Landing cae a sus
+        // placeholders en vez de tumbar toda la app.
+        const [tenantData, imagenesData] = await Promise.all([
+          getTenant(),
+          getImagenesNegocio().catch((err) => {
+            console.warn('[App] getImagenesNegocio — falló, se usan placeholders:', err.message);
+            return [];
+          }),
+        ]);
+        setTenant(tenantData);
+        setImagenes(imagenesData);
+        console.log('[App] carga inicial — completada | nombre:', tenantData.nombre,
+          '| imágenes:', imagenesData.length);
       } catch (err) {
         console.error('[App] Error cargando tenant:', err.message);
         setError('No se pudo cargar la información del negocio');
@@ -169,7 +181,7 @@ function App() {
   // Wizard de reserva — paso 0 a 6 (7 pantallas)
   switch (paso) {
     case 0:
-      return <Landing tenant={tenant} onReservar={siguiente} />;
+      return <Landing tenant={tenant} imagenes={imagenes} onReservar={siguiente} />;
     case 1:
       return (
         <SeleccionServicio

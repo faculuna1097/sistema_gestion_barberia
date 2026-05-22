@@ -7,13 +7,12 @@
 //   onAcceso(token, barbero) — callback cuando el login es exitoso.
 
 import { useState, useEffect, useCallback } from 'react';
-import { ChevronRight, Delete, AlertCircle } from 'lucide-react';
+import { Delete, AlertCircle, ChevronRight } from 'lucide-react';
 
-import { getBarberos, loginBarbero } from '../services/api.js';
+import { getBarberos, loginBarbero, getImagenesNegocio, getTenant } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import {
   PageContainer,
-  ScreenHeader,
   TopBar,
   Card,
   Skeleton,
@@ -47,6 +46,11 @@ export default function Login({ onAcceso }) {
   const [fase, setFase] = useState('selector'); // 'selector' | 'pin'
   const [barberoSel, setBarberoSel] = useState(null);
 
+  // Logo y nombre del tenant para brandear la pantalla de login. Cargan
+  // best-effort: si fallan, la pantalla funciona igual sin esos datos.
+  const [logoUrl, setLogoUrl] = useState(null);
+  const [nombreNegocio, setNombreNegocio] = useState(null);
+
   /**
    * cargarBarberos
    * Llama al endpoint público de barberos. Reusable por el botón "Reintentar".
@@ -67,6 +71,30 @@ export default function Login({ onAcceso }) {
   }, []);
 
   useEffect(() => { cargarBarberos(); }, [cargarBarberos]);
+
+  // Carga del branding del tenant (logo + nombre) — independiente de los
+  // barberos y best-effort: si algo falla, el login funciona igual.
+  useEffect(() => {
+    let activo = true;
+    getImagenesNegocio()
+      .then((imagenes) => {
+        if (!activo) return;
+        const logo = imagenes.find((img) => img.tipo === 'logo' && img.orden === 1);
+        if (logo) setLogoUrl(logo.url);
+        console.log('[Login] getImagenesNegocio — logo:', logo ? 'encontrado' : 'sin logo');
+      })
+      .catch((err) => {
+        console.warn('[Login] getImagenesNegocio — falló, login sin logo:', err.message);
+      });
+    getTenant()
+      .then((tenant) => {
+        if (activo && tenant?.nombre) setNombreNegocio(tenant.nombre);
+      })
+      .catch((err) => {
+        console.warn('[Login] getTenant — falló, login sin nombre:', err.message);
+      });
+    return () => { activo = false; };
+  }, []);
 
   /**
    * seleccionarBarbero
@@ -94,6 +122,8 @@ export default function Login({ onAcceso }) {
           barberos={barberos}
           cargando={cargando}
           error={errorCarga}
+          logoUrl={logoUrl}
+          nombreNegocio={nombreNegocio}
           onReintentar={cargarBarberos}
           onElegir={seleccionarBarbero}
         />
@@ -114,91 +144,194 @@ export default function Login({ onAcceso }) {
 
 /**
  * SelectorBarbero
- * Lista de barberos del tenant con tres estados visuales:
- * cargando (skeletons), error (EmptyState con reintentar), o lista (cards).
+ * Login del barbero: bloque de marca (logo en círculo sutil + nombre del local)
+ * y, debajo, la lista vertical de barberos donde cada uno es una fila clickeable.
+ * Todo el bloque queda centrado verticalmente en el alto disponible.
+ * Tres estados: cargando (skeletons), error (EmptyState con reintentar), o la
+ * lista de barberos.
  * @param {Array<{id, nombre}>} props.barberos
  * @param {boolean} props.cargando
  * @param {string|null} props.error
+ * @param {string|null} props.logoUrl - URL del logo del tenant (o null)
+ * @param {string|null} props.nombreNegocio - Nombre del local (o null)
  * @param {() => void} props.onReintentar
  * @param {(b) => void} props.onElegir
  */
-function SelectorBarbero({ barberos, cargando, error, onReintentar, onElegir }) {
-  return (
-    <>
-      <div style={{ height: 16 }} />
-      <ScreenHeader
-        eyebrow="App del barbero"
-        title="Iniciá sesión"
-        subtitle="Seleccioná tu nombre para continuar."
-      />
+function SelectorBarbero({ barberos, cargando, error, logoUrl, nombreNegocio, onReintentar, onElegir }) {
+  // La lista solo aparece mientras carga o cuando hay barberos; en error /
+  // lista vacía se muestra un EmptyState en su lugar.
+  const mostrarLista = cargando || (!error && barberos.length > 0);
 
+  return (
+    <div style={{
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      gap: 24,
+      padding: '32px 16px 112px',
+    }}>
+      {/* Bloque de marca — logo + encabezado */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 8,
-        padding: '8px 16px 24px',
+        alignItems: 'center',
+        gap: 16,
       }}>
-        {cargando && Array.from({ length: 4 }).map((_, i) => (
-          <CardBarberoSkeleton key={i} />
-        ))}
-
-        {!cargando && error && (
-          <EmptyState
-            glyph={<AlertCircle size={28} strokeWidth={1.5} aria-hidden="true" />}
-            title="No pudimos cargar la lista"
-            body={error}
-            action={
-              <Button variant="secondary" full={false} onClick={onReintentar}>
-                Reintentar
-              </Button>
-            }
-          />
-        )}
-
-        {!cargando && !error && barberos.length === 0 && (
-          <EmptyState
-            glyph={<AlertCircle size={28} strokeWidth={1.5} aria-hidden="true" />}
-            title="No hay barberos cargados"
-            body="Pediles a tu admin que te dé de alta en el sistema."
-          />
-        )}
-
-        {!cargando && !error && barberos.map((b) => (
-          <Card key={b.id} onClick={() => onElegir(b)} padding={12}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <AvatarIniciales nombre={b.nombre} size={40} />
-              <div style={{
-                flex: 1,
-                fontFamily: theme.body,
-                fontSize: theme.sizeBody,
-                fontWeight: theme.weightMedium,
-                color: theme.ink,
-                minWidth: 0,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}>
-                {b.nombre}
-              </div>
-              <ChevronRight size={18} strokeWidth={1.75} color={theme.mutedSoft} aria-hidden="true" />
-            </div>
-          </Card>
-        ))}
+        <LogoNegocio src={logoUrl} />
+        <EncabezadoLogin nombreNegocio={nombreNegocio} />
       </div>
-    </>
+
+      {/* Lista de barberos */}
+      {mostrarLista && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {cargando
+            ? Array.from({ length: 5 }).map((_, i) => <BarberoSkeleton key={i} />)
+            : barberos.map((b) => (
+                <FilaBarbero key={b.id} barbero={b} onClick={() => onElegir(b)} />
+              ))}
+        </div>
+      )}
+
+      {!cargando && error && (
+        <EmptyState
+          glyph={<AlertCircle size={28} strokeWidth={1.5} aria-hidden="true" />}
+          title="No pudimos cargar la lista"
+          body={error}
+          action={
+            <Button variant="secondary" full={false} onClick={onReintentar}>
+              Reintentar
+            </Button>
+          }
+        />
+      )}
+
+      {!cargando && !error && barberos.length === 0 && (
+        <EmptyState
+          glyph={<AlertCircle size={28} strokeWidth={1.5} aria-hidden="true" />}
+          title="No hay barberos cargados"
+          body="Pediles a tu admin que te dé de alta en el sistema."
+        />
+      )}
+    </div>
   );
 }
 
 /**
- * CardBarberoSkeleton
- * Silueta del item de barbero mientras carga la lista (sin layout shift).
+ * LogoNegocio
+ * Logo del tenant dentro de un círculo sutil de 88px (`surface` + borde
+ * hairline). `objectFit: contain` no deforma logos no cuadrados. Solo se
+ * renderiza si hay URL.
+ * @param {string|null} props.src - URL del logo del tenant
  */
-function CardBarberoSkeleton() {
+function LogoNegocio({ src }) {
+  if (!src) return null;
+  return (
+    <div style={{
+      width: 88,
+      height: 88,
+      boxSizing: 'border-box',
+      borderRadius: 999,
+      background: theme.surface,
+      border: `1px solid ${theme.hairline}`,
+      overflow: 'hidden',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    }}>
+      <img
+        src={src}
+        alt="Logo del negocio"
+        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
+      />
+    </div>
+  );
+}
+
+/**
+ * EncabezadoLogin
+ * Encabezado de texto del login: el nombre del local como título y, debajo,
+ * una línea secundaria que indica la acción. Si el nombre no cargó, el título
+ * pasa a ser "Iniciar sesión".
+ * @param {string|null} props.nombreNegocio - Nombre del local (o null)
+ */
+function EncabezadoLogin({ nombreNegocio }) {
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <h1 style={{
+        fontFamily: theme.body,
+        fontWeight: theme.weightHeading,
+        fontSize: theme.sizeTitle,
+        letterSpacing: '-0.02em',
+        color: theme.ink,
+        margin: 0,
+      }}>
+        {nombreNegocio || 'Iniciar sesión'}
+      </h1>
+      <p style={{
+        fontFamily: theme.body,
+        fontSize: theme.sizeBody,
+        color: theme.muted,
+        lineHeight: 1.5,
+        margin: '4px 0 0',
+      }}>
+        Elegí tu perfil para continuar
+      </p>
+    </div>
+  );
+}
+
+/**
+ * FilaBarbero
+ * Fila clickeable para elegir un barbero: avatar de iniciales (40px) + nombre
+ * + chevron a la derecha. Usa el primitivo Card, que ya aporta borde, hover y
+ * navegación por teclado — así se nota que es clickeable.
+ * @param {{id, nombre}} props.barbero
+ * @param {() => void} props.onClick
+ */
+function FilaBarbero({ barbero, onClick }) {
+  return (
+    <Card onClick={onClick} padding={12}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+      }}>
+        <AvatarIniciales nombre={barbero.nombre} size={40} />
+        <span style={{
+          flex: 1,
+          fontFamily: theme.body,
+          fontSize: theme.sizeBody,
+          fontWeight: theme.weightMedium,
+          color: theme.ink,
+          lineHeight: 1.3,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {barbero.nombre}
+        </span>
+        <ChevronRight size={20} strokeWidth={1.75} color={theme.mutedSoft} aria-hidden="true" />
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * BarberoSkeleton
+ * Silueta de una fila de barbero mientras carga la lista: círculo del avatar
+ * + línea del nombre, dentro de una Card. Mismas medidas que FilaBarbero.
+ */
+function BarberoSkeleton() {
   return (
     <Card padding={12}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+      }}>
         <Skeleton width={40} height={40} radius={999} />
-        <Skeleton height={14} width="60%" />
+        <Skeleton width={120} height={14} />
       </div>
     </Card>
   );

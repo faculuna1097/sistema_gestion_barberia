@@ -31,14 +31,17 @@ const REGEX_EMAIL = /.+@.+\..+/;
  * Devuelve los datos públicos del tenant para la landing del turnero.
  * No incluye PIN, suscripción ni datos sensibles.
  *
+ * El logo y demás imágenes del tenant ya no viajan acá: se sirven por
+ * GET /api/negocio/imagenes (los frontends los consumen desde ese endpoint).
+ *
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
- * @returns {JSON} { id, nombre, logo_url, horario_atencion, feriados }
+ * @returns {JSON} { id, nombre, horario_atencion, feriados }
  */
 export const getTenant = async (req, res) => {
   console.log('[turnero] getTenant — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
-      `SELECT id, nombre_negocio, logo
+      `SELECT id, nombre_negocio
        FROM tenant
        WHERE id = $1 AND activo = true`,
       [req.tenant_id]
@@ -59,7 +62,6 @@ export const getTenant = async (req, res) => {
     res.json({
       id: row.id,
       nombre: row.nombre_negocio,
-      logo_url: row.logo,
       horario_atencion: horarioAtencion,
       feriados,
     });

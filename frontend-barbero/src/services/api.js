@@ -78,6 +78,18 @@ export const getBarberos = async () => {
 };
 
 /**
+ * getImagenesNegocio
+ * Obtiene las imágenes públicas del tenant (logo, fotos del local, cortes).
+ * Viven en Supabase Storage; el endpoint devuelve la URL pública ya armada.
+ * @returns {Promise<Array>} [{ id, tipo: 'local'|'corte'|'logo', orden, url }]
+ */
+export const getImagenesNegocio = async () => {
+  const res = await fetch(`${BASE_URL}/negocio/imagenes`, { headers: publicHeaders });
+  if (!res.ok) throw new Error('Error al obtener imágenes del negocio');
+  return res.json();
+};
+
+/**
  * loginBarbero
  * Autentica al barbero con su id y PIN.
  * @param {string} barberoId
@@ -132,7 +144,7 @@ export const getDisponibilidad = async (barberoId, servicioId, fecha) => {
  * Obtiene los datos públicos del negocio, incluido el horario de atención
  * semanal. Se usa para validar los bloques del barbero contra el horario
  * real del local.
- * @returns {Promise<Object>} { id, nombre, logo_url, horario_atencion, feriados }
+ * @returns {Promise<Object>} { id, nombre, horario_atencion, feriados }
  */
 export const getTenant = async () => {
   const res = await fetch(`${BASE_URL}/turnero/tenant`, { headers: publicHeaders });

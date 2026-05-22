@@ -2,9 +2,15 @@
 // Centraliza las llamadas HTTP a los endpoints públicos del turnero.
 // Sin auth — el turnero del cliente es anónimo.
 
-const BASE_URL = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api/turnero`
-  : 'http://localhost:3001/api/turnero';
+// Base de la API. `BASE_API` apunta a `/api` y `BASE_URL` al namespace
+// `/api/turnero`. La mayoría de los endpoints del turnero cuelgan de
+// `BASE_URL`; los de imágenes viven en `/api/negocio/*`, fuera de ese
+// namespace, y por eso se arman desde `BASE_API`.
+const BASE_API = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : 'http://localhost:3001/api';
+
+const BASE_URL = `${BASE_API}/turnero`;
 
 // Extraer subdominio del hostname actual.
 // Solo se considera subdominio si estamos en el dominio de producción.
@@ -23,12 +29,25 @@ const publicHeaders = {
 
 /**
  * getTenant
- * Obtiene datos públicos del tenant (nombre, logo).
- * @returns {Promise<Object>} { id, nombre, logo_url }
+ * Obtiene datos públicos del tenant (nombre, horario de atención, feriados).
+ * El logo y demás imágenes se obtienen aparte con getImagenesNegocio().
+ * @returns {Promise<Object>} { id, nombre, horario_atencion, feriados }
  */
 export const getTenant = async () => {
   const res = await fetch(`${BASE_URL}/tenant`, { headers: publicHeaders });
   if (!res.ok) throw new Error('Error al obtener tenant');
+  return res.json();
+};
+
+/**
+ * getImagenesNegocio
+ * Obtiene las imágenes públicas del tenant (logo, fotos del local, cortes).
+ * Viven en Supabase Storage; el endpoint devuelve la URL pública ya armada.
+ * @returns {Promise<Array>} [{ id, tipo: 'local'|'corte'|'logo', orden, url }]
+ */
+export const getImagenesNegocio = async () => {
+  const res = await fetch(`${BASE_API}/negocio/imagenes`, { headers: publicHeaders });
+  if (!res.ok) throw new Error('Error al obtener imágenes del negocio');
   return res.json();
 };
 

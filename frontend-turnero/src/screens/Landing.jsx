@@ -1,27 +1,67 @@
 // /frontend-turnero/src/screens/Landing.jsx
-// Pantalla 1: Landing del tenant — hero + avatar + nombre + meta + CTA.
+// Pantalla 1: Landing del tenant — hero + avatar + nombre + meta + estado + CTA.
 //
-// Imágenes y meta esperadas en `tenant` (futuras columnas en DB):
-//   - tenant.nombre          (existe hoy)
-//   - tenant.foto_local_url  (futuro — hero horizontal)
-//   - tenant.avatar_url      (futuro — logo circular, reemplaza al `tenant.logo_url` actual)
-//   - tenant.direccion       (futuro)
-//   - tenant.telefono        (futuro)
-// Si los campos no existen todavía, se renderizan placeholders neutros.
+// Las imágenes (logo, foto del local) llegan en el prop `imagenes`, que viene
+// de GET /api/negocio/imagenes. Cada imagen es { id, tipo, orden, url }:
+//   - tipo 'logo'  orden 1 → avatar circular.
+//   - tipo 'local' orden 1 → hero horizontal.
+// Si un slot no tiene imagen cargada, se renderiza un placeholder neutro.
+//
+// `tenant.direccion` y `tenant.telefono` son columnas futuras en DB; mientras
+// no existan se muestran placeholders de texto.
 
 import { theme } from '../theme/tokens.js';
 import { PageContainer, Button, StickyFooter } from '../components/ui';
 
 /**
+ * calcularEstadoNegocio
+ * Determina si el negocio está abierto en este momento, según su horario
+ * de atención semanal y sus feriados. Función pura: usa la hora local del
+ * navegador.
+ * @param {Array<Object>} horarioAtencion - días abiertos [{ dia_semana, hora_inicio, hora_fin }]
+ * @param {Array<Object>} feriados - feriados del tenant [{ fecha }]
+ * @returns {{ abierto: boolean, texto: string }} estado + label a mostrar
+ */
+function calcularEstadoNegocio(horarioAtencion = [], feriados = []) {
+  const ahora = new Date();
+
+  // Fecha de hoy en YYYY-MM-DD local, para cruzar contra feriados.
+  const hoyStr = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
+  if (feriados.some((f) => f.fecha === hoyStr)) {
+    return { abierto: false, texto: 'Cerrado' };
+  }
+
+  // Día de semana 0..6 (0=domingo), misma convención que el backend.
+  const dia = horarioAtencion.find((h) => h.dia_semana === ahora.getDay());
+  if (!dia) {
+    return { abierto: false, texto: 'Cerrado' };
+  }
+
+  // Hora actual en 'HH:MM' para comparar como string contra el rango.
+  const horaActual = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
+  if (horaActual < dia.hora_inicio) {
+    return { abierto: false, texto: `Cerrado · abre ${dia.hora_inicio}` };
+  }
+  if (horaActual >= dia.hora_fin) {
+    return { abierto: false, texto: 'Cerrado' };
+  }
+  return { abierto: true, texto: `Abierto · cierra ${dia.hora_fin}` };
+}
+
+/**
  * Landing
  * Pantalla inicial del turnero público: muestra el tenant y arranca el wizard.
- * @param {Object} props.tenant - { nombre, logo_url, foto_local_url?, avatar_url?, direccion?, telefono? }
+ * @param {Object} props.tenant - { nombre, direccion?, telefono?, horario_atencion, feriados }
+ * @param {Array<Object>} props.imagenes - [{ id, tipo, orden, url }] de GET /api/negocio/imagenes
  * @param {Function} props.onReservar - Callback al presionar el CTA principal
  */
-function Landing({ tenant, onReservar }) {
-  // Avatar URL: priorizamos avatar_url futuro, caemos a logo_url actual.
-  const avatarUrl = tenant.avatar_url || tenant.logo_url || null;
-  const fotoLocalUrl = tenant.foto_local_url || null;
+function Landing({ tenant, imagenes = [], onReservar }) {
+  // Resolvemos los slots usados por la landing (logo y foto del local).
+  const logoUrl = imagenes.find((img) => img.tipo === 'logo' && img.orden === 1)?.url || null;
+  const fotoLocalUrl = imagenes.find((img) => img.tipo === 'local' && img.orden === 1)?.url || null;
+
+  // Estado "abierto/cerrado" calculado desde el horario del tenant.
+  const estado = calcularEstadoNegocio(tenant.horario_atencion, tenant.feriados);
 
   return (
     <PageContainer>
@@ -34,14 +74,14 @@ function Landing({ tenant, onReservar }) {
         <div style={{
           display: 'flex',
           justifyContent: 'center',
-          marginTop: -40,
+          marginTop: -48,
           marginBottom: 16,
         }}>
-          <AvatarLogo src={avatarUrl} altText={tenant.nombre} />
+          <AvatarLogo src={logoUrl} altText={tenant.nombre} />
         </div>
 
-        {/* Bloque de identidad — nombre + dirección + teléfono */}
-        <div style={{ textAlign: 'center', padding: '0 16px' }}>
+        {/* Bloque de identidad — nombre centrado; info (estado + contacto) a la izquierda */}
+        <div style={{ padding: '0 16px' }}>
           <h1 style={{
             fontFamily: theme.body,
             fontWeight: theme.weightHeading,
@@ -50,14 +90,18 @@ function Landing({ tenant, onReservar }) {
             lineHeight: 1.15,
             color: theme.ink,
             margin: 0,
+            textAlign: 'center',
           }}>{tenant.nombre}</h1>
+
+          {/* Estado del negocio — eyebrow debajo del nombre, alineado a la izquierda */}
+          <EstadoNegocio abierto={estado.abierto} texto={estado.texto} />
 
           <div style={{
             fontFamily: theme.body,
             fontSize: theme.sizeBody,
             color: theme.muted,
             lineHeight: 1.5,
-            marginTop: 8,
+            marginTop: 4,
           }}>
             {tenant.direccion || 'Dirección del local'}
           </div>
@@ -67,7 +111,7 @@ function Landing({ tenant, onReservar }) {
             fontSize: theme.sizeBody,
             color: theme.muted,
             lineHeight: 1.5,
-            marginTop: 2,
+            marginTop: 4,
           }}>
             {tenant.telefono || 'Teléfono de contacto'}
           </div>
@@ -96,7 +140,7 @@ function HeroFoto({ src, altText }) {
   return (
     <div style={{
       width: '100%',
-      aspectRatio: '16 / 9',
+      aspectRatio: '4 / 3',
       borderRadius: theme.radiusLg,
       overflow: 'hidden',
       background: theme.surfaceAlt,
@@ -120,15 +164,15 @@ function HeroFoto({ src, altText }) {
 
 /**
  * AvatarLogo
- * Círculo 80px con el logo/avatar del tenant. Placeholder si no hay src.
+ * Círculo 96px con el logo/avatar del tenant. Placeholder si no hay src.
  * @param {string|null} props.src - URL del avatar (o null)
  * @param {string} props.altText
  */
 function AvatarLogo({ src, altText }) {
   return (
     <div style={{
-      width: 80,
-      height: 80,
+      width: 96,
+      height: 96,
       borderRadius: 999,
       overflow: 'hidden',
       background: theme.surface,
@@ -157,6 +201,39 @@ function AvatarLogo({ src, altText }) {
           <IconoCamara size={24} />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * EstadoNegocio
+ * Eyebrow que indica si el negocio está abierto ahora: dot de color + texto
+ * en mono mayúsculas, sin fondo. Dot verde si está abierto, gris si cerrado.
+ * @param {boolean} props.abierto - True si el negocio atiende en este momento
+ * @param {string} props.texto - Label a mostrar (ej: "Abierto · cierra 20:00")
+ */
+function EstadoNegocio({ abierto, texto }) {
+  const dotColor = abierto ? theme.success : theme.mutedSoft;
+  return (
+    <div style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 16,
+      fontFamily: theme.mono,
+      fontWeight: theme.weightMedium,
+      fontSize: theme.sizeMicro,
+      letterSpacing: '0.04em',
+      textTransform: 'uppercase',
+      color: theme.inkSoft,
+    }}>
+      <span style={{
+        width: 6,
+        height: 6,
+        borderRadius: 999,
+        background: dotColor,
+      }}/>
+      {texto}
     </div>
   );
 }

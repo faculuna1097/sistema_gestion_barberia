@@ -826,6 +826,14 @@ cuando todo el flujo funcione en demo.
   y reasigna todos los `turno.cliente_id` del que se va al que se queda.
 - **Eliminar `tenant.booking_url`** una vez que todos los tenants usen el
   turnero propio.
+- **Migrar el logo viejo y eliminar `tenant.logo`** (Paso 7 diferido de la
+  feature de imágenes múltiples por tenant). La feature movió el logo a la
+  tabla `tenant_imagen` + Supabase Storage; el turnero y el barbero ya lo
+  consumen desde ahí (`GET /api/negocio/imagenes`). La columna `tenant.logo`
+  sigue viva porque la app `frontend/` todavía la lee. Cuando esa app se
+  re-estile y deje de usarla: migrar el logo actual de cada tenant al slot
+  `tipo='logo', orden=1` de `tenant_imagen` y hacer `DROP COLUMN logo` de la
+  tabla `tenant`.
 - **Tabla `notificaciones` o `mails_enviados`** para trazabilidad de envíos.
 - **Tabla `metricas_diarias` (rollup)** para acelerar dashboards históricos
   cuando la tabla `corte` crezca lo suficiente.
