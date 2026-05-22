@@ -9,6 +9,7 @@ import {
   getServicios,
   getBarberos,
   getDisponibilidad,
+  getDiasDisponibles,
   crearTurno,
   getTurnoPorToken,
   cancelarTurno,
@@ -21,6 +22,7 @@ router.get('/tenant',                       getTenant);
 router.get('/servicios',                    getServicios);
 router.get('/barberos',                     getBarberos);
 router.get('/disponibilidad',               getDisponibilidad);
+router.get('/dias-disponibles',             getDiasDisponibles);
 
 router.post('/turnos',                      crearTurno);
 router.get('/turnos/:token',                getTurnoPorToken);

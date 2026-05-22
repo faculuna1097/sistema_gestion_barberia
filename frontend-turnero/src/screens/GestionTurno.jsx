@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import {
   getTurnoPorToken, cancelarTurno, reprogramarTurno, getDisponibilidad,
+  getDiasDisponibles,
 } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { fmtPesos } from '../utils/formato.js';
@@ -12,7 +13,7 @@ import { fmtFechaLarga, fmtHora, fmtFechaHora, generarProximosDias } from '../ut
 import {
   PageContainer, ScreenHeader, Button, EmptyState, Skeleton,
   StatusPill, SummaryRow, AvatarIniciales, ConfirmDialog,
-  MiniCalendario, SlotChip,
+  MiniCalendario, SlotChip, IconoAlerta,
 } from '../components/ui';
 
 // Días hacia adelante que se muestran en el sub-flow de reprogramación.
@@ -41,6 +42,11 @@ function GestionTurno({ token, tenant }) {
   const [slotsReprog, setSlotsReprog] = useState([]);
   const [cargandoSlots, setCargandoSlots] = useState(false);
   const [slotElegido, setSlotElegido] = useState(null); // ISO del slot pre-seleccionado (aún sin confirmar)
+
+  // ── Estado de los días disponibles del calendario de reprogramación ──
+  const [diasReprog, setDiasReprog] = useState([]);
+  const [cargandoDiasReprog, setCargandoDiasReprog] = useState(false);
+  const [errorDiasReprog, setErrorDiasReprog] = useState(false);
 
   useEffect(() => {
     async function cargar() {
@@ -75,6 +81,29 @@ function GestionTurno({ token, tenant }) {
     } finally {
       setProcesando(false);
       setConfirmCancel(false);
+    }
+  };
+
+  /**
+   * abrirReprogramacion
+   * Abre el sub-flow de reprogramación y carga los días con disponibilidad
+   * para el barbero y servicio del turno (para grisar el calendario).
+   */
+  const abrirReprogramacion = async () => {
+    setReprogramando(true);
+    setCargandoDiasReprog(true);
+    setErrorDiasReprog(false);
+    const dias = generarProximosDias(DIAS_REPROG);
+    try {
+      const { dias: disponibles } = await getDiasDisponibles(
+        datos.barbero.id, datos.servicio.id, dias[0], dias[dias.length - 1],
+      );
+      setDiasReprog(disponibles);
+    } catch (err) {
+      console.error('[GestionTurno] Error cargando días disponibles:', err.message);
+      setErrorDiasReprog(true);
+    } finally {
+      setCargandoDiasReprog(false);
     }
   };
 
@@ -288,7 +317,7 @@ function GestionTurno({ token, tenant }) {
         {/* ── Acciones (si está reservado y no en reprog) ── */}
         {esReservado && !reprogramando && (
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-            <Button variant="secondary" onClick={() => setReprogramando(true)} disabled={procesando}>
+            <Button variant="secondary" onClick={abrirReprogramacion} disabled={procesando}>
               Reprogramar
             </Button>
             <Button variant="danger" onClick={() => setConfirmCancel(true)} disabled={procesando}>
@@ -300,16 +329,19 @@ function GestionTurno({ token, tenant }) {
         {/* ── Sub-flow de reprogramación ───────────────────── */}
         {reprogramando && (
           <ReprogramarPanel
-            tenant={tenant}
             fechaReprog={fechaReprog}
             slotsReprog={slotsReprog}
             cargandoSlots={cargandoSlots}
+            diasDisponibles={diasReprog}
+            cargandoDias={cargandoDiasReprog}
+            errorDias={errorDiasReprog}
             procesando={procesando}
             slotElegido={slotElegido}
             onSeleccionarFecha={handleSeleccionarFechaReprog}
             onSeleccionarSlot={setSlotElegido}
             onConfirmar={handleConfirmarReprogramacion}
             onCerrar={cerrarReprogramacion}
+            onReintentarDias={abrirReprogramacion}
           />
         )}
 
@@ -353,16 +385,19 @@ function GestionTurno({ token, tenant }) {
  * Flujo: elegir fecha → elegir slot (pre-selección) → confirmar reprogramación.
  */
 function ReprogramarPanel({
-  tenant,
   fechaReprog,
   slotsReprog,
   cargandoSlots,
+  diasDisponibles,
+  cargandoDias,
+  errorDias,
   procesando,
   slotElegido,
   onSeleccionarFecha,
   onSeleccionarSlot,
   onConfirmar,
   onCerrar,
+  onReintentarDias,
 }) {
   const dias = generarProximosDias(DIAS_REPROG);
 
@@ -392,13 +427,26 @@ function ReprogramarPanel({
         </Button>
       </div>
 
-      <MiniCalendario
-        dias={dias}
-        seleccionada={fechaReprog}
-        onSeleccionar={onSeleccionarFecha}
-        horarioAtencion={tenant.horario_atencion}
-        feriados={tenant.feriados}
-      />
+      {errorDias ? (
+        <EmptyState
+          glyph={<IconoAlerta/>}
+          title="No pudimos cargar las fechas"
+          body="Revisá tu conexión e intentá de nuevo."
+          action={
+            <Button variant="secondary" onClick={onReintentarDias} full={false}>
+              Reintentar
+            </Button>
+          }
+        />
+      ) : (
+        <MiniCalendario
+          dias={dias}
+          diasDisponibles={diasDisponibles}
+          cargando={cargandoDias}
+          seleccionada={fechaReprog}
+          onSeleccionar={onSeleccionarFecha}
+        />
+      )}
 
       {/* Slots de la fecha elegida */}
       {fechaReprog && (
@@ -551,20 +599,6 @@ function SkeletonGestion() {
         ))}
       </div>
     </div>
-  );
-}
-
-/**
- * IconoAlerta
- * SVG para EmptyState de error de carga.
- */
-function IconoAlerta() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5"/>
-      <path d="M12 8v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-      <circle cx="12" cy="15.5" r="0.75" fill="currentColor"/>
-    </svg>
   );
 }
 

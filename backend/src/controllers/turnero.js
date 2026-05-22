@@ -8,7 +8,7 @@
 
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
-import { calcularSlotsDisponibles, DisponibilidadError } from '../services/disponibilidadService.js';
+import { calcularSlotsDisponibles, calcularDiasConDisponibilidad, DisponibilidadError } from '../services/disponibilidadService.js';
 import { actualizarEvento, cancelarEvento } from '../services/googleCalendar.js';
 import { enviarCancelacion, enviarReprogramacion } from '../services/mailer.js';
 import {
@@ -175,6 +175,52 @@ export const getDisponibilidad = async (req, res) => {
     res.status(500).json({ error: 'Error al calcular disponibilidad' });
   }
 };
+/**
+ * getDiasDisponibles
+ * Devuelve qué días de un rango tienen al menos un slot reservable para un
+ * (barbero, servicio). El calendario del turnero lo usa para grisar los días
+ * sin disponibilidad. Delega la lógica al disponibilidadService.
+ *
+ * @param {string} req.tenant_id          - Inyectado por tenantMiddleware
+ * @param {string} req.query.barbero_id
+ * @param {string} req.query.servicio_id
+ * @param {string} req.query.desde         - 'YYYY-MM-DD' (inclusive)
+ * @param {string} req.query.hasta         - 'YYYY-MM-DD' (inclusive)
+ * @returns {JSON} { dias: ['YYYY-MM-DD', ...] }
+ */
+export const getDiasDisponibles = async (req, res) => {
+  const { barbero_id, servicio_id, desde, hasta } = req.query;
+  console.log('[turnero] getDiasDisponibles — request recibido | tenant:', req.tenant_id,
+    '| barbero:', barbero_id, '| servicio:', servicio_id, '| desde:', desde, '| hasta:', hasta);
+
+  if (!barbero_id || !servicio_id || !desde || !hasta) {
+    return res.status(400).json({ error: 'barbero_id, servicio_id, desde y hasta son requeridos' });
+  }
+  if (!REGEX_FECHA.test(desde) || !REGEX_FECHA.test(hasta)) {
+    return res.status(400).json({ error: 'desde y hasta deben tener formato YYYY-MM-DD' });
+  }
+
+  try {
+    const dias = await calcularDiasConDisponibilidad({
+      tenantId: req.tenant_id,
+      barberoId: barbero_id,
+      servicioId: servicio_id,
+      desde,
+      hasta,
+    });
+    console.log('[turnero] getDiasDisponibles — completado |', dias.length, 'días con disponibilidad');
+    res.json({ dias });
+  } catch (err) {
+    if (err instanceof DisponibilidadError) {
+      console.warn('[turnero] getDiasDisponibles — error de dominio:', err.codigo, err.message);
+      const status = err.codigo === 'fecha_invalida' ? 400 : 404;
+      return res.status(status).json({ error: err.message });
+    }
+    console.error('[turnero] Error en getDiasDisponibles:', err.message);
+    res.status(500).json({ error: 'Error al calcular días disponibles' });
+  }
+};
+
 /**
  * crearTurno
  * Crea un turno desde el turnero público. Hace upsert del cliente por

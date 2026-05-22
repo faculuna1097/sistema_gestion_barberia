@@ -29,9 +29,9 @@ const publicHeaders = {
 
 /**
  * getTenant
- * Obtiene datos públicos del tenant (nombre, horario de atención, feriados).
+ * Obtiene datos públicos del tenant (nombre, contacto, horario, feriados).
  * El logo y demás imágenes se obtienen aparte con getImagenesNegocio().
- * @returns {Promise<Object>} { id, nombre, horario_atencion, feriados }
+ * @returns {Promise<Object>} { id, nombre, telefono, direccion, horario_atencion, feriados }
  */
 export const getTenant = async () => {
   const res = await fetch(`${BASE_URL}/tenant`, { headers: publicHeaders });
@@ -89,6 +89,28 @@ export const getDisponibilidad = async (barberoId, servicioId, fecha) => {
   });
   const res = await fetch(`${BASE_URL}/disponibilidad?${params}`, { headers: publicHeaders });
   if (!res.ok) throw new Error('Error al obtener disponibilidad');
+  return res.json();
+};
+
+/**
+ * getDiasDisponibles
+ * Obtiene qué días de un rango tienen al menos un slot reservable para un
+ * (barbero, servicio). El calendario lo usa para grisar los días sin turnos.
+ * @param {string} barberoId
+ * @param {string} servicioId
+ * @param {string} desde - 'YYYY-MM-DD' (inclusive)
+ * @param {string} hasta - 'YYYY-MM-DD' (inclusive)
+ * @returns {Promise<Object>} { dias: ['YYYY-MM-DD', ...] }
+ */
+export const getDiasDisponibles = async (barberoId, servicioId, desde, hasta) => {
+  const params = new URLSearchParams({
+    barbero_id: barberoId,
+    servicio_id: servicioId,
+    desde,
+    hasta,
+  });
+  const res = await fetch(`${BASE_URL}/dias-disponibles?${params}`, { headers: publicHeaders });
+  if (!res.ok) throw new Error('Error al obtener días disponibles');
   return res.json();
 };
 

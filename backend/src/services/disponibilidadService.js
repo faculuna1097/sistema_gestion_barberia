@@ -41,6 +41,71 @@ const armarDateTime = (fecha, hora) => {
 };
 
 /**
+ * computarSlotsDeUnDia
+ * Recorre los bloques horarios de un día y arma los inicios de slot
+ * reservables. Es cómputo puro en memoria: no toca la DB. Lo usan tanto
+ * `calcularSlotsDisponibles` (un día) como `calcularDiasConDisponibilidad`
+ * (rango), para no duplicar el algoritmo.
+ *
+ * @param {Object} params
+ * @param {DateTime} params.fechaArg - Fecha del día, en TZ Argentina
+ * @param {Array<{hora_inicio:string,hora_fin:string}>} params.bloquesHorario - Bloques del barbero ese día
+ * @param {Array<{inicio:DateTime,fin:DateTime}>} params.turnos - Turnos reservados a evitar
+ * @param {Array<{inicio:DateTime,fin:DateTime}>} params.suspensiones - Suspensiones a evitar
+ * @param {number} params.duracionSlotMin - Minutos por slot del tenant
+ * @param {number} params.duracionServicioMin - Minutos que ocupa el servicio
+ * @param {DateTime|null} params.umbralMinimo - Inicio mínimo permitido (hoy: now+margen); null si no aplica
+ * @param {boolean} [params.soloPrimero=false] - Si es true, corta y devuelve apenas encuentra el primer slot
+ * @returns {string[]} array de ISO strings (con offset Argentina)
+ */
+const computarSlotsDeUnDia = ({
+  fechaArg, bloquesHorario, turnos, suspensiones,
+  duracionSlotMin, duracionServicioMin, umbralMinimo, soloPrimero = false,
+}) => {
+  // ¿el rango [aIni,aFin) solapa con [bIni,bFin)?
+  const solapa = (aIni, aFin, bIni, bFin) => aIni < bFin && bIni < aFin;
+
+  const slots = [];
+
+  for (const bloque of bloquesHorario) {
+    const bloqueInicio = armarDateTime(fechaArg, bloque.hora_inicio);
+    const bloqueFin    = armarDateTime(fechaArg, bloque.hora_fin);
+
+    let slotInicio = bloqueInicio;
+    while (true) {
+      const slotFin = slotInicio.plus({ minutes: duracionServicioMin });
+
+      // El servicio se pasa del bloque → fin del bloque, salimos.
+      if (slotFin > bloqueFin) break;
+
+      // Margen mínimo cuando la fecha es hoy.
+      if (umbralMinimo && slotInicio <= umbralMinimo) {
+        slotInicio = slotInicio.plus({ minutes: duracionSlotMin });
+        continue;
+      }
+
+      // Solapa con un turno reservado.
+      if (turnos.some(t => solapa(slotInicio, slotFin, t.inicio, t.fin))) {
+        slotInicio = slotInicio.plus({ minutes: duracionSlotMin });
+        continue;
+      }
+
+      // Solapa con una suspensión.
+      if (suspensiones.some(s => solapa(slotInicio, slotFin, s.inicio, s.fin))) {
+        slotInicio = slotInicio.plus({ minutes: duracionSlotMin });
+        continue;
+      }
+
+      slots.push(slotInicio.toISO());
+      if (soloPrimero) return slots;
+      slotInicio = slotInicio.plus({ minutes: duracionSlotMin });
+    }
+  }
+
+  return slots;
+};
+
+/**
  * Calcula el array de inicios de slots disponibles para reservar.
  *
  * @param {Object} params
@@ -164,48 +229,183 @@ export const calcularSlotsDisponibles = async ({ tenantId, barberoId, servicioId
   const esHoy = ahora.hasSame(fechaArg, 'day');
   const umbralMinimo = esHoy ? ahora.plus({ minutes: ANTELACION_MINIMA_MINUTOS }) : null;
 
-  // Helper: ¿el rango [a,b) solapa con [c,d)?
-  const solapa = (aIni, aFin, bIni, bFin) => aIni < bFin && bIni < aFin;
-
-  const slotsDisponibles = [];
-
-  for (const bloque of horariosRes.rows) {
-    const bloqueInicio = armarDateTime(fechaArg, bloque.hora_inicio);
-    const bloqueFin    = armarDateTime(fechaArg, bloque.hora_fin);
-
-    let slotInicio = bloqueInicio;
-    while (true) {
-      const slotFin = slotInicio.plus({ minutes: duracionServicioMin });
-
-      // El servicio se pasa del bloque → fin del bloque, salimos.
-      if (slotFin > bloqueFin) break;
-
-      // Margen mínimo cuando la fecha es hoy.
-      if (umbralMinimo && slotInicio <= umbralMinimo) {
-        slotInicio = slotInicio.plus({ minutes: duracionSlotMin });
-        continue;
-      }
-
-      // Solapa con un turno reservado.
-      const chocaTurno = turnos.some(t => solapa(slotInicio, slotFin, t.inicio, t.fin));
-      if (chocaTurno) {
-        slotInicio = slotInicio.plus({ minutes: duracionSlotMin });
-        continue;
-      }
-
-      // Solapa con una suspensión.
-      const chocaSusp = suspensiones.some(s => solapa(slotInicio, slotFin, s.inicio, s.fin));
-      if (chocaSusp) {
-        slotInicio = slotInicio.plus({ minutes: duracionSlotMin });
-        continue;
-      }
-
-      slotsDisponibles.push(slotInicio.toISO());
-      slotInicio = slotInicio.plus({ minutes: duracionSlotMin });
-    }
-  }
+  const slotsDisponibles = computarSlotsDeUnDia({
+    fechaArg,
+    bloquesHorario: horariosRes.rows,
+    turnos,
+    suspensiones,
+    duracionSlotMin,
+    duracionServicioMin,
+    umbralMinimo,
+  });
 
   console.log('[disponibilidadService] calcularSlotsDisponibles — completado |',
     slotsDisponibles.length, 'slots');
   return slotsDisponibles;
+};
+
+/**
+ * Calcula qué días de un rango tienen al menos un slot reservable para un
+ * (barbero, servicio). Pensado para grisar días en el calendario del turnero.
+ *
+ * A diferencia de llamar `calcularSlotsDisponibles` una vez por día, esta
+ * función hace un set fijo de queries (independiente del tamaño del rango):
+ * trae los datos compartidos una sola vez y los turnos/suspensiones de todo
+ * el rango en una query cada uno, después recorre los días en memoria.
+ *
+ * El resultado ya excluye días cerrados del negocio, feriados, fechas
+ * pasadas y "hoy ya cerrado" (lo cubre el umbral mínimo): es la fuente
+ * única de verdad sobre qué días son reservables.
+ *
+ * @param {Object} params
+ * @param {string} params.tenantId
+ * @param {string} params.barberoId
+ * @param {string} params.servicioId
+ * @param {string} params.desde - 'YYYY-MM-DD' (inclusive)
+ * @param {string} params.hasta - 'YYYY-MM-DD' (inclusive)
+ * @returns {Promise<string[]>} array de fechas 'YYYY-MM-DD' con ≥1 slot
+ */
+export const calcularDiasConDisponibilidad = async ({ tenantId, barberoId, servicioId, desde, hasta }) => {
+  console.log('[disponibilidadService] calcularDiasConDisponibilidad — request recibido',
+    '| tenant:', tenantId, '| barbero:', barberoId, '| servicio:', servicioId,
+    '| desde:', desde, '| hasta:', hasta);
+
+  const desdeArg = DateTime.fromISO(desde, { zone: TZ });
+  const hastaArg = DateTime.fromISO(hasta, { zone: TZ });
+  if (!desdeArg.isValid || !hastaArg.isValid) {
+    throw new DisponibilidadError('fecha_invalida', 'Fecha inválida');
+  }
+  if (hastaArg < desdeArg) {
+    throw new DisponibilidadError('fecha_invalida', 'hasta debe ser posterior o igual a desde');
+  }
+
+  const inicioRango = desdeArg.startOf('day');
+  const finRango    = hastaArg.endOf('day');
+
+  // Set fijo de queries para todo el rango. Las dependientes de fecha
+  // (turnos, suspensiones, feriados) se piden por rango, no por día.
+  const [tenantRes, servicioRes, horariosRes, turnosRes, suspensionesRes, horarioTenantRes, feriadoRes] = await Promise.all([
+    query(
+      `SELECT duracion_slot_minutos FROM tenant WHERE id = $1 AND activo = true`,
+      [tenantId]
+    ),
+    query(
+      `SELECT cantidad_slots FROM servicio WHERE id = $1 AND tenant_id = $2 AND activo = true`,
+      [servicioId, tenantId]
+    ),
+    query(
+      `SELECT dia_semana, hora_inicio, hora_fin
+       FROM barbero_horario
+       WHERE tenant_id = $1 AND barbero_id = $2
+       ORDER BY hora_inicio ASC`,
+      [tenantId, barberoId]
+    ),
+    query(
+      `SELECT inicio, fin
+       FROM turno
+       WHERE tenant_id = $1
+         AND barbero_id = $2
+         AND estado = 'reservado'
+         AND inicio < $4
+         AND fin    > $3`,
+      [tenantId, barberoId, inicioRango.toISO(), finRango.toISO()]
+    ),
+    query(
+      `SELECT desde, hasta
+       FROM barbero_suspension
+       WHERE tenant_id = $1
+         AND barbero_id = $2
+         AND desde < $4
+         AND hasta > $3`,
+      [tenantId, barberoId, inicioRango.toISO(), finRango.toISO()]
+    ),
+    query(
+      `SELECT dia_semana, hora_inicio, hora_fin
+       FROM tenant_horario_atencion
+       WHERE tenant_id = $1`,
+      [tenantId]
+    ),
+    query(
+      `SELECT to_char(fecha, 'YYYY-MM-DD') AS fecha
+       FROM tenant_feriado
+       WHERE tenant_id = $1 AND fecha BETWEEN $2::date AND $3::date`,
+      [tenantId, desde, hasta]
+    ),
+  ]);
+
+  if (tenantRes.rows.length === 0) {
+    throw new DisponibilidadError('tenant_no_encontrado', 'Tenant no encontrado');
+  }
+  if (servicioRes.rows.length === 0) {
+    throw new DisponibilidadError('servicio_no_encontrado', 'Servicio no encontrado o inactivo');
+  }
+
+  const duracionSlotMin     = tenantRes.rows[0].duracion_slot_minutos;
+  const cantidadSlots       = servicioRes.rows[0].cantidad_slots;
+  const duracionServicioMin = duracionSlotMin * cantidadSlots;
+
+  // Días de semana en que el negocio abre (0=domingo..6=sábado).
+  const diasAbiertosNegocio = new Set(horarioTenantRes.rows.map(r => r.dia_semana));
+  // Feriados del rango como 'YYYY-MM-DD'.
+  const feriados = new Set(feriadoRes.rows.map(r => r.fecha));
+
+  // Bloques del barbero agrupados por día de semana.
+  const horariosPorDia = new Map();
+  for (const r of horariosRes.rows) {
+    if (!horariosPorDia.has(r.dia_semana)) horariosPorDia.set(r.dia_semana, []);
+    horariosPorDia.get(r.dia_semana).push(r);
+  }
+
+  // Turnos y suspensiones del rango → Intervals de luxon, una sola vez.
+  const turnos = turnosRes.rows.map(t => ({
+    inicio: DateTime.fromJSDate(t.inicio, { zone: TZ }),
+    fin:    DateTime.fromJSDate(t.fin,    { zone: TZ }),
+  }));
+  const suspensiones = suspensionesRes.rows.map(s => ({
+    inicio: DateTime.fromJSDate(s.desde, { zone: TZ }),
+    fin:    DateTime.fromJSDate(s.hasta, { zone: TZ }),
+  }));
+
+  const ahora = DateTime.now().setZone(TZ);
+  const diasDisponibles = [];
+
+  // Recorrido en memoria, día por día.
+  for (let dia = inicioRango; dia <= finRango; dia = dia.plus({ days: 1 })) {
+    const fechaArg = dia.startOf('day');
+    const fechaISO = fechaArg.toISODate();
+
+    // Fecha pasada → no reservable.
+    if (fechaArg.endOf('day') < ahora) continue;
+    // Feriado → el negocio cierra el día completo.
+    if (feriados.has(fechaISO)) continue;
+
+    const diaSemana = fechaArg.weekday % 7;
+    // El negocio no abre ese día de semana.
+    if (!diasAbiertosNegocio.has(diaSemana)) continue;
+    // El barbero no tiene bloques horarios ese día.
+    const bloques = horariosPorDia.get(diaSemana);
+    if (!bloques || bloques.length === 0) continue;
+
+    // Umbral mínimo solo si el día es hoy.
+    const umbralMinimo = ahora.hasSame(fechaArg, 'day')
+      ? ahora.plus({ minutes: ANTELACION_MINIMA_MINUTOS })
+      : null;
+
+    const slots = computarSlotsDeUnDia({
+      fechaArg,
+      bloquesHorario: bloques,
+      turnos,
+      suspensiones,
+      duracionSlotMin,
+      duracionServicioMin,
+      umbralMinimo,
+      soloPrimero: true, // solo nos interesa si hay ≥1 slot
+    });
+
+    if (slots.length > 0) diasDisponibles.push(fechaISO);
+  }
+
+  console.log('[disponibilidadService] calcularDiasConDisponibilidad — completado |',
+    diasDisponibles.length, 'días con disponibilidad');
+  return diasDisponibles;
 };

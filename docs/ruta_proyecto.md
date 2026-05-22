@@ -133,23 +133,41 @@ sistema-gestion-barberia/
 │       ├── main.jsx
 │       ├── App.jsx                    # Router: wizard de reserva (pasos 0-6) + ruta /gestionar/:token
 │       ├── App.css                    # Placeholder — estilos en chat dedicado
-│       ├── index.css                  # Reset mínimo
+│       ├── index.css                  # Reset + Geist + @keyframes + scrollbar
+│       │
+│       ├── theme/
+│       │   └── tokens.js              # Tokens del sistema "Luz" — fuente de verdad del proyecto
+│       │
+│       ├── utils/
+│       │   ├── formato.js             # fmtPesos
+│       │   └── fecha.js               # Helpers de fecha/hora
 │       │
 │       ├── services/
-│       │   └── api.js                 # 8 funciones contra /api/turnero/* (sin auth)
+│       │   └── api.js                 # 10 funciones contra la API pública del turnero (sin auth)
 │       │
 │       ├── assets/
-│       │   └── hero.png
+│       │   ├── hero.png
+│       │   ├── react.svg
+│       │   └── vite.svg
+│       │
+│       ├── screens/                   # Las 8 pantallas del turnero
+│       │   ├── Landing.jsx            # Pantalla 1: hero + logo + contacto + horario + "Reservar"
+│       │   ├── SeleccionServicio.jsx  # Pantalla 2: lista de servicios
+│       │   ├── SeleccionBarbero.jsx   # Pantalla 3: lista de barberos
+│       │   ├── SeleccionFecha.jsx     # Pantalla 4: calendario 7× (15 días, grisa días sin disponibilidad)
+│       │   ├── SeleccionHorario.jsx   # Pantalla 5: slots disponibles del día
+│       │   ├── DatosCliente.jsx       # Pantalla 6: nombre, teléfono, email
+│       │   ├── Confirmacion.jsx       # Pantalla 7: resumen + confirmar + resultado
+│       │   └── GestionTurno.jsx       # Pantalla 8: ver/cancelar/reprogramar turno por token
 │       │
 │       └── components/
-│           ├── Landing.jsx            # Pantalla 1: logo + nombre + botón "Reservar turno"
-│           ├── SeleccionServicio.jsx   # Pantalla 2: lista de servicios
-│           ├── SeleccionBarbero.jsx    # Pantalla 3: lista de barberos
-│           ├── SeleccionFecha.jsx      # Pantalla 4: grilla de próximos 14 días
-│           ├── SeleccionHorario.jsx    # Pantalla 5: slots disponibles del día
-│           ├── DatosCliente.jsx        # Pantalla 6: nombre, teléfono, email
-│           ├── Confirmacion.jsx        # Pantalla 7: resumen + confirmar + resultado
-│           └── GestionTurno.jsx        # Pantalla 8: ver/cancelar/reprogramar turno por token
+│           └── ui/                    # Primitivos del sistema de diseño
+│               ├── index.js           # Barrel export
+│               ├── Button.jsx, Card.jsx, Field.jsx, TopBar.jsx, ScreenHeader.jsx
+│               ├── StickyFooter.jsx, EmptyState.jsx, Skeleton.jsx, StatusPill.jsx
+│               ├── PageContainer.jsx, ConfirmDialog.jsx, AvatarIniciales.jsx, SummaryRow.jsx  # 13 universales
+│               ├── Progress.jsx, MiniCalendario.jsx, SlotChip.jsx  # específicos del wizard de reserva
+│               └── IconoAlerta.jsx    # ícono compartido para el EmptyState de error
 │
 ├── frontend-barbero/                  # App del barbero — React + Vite
 │   ├── package.json
@@ -302,6 +320,7 @@ sistema-gestion-barberia/
 | **Turnero — servicios** | `GET` | `/api/turnero/servicios` | Público |
 | **Turnero — barberos** | `GET` | `/api/turnero/barberos` | Público |
 | **Turnero — disponibilidad** | `GET` | `/api/turnero/disponibilidad` | Público |
+| **Turnero — días disponibles** | `GET` | `/api/turnero/dias-disponibles` | Público |
 | **Turnero — turnos** | `POST` | `/api/turnero/turnos` | Público |
 | **Turnero — turnos** | `GET` | `/api/turnero/turnos/:token` | Público |
 | **Turnero — turnos** | `POST` | `/api/turnero/turnos/:token/cancelar` | Público |

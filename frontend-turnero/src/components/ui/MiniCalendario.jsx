@@ -3,7 +3,8 @@
 // Usado en SeleccionFecha (wizard inicial) y GestionTurno (reprogramación).
 
 import { theme } from '../../theme/tokens.js';
-import { diaNumero, esHoy, diaDeSemana } from '../../utils/fecha.js';
+import { diaNumero, esHoy } from '../../utils/fecha.js';
+import Skeleton from './Skeleton.jsx';
 
 // Días de la semana en orden lunes-primero (convención AR).
 const DIAS_SEMANA = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
@@ -11,48 +12,28 @@ const DIAS_SEMANA = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 /**
  * MiniCalendario
  * Renderiza un grid 7-columnas con el mes/año arriba y celdas cuadradas.
- * Marca "hoy" con dot accent, días cerrados del negocio y feriados como
- * deshabilitados, y la fecha seleccionada con fill accent.
+ * Marca "hoy" con dot accent, los días sin disponibilidad como deshabilitados,
+ * y la fecha seleccionada con fill accent.
  *
- * "Hoy" también se deshabilita si la hora de cierre del negocio ya pasó:
- * en ese caso ya no quedan turnos posibles ese día.
+ * Qué día es reservable lo decide el backend: `diasDisponibles` es la lista
+ * de fechas con ≥1 slot (ya excluye días cerrados del negocio, feriados,
+ * fechas pasadas y "hoy ya cerrado"). Cualquier día que no esté en esa lista
+ * se grisa. Mientras `cargando` es true, las celdas se muestran como skeletons.
  * @param {Array<string>} props.dias - Array de YYYY-MM-DD (mínimo 1)
+ * @param {Array<string>} [props.diasDisponibles=[]] - YYYY-MM-DD con ≥1 slot reservable
+ * @param {boolean} [props.cargando=false] - True mientras se cargan los días disponibles
  * @param {string|null} props.seleccionada - YYYY-MM-DD de la fecha seleccionada
  * @param {Function} props.onSeleccionar - Callback con la fecha clickeada
- * @param {Array<Object>} [props.horarioAtencion=[]] - Días abiertos del tenant: [{ dia_semana, hora_inicio, hora_fin }]
- * @param {Array<Object>} [props.feriados=[]] - Feriados del tenant: [{ fecha, ... }]
  */
-function MiniCalendario({ dias, seleccionada, onSeleccionar, horarioAtencion = [], feriados = [] }) {
+function MiniCalendario({ dias, diasDisponibles = [], cargando = false, seleccionada, onSeleccionar }) {
   const primerDia = dias[0];
 
   // Sublabel derivado de la cantidad de días visibles: la pantalla controla
   // cuántos días mostrar y el label se ajusta solo.
   const subLabel = `${dias.length} días`;
 
-  // Conjuntos para resolver "¿está cerrado este día?" sin recorrer arrays
-  // por cada celda. Día cerrado = su día-de-semana no abre, o es feriado.
-  const diasAbiertos = new Set(horarioAtencion.map(h => h.dia_semana));
-  const fechasFeriado = new Set(feriados.map(f => f.fecha));
-
-  // Hora local actual en 'HH:MM', para detectar si el negocio ya cerró hoy.
-  const ahora = new Date();
-  const horaActual = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
-
-  /**
-   * yaCerroHoy
-   * True si la fecha es hoy y la hora de cierre del negocio ya pasó —
-   * ya no quedan turnos posibles ese día, así que se trata como cerrado.
-   * Para fechas que no son hoy devuelve false (el cierre por día-de-semana
-   * o feriado lo resuelve el filtro principal).
-   * @param {string} fecha - YYYY-MM-DD
-   * @returns {boolean}
-   */
-  function yaCerroHoy(fecha) {
-    if (!esHoy(fecha)) return false;
-    const dia = horarioAtencion.find(h => h.dia_semana === diaDeSemana(fecha));
-    if (!dia) return false;
-    return horaActual >= dia.hora_fin;
-  }
+  // Set para resolver "¿este día es reservable?" en O(1) por celda.
+  const reservables = new Set(diasDisponibles);
 
   // Mes del primer día visible.
   const [y, m] = primerDia.split('-').map(Number);
@@ -119,15 +100,19 @@ function MiniCalendario({ dias, seleccionada, onSeleccionar, horarioAtencion = [
           <div key={`pad-${i}`}/>
         ))}
 
-        {/* Días */}
+        {/* Días — skeleton mientras carga, celda real cuando hay datos */}
         {dias.map(f => (
-          <CeldaDia
-            key={f}
-            fecha={f}
-            cerrado={!diasAbiertos.has(diaDeSemana(f)) || fechasFeriado.has(f) || yaCerroHoy(f)}
-            seleccionada={f === seleccionada}
-            onClick={() => onSeleccionar(f)}
-          />
+          cargando ? (
+            <Skeleton key={f} radius={theme.radius} style={{ aspectRatio: '1' }}/>
+          ) : (
+            <CeldaDia
+              key={f}
+              fecha={f}
+              cerrado={!reservables.has(f)}
+              seleccionada={f === seleccionada}
+              onClick={() => onSeleccionar(f)}
+            />
+          )
         ))}
       </div>
     </div>
@@ -137,8 +122,7 @@ function MiniCalendario({ dias, seleccionada, onSeleccionar, horarioAtencion = [
 /**
  * CeldaDia
  * Celda cuadrada de un día. Estados: normal, hoy, seleccionado, cerrado.
- * "Cerrado" = día sin atención del negocio, feriado, u hoy ya pasado el
- * horario de cierre; lo resuelve el padre.
+ * "Cerrado" = día sin disponibilidad reservable; lo resuelve el padre.
  * @param {string} props.fecha - YYYY-MM-DD
  * @param {boolean} props.cerrado - True si ese día no es reservable
  * @param {boolean} props.seleccionada
@@ -168,7 +152,7 @@ function CeldaDia({ fecha, cerrado, seleccionada, onClick }) {
       type="button"
       onClick={cerrado ? undefined : onClick}
       disabled={cerrado}
-      aria-label={fecha + (cerrado ? ' (cerrado)' : '') + (hoy ? ' (hoy)' : '')}
+      aria-label={fecha + (cerrado ? ' (sin disponibilidad)' : '') + (hoy ? ' (hoy)' : '')}
       style={{
         aspectRatio: '1',
         background,

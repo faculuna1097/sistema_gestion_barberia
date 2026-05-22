@@ -18,3 +18,4 @@ export { default as AvatarIniciales } from './AvatarIniciales.jsx';
 export { default as SummaryRow }      from './SummaryRow.jsx';
 export { default as MiniCalendario }  from './MiniCalendario.jsx';
 export { default as SlotChip }        from './SlotChip.jsx';
+export { default as IconoAlerta }     from './IconoAlerta.jsx';

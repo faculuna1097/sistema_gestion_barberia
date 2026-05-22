@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { getTenant, getImagenesNegocio } from './services/api.js';
 import { theme } from './theme/tokens.js';
-import { PageContainer, Skeleton, EmptyState, Button } from './components/ui';
+import { PageContainer, Skeleton, EmptyState, Button, IconoAlerta } from './components/ui';
 import Landing from './screens/Landing.jsx';
 import SeleccionServicio from './screens/SeleccionServicio.jsx';
 import SeleccionBarbero from './screens/SeleccionBarbero.jsx';
@@ -25,22 +25,6 @@ function extraerTokenDeURL() {
   const path = window.location.pathname;
   const match = path.match(/\/turnos\/gestionar\/([^/]+)/);
   return match ? match[1] : null;
-}
-
-/**
- * IconoAlerta
- * SVG inline para el EmptyState de error de carga del tenant.
- * Duplicado intencional con GestionTurno.jsx — al tercer uso, centralizar
- * en /components/ui/IconoAlerta.jsx.
- */
-function IconoAlerta() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5"/>
-      <path d="M12 8v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-      <circle cx="12" cy="15.5" r="0.75" fill="currentColor"/>
-    </svg>
-  );
 }
 
 function App() {
@@ -201,7 +185,8 @@ function App() {
     case 3:
       return (
         <SeleccionFecha
-          tenant={tenant}
+          barbero={reserva.barbero}
+          servicio={reserva.servicio}
           seleccionada={reserva.fecha}
           onSeleccionar={(f) => { actualizarReserva({ fecha: f, horario: null }); siguiente(); }}
           onVolver={volver}
