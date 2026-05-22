@@ -13,10 +13,13 @@ const DIAS_SEMANA = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
  * Renderiza un grid 7-columnas con el mes/año arriba y celdas cuadradas.
  * Marca "hoy" con dot accent, días cerrados del negocio y feriados como
  * deshabilitados, y la fecha seleccionada con fill accent.
+ *
+ * "Hoy" también se deshabilita si la hora de cierre del negocio ya pasó:
+ * en ese caso ya no quedan turnos posibles ese día.
  * @param {Array<string>} props.dias - Array de YYYY-MM-DD (mínimo 1)
  * @param {string|null} props.seleccionada - YYYY-MM-DD de la fecha seleccionada
  * @param {Function} props.onSeleccionar - Callback con la fecha clickeada
- * @param {Array<Object>} [props.horarioAtencion=[]] - Días abiertos del tenant: [{ dia_semana, ... }]
+ * @param {Array<Object>} [props.horarioAtencion=[]] - Días abiertos del tenant: [{ dia_semana, hora_inicio, hora_fin }]
  * @param {Array<Object>} [props.feriados=[]] - Feriados del tenant: [{ fecha, ... }]
  */
 function MiniCalendario({ dias, seleccionada, onSeleccionar, horarioAtencion = [], feriados = [] }) {
@@ -30,6 +33,26 @@ function MiniCalendario({ dias, seleccionada, onSeleccionar, horarioAtencion = [
   // por cada celda. Día cerrado = su día-de-semana no abre, o es feriado.
   const diasAbiertos = new Set(horarioAtencion.map(h => h.dia_semana));
   const fechasFeriado = new Set(feriados.map(f => f.fecha));
+
+  // Hora local actual en 'HH:MM', para detectar si el negocio ya cerró hoy.
+  const ahora = new Date();
+  const horaActual = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
+
+  /**
+   * yaCerroHoy
+   * True si la fecha es hoy y la hora de cierre del negocio ya pasó —
+   * ya no quedan turnos posibles ese día, así que se trata como cerrado.
+   * Para fechas que no son hoy devuelve false (el cierre por día-de-semana
+   * o feriado lo resuelve el filtro principal).
+   * @param {string} fecha - YYYY-MM-DD
+   * @returns {boolean}
+   */
+  function yaCerroHoy(fecha) {
+    if (!esHoy(fecha)) return false;
+    const dia = horarioAtencion.find(h => h.dia_semana === diaDeSemana(fecha));
+    if (!dia) return false;
+    return horaActual >= dia.hora_fin;
+  }
 
   // Mes del primer día visible.
   const [y, m] = primerDia.split('-').map(Number);
@@ -101,7 +124,7 @@ function MiniCalendario({ dias, seleccionada, onSeleccionar, horarioAtencion = [
           <CeldaDia
             key={f}
             fecha={f}
-            cerrado={!diasAbiertos.has(diaDeSemana(f)) || fechasFeriado.has(f)}
+            cerrado={!diasAbiertos.has(diaDeSemana(f)) || fechasFeriado.has(f) || yaCerroHoy(f)}
             seleccionada={f === seleccionada}
             onClick={() => onSeleccionar(f)}
           />
@@ -114,9 +137,10 @@ function MiniCalendario({ dias, seleccionada, onSeleccionar, horarioAtencion = [
 /**
  * CeldaDia
  * Celda cuadrada de un día. Estados: normal, hoy, seleccionado, cerrado.
- * "Cerrado" = día sin atención del negocio o feriado; lo resuelve el padre.
+ * "Cerrado" = día sin atención del negocio, feriado, u hoy ya pasado el
+ * horario de cierre; lo resuelve el padre.
  * @param {string} props.fecha - YYYY-MM-DD
- * @param {boolean} props.cerrado - True si el negocio no atiende ese día
+ * @param {boolean} props.cerrado - True si ese día no es reservable
  * @param {boolean} props.seleccionada
  * @param {Function} props.onClick
  */
