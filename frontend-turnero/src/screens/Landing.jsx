@@ -10,14 +10,73 @@
 // `tenant.direccion` y `tenant.telefono` son columnas futuras en DB; mientras
 // no existan se muestran placeholders de texto.
 
+import { useState } from 'react';
 import { theme } from '../theme/tokens.js';
 import { PageContainer, Button, StickyFooter } from '../components/ui';
 
 /**
+ * NOMBRES_DIA
+ * Nombres de día de semana en español, indexados 0..6 (0=domingo),
+ * misma convención que `dia_semana` del backend.
+ */
+const NOMBRES_DIA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+
+/**
+ * ORDEN_SEMANA
+ * Índices de día (0=domingo) ordenados de lunes a domingo, para listar
+ * la grilla semanal en el orden natural de un negocio.
+ */
+const ORDEN_SEMANA = [1, 2, 3, 4, 5, 6, 0];
+
+/**
+ * fechaLocalStr
+ * Convierte un Date a 'YYYY-MM-DD' usando la fecha local del navegador.
+ * @param {Date} d - Fecha a formatear
+ * @returns {string} Ej: "2026-05-22"
+ */
+function fechaLocalStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * buscarProximaApertura
+ * Recorre los próximos 7 días buscando el primer día/hora en que el negocio
+ * abre. Saltea feriados. Para el día de hoy, solo cuenta si la apertura
+ * todavía no pasó.
+ * @param {Array<Object>} horarioAtencion - días abiertos [{ dia_semana, hora_inicio, hora_fin }]
+ * @param {Array<Object>} feriados - feriados del tenant [{ fecha }]
+ * @param {Date} ahora - Momento de referencia
+ * @param {string} horaActual - Hora actual en 'HH:MM'
+ * @returns {string|null} Ej: "hoy 14:00", "mañana 10:00", "el martes 10:00"; null si no abre en 7 días
+ */
+function buscarProximaApertura(horarioAtencion, feriados, ahora, horaActual) {
+  for (let offset = 0; offset <= 7; offset++) {
+    const fecha = new Date(ahora);
+    fecha.setDate(ahora.getDate() + offset);
+
+    if (feriados.some((f) => f.fecha === fechaLocalStr(fecha))) continue;
+
+    const dia = horarioAtencion.find((h) => h.dia_semana === fecha.getDay());
+    if (!dia) continue;
+
+    // El día de hoy solo cuenta si la apertura todavía no pasó.
+    if (offset === 0 && horaActual >= dia.hora_inicio) continue;
+
+    let cuando;
+    if (offset === 0) cuando = 'hoy';
+    else if (offset === 1) cuando = 'mañana';
+    else cuando = `el ${NOMBRES_DIA[fecha.getDay()]}`;
+
+    return `${cuando} ${dia.hora_inicio}`;
+  }
+  return null;
+}
+
+/**
  * calcularEstadoNegocio
  * Determina si el negocio está abierto en este momento, según su horario
- * de atención semanal y sus feriados. Función pura: usa la hora local del
- * navegador.
+ * de atención semanal y sus feriados. Si está cerrado, calcula cuándo abre.
+ * Función pura: usa la hora local del navegador.
  * @param {Array<Object>} horarioAtencion - días abiertos [{ dia_semana, hora_inicio, hora_fin }]
  * @param {Array<Object>} feriados - feriados del tenant [{ fecha }]
  * @returns {{ abierto: boolean, texto: string }} estado + label a mostrar
@@ -25,27 +84,26 @@ import { PageContainer, Button, StickyFooter } from '../components/ui';
 function calcularEstadoNegocio(horarioAtencion = [], feriados = []) {
   const ahora = new Date();
 
-  // Fecha de hoy en YYYY-MM-DD local, para cruzar contra feriados.
-  const hoyStr = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
-  if (feriados.some((f) => f.fecha === hoyStr)) {
-    return { abierto: false, texto: 'Cerrado' };
-  }
-
-  // Día de semana 0..6 (0=domingo), misma convención que el backend.
-  const dia = horarioAtencion.find((h) => h.dia_semana === ahora.getDay());
-  if (!dia) {
-    return { abierto: false, texto: 'Cerrado' };
-  }
-
   // Hora actual en 'HH:MM' para comparar como string contra el rango.
   const horaActual = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
-  if (horaActual < dia.hora_inicio) {
-    return { abierto: false, texto: `Cerrado · abre ${dia.hora_inicio}` };
+
+  // Horario de hoy — null si hoy es feriado o el negocio no atiende ese día.
+  const hoyEsFeriado = feriados.some((f) => f.fecha === fechaLocalStr(ahora));
+  const diaHoy = hoyEsFeriado
+    ? null
+    : horarioAtencion.find((h) => h.dia_semana === ahora.getDay());
+
+  // Abierto: hay horario hoy y la hora actual cae dentro del rango.
+  if (diaHoy && horaActual >= diaHoy.hora_inicio && horaActual < diaHoy.hora_fin) {
+    return { abierto: true, texto: `Abierto · cierra ${diaHoy.hora_fin}` };
   }
-  if (horaActual >= dia.hora_fin) {
-    return { abierto: false, texto: 'Cerrado' };
-  }
-  return { abierto: true, texto: `Abierto · cierra ${dia.hora_fin}` };
+
+  // Cerrado: buscar la próxima apertura en los próximos 7 días.
+  const proxima = buscarProximaApertura(horarioAtencion, feriados, ahora, horaActual);
+  return {
+    abierto: false,
+    texto: proxima ? `Cerrado · abre ${proxima}` : 'Cerrado',
+  };
 }
 
 /**
@@ -93,8 +151,8 @@ function Landing({ tenant, imagenes = [], onReservar }) {
             textAlign: 'center',
           }}>{tenant.nombre}</h1>
 
-          {/* Estado del negocio — eyebrow debajo del nombre, alineado a la izquierda */}
-          <EstadoNegocio abierto={estado.abierto} texto={estado.texto} />
+          {/* Estado del negocio + horario semanal desplegable */}
+          <HorarioSemanal estado={estado} horarioAtencion={tenant.horario_atencion} />
 
           <div style={{
             fontFamily: theme.body,
@@ -206,35 +264,120 @@ function AvatarLogo({ src, altText }) {
 }
 
 /**
- * EstadoNegocio
- * Eyebrow que indica si el negocio está abierto ahora: dot de color + texto
- * en mono mayúsculas, sin fondo. Dot verde si está abierto, gris si cerrado.
- * @param {boolean} props.abierto - True si el negocio atiende en este momento
- * @param {string} props.texto - Label a mostrar (ej: "Abierto · cierra 20:00")
+ * HorarioSemanal
+ * Bloque de estado del negocio + horario semanal desplegable. La fila de
+ * estado (ícono reloj + texto + chevron) es un botón: al activarse muestra
+ * u oculta la grilla con los 7 días de la semana, con el día de hoy resaltado.
+ * @param {Object} props.estado - { abierto, texto } devuelto por calcularEstadoNegocio
+ * @param {Array<Object>} props.horarioAtencion - [{ dia_semana, hora_inicio, hora_fin }]
  */
-function EstadoNegocio({ abierto, texto }) {
-  const dotColor = abierto ? theme.success : theme.mutedSoft;
+function HorarioSemanal({ estado, horarioAtencion = [] }) {
+  const [expandido, setExpandido] = useState(false);
+  const [foco, setFoco] = useState(false);
+
+  const diaHoy = new Date().getDay();
+  const colorIcono = estado.abierto ? theme.success : theme.mutedSoft;
+
   return (
-    <div style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 6,
-      marginTop: 16,
-      fontFamily: theme.mono,
-      fontWeight: theme.weightMedium,
-      fontSize: theme.sizeMicro,
-      letterSpacing: '0.04em',
-      textTransform: 'uppercase',
-      color: theme.inkSoft,
-    }}>
-      <span style={{
-        width: 6,
-        height: 6,
-        borderRadius: 999,
-        background: dotColor,
-      }}/>
-      {texto}
+    <div style={{ marginTop: 16 }}>
+      {/* Fila de estado — botón que despliega/oculta la grilla semanal */}
+      <button
+        type="button"
+        onClick={() => setExpandido((v) => !v)}
+        onFocus={() => setFoco(true)}
+        onBlur={() => setFoco(false)}
+        aria-expanded={expandido}
+        aria-controls="grilla-horario"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          width: '100%',
+          minHeight: 44,
+          padding: '4px 0',
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          textAlign: 'left',
+          fontFamily: theme.body,
+          fontSize: theme.sizeBody,
+          color: theme.inkSoft,
+          outline: foco ? `2px solid ${theme.accent}` : 'none',
+          outlineOffset: 2,
+          borderRadius: theme.radiusSm,
+        }}
+      >
+        <IconoReloj size={16} color={colorIcono} />
+        <span style={{ flex: 1 }}>{estado.texto}</span>
+        <IconoChevron expandido={expandido} />
+      </button>
+
+      {/* Grilla semanal — visible solo al expandir */}
+      {expandido && (
+        <ul id="grilla-horario" style={{ listStyle: 'none', margin: '4px 0 0', padding: 0 }}>
+          {ORDEN_SEMANA.map((diaSemana, i) => {
+            const dia = horarioAtencion.find((h) => h.dia_semana === diaSemana);
+            const esHoy = diaSemana === diaHoy;
+            return (
+              <li key={diaSemana} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 16,
+                padding: '8px 0',
+                borderBottom: i < ORDEN_SEMANA.length - 1 ? `1px solid ${theme.hairlineSoft}` : 'none',
+                fontFamily: theme.body,
+                fontSize: theme.sizeBody,
+                color: esHoy ? theme.accent : theme.muted,
+                fontWeight: esHoy ? theme.weightMedium : theme.weightRegular,
+              }}>
+                <span>{NOMBRES_DIA[diaSemana]}</span>
+                <span>{dia ? `${dia.hora_inicio} – ${dia.hora_fin}` : 'Cerrado'}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
+  );
+}
+
+/**
+ * IconoReloj
+ * SVG inline de un reloj, para la fila de estado del negocio.
+ * @param {number} props.size - Tamaño en px (ancho y alto)
+ * @param {string} props.color - Color del trazo
+ */
+function IconoReloj({ size = 16, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke={color} strokeWidth="1.5"/>
+      <path d="M12 7v5l3.5 2" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+/**
+ * IconoChevron
+ * SVG inline de un chevron que apunta hacia abajo, y rota 180° al expandir.
+ * @param {boolean} props.expandido - True cuando la grilla está desplegada
+ */
+function IconoChevron({ expandido }) {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      style={{
+        flexShrink: 0,
+        color: theme.muted,
+        transform: expandido ? 'rotate(180deg)' : 'rotate(0deg)',
+        transition: `transform ${theme.transitionFast}`,
+      }}
+    >
+      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
   );
 }
 
