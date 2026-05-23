@@ -55,18 +55,11 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago }) {
   const [colapsado, setColapsado]           = useState(false);
 
 
-  // Log de montado — solo una vez al montar el componente
-  useEffect(() => {
-    console.log("[panelAdmin] Montado | avisosPago:", avisosPago);
-  }, []);
-
   // Carga el nombre del negocio para mostrarlo en el header del sidebar
   useEffect(() => {
     const cargarNombreNegocio = async () => {
-      console.log('[panelAdmin] cargarNombreNegocio — request recibido');
       try {
         const data = await getNegocio();
-        console.log('[panelAdmin] cargarNombreNegocio — completado | nombre:', data.nombre_negocio);
         setNombreNegocio(data.nombre_negocio);
       } catch (err) {
         console.error('[panelAdmin] Error en cargarNombreNegocio:', err.message);
@@ -79,12 +72,10 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago }) {
   const SeccionActual = SECCIONES.find((s) => s.id === seccionActiva)?.componente;
 
   const handleCerrarSesion = () => {
-    console.log("[panelAdmin] handleCerrarSesion — cerrando sesión");
     onCerrarSesion();
   };
 
   const handleNavegar = (id) => {
-    console.log("[panelAdmin] handleNavegar — navegando a sección:", id);
     setSeccionActiva(id);
   };
 
@@ -184,7 +175,6 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago }) {
       <div style={styles.contenidoWrapper}>
         {mostrarAviso && (
           <BannerAviso onCerrar={() => {
-            console.log('[panelAdmin] aviso de pago cerrado por el usuario');
             setMostrarAviso(false);
           }} />
         )}

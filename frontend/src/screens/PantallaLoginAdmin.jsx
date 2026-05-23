@@ -56,8 +56,6 @@ const PantallaBloqueada = ({ onCancelar }) => (
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {
-  console.log('[pantallaLoginAdmin] render — montada');
-
   const [pin, setPin] = useState("");
   const [estado, setEstado] = useState("idle"); // "idle" | "error" | "exito"
   const [shake, setShake] = useState(false);
@@ -68,7 +66,6 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {
     if (pin.length >= 4 || estado === "exito") return;
 
     const nuevo = pin + digito;
-    console.log('[pantallaLoginAdmin] agregarDigito — PIN parcial:', '*'.repeat(nuevo.length));
     setEstado("idle");
     setPin(nuevo);
 
@@ -86,10 +83,8 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {
 
   // ── Validar PIN ─────────────────────────────────────────────────────────────
   const validarPin = async (pinIngresado) => {
-    console.log('[pantallaLoginAdmin] validarPin — request iniciado');
     try {
       const { token, aviso_pago } = await loginAdmin(pinIngresado);
-      console.log('[pantallaLoginAdmin] validarPin — completado | acceso concedido | aviso_pago:', aviso_pago);
       setEstado("exito");
       setTimeout(() => onAcceso(token, aviso_pago), 600);
     } catch (err) {
@@ -142,7 +137,6 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {
 
       <div style={styles.headerRow}>
         <button style={styles.btnCancelar} onClick={() => {
-          console.log('[pantallaLoginAdmin] onCancelar — iniciado');
           onCancelar();
         }}>
           Cancelar

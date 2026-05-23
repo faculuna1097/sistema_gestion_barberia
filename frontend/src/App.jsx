@@ -134,7 +134,7 @@ export default function App() {
   // El token ya fue limpiado por api.js, así que acá solo tocamos estado de React.
   useEffect(() => {
     setOnUnauthorizedOperativo(() => {
-      console.log('[app] 401 operativo detectado — redirigiendo a login operativo');
+      console.warn('[app] 401 operativo detectado — redirigiendo a login operativo');
       setTokenOperativo(null);
       setCurrentScreen("loginOperativo");
     });
@@ -151,8 +151,6 @@ export default function App() {
       setLogoUrl(data.logo || null);
       setBookingUrl(data.booking_url || null);
       if (data.nombre_negocio) document.title = data.nombre_negocio; // ← NUEVO
-      console.log('[app] cargarLogo — completado | logo:', data.logo ? 'sí' : 'no',
-        '| booking_url:', data.booking_url ? 'sí' : 'no');
     } catch (err) {
       console.error('[app] Error en cargarLogo:', err.message);
     }
@@ -171,11 +169,6 @@ export default function App() {
         getProductos(),
         getCategorias(),
       ]);
-      console.log('[app] precargarDatos — completado | barberos:', barberos.length,
-        '| servicios:', servicios.length,
-        '| productos:', productos.length,
-        '| categorias:', categorias.length
-      );
       setDatos({ barberos, servicios, productos, categorias, cargando: false, error: null });
     } catch (err) {
       console.error('[app] Error en precargarDatos:', err.message);
@@ -191,18 +184,15 @@ export default function App() {
   }, [tokenOperativo, precargarDatos]);
 
   const reintentar = useCallback(() => {
-    console.log('[app] reintentar — iniciado');
     precargarDatos();
     cargarLogo();
   }, [precargarDatos, cargarLogo]);
 
   const volverAlInicio = () => {
-    console.log('[App] Volviendo a pantalla principal — pantalla anterior:', currentScreen);
     setCurrentScreen("main");
   };
 
   const cerrarSesionAdmin = () => {
-    console.log('[app] cerrarSesionAdmin — iniciado');
     setToken(null);
     clearAuthToken();
     precargarDatos();
@@ -217,7 +207,6 @@ export default function App() {
    * muestra en MainScreen (modo operativo), así que no debería haber admin activo.
    */
   const cerrarSesionOperativo = () => {
-    console.log('[app] cerrarSesionOperativo — iniciado');
     clearAuthTokenOperativo();
     setTokenOperativo(null);
     setCurrentScreen("loginOperativo");
@@ -227,12 +216,10 @@ export default function App() {
   // ir ANTES de los chequeos de cargando/error porque precargarDatos no corre
   // sin token, así que datos.barberos quedaría en [] permanentemente acá.
   if (currentScreen === "loginOperativo") {
-    console.log('[app] Renderizando PantallaLoginOperativo');
     return (
       <PantallaLoginOperativo
         logoUrl={logoUrl}
         onAcceso={(tokenRecibido) => {
-          console.log('[app] Acceso operativo concedido');
           setTokenOperativo(tokenRecibido);
           setCurrentScreen("main");
         }}
@@ -243,21 +230,17 @@ export default function App() {
   if (datos.cargando && datos.barberos.length === 0) return <PantallaCargando />;
 
   if (datos.error && datos.barberos.length === 0) {
-    console.error('[app] precargarDatos — mostrando PantallaError');
     return <PantallaError onReintentar={reintentar} />;
   }
 
   if (currentScreen === "nuevoCorte") {
-    console.log('[app] Renderizando FlujoCorte');
     return <FlujoCorte onVolver={volverAlInicio}
       barberos={datos.barberos} servicios={datos.servicios} />;
   }
 
   if (currentScreen === "nuevaVenta") {
-    console.log('[app] Renderizando FlujoVenta');
     return <FlujoVenta
       onVolver={() => {
-        console.log('[app] Volviendo desde FlujoVenta — recargando datos de productos...');
         precargarDatos();
         setCurrentScreen("main");
       }}
@@ -266,16 +249,13 @@ export default function App() {
   }
 
   if (currentScreen === "nuevoGasto") {
-    console.log('[app] Renderizando FlujoGasto');
     return <FlujoGasto onVolver={volverAlInicio} categorias={datos.categorias} />;
   }
 
   if (currentScreen === "loginAdmin") {
-    console.log('[app] Renderizando PantallaLoginAdmin');
     return (
       <PantallaLoginAdmin
         onAcceso={(tokenRecibido, aviso_pago) => {
-          console.log('[app] Acceso admin concedido | aviso_pago:', aviso_pago);
           setToken(tokenRecibido);
           setAuthToken(tokenRecibido);
           setAvisosPago(aviso_pago || false);
@@ -287,30 +267,24 @@ export default function App() {
   }
 
   if (currentScreen === "admin") {
-    console.log('[app] Renderizando PanelAdmin');
     return <PanelAdmin onCerrarSesion={cerrarSesionAdmin} avisosPago={avisosPago} />;
   }
 
   return (
     <MainScreen
       onNuevoCorte={() => {
-        console.log('[app] Navegando a → nuevoCorte');
         setCurrentScreen("nuevoCorte");
       }}
       onNuevaVenta={() => {
-        console.log('[app] Navegando a → nuevaVenta');
         setCurrentScreen("nuevaVenta");
       }}
       onNuevoGasto={() => {
-        console.log('[app] Navegando a → nuevoGasto');
         setCurrentScreen("nuevoGasto");
       }}
       onAdminAccess={() => {
-        console.log('[app] Navegando a → loginAdmin');
         setCurrentScreen("loginAdmin");
       }}
       onSpotify={() => {
-        console.log('[app] Abriendo Spotify');
         window.open("https://open.spotify.com", "_blank");
       }}
       onLogoutOperativo={cerrarSesionOperativo}

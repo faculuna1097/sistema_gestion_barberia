@@ -58,7 +58,6 @@ const BookingIcon = () => (
  * porque la app no está instalada), hace fallback a la web.
  */
 const abrirYouTube = () => {
-  console.log('[mainScreen] Abriendo YouTube');
   const inicio = Date.now();
 
   // Timer de fallback: si la app no toma el control en 500ms, abrir web
@@ -67,7 +66,6 @@ const abrirYouTube = () => {
     // no estaba instalada (si hubiera abierto, el navegador habría perdido
     // foco y los timers se habrían pausado).
     if (Date.now() - inicio < 600) {
-      console.log('[mainScreen] App de YouTube no respondió, abriendo versión web');
       window.open(YOUTUBE_WEB_URL, '_blank');
     }
   }, 500);
@@ -227,7 +225,6 @@ export default function MainScreen({
               ...(pressed === "booking" ? styles.cornerButtonPressed : {}),
             }}
             onPointerDown={() => handlePress("booking", () => {
-              console.log('[mainScreen] Abriendo booking url');
               window.open(bookingUrl, "_blank");
             })}
             aria-label="Reservar turno"

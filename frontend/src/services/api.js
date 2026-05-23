@@ -43,7 +43,6 @@ let authToken = null;
 let tokenOperativo = null;
 try {
   tokenOperativo = localStorage.getItem('token_operativo');
-  if (tokenOperativo) console.log('[api] tokenOperativo hidratado desde localStorage');
 } catch (err) {
   // localStorage puede estar deshabilitado (modo privado agresivo, etc.).
   // En ese caso el operativo va a tener que re-loguearse cada vez que recargue.
@@ -63,7 +62,6 @@ let onUnauthorizedOperativo = null;
  */
 export const setAuthToken = (token) => {
   authToken = token;
-  console.log('[api] setAuthToken — completado');
 };
 
 /**
@@ -72,7 +70,6 @@ export const setAuthToken = (token) => {
  */
 export const clearAuthToken = () => {
   authToken = null;
-  console.log('[api] clearAuthToken — completado');
 };
 
 /**
@@ -89,7 +86,6 @@ export const setAuthTokenOperativo = (token) => {
   } catch (err) {
     console.warn('[api] No se pudo persistir tokenOperativo en localStorage:', err.message);
   }
-  console.log('[api] setAuthTokenOperativo — completado');
 };
 
 /**
@@ -105,7 +101,6 @@ export const clearAuthTokenOperativo = () => {
   } catch (err) {
     console.warn('[api] No se pudo limpiar tokenOperativo de localStorage:', err.message);
   }
-  console.log('[api] clearAuthTokenOperativo — completado');
 };
 
 /**

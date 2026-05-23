@@ -29,8 +29,6 @@ const CandadoIcon = () => (
  * No persiste nada — la persistencia ocurre dentro de loginOperativo() en api.js.
  */
 export default function PantallaLoginOperativo({ onAcceso, logoUrl }) {
-  console.log('[pantallaLoginOperativo] render — montada');
-
   const [usuario,  setUsuario]  = useState("");
   const [password, setPassword] = useState("");
   const [error,    setError]    = useState(null);
@@ -52,7 +50,6 @@ export default function PantallaLoginOperativo({ onAcceso, logoUrl }) {
     setError(null);
     try {
       const token = await loginOperativo(usuario.trim(), password);
-      console.log('[pantallaLoginOperativo] submit — login exitoso');
       onAcceso(token);
     } catch (err) {
       console.error('[pantallaLoginOperativo] Error en submit:', err.message);
