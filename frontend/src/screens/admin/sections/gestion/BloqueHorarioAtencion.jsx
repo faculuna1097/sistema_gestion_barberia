@@ -110,7 +110,6 @@ export default function BloqueHorarioAtencion() {
 
   useEffect(() => {
     const cargarHorario = async () => {
-      console.log('[bloqueHorarioAtencion] cargarHorario — request recibido');
       try {
         const res  = await apiFetch('/admin/horario-atencion');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -118,8 +117,6 @@ export default function BloqueHorarioAtencion() {
         const norm = normalizarSemana(data);
         setDias(norm);
         setClaveOrig(claveHorario(norm));
-        console.log('[bloqueHorarioAtencion] cargarHorario — completado |',
-          norm.filter((d) => d.abierto).length, 'días abiertos');
       } catch (err) {
         console.error('[bloqueHorarioAtencion] Error en cargarHorario:', err.message);
         setError('No se pudo cargar el horario de atención.');
@@ -170,9 +167,6 @@ export default function BloqueHorarioAtencion() {
       .filter((d) => d.abierto)
       .map((d) => ({ dia_semana: d.dia_semana, hora_inicio: d.hora_inicio, hora_fin: d.hora_fin }));
 
-    console.log('[bloqueHorarioAtencion] ejecutarGuardado — request recibido |',
-      'días abiertos:', horarios.length, '| confirmar_cascada:', confirmarCascada);
-
     try {
       const res = await apiFetch('/admin/horario-atencion', {
         method: 'PUT',
@@ -205,9 +199,6 @@ export default function BloqueHorarioAtencion() {
         setExito(true);
         setTimeout(() => setExito(false), 3000);
       }
-      console.log('[bloqueHorarioAtencion] ejecutarGuardado — completado |',
-        'turnos cancelados:', c.turnos_cancelados,
-        '| bloques:', c.bloques_eliminados + c.bloques_truncados);
     } catch (err) {
       console.error('[bloqueHorarioAtencion] Error en ejecutarGuardado:', err.message);
       setError(err.message || 'No se pudo guardar el horario. Intentá de nuevo.');

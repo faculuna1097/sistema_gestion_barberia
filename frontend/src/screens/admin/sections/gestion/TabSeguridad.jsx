@@ -44,7 +44,6 @@ export default function TabSeguridad() {
   // Cargar usuario operativo al montar para poder precargarlo en el modal.
   useEffect(() => {
     (async () => {
-      console.log('[tabSeguridad] cargando usuario operativo...');
       try {
         const data = await getCredencialesOperativas();
         setUsuarioOperativo(data.usuario);
@@ -242,7 +241,6 @@ function ModalCambiarPin({ open, onClose, onSuccess }) {
     if (!puedeGuardar) return;
     setGuardando(true);
     setError(null);
-    console.log('[modalCambiarPin] handleGuardar — request iniciado');
     try {
       const res = await apiFetch('/admin/negocio/pin-admin', {
         method: 'PUT',
@@ -252,7 +250,6 @@ function ModalCambiarPin({ open, onClose, onSuccess }) {
         const data = await res.json();
         throw new Error(data.error || 'Error del servidor');
       }
-      console.log('[modalCambiarPin] handleGuardar — completado');
       onSuccess();
     } catch (err) {
       console.error('[modalCambiarPin] Error:', err.message);
@@ -349,10 +346,8 @@ function ModalCambiarUsuario({ open, onClose, usuarioActual, onSuccess }) {
     if (!puedeGuardar) return;
     setGuardando(true);
     setError(null);
-    console.log('[modalCambiarUsuario] handleGuardar — request iniciado');
     try {
       await actualizarCredencialesOperativas({ usuario: usuarioLimpio });
-      console.log('[modalCambiarUsuario] handleGuardar — completado');
       onSuccess(usuarioLimpio);
     } catch (err) {
       console.error('[modalCambiarUsuario] Error:', err.message);
@@ -423,10 +418,8 @@ function ModalCambiarPassword({ open, onClose, onSuccess }) {
     if (!puedeGuardar) return;
     setGuardando(true);
     setError(null);
-    console.log('[modalCambiarPassword] handleGuardar — request iniciado');
     try {
       await actualizarCredencialesOperativas({ password });
-      console.log('[modalCambiarPassword] handleGuardar — completado');
       onSuccess();
     } catch (err) {
       console.error('[modalCambiarPassword] Error:', err.message);

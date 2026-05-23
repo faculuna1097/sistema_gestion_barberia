@@ -52,8 +52,6 @@ function ModalProducto({ producto, onGuardar, onCerrar }) {
     const method = esEdicion ? 'PUT' : 'POST';
     const path   = esEdicion ? `/admin/productos/${producto.id}` : '/admin/productos';
 
-    console.log(`[tabProductos] handleGuardar — request recibido | method: ${method} | nombre: ${body.nombre}`);
-
     try {
       const res = await apiFetch(path, {
         method,
@@ -81,11 +79,9 @@ function ModalProducto({ producto, onGuardar, onCerrar }) {
           throw new Error(data.error || 'Error al actualizar el stock');
         }
         const dataStock = await resStock.json();
-        console.log('[tabProductos] handleGuardar — stock actualizado | nuevo stock:', dataStock.stock_actual);
         productoGuardado.stock_actual = dataStock.stock_actual;
       }
 
-      console.log('[tabProductos] handleGuardar — completado | id:', productoGuardado.id);
       onGuardar(productoGuardado, esEdicion);
     } catch (err) {
       console.error('[tabProductos] Error en handleGuardar:', err.message);
@@ -233,11 +229,9 @@ export default function TabProductos() {
   // ── Carga inicial ─────────────────────────────────────────────────────────
   useEffect(() => {
     const cargarProductos = async () => {
-      console.log('[tabProductos] cargarProductos — request recibido');
       try {
         const res  = await apiFetch('/admin/productos');
         const data = await res.json();
-        console.log('[tabProductos] cargarProductos — completado | productos:', data.length);
         setProductos(data);
       } catch (err) {
         console.error('[tabProductos] Error en cargarProductos:', err.message);

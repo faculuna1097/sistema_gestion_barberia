@@ -17,11 +17,9 @@ export default function TabNegocio() {
 
   useEffect(() => {
     const cargarNegocio = async () => {
-      console.log('[tabNegocio] cargarNegocio — request recibido');
       try {
         const res  = await apiFetch('/admin/negocio');
         const data = await res.json();
-        console.log('[tabNegocio] cargarNegocio — completado | nombre:', data.nombre_negocio);
         setNombreNegocio(data.nombre_negocio);
         setNombreOriginal(data.nombre_negocio);
         setBookingUrl(data.booking_url || '');
@@ -46,8 +44,6 @@ export default function TabNegocio() {
     setError(null);
     setExito(false);
 
-    console.log('[tabNegocio] handleGuardar — request recibido | nombre:', nombreNegocio.trim());
-
     try {
       const res = await apiFetch('/admin/negocio', {
         method: 'PUT',
@@ -63,7 +59,6 @@ export default function TabNegocio() {
       }
 
       const data = await res.json();
-      console.log('[tabNegocio] handleGuardar — completado | nombre:', data.nombre_negocio);
       setNombreOriginal(data.nombre_negocio);
       setBookingUrlOriginal(data.booking_url || '');
       setExito(true);

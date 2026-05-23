@@ -223,13 +223,11 @@ export default function BloqueFeriados() {
 
   useEffect(() => {
     const cargarFeriados = async () => {
-      console.log('[bloqueFeriados] cargarFeriados — request recibido');
       try {
         const res = await apiFetch('/admin/feriados');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         setFeriados(data);
-        console.log('[bloqueFeriados] cargarFeriados — completado |', data.length, 'feriados');
       } catch (err) {
         console.error('[bloqueFeriados] Error en cargarFeriados:', err.message);
         setError('No se pudieron cargar los feriados.');
@@ -265,9 +263,6 @@ export default function BloqueFeriados() {
   const ejecutarAlta = async (confirmarCascada) => {
     setGuardando(true);
     setErrorModal(null);
-
-    console.log('[bloqueFeriados] ejecutarAlta — request recibido | fecha:', nuevaFecha,
-      '| confirmar_cascada:', confirmarCascada);
 
     try {
       const res = await apiFetch('/admin/feriados', {
@@ -310,8 +305,6 @@ export default function BloqueFeriados() {
         : '✓ Feriado agregado correctamente.');
       setTimeout(() => setExito(null), 4000);
 
-      console.log('[bloqueFeriados] ejecutarAlta — completado | fecha:', data.feriado.fecha,
-        '| turnos cancelados:', canceladas);
     } catch (err) {
       console.error('[bloqueFeriados] Error en ejecutarAlta:', err.message);
       // El error se muestra donde esté el usuario: modal de alta o de cascada.
@@ -336,9 +329,6 @@ export default function BloqueFeriados() {
     setEliminando(true);
     setError(null);
 
-    console.log('[bloqueFeriados] ejecutarEliminar — request recibido | feriado:',
-      feriadoAEliminar.id);
-
     try {
       const res = await apiFetch(`/admin/feriados/${feriadoAEliminar.id}`, { method: 'DELETE' });
       if (!res.ok) {
@@ -347,8 +337,6 @@ export default function BloqueFeriados() {
       }
       setFeriados((prev) => prev.filter((f) => f.id !== feriadoAEliminar.id));
       setAEliminar(null);
-      console.log('[bloqueFeriados] ejecutarEliminar — completado | feriado:',
-        feriadoAEliminar.id);
     } catch (err) {
       console.error('[bloqueFeriados] Error en ejecutarEliminar:', err.message);
       setError('No se pudo eliminar el feriado. Intentá de nuevo.');

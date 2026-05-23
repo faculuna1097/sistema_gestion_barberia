@@ -84,11 +84,9 @@ export default function BloqueImagenes() {
 
   useEffect(() => {
     const cargarImagenes = async () => {
-      console.log('[bloqueImagenes] cargarImagenes — request recibido');
       try {
         const data = await getImagenesAdmin();
         setImagenes(data);
-        console.log('[bloqueImagenes] cargarImagenes — completado |', data.length, 'imágenes');
       } catch (err) {
         console.error('[bloqueImagenes] Error en cargarImagenes:', err.message);
         setError('No se pudieron cargar las imágenes.');
@@ -132,9 +130,6 @@ export default function BloqueImagenes() {
     const { tipo, orden } = slot;
     setSubiendo(`${tipo}-${orden}`);
     setError(null);
-    console.log('[bloqueImagenes] handleArchivo — request recibido | slot:', tipo, orden,
-      '| original:', Math.round(file.size / 1024), 'KB');
-
     try {
       // Compresión + conversión a WebP en el navegador.
       const comprimida = await imageCompression(file, {
@@ -149,8 +144,6 @@ export default function BloqueImagenes() {
         ...prev.filter((img) => !(img.tipo === tipo && img.orden === orden)),
         nueva,
       ]);
-      console.log('[bloqueImagenes] handleArchivo — completado | slot:', tipo, orden,
-        '| comprimida:', Math.round(comprimida.size / 1024), 'KB');
     } catch (err) {
       console.error('[bloqueImagenes] Error en handleArchivo:', err.message);
       setError(err.message || 'No se pudo subir la imagen.');
@@ -166,14 +159,10 @@ export default function BloqueImagenes() {
     if (!imagenAEliminar) return;
     setEliminando(true);
     setError(null);
-    console.log('[bloqueImagenes] ejecutarEliminar — request recibido | imagen:',
-      imagenAEliminar.id);
-
     try {
       await eliminarImagen(imagenAEliminar.id);
       setImagenes((prev) => prev.filter((img) => img.id !== imagenAEliminar.id));
       setAEliminar(null);
-      console.log('[bloqueImagenes] ejecutarEliminar — completado');
     } catch (err) {
       console.error('[bloqueImagenes] Error en ejecutarEliminar:', err.message);
       setError('No se pudo eliminar la imagen. Intentá de nuevo.');

@@ -64,8 +64,6 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
     const method = esEdicion ? 'PUT' : 'POST';
     const path   = esEdicion ? `/admin/barberos/${barbero.id}` : '/admin/barberos';
 
-    console.log(`[tabBarberos] handleGuardar — request recibido | method: ${method} | nombre: ${body.nombre}`);
-
     try {
       const res = await apiFetch(path, {
         method,
@@ -78,7 +76,6 @@ function ModalBarbero({ barbero, onGuardar, onCerrar }) {
       }
 
       const barberoGuardado = await res.json();
-      console.log('[tabBarberos] handleGuardar — completado | id:', barberoGuardado.id);
       onGuardar(barberoGuardado, esEdicion);
     } catch (err) {
       console.error('[tabBarberos] Error en handleGuardar:', err.message);
@@ -218,7 +215,6 @@ function PanelHorarios({ barbero }) {
       try {
         const data = await getAdminHorarios(barbero.id);
         setBloques(data);
-        console.log('[tabBarberos/Horarios] cargar — completado |', data.length, 'bloques');
       } catch (err) {
         console.error('[tabBarberos/Horarios] Error cargando:', err.message);
         setMensaje('Error al cargar horarios');
@@ -273,7 +269,6 @@ function PanelHorarios({ barbero }) {
       const resultado = await putAdminHorarios(barbero.id, payload);
       setBloques(resultado);
       setMensaje('Horarios guardados correctamente');
-      console.log('[tabBarberos/Horarios] guardar — completado');
     } catch (err) {
       console.error('[tabBarberos/Horarios] Error guardando:', err.message);
       setMensaje('Error: ' + err.message);
@@ -379,7 +374,6 @@ function PanelSuspensiones({ barbero }) {
     try {
       const data = await getAdminSuspensiones(barbero.id);
       setSuspensiones(data);
-      console.log('[tabBarberos/Suspensiones] cargar — completado |', data.length, 'suspensiones');
     } catch (err) {
       console.error('[tabBarberos/Suspensiones] Error cargando:', err.message);
     } finally {
@@ -438,7 +432,6 @@ function PanelSuspensiones({ barbero }) {
     setEliminando(id);
     try {
       await eliminarAdminSuspension(id);
-      console.log('[tabBarberos/Suspensiones] eliminar — completado |', id);
       await cargarSuspensiones();
     } catch (err) {
       console.error('[tabBarberos/Suspensiones] Error eliminando:', err.message);
@@ -591,11 +584,9 @@ export default function TabBarberos() {
 
   useEffect(() => {
     const cargarBarberos = async () => {
-      console.log('[tabBarberos] cargarBarberos — request recibido');
       try {
         const res  = await apiFetch('/admin/barberos');
         const data = await res.json();
-        console.log('[tabBarberos] cargarBarberos — completado | barberos:', data.length);
         setBarberos(data);
       } catch (err) {
         console.error('[tabBarberos] Error en cargarBarberos:', err.message);

@@ -36,8 +36,6 @@ function ModalServicio({ servicio, onGuardar, onCerrar }) {
     const method = esEdicion ? 'PUT' : 'POST';
     const path   = esEdicion ? `/admin/servicios/${servicio.id}` : '/admin/servicios';
 
-    console.log(`[tabServicios] handleGuardar — request recibido | method: ${method} | nombre: ${body.nombre}`);
-
     try {
       const res = await apiFetch(path, {
         method,
@@ -50,7 +48,6 @@ function ModalServicio({ servicio, onGuardar, onCerrar }) {
       }
 
       const servicioGuardado = await res.json();
-      console.log('[tabServicios] handleGuardar — completado | id:', servicioGuardado.id);
       onGuardar(servicioGuardado, esEdicion);
     } catch (err) {
       console.error('[tabServicios] Error en handleGuardar:', err.message);
@@ -159,11 +156,9 @@ export default function TabServicios() {
   // ── Carga inicial ─────────────────────────────────────────────────────────
   useEffect(() => {
     const cargarServicios = async () => {
-      console.log('[tabServicios] cargarServicios — request recibido');
       try {
         const res  = await apiFetch('/admin/servicios');
         const data = await res.json();
-        console.log('[tabServicios] cargarServicios — completado | servicios:', data.length);
         setServicios(data);
       } catch (err) {
         console.error('[tabServicios] Error en cargarServicios:', err.message);

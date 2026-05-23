@@ -15,13 +15,11 @@ export default function TabTurnero() {
 
   useEffect(() => {
     async function cargar() {
-      console.log('[tabTurnero] cargar — request recibido');
       try {
         const data = await getAdminTurneroConfig();
         const valor = String(data.duracion_slot_minutos);
         setDuracion(valor);
         setOriginal(valor);
-        console.log('[tabTurnero] cargar — completado | duracion_slot_minutos:', data.duracion_slot_minutos);
       } catch (err) {
         console.error('[tabTurnero] Error cargando config:', err.message);
         setError('No se pudo cargar la configuración del turnero.');
@@ -50,7 +48,6 @@ export default function TabTurnero() {
       setDuracion(nuevoValor);
       setOriginal(nuevoValor);
       setMensaje('Configuración guardada correctamente.');
-      console.log('[tabTurnero] guardar — completado | duracion_slot_minutos:', data.duracion_slot_minutos);
     } catch (err) {
       console.error('[tabTurnero] Error guardando:', err.message);
       setMensaje('Error: ' + err.message);
