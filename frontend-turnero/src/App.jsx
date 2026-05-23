@@ -66,8 +66,6 @@ function App() {
         ]);
         setTenant(tenantData);
         setImagenes(imagenesData);
-        console.log('[App] carga inicial — completada | nombre:', tenantData.nombre,
-          '| imágenes:', imagenesData.length);
       } catch (err) {
         console.error('[App] Error cargando tenant:', err.message);
         setError('No se pudo cargar la información del negocio');

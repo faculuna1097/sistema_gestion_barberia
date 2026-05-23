@@ -41,7 +41,6 @@ function Confirmacion({ reserva, tenant, onExito, onVolver, resultado, onNuevaRe
         telefono: reserva.telefono,
         email: reserva.email,
       });
-      console.log('[Confirmacion] turno creado | turno_id:', res.turno_id);
       onExito(res);
     } catch (err) {
       console.error('[Confirmacion] Error:', err.message);

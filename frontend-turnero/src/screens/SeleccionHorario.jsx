@@ -36,7 +36,6 @@ function SeleccionHorario({ barbero, servicio, fecha, seleccionado, onSelecciona
       try {
         const data = await getDisponibilidad(barbero.id, servicio.id, fecha);
         setSlots(data.slots);
-        console.log('[SeleccionHorario] slots cargados |', data.slots.length);
       } catch (err) {
         console.error('[SeleccionHorario] Error:', err.message);
         setError('No pudimos cargar los horarios. Probá de nuevo.');

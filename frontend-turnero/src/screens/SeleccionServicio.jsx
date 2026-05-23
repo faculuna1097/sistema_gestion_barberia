@@ -27,7 +27,6 @@ function SeleccionServicio({ seleccionado, onSeleccionar, onVolver }) {
       try {
         const data = await getServicios();
         setServicios(data);
-        console.log('[SeleccionServicio] servicios cargados |', data.length);
       } catch (err) {
         console.error('[SeleccionServicio] Error:', err.message);
         setError('No pudimos cargar los servicios. Probá de nuevo en unos minutos.');

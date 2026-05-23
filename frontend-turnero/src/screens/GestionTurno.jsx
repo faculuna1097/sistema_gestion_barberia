@@ -53,7 +53,6 @@ function GestionTurno({ token, tenant }) {
       try {
         const data = await getTurnoPorToken(token);
         setDatos(data);
-        console.log('[GestionTurno] turno cargado | estado:', data.turno.estado);
       } catch (err) {
         console.error('[GestionTurno] Error:', err.message);
         setErrorCarga('No pudimos cargar tu turno. El link puede estar vencido o ser inválido.');
@@ -74,7 +73,6 @@ function GestionTurno({ token, tenant }) {
       await cancelarTurno(token);
       setDatos(prev => ({ ...prev, turno: { ...prev.turno, estado: 'cancelado' } }));
       setMensaje({ kind: 'ok', text: 'Turno cancelado. Te llegará un email de confirmación.' });
-      console.log('[GestionTurno] turno cancelado');
     } catch (err) {
       console.error('[GestionTurno] Error cancelando:', err.message);
       setMensaje({ kind: 'err', text: err.message });
@@ -143,7 +141,6 @@ function GestionTurno({ token, tenant }) {
       }));
       cerrarReprogramacion();
       setMensaje({ kind: 'ok', text: 'Turno reprogramado correctamente.' });
-      console.log('[GestionTurno] turno reprogramado');
     } catch (err) {
       console.error('[GestionTurno] Error reprogramando:', err.message);
       setMensaje({ kind: 'err', text: err.message });

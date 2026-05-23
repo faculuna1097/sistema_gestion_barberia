@@ -26,7 +26,6 @@ function SeleccionBarbero({ seleccionado, onSeleccionar, onVolver }) {
       try {
         const data = await getBarberos();
         setBarberos(data);
-        console.log('[SeleccionBarbero] barberos cargados |', data.length);
       } catch (err) {
         console.error('[SeleccionBarbero] Error:', err.message);
         setError('No pudimos cargar los barberos. Probá de nuevo en unos minutos.');
