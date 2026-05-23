@@ -21,14 +21,9 @@ import { query } from '../config/db.js';
  * @returns {JSON} { message, corte_id, monto_total }
  */
 export const createCorte = async (req, res) => {
-  console.log('[cortes] createCorte — request recibido | tenant:', req.tenant_id);
-
   const { barbero_id, servicio_id, precio, forma_pago, propina, turno_id } = req.body;
 
   if (!barbero_id || !servicio_id || precio === undefined || !forma_pago) {
-    console.warn('[cortes] createCorte — validación fallida | campos faltantes:', {
-      barbero_id, servicio_id, precio, forma_pago
-    });
     return res.status(400).json({
       error: 'Faltan campos requeridos: barbero_id, servicio_id, precio, forma_pago'
     });
@@ -63,7 +58,7 @@ export const createCorte = async (req, res) => {
       }
     }
 
-    console.log('[cortes] createCorte — completado | corte_id:', corteId, '| monto_total:', monto_total, '| turno_id:', turno_id || 'walk-in');
+    console.log('[cortes] createCorte completado | corte_id:', corteId);
     res.status(201).json({
       message: 'Corte registrado correctamente',
       corte_id: corteId,
@@ -89,15 +84,13 @@ export const createCorte = async (req, res) => {
       return res.status(400).json({ error: 'El turno_id proporcionado no existe' });
     }
 
-    console.error('[cortes] Error en createCorte | corte_id al momento del fallo:', corteId, '| error:', err.message);
+    console.error('[cortes] Error en createCorte | corte_id al momento del fallo:', corteId, '| error:', err);
 
     // Cleanup: si el corte se insertó pero el UPDATE del turno falló, eliminar el corte huérfano
     if (corteId) {
-      console.warn('[cortes] createCorte — iniciando cleanup | eliminando corte huérfano:', corteId);
       await query('DELETE FROM corte WHERE id = $1', [corteId]).catch((cleanupErr) => {
-        console.error('[cortes] createCorte — error en cleanup:', cleanupErr.message);
+        console.error('[cortes] createCorte — error en cleanup:', cleanupErr);
       });
-      console.log('[cortes] createCorte — cleanup completado | corte eliminado:', corteId);
     }
 
     res.status(500).json({ error: 'Error al registrar el corte' });

@@ -11,8 +11,6 @@ import { armarLinkTurnero } from '../services/turnosService.js';
  * @returns {JSON} array de suspensiones futuras
  */
 export const getSuspensiones = async (req, res) => {
-  console.log('[suspensiones] getSuspensiones — request recibido | tenant:', req.tenant_id, '| rol:', req.rol);
-
   try {
     let barberoId;
     if (req.rol === 'barbero') {
@@ -22,10 +20,9 @@ export const getSuspensiones = async (req, res) => {
     }
 
     const suspensiones = await listarSuspensiones(req.tenant_id, barberoId);
-    console.log('[suspensiones] getSuspensiones — completado |', suspensiones.length, 'suspensiones');
     res.json(suspensiones);
   } catch (err) {
-    console.error('[suspensiones] Error en getSuspensiones:', err.message);
+    console.error('[suspensiones] Error en getSuspensiones:', err);
     res.status(500).json({ error: 'Error al listar suspensiones' });
   }
 };
@@ -39,8 +36,6 @@ export const getSuspensiones = async (req, res) => {
  * @returns {JSON} 201 { suspension, turnos_cancelados } o 409 { turnos_afectados }
  */
 export const postSuspension = async (req, res) => {
-  console.log('[suspensiones] postSuspension — request recibido | tenant:', req.tenant_id, '| rol:', req.rol);
-
   const { desde, hasta, motivo, confirmar_cancelacion } = req.body;
 
   // barbero_id: si es barbero, forzar el propio
@@ -77,11 +72,10 @@ export const postSuspension = async (req, res) => {
       });
     }
 
-    console.log('[suspensiones] postSuspension — completado | suspension_id:',
-      resultado.suspension.id, '| turnos_cancelados:', resultado.turnos_cancelados);
+    console.log('[suspensiones] postSuspension completado | suspension_id:', resultado.suspension.id, '| turnos_cancelados:', resultado.turnos_cancelados);
     return res.status(201).json(resultado);
   } catch (err) {
-    console.error('[suspensiones] Error en postSuspension:', err.message);
+    console.error('[suspensiones] Error en postSuspension:', err);
     res.status(500).json({ error: 'Error al crear suspensión' });
   }
 };
@@ -93,20 +87,17 @@ export const postSuspension = async (req, res) => {
  * @returns {JSON} { ok: true }
  */
 export const deleteSuspension = async (req, res) => {
-  console.log('[suspensiones] deleteSuspension — request recibido | tenant:', req.tenant_id,
-    '| suspension:', req.params.id, '| rol:', req.rol);
-
   const barberoId = req.rol === 'barbero' ? req.barbero_id : null;
 
   try {
     await eliminarSuspension(req.params.id, req.tenant_id, barberoId);
-    console.log('[suspensiones] deleteSuspension — completado | suspension_id:', req.params.id);
+    console.log('[suspensiones] deleteSuspension completado | suspension_id:', req.params.id);
     res.json({ ok: true });
   } catch (err) {
     if (err.code === 'NO_ENCONTRADA') {
       return res.status(404).json({ error: err.message });
     }
-    console.error('[suspensiones] Error en deleteSuspension:', err.message);
+    console.error('[suspensiones] Error en deleteSuspension:', err);
     res.status(500).json({ error: 'Error al eliminar suspensión' });
   }
 };

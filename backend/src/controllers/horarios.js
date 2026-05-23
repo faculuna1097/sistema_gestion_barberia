@@ -12,8 +12,6 @@ import { obtenerHorarioCrudo, validarRangoEnHorario } from '../services/horarioA
  */
 export const getHorarios = async (req, res) => {
   const { barbero_id } = req.params;
-  console.log('[horarios] getHorarios — request recibido | tenant:', req.tenant_id,
-    '| barbero:', barbero_id, '| rol:', req.rol);
 
   if (req.rol === 'barbero' && barbero_id !== req.barbero_id) {
     return res.status(403).json({ error: 'No podés ver horarios de otro barbero' });
@@ -21,10 +19,9 @@ export const getHorarios = async (req, res) => {
 
   try {
     const bloques = await obtenerHorarios(barbero_id, req.tenant_id);
-    console.log('[horarios] getHorarios — completado |', bloques.length, 'bloques');
     res.json(bloques);
   } catch (err) {
-    console.error('[horarios] Error en getHorarios:', err.message);
+    console.error('[horarios] Error en getHorarios:', err);
     res.status(500).json({ error: 'Error al obtener horarios' });
   }
 };
@@ -39,8 +36,6 @@ export const getHorarios = async (req, res) => {
  */
 export const putHorarios = async (req, res) => {
   const { barbero_id } = req.params;
-  console.log('[horarios] putHorarios — request recibido | tenant:', req.tenant_id,
-    '| barbero:', barbero_id, '| rol:', req.rol);
 
   if (req.rol === 'barbero' && barbero_id !== req.barbero_id) {
     return res.status(403).json({ error: 'No podés modificar horarios de otro barbero' });
@@ -95,10 +90,10 @@ export const putHorarios = async (req, res) => {
     }
 
     const insertados = await reemplazarHorarios(barbero_id, req.tenant_id, bloques);
-    console.log('[horarios] putHorarios — completado |', insertados.length, 'bloques insertados');
+    console.log('[horarios] putHorarios completado | bloques_insertados:', insertados.length);
     res.json(insertados);
   } catch (err) {
-    console.error('[horarios] Error en putHorarios:', err.message);
+    console.error('[horarios] Error en putHorarios:', err);
     res.status(500).json({ error: 'Error al actualizar horarios' });
   }
 };

@@ -18,7 +18,6 @@ const SALT_ROUNDS = 10;
  * @returns {JSON} Array de barberos con id, nombre, comision_tipo, comision_valor, activo
  */
 export const getBarberos = async (req, res) => {
-  console.log('[gestion] getBarberos — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre, comision_tipo, comision_valor, activo
@@ -27,10 +26,9 @@ export const getBarberos = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    console.log('[gestion] getBarberos — completado:', result.rows.length, 'barberos');
     res.json(result.rows);
   } catch (err) {
-    console.error('[gestion] Error en getBarberos:', err.message);
+    console.error('[gestion] Error en getBarberos:', err);
     res.status(500).json({ error: 'Error al obtener barberos' });
   }
 };
@@ -45,7 +43,6 @@ export const getBarberos = async (req, res) => {
  * @returns {JSON} Barbero creado sin PIN
  */
 export const crearBarbero = async (req, res) => {
-  console.log('[gestion] crearBarbero — request recibido | body:', { ...req.body, pin: '***' }, '| tenant:', req.tenant_id);
   const { nombre, pin, comision_valor } = req.body;
 
   if (!nombre || !pin || comision_valor === undefined) {
@@ -63,10 +60,10 @@ export const crearBarbero = async (req, res) => {
        RETURNING id, nombre, comision_tipo, comision_valor, activo`,
       [req.tenant_id, nombre.trim(), pinHash, Number(comision_valor)]
     );
-    console.log('[gestion] crearBarbero — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
+    console.log('[gestion] crearBarbero completado | barbero_id:', result.rows[0].id);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en crearBarbero:', err.message);
+    console.error('[gestion] Error en crearBarbero:', err);
     res.status(500).json({ error: 'Error al crear barbero' });
   }
 };
@@ -85,7 +82,6 @@ export const crearBarbero = async (req, res) => {
  */
 export const editarBarbero = async (req, res) => {
   const { id } = req.params;
-  console.log('[gestion] editarBarbero — request recibido | id:', id, '| body:', { ...req.body, pin: req.body.pin ? '***' : undefined }, '| tenant:', req.tenant_id);
   const { nombre, comision_valor, activo, pin } = req.body;
 
   if (!nombre || comision_valor === undefined || activo === undefined) {
@@ -120,10 +116,10 @@ export const editarBarbero = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Barbero no encontrado' });
     }
-    console.log('[gestion] editarBarbero — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
+    console.log('[gestion] editarBarbero completado | barbero_id:', result.rows[0].id);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en editarBarbero:', err.message);
+    console.error('[gestion] Error en editarBarbero:', err);
     res.status(500).json({ error: 'Error al editar barbero' });
   }
 };
@@ -137,7 +133,6 @@ export const editarBarbero = async (req, res) => {
  * @returns {JSON} Array de servicios con id, nombre, precio, activo
  */
 export const getServicios = async (req, res) => {
-  console.log('[gestion] getServicios — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre, precio, activo
@@ -146,10 +141,9 @@ export const getServicios = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    console.log('[gestion] getServicios — completado:', result.rows.length, 'servicios');
     res.json(result.rows);
   } catch (err) {
-    console.error('[gestion] Error en getServicios:', err.message);
+    console.error('[gestion] Error en getServicios:', err);
     res.status(500).json({ error: 'Error al obtener servicios' });
   }
 };
@@ -163,7 +157,6 @@ export const getServicios = async (req, res) => {
  * @returns {JSON} Servicio creado
  */
 export const crearServicio = async (req, res) => {
-  console.log('[gestion] crearServicio — request recibido | body:', req.body, '| tenant:', req.tenant_id);
   const { nombre, precio } = req.body;
 
   if (!nombre || precio === undefined) {
@@ -177,10 +170,10 @@ export const crearServicio = async (req, res) => {
        RETURNING id, nombre, precio, activo`,
       [req.tenant_id, nombre.trim(), Number(precio)]
     );
-    console.log('[gestion] crearServicio — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
+    console.log('[gestion] crearServicio completado | servicio_id:', result.rows[0].id);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en crearServicio:', err.message);
+    console.error('[gestion] Error en crearServicio:', err);
     res.status(500).json({ error: 'Error al crear servicio' });
   }
 };
@@ -197,7 +190,6 @@ export const crearServicio = async (req, res) => {
  */
 export const editarServicio = async (req, res) => {
   const { id } = req.params;
-  console.log('[gestion] editarServicio — request recibido | id:', id, '| body:', req.body, '| tenant:', req.tenant_id);
   const { nombre, precio, activo } = req.body;
 
   if (!nombre || precio === undefined || activo === undefined) {
@@ -215,10 +207,10 @@ export const editarServicio = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Servicio no encontrado' });
     }
-    console.log('[gestion] editarServicio — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
+    console.log('[gestion] editarServicio completado | servicio_id:', result.rows[0].id);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en editarServicio:', err.message);
+    console.error('[gestion] Error en editarServicio:', err);
     res.status(500).json({ error: 'Error al editar servicio' });
   }
 };
@@ -232,7 +224,6 @@ export const editarServicio = async (req, res) => {
  * @returns {JSON} Array de productos con id, nombre, precio, stock_actual, stock_minimo, activo
  */
 export const getProductos = async (req, res) => {
-  console.log('[gestion] getProductos — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre, precio, stock_actual, stock_minimo, activo
@@ -241,10 +232,9 @@ export const getProductos = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    console.log('[gestion] getProductos — completado:', result.rows.length, 'productos');
     res.json(result.rows);
   } catch (err) {
-    console.error('[gestion] Error en getProductos:', err.message);
+    console.error('[gestion] Error en getProductos:', err);
     res.status(500).json({ error: 'Error al obtener productos' });
   }
 };
@@ -259,7 +249,6 @@ export const getProductos = async (req, res) => {
  * @returns {JSON} Producto creado
  */
 export const crearProducto = async (req, res) => {
-  console.log('[gestion] crearProducto — request recibido | body:', req.body, '| tenant:', req.tenant_id);
   const { nombre, precio, stock_minimo } = req.body;
 
   if (!nombre || precio === undefined) {
@@ -273,10 +262,10 @@ export const crearProducto = async (req, res) => {
        RETURNING id, nombre, precio, stock_actual, stock_minimo, activo`,
       [req.tenant_id, nombre.trim(), Number(precio), Number(stock_minimo ?? 0)]
     );
-    console.log('[gestion] crearProducto — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
+    console.log('[gestion] crearProducto completado | producto_id:', result.rows[0].id);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en crearProducto:', err.message);
+    console.error('[gestion] Error en crearProducto:', err);
     res.status(500).json({ error: 'Error al crear producto' });
   }
 };
@@ -294,7 +283,6 @@ export const crearProducto = async (req, res) => {
  */
 export const editarProducto = async (req, res) => {
   const { id } = req.params;
-  console.log('[gestion] editarProducto — request recibido | id:', id, '| body:', req.body, '| tenant:', req.tenant_id);
   const { nombre, precio, stock_minimo, activo } = req.body;
 
   if (!nombre || precio === undefined || activo === undefined) {
@@ -312,10 +300,10 @@ export const editarProducto = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
-    console.log('[gestion] editarProducto — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
+    console.log('[gestion] editarProducto completado | producto_id:', result.rows[0].id);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en editarProducto:', err.message);
+    console.error('[gestion] Error en editarProducto:', err);
     res.status(500).json({ error: 'Error al editar producto' });
   }
 };
@@ -330,7 +318,6 @@ export const editarProducto = async (req, res) => {
  */
 export const agregarStock = async (req, res) => {
   const { id } = req.params;
-  console.log('[gestion] agregarStock — request recibido | id:', id, '| cantidad:', req.body.cantidad, '| tenant:', req.tenant_id);
   const { cantidad } = req.body;
 
   if (!cantidad || Number(cantidad) <= 0) {
@@ -348,10 +335,10 @@ export const agregarStock = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
-    console.log('[gestion] agregarStock — completado | nombre:', result.rows[0].nombre, '| nuevo stock:', result.rows[0].stock_actual);
+    console.log('[gestion] agregarStock completado | nombre:', result.rows[0].nombre, '| stock:', result.rows[0].stock_actual);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en agregarStock:', err.message);
+    console.error('[gestion] Error en agregarStock:', err);
     res.status(500).json({ error: 'Error al agregar stock' });
   }
 };
@@ -366,7 +353,6 @@ export const agregarStock = async (req, res) => {
  * @returns {JSON} { nombre_negocio, logo }
  */
 export const getNegocio = async (req, res) => {
-  console.log('[gestion] getNegocio — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT nombre_negocio, logo, booking_url FROM tenant WHERE id = $1`,
@@ -375,16 +361,14 @@ export const getNegocio = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Tenant no encontrado' });
     }
-    console.log('[gestion] getNegocio — completado | nombre:', result.rows[0].nombre_negocio);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en getNegocio:', err.message);
+    console.error('[gestion] Error en getNegocio:', err);
     res.status(500).json({ error: 'Error al obtener datos del negocio' });
   }
 };
 
 export const editarNegocio = async (req, res) => {
-  console.log('[gestion] editarNegocio — request recibido | body:', req.body, '| tenant:', req.tenant_id);
   const { nombre_negocio, booking_url } = req.body;
 
   if (!nombre_negocio) {
@@ -400,10 +384,10 @@ export const editarNegocio = async (req, res) => {
        RETURNING nombre_negocio, booking_url`,
       [nombre_negocio.trim(), booking_url ? booking_url.trim() : null, req.tenant_id]
     );
-    console.log('[gestion] editarNegocio — completado | nombre:', result.rows[0].nombre_negocio);
+    console.log('[gestion] editarNegocio completado | nombre:', result.rows[0].nombre_negocio);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en editarNegocio:', err.message);
+    console.error('[gestion] Error en editarNegocio:', err);
     res.status(500).json({ error: 'Error al editar negocio' });
   }
 };
@@ -419,7 +403,6 @@ export const editarNegocio = async (req, res) => {
  * @returns {JSON} { ok: true }
  */
 export const cambiarPinAdmin = async (req, res) => {
-  console.log('[gestion] cambiarPinAdmin — request recibido | tenant:', req.tenant_id);
   const { pin_actual, pin_nuevo } = req.body;
 
   if (!pin_actual || !pin_nuevo) {
@@ -450,10 +433,10 @@ export const cambiarPinAdmin = async (req, res) => {
       [nuevoPinHash, req.tenant_id]
     );
 
-    console.log('[gestion] cambiarPinAdmin — completado | PIN actualizado');
+    console.log('[gestion] cambiarPinAdmin completado');
     res.json({ ok: true });
   } catch (err) {
-    console.error('[gestion] Error en cambiarPinAdmin:', err.message);
+    console.error('[gestion] Error en cambiarPinAdmin:', err);
     res.status(500).json({ error: 'Error al cambiar el PIN' });
   }
 };

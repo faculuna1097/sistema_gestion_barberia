@@ -12,9 +12,6 @@ const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
  * @returns {JSON} array de { barbero_id, barbero_nombre, cortes: [...] }
  */
 export const getPlanilla = async (req, res) => {
-  console.log('[planilla] getPlanilla — request recibido | tenant:', req.tenant_id,
-    '| semana:', req.query.semana, '| rol:', req.rol);
-
   const { semana } = req.query;
   if (!semana || !REGEX_FECHA.test(semana)) {
     return res.status(400).json({ error: 'semana debe tener formato YYYY-MM-DD' });
@@ -29,10 +26,9 @@ export const getPlanilla = async (req, res) => {
 
   try {
     const resultado = await detalleSemanal({ tenantId: req.tenant_id, semana, barberoId });
-    console.log('[planilla] getPlanilla — completado |', resultado.length, 'barberos');
     res.json(resultado);
   } catch (err) {
-    console.error('[planilla] Error en getPlanilla:', err.message);
+    console.error('[planilla] Error en getPlanilla:', err);
     res.status(500).json({ error: 'Error al obtener planilla' });
   }
 };
@@ -43,9 +39,6 @@ export const getPlanilla = async (req, res) => {
  * @returns {JSON} { barberos: [...], totales: {...} }
  */
 export const getResumen = async (req, res) => {
-  console.log('[planilla] getResumen — request recibido | tenant:', req.tenant_id,
-    '| semana:', req.query.semana, '| rol:', req.rol);
-
   const { semana } = req.query;
   if (!semana || !REGEX_FECHA.test(semana)) {
     return res.status(400).json({ error: 'semana debe tener formato YYYY-MM-DD' });
@@ -60,10 +53,9 @@ export const getResumen = async (req, res) => {
 
   try {
     const resultado = await resumenSemanal({ tenantId: req.tenant_id, semana, barberoId });
-    console.log('[planilla] getResumen — completado |', resultado.barberos.length, 'barberos');
     res.json(resultado);
   } catch (err) {
-    console.error('[planilla] Error en getResumen:', err.message);
+    console.error('[planilla] Error en getResumen:', err);
     res.status(500).json({ error: 'Error al obtener resumen' });
   }
 };

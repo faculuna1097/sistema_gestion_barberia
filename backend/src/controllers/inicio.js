@@ -12,7 +12,6 @@ const TZ = 'America/Argentina/Buenos_Aires';
  * @param {string} req.tenant_id - Inyectado por verificarToken
  */
 export const getResumenDia = async (req, res) => {
-  console.log('[inicio] getResumenDia — request recibido | tenant:', req.tenant_id);
   try {
 
     // ── Hoy ───────────────────────────────────────────────────────────────────
@@ -84,10 +83,9 @@ export const getResumenDia = async (req, res) => {
       clientes_mes:  Number(cortesMes.rows[0].clientes),
     };
 
-    console.log('[inicio] getResumenDia — completado | monto_dia:', resultado.monto_dia, '| clientes_dia:', resultado.clientes_dia);
     res.json(resultado);
   } catch (err) {
-    console.error('[inicio] Error en getResumenDia:', err.message);
+    console.error('[inicio] Error en getResumenDia:', err);
     res.status(500).json({ error: 'Error al obtener resumen del día' });
   }
 };
@@ -99,7 +97,6 @@ export const getResumenDia = async (req, res) => {
  * @param {string} req.tenant_id - Inyectado por verificarToken
  */
 export const getComparativoMes = async (req, res) => {
-  console.log('[inicio] getComparativoMes — request recibido | tenant:', req.tenant_id);
   try {
     const [cortesActual, ventasActual] = await Promise.all([
       query(
@@ -163,10 +160,9 @@ export const getComparativoMes = async (req, res) => {
       mes_anterior:    mesAnteriorNombre.charAt(0).toUpperCase() + mesAnteriorNombre.slice(1),
     };
 
-    console.log('[inicio] getComparativoMes — completado | monto_actual:', resultado.monto_actual, '| diferencia_pct:', resultado.diferencia_pct);
     res.json(resultado);
   } catch (err) {
-    console.error('[inicio] Error en getComparativoMes:', err.message);
+    console.error('[inicio] Error en getComparativoMes:', err);
     res.status(500).json({ error: 'Error al obtener comparativo mensual' });
   }
 };
@@ -179,7 +175,6 @@ export const getComparativoMes = async (req, res) => {
  * @returns {JSON} { productos: Array }
  */
 export const getStockBajo = async (req, res) => {
-  console.log('[inicio] getStockBajo — request recibido | tenant:', req.tenant_id);
   try {
     const resultado = await query(
       `SELECT id, nombre, stock_actual, stock_minimo
@@ -191,10 +186,9 @@ export const getStockBajo = async (req, res) => {
       [req.tenant_id]
     );
 
-    console.log('[inicio] getStockBajo — completado | productos con stock bajo:', resultado.rows.length);
     res.json({ productos: resultado.rows });
   } catch (err) {
-    console.error('[inicio] Error en getStockBajo:', err.message);
+    console.error('[inicio] Error en getStockBajo:', err);
     res.status(500).json({ error: 'Error al obtener alertas de stock' });
   }
 };

@@ -22,7 +22,6 @@ const redondear2 = (n) => Math.round(n * 100) / 100;
  */
 export const getBalanceMensual = async (req, res) => {
   const mes = req.query.mes || new Date().toISOString().slice(0, 7);
-  console.log('[balances] getBalanceMensual — request recibido:', { mes, tenant: req.tenant_id });
 
   if (!/^\d{4}-\d{2}$/.test(mes)) {
     return res.status(400).json({ error: 'Formato de mes inválido. Usar YYYY-MM.' });
@@ -145,16 +144,9 @@ export const getBalanceMensual = async (req, res) => {
       },
     };
 
-    console.log('[balances] getBalanceMensual — completado:', {
-      mes,
-      barberos: serviciosPorBarbero.length,
-      ingresos_brutos: respuesta.resumen.ingresos_brutos,
-      balance_neto: respuesta.resumen.balance_neto,
-    });
-
     res.json(respuesta);
   } catch (err) {
-    console.error('[balances] Error en getBalanceMensual:', err.message);
+    console.error('[balances] Error en getBalanceMensual:', err);
     res.status(500).json({ error: 'Error al obtener el balance mensual.' });
   }
 };
@@ -168,7 +160,6 @@ export const getBalanceMensual = async (req, res) => {
  */
 export const getBalanceHistorico = async (req, res) => {
   const cantidad = Math.min(parseInt(req.query.cantidad) || 12, 24);
-  console.log('[balances] getBalanceHistorico — request recibido:', { cantidad, tenant: req.tenant_id });
 
   try {
     const queryServiciosMensuales = `
@@ -261,13 +252,9 @@ export const getBalanceHistorico = async (req, res) => {
       return { ...mes, variacion_vs_anterior: variacion };
     });
 
-    console.log('[balances] getBalanceHistorico — completado:', {
-      meses_devueltos: historialConVariacion.length,
-    });
-
     res.json(historialConVariacion);
   } catch (err) {
-    console.error('[balances] Error en getBalanceHistorico:', err.message);
+    console.error('[balances] Error en getBalanceHistorico:', err);
     res.status(500).json({ error: 'Error al obtener el histórico de balances.' });
   }
 };

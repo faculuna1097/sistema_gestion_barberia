@@ -9,7 +9,6 @@ import { query } from '../config/db.js';
  * @returns {JSON} Array de servicios con id, nombre y precio
  */
 export const getServicios = async (req, res) => {
-  console.log('[servicios] getServicios — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre, precio
@@ -18,10 +17,9 @@ export const getServicios = async (req, res) => {
        ORDER BY precio ASC`,
       [req.tenant_id]
     );
-    console.log('[servicios] getServicios — completado:', result.rows.length, 'servicios encontrados');
     res.json(result.rows);
   } catch (err) {
-    console.error('[servicios] Error en getServicios:', err.message);
+    console.error('[servicios] Error en getServicios:', err);
     res.status(500).json({ error: 'Error al obtener servicios' });
   }
 };

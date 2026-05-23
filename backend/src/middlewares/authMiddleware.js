@@ -24,13 +24,10 @@ import { query } from '../config/db.js';
  * @param {Function} next - Pasa al siguiente middleware o controller si todo es correcto.
  */
 export const verificarToken = async (req, res, next) => {
-  console.log('[authMiddleware] verificarToken — request recibido | ruta:', req.method, req.url);
-
   const authHeader = req.headers['authorization'];
 
   // Verificar que el header exista y tenga el formato "Bearer <token>"
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.error('[authMiddleware] Error en verificarToken: header Authorization ausente o con formato incorrecto');
     return res.status(401).json({ error: 'Acceso no autorizado — token requerido' });
   }
 
@@ -43,8 +40,6 @@ export const verificarToken = async (req, res, next) => {
     // Validación cruzada: el tenant del JWT debe coincidir con el del subdominio.
     // tenantMiddleware corre antes y ya inyectó req.tenant_id.
     if (payload.tenant_id !== req.tenant_id) {
-      console.error('[authMiddleware] Error en verificarToken: el tenant del token no coincide con el del subdominio',
-        '| token:', payload.tenant_id, '| subdominio:', req.tenant_id);
       return res.status(403).json({ error: 'El token no corresponde a este tenant' });
     }
 
@@ -67,17 +62,14 @@ export const verificarToken = async (req, res, next) => {
       const tvActual = resultado.rows[0]?.operativo_token_version ?? 0;
       const tvToken  = payload.tv ?? 0;
       if (tvToken !== tvActual) {
-        console.error('[authMiddleware] Error en verificarToken: tv del token operativo no coincide',
-          '| token:', tvToken, '| tenant:', tvActual);
         return res.status(401).json({ error: 'Token inválido o expirado' });
       }
     }
 
-    console.log('[authMiddleware] verificarToken — completado | rol:', req.rol, '| barbero_id:', req.barbero_id);
     next();
   } catch (err) {
     // jwt.verify lanza error si el token está vencido, manipulado o con firma inválida
-    console.error('[authMiddleware] Error en verificarToken:', err.message);
+    console.error('[authMiddleware] Error en verificarToken:', err);
     return res.status(401).json({ error: 'Token inválido o expirado' });
   }
 };

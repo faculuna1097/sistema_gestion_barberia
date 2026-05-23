@@ -27,8 +27,6 @@ const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
  * @returns {JSON} array de feriados [{ id, fecha, descripcion }]
  */
 export const getFeriados = async (req, res) => {
-  console.log('[feriados] getFeriados — request recibido | tenant:', req.tenant_id);
-
   const hoy = DateTime.now().setZone(TZ).toISODate();
   const desde = req.query.desde || hoy;
   if (!REGEX_FECHA.test(desde)) {
@@ -37,10 +35,9 @@ export const getFeriados = async (req, res) => {
 
   try {
     const feriados = await obtenerFeriados(req.tenant_id, desde);
-    console.log('[feriados] getFeriados — completado |', feriados.length, 'feriados');
     res.json(feriados);
   } catch (err) {
-    console.error('[feriados] Error en getFeriados:', err.message);
+    console.error('[feriados] Error en getFeriados:', err);
     res.status(500).json({ error: 'Error al obtener los feriados' });
   }
 };
@@ -58,8 +55,6 @@ export const getFeriados = async (req, res) => {
  * @returns {JSON} 201 { feriado, cascada } | 409 { codigo, delta? } | 400
  */
 export const postFeriado = async (req, res) => {
-  console.log('[feriados] postFeriado — request recibido | tenant:', req.tenant_id);
-
   const { fecha, descripcion, confirmar_cascada } = req.body;
 
   // --- Validación del shape ---
@@ -105,11 +100,10 @@ export const postFeriado = async (req, res) => {
     }
     const feriado = await insertarFeriado(req.tenant_id, fecha, descripcionNorm);
 
-    console.log('[feriados] postFeriado — completado | fecha:', fecha,
-      '| turnos cancelados:', cascada.turnos_cancelados);
+    console.log('[feriados] postFeriado completado | fecha:', fecha, '| turnos_cancelados:', cascada.turnos_cancelados);
     res.status(201).json({ feriado, cascada });
   } catch (err) {
-    console.error('[feriados] Error en postFeriado:', err.message);
+    console.error('[feriados] Error en postFeriado:', err);
     res.status(500).json({ error: 'Error al cargar el feriado' });
   }
 };
@@ -122,17 +116,15 @@ export const postFeriado = async (req, res) => {
  * @returns {JSON} 200 { ok: true } | 404
  */
 export const deleteFeriado = async (req, res) => {
-  console.log('[feriados] deleteFeriado — request recibido | feriado:', req.params.id);
-
   try {
     const eliminado = await eliminarFeriado(req.tenant_id, req.params.id);
     if (!eliminado) {
       return res.status(404).json({ error: 'Feriado no encontrado' });
     }
-    console.log('[feriados] deleteFeriado — completado | feriado:', req.params.id);
+    console.log('[feriados] deleteFeriado completado | feriado_id:', req.params.id);
     res.json({ ok: true });
   } catch (err) {
-    console.error('[feriados] Error en deleteFeriado:', err.message);
+    console.error('[feriados] Error en deleteFeriado:', err);
     res.status(500).json({ error: 'Error al eliminar el feriado' });
   }
 };

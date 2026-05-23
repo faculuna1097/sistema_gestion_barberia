@@ -19,15 +19,11 @@ import { armarLinkTurnero } from '../services/turnosService.js';
  * @returns {JSON} array de 7 objetos día
  */
 export const getHorarioAtencion = async (req, res) => {
-  console.log('[horarioAtencion] getHorarioAtencion — request recibido | tenant:', req.tenant_id);
-
   try {
     const semana = await obtenerHorarioCompleto(req.tenant_id);
-    console.log('[horarioAtencion] getHorarioAtencion — completado |',
-      semana.filter((d) => d.abierto).length, 'días abiertos');
     res.json(semana);
   } catch (err) {
-    console.error('[horarioAtencion] Error en getHorarioAtencion:', err.message);
+    console.error('[horarioAtencion] Error en getHorarioAtencion:', err);
     res.status(500).json({ error: 'Error al obtener el horario de atención' });
   }
 };
@@ -47,8 +43,6 @@ export const getHorarioAtencion = async (req, res) => {
  * @returns {JSON} 200 { horarios, cascada } | 409 { codigo, delta } | 400
  */
 export const putHorarioAtencion = async (req, res) => {
-  console.log('[horarioAtencion] putHorarioAtencion — request recibido | tenant:', req.tenant_id);
-
   const { horarios, confirmar_cascada } = req.body;
 
   // --- Validación del shape ---
@@ -112,13 +106,10 @@ export const putHorarioAtencion = async (req, res) => {
     await reemplazarHorario(req.tenant_id, horariosNorm);
 
     const semana = await obtenerHorarioCompleto(req.tenant_id);
-    console.log('[horarioAtencion] putHorarioAtencion — completado |',
-      'turnos cancelados:', cascada.turnos_cancelados,
-      '| bloques eliminados:', cascada.bloques_eliminados,
-      '| bloques truncados:', cascada.bloques_truncados);
+    console.log('[horarioAtencion] putHorarioAtencion completado | turnos_cancelados:', cascada.turnos_cancelados);
     res.json({ horarios: semana, cascada });
   } catch (err) {
-    console.error('[horarioAtencion] Error en putHorarioAtencion:', err.message);
+    console.error('[horarioAtencion] Error en putHorarioAtencion:', err);
     res.status(500).json({ error: 'Error al actualizar el horario de atención' });
   }
 };

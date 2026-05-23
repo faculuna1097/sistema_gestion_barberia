@@ -168,8 +168,6 @@ app.use('/api/admin/horario-atencion', verificarToken, requiereRol('admin'), adm
 app.use('/api/admin/feriados',         verificarToken, requiereRol('admin'), adminFeriadosRoutes);
 app.use('/api/admin/imagenes',         verificarToken, requiereRol('admin'), adminImagenesRoutes);
 
-console.log('[index] Rutas registradas correctamente');
-
 // --- Arranque del servidor ---
 const startServer = async () => {
   console.log('[index] Verificando conexión a la base de datos...');
@@ -181,6 +179,6 @@ const startServer = async () => {
 };
 
 startServer().catch((err) => {
-  console.error('[index] ❌ Error fatal al iniciar el servidor:', err.message);
+  console.error('[index] ❌ Error fatal al iniciar el servidor:', err);
   process.exit(1);
 });

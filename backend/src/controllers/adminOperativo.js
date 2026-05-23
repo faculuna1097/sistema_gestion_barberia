@@ -32,7 +32,6 @@ import { query } from '../config/db.js';
  * @param {Response} res - 200 { usuario: string|null } | 404 | 500.
  */
 export async function obtenerCredencialesOperativas(req, res) {
-  console.log('[adminOperativo] obtenerCredencialesOperativas — request recibido | tenant:', req.tenant_id);
   try {
     const resultado = await query(
       'SELECT operativo_usuario FROM tenant WHERE id = $1',
@@ -43,7 +42,7 @@ export async function obtenerCredencialesOperativas(req, res) {
     }
     return res.json({ usuario: resultado.rows[0].operativo_usuario });
   } catch (err) {
-    console.error('[adminOperativo] Error en obtenerCredencialesOperativas:', err.message);
+    console.error('[adminOperativo] Error en obtenerCredencialesOperativas:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 }
@@ -57,7 +56,6 @@ export async function obtenerCredencialesOperativas(req, res) {
  * @param {Response} res - 204 No Content | 400 | 500.
  */
 export async function actualizarCredencialesOperativas(req, res) {
-  console.log('[adminOperativo] actualizarCredencialesOperativas — request recibido | tenant:', req.tenant_id);
   const { usuario, password } = req.body;
   const tenant_id = req.tenant_id;
 
@@ -102,12 +100,11 @@ export async function actualizarCredencialesOperativas(req, res) {
 
     await query(sql, valores);
 
-    console.log('[adminOperativo] actualizarCredencialesOperativas — completado | tenant:', tenant_id,
-      '| cambió usuario:', cambiarUsuario, '| cambió password:', cambiarPassword);
+    console.log('[adminOperativo] actualizarCredencialesOperativas completado | tenant:', tenant_id);
     return res.status(204).end();
 
   } catch (err) {
-    console.error('[adminOperativo] Error en actualizarCredencialesOperativas:', err.message);
+    console.error('[adminOperativo] Error en actualizarCredencialesOperativas:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 }

@@ -164,7 +164,7 @@ export const sincronizarCalendarCreacion = async (turnoId, enriquecido) => {
     try {
       await query(`UPDATE turno SET google_event_id = $1 WHERE id = $2`, [eventId, turnoId]);
     } catch (err) {
-      console.error('[turnosService] sincronizarCalendarCreacion — fallo UPDATE google_event_id:', err.message);
+      console.error('[turnosService] sincronizarCalendarCreacion — fallo UPDATE google_event_id:', err);
     }
   }
 };

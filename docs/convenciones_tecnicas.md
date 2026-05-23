@@ -7,31 +7,61 @@ Toda regla acá es estándar y se aplica sin excepción salvo acuerdo explícito
 
 ## 1. Logs
 
+El criterio es simple: **se loguea solo lo que aporta señal cuando algo se rompe o cuando audita un cambio de estado.** Todo lo demás es ruido y empeora la lectura.
+
 ### Formato
-- Prefijo `[recurso]` en minúscula. El recurso es el nombre del archivo.
-- Log de request recibido: `[recurso] nombreFuncion — request recibido | dato: valor`
-- Log de operación completada: `[recurso] nombreFuncion — completado | dato: valor`
-- Log de error: `console.error('[recurso] Error en nombreFuncion:', err.message)`
+- Prefijo `[modulo]` en minúscula, donde `modulo` es el nombre del archivo (sin extensión).
+- Estructura: `[modulo] nombreFuncion — descripción | dato1: valor | dato2: valor`
+- Los datos se separan con ` | `, key-value.
+- Nunca loguear arrays/objetos completos: solo `.length` o los campos relevantes.
+- Nunca loguear PINs, passwords, tokens JWT ni `req.body` que pueda contenerlos.
+- Si necesitás loguear `req.body`, pasalo por `sanitizarObjeto` (definido en `backend/src/index.js`) — enmascara campos sensibles.
 
-### Cuándo loguear
-Siempre en estos 4 puntos:
-1. Request recibido al inicio de cada controlador.
-2. Operación completada tras cada INSERT/UPDATE exitoso.
-3. Error en cada `catch`.
-4. Eventos importantes en el frontend: carga de datos y envíos.
+### Backend — qué SÍ se loguea
 
-### Cuándo NO loguear
-- Eventos de UI: clicks, cambios de tab, navegación, keystrokes, incrementos.
-- Logs de montado en el cuerpo del componente (van en `useEffect([])`).
-- Arrays completos: solo loguear `.length`, nunca el objeto.
-- Nunca loguear PINs, passwords ni tokens JWT.
+1. **Errores en `catch`** — siempre con el `err` completo (no solo `err.message`), para preservar el stack trace.
+   ```js
+   console.error('[modulo] Error en nombreFuncion:', err);
+   ```
+2. **Eventos de negocio que mutan estado** — POST/PUT/PATCH/DELETE exitosos en escrituras relevantes (crear/cancelar turno, eliminar movimiento de caja, cambiar PIN, cascadas de cancelación por feriado/suspensión/cambio de horario). Conciso, con el id de la entidad y el dato clave:
+   ```js
+   console.log('[turnos] cancelarTurno completado | turno_id:', turnoId);
+   ```
+3. **Conflictos de negocio relevantes** — `console.warn` cuando un caso raro y real ocurre: slot ocupado, stock insuficiente, turno ya vinculado a otro corte, estado no cancelable, suscripción vencida.
+4. **Eventos de seguridad** — `console.warn` en intentos de login fallidos (PIN incorrecto, credenciales operativas incorrectas, tenant no encontrado). Sirven para detectar abuso.
+5. **Arranque del proceso** — un log por subsistema cuando se inicializa (DB pool, mailer, integración Calendar, servidor escuchando). Son one-shot, no contaminan runtime.
+6. **Log de acceso HTTP global** — uno por request, vive en el middleware de `index.js`. No replicarlo por función.
+
+### Backend — qué NO se loguea
+
+- **No** "request recibido" al entrar a cada función — el log de acceso HTTP global ya cubre eso.
+- **No** "completado" en lecturas (GET) — el resultado se ve en la respuesta HTTP.
+- **No** validaciones de input faltante (400) — error del cliente, no accionable.
+- **No** pasos intermedios de "devuelvo array vacío porque X" — debug de desarrollo.
+- **No** entrada/salida de middlewares que corren en cada request (auth, tenant) — ruido masivo.
+
+Excepción: los scripts CLI en `backend/src/scripts/` quedan fuera de estas reglas — ahí `console.log` es la interfaz del script, no logging de runtime.
+
+### Frontend — regla simple
+
+En el navegador del cliente nadie lee la consola en producción. Por eso el criterio es estricto: **solo se loguea lo que salió mal.**
+
+1. **Errores en `catch`** — `console.error('[modulo] Error en X:', err.message)`. En frontend no hay stack server-side que preservar, alcanza con `err.message`.
+2. **Degradaciones funcionales** — `console.warn` cuando una falla recuperable degrada la experiencia: `localStorage` inaccesible, una imagen opcional no carga, 401 que dispara redirect a login.
+
+Nada más. **Sin trace de navegación, sin "paso N — X seleccionado", sin "completado" de cargas o de guardados, sin render/montado, sin "navegando a Y".** La UI ya da feedback al usuario; la consola no es el lugar.
+
+### Convención de nivel
+- `console.log` — eventos de negocio normales (escrituras exitosas, arranque).
+- `console.warn` — algo anómalo pero recuperable (conflicto de negocio, degradación frontend, login fallido).
+- `console.error` — algo que rompió el flujo (entró al `catch`).
 
 ---
 
 ## 2. Manejo de errores
 
 - En `catch`, la variable es siempre `err`. Nunca `error`.
-- En el log siempre `err.message`, nunca el objeto completo.
+- En backend, loguear el `err` completo (preserva el stack trace). En frontend, alcanza con `err.message`.
 - En frontend: `setEliminando(true)` / `setCargando(true)` van **antes** del `try`, no dentro.
 
 ---

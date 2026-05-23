@@ -166,10 +166,10 @@ const enviarMail = async ({ destino, asunto, texto, html, nombreFuncion }) => {
       text: texto,
       html,
     });
-    console.log(`[mailer] ${nombreFuncion} — completado | destino:`, destino);
+    console.log(`[mailer] ${nombreFuncion} completado | destino:`, destino);
     return true;
   } catch (err) {
-    console.error(`[mailer] Error en ${nombreFuncion}:`, err.message);
+    console.error(`[mailer] Error en ${nombreFuncion}:`, err);
     return false;
   }
 };
@@ -205,7 +205,6 @@ const debeSaltarseEnvio = (nombreFuncion, cliente) => {
  * @returns {Promise<boolean>}
  */
 export const enviarConfirmacion = async (turno, barbero, servicio, cliente, linkGestion) => {
-  console.log('[mailer] enviarConfirmacion — request recibido | cliente_email:', cliente?.email ?? '(null)');
   if (debeSaltarseEnvio('enviarConfirmacion', cliente)) return false;
 
   const fechaTexto = formatearFecha(turno.inicio);
@@ -239,7 +238,6 @@ export const enviarConfirmacion = async (turno, barbero, servicio, cliente, link
  * @returns {Promise<boolean>}
  */
 export const enviarCancelacion = async (turno, barbero, servicio, cliente, canceladoPor) => {
-  console.log('[mailer] enviarCancelacion — request recibido | cliente_email:', cliente?.email ?? '(null)', '| canceladoPor:', canceladoPor);
   if (debeSaltarseEnvio('enviarCancelacion', cliente)) return false;
 
   const fechaTexto = formatearFecha(turno.inicio);
@@ -273,7 +271,6 @@ export const enviarCancelacion = async (turno, barbero, servicio, cliente, cance
  * @returns {Promise<boolean>}
  */
 export const enviarReprogramacion = async (turno, barbero, servicio, cliente, linkGestion) => {
-  console.log('[mailer] enviarReprogramacion — request recibido | cliente_email:', cliente?.email ?? '(null)');
   if (debeSaltarseEnvio('enviarReprogramacion', cliente)) return false;
 
   const fechaTexto = formatearFecha(turno.inicio);
@@ -312,7 +309,6 @@ export const enviarReprogramacion = async (turno, barbero, servicio, cliente, li
  * @returns {Promise<boolean>}
  */
 export const enviarCancelacionAutomatica = async (turno, barbero, servicio, cliente, opciones, linkTurnero) => {
-  console.log('[mailer] enviarCancelacionAutomatica — request recibido | cliente_email:', cliente?.email ?? '(null)');
   if (debeSaltarseEnvio('enviarCancelacionAutomatica', cliente)) return false;
 
   const fechaTexto = formatearFecha(turno.inicio);
