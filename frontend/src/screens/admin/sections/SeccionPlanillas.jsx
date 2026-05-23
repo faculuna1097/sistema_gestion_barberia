@@ -73,7 +73,6 @@ export default function SeccionPlanillas() {
   // ── Carga de datos ────────────────────────────────────────────────────────
   useEffect(() => {
     const cargarDatos = async () => {
-      console.log("[seccionPlanillas] cargarDatos — request recibido | semana:", semana);
       setLoading(true);
       setError(null);
       try {
@@ -87,7 +86,6 @@ export default function SeccionPlanillas() {
           resDetalle.json(),
           resResumen.json(),
         ]);
-        console.log("[seccionPlanillas] cargarDatos — completado | barberos:", detalle.length);
         setDetalleData(detalle);
         setResumenData(resumen);
         if (detalle.length > 0) setBarberoActivo(detalle[0].barbero_id);
@@ -106,7 +104,6 @@ export default function SeccionPlanillas() {
   // ── Exportación Excel — Detalle ───────────────────────────────────────────
   const exportarDetalle = () => {
     if (!detalleData.length) return;
-    console.log("[seccionPlanillas] exportarDetalle — completado | semana:", semana);
     const filas = [];
     detalleData.forEach((barbero) => {
       const infoComision = resumenData?.barberos.find((b) => b.barbero_id === barbero.barbero_id);
@@ -156,7 +153,6 @@ export default function SeccionPlanillas() {
   // ── Exportación Excel — Resumen ───────────────────────────────────────────
   const exportarResumen = () => {
     if (!resumenData?.barberos.length) return;
-    console.log("[seccionPlanillas] exportarResumen — completado | semana:", semana);
     const filas = resumenData.barberos.map((b) => ({
       Barbero: b.barbero_nombre, Cortes: b.cantidad_cortes,
       "Monto servicios ($)": b.monto_servicios, "Propinas ($)": b.propinas,

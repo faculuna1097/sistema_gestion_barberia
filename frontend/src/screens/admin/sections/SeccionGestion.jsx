@@ -5,7 +5,7 @@
 // Cada tab carga sus propios datos al activarse — no hay precarga global.
 // Estilo visual idéntico a SeccionBalances.
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import TabBarberos  from './gestion/TabBarberos.jsx';
 import TabServicios from './gestion/TabServicios.jsx';
 import TabProductos from './gestion/TabProductos.jsx';
@@ -25,10 +25,6 @@ const TABS = [
 
 export default function SeccionGestion() {
   const [tabActiva, setTabActiva] = useState('barberos');
-
-  useEffect(() => {
-    console.log('[seccionGestion] Montada');
-  }, []);
 
   return (
     <div style={styles.contenedor}>

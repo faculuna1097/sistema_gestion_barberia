@@ -96,10 +96,8 @@ export default function SeccionTurnero() {
   // ── Carga de barberos (una sola vez) ──────────────────────────────────────
   useEffect(() => {
     const cargar = async () => {
-      console.log('[seccionTurnero] cargarBarberos — request recibido');
       try {
         const data = await getBarberosAdmin();
-        console.log('[seccionTurnero] cargarBarberos — completado |', data.length, 'barberos');
         setBarberos(data);
       } catch (err) {
         console.error('[seccionTurnero] Error en cargarBarberos:', err.message);
@@ -111,12 +109,10 @@ export default function SeccionTurnero() {
   // ── Carga de turnos (cada vez que cambia fecha o barbero) ─────────────────
   useEffect(() => {
     const cargar = async () => {
-      console.log('[seccionTurnero] cargarTurnos — request recibido | fecha:', fecha, '| barbero:', barberoActivo ?? 'todos');
       setCargando(true);
       setError(null);
       try {
         const data = await getAdminTurnos(fecha, barberoActivo);
-        console.log('[seccionTurnero] cargarTurnos — completado |', data.length, 'turnos');
         setTurnos(data);
       } catch (err) {
         console.error('[seccionTurnero] Error en cargarTurnos:', err.message);
@@ -141,7 +137,6 @@ export default function SeccionTurnero() {
     try {
       const actualizado = await patchAdminTurnoEstado(turnoId, nuevoEstado);
       setTurnos(prev => prev.map(t => t.id === turnoId ? { ...t, estado: actualizado.estado } : t));
-      console.log('[seccionTurnero] cambiarEstado — completado | turno:', turnoId, '→', nuevoEstado);
     } catch (err) {
       console.error('[seccionTurnero] Error en cambiarEstado:', err.message);
       alert('Error al cambiar estado: ' + err.message);
@@ -160,7 +155,6 @@ export default function SeccionTurnero() {
     try {
       await cancelarAdminTurno(turnoId);
       setTurnos(prev => prev.map(t => t.id === turnoId ? { ...t, estado: 'cancelado' } : t));
-      console.log('[seccionTurnero] confirmarCancelacion — completado | turno:', turnoId);
       setTurnoACancelar(null);
     } catch (err) {
       console.error('[seccionTurnero] Error en confirmarCancelacion:', err.message);

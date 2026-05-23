@@ -45,7 +45,6 @@ export default function SeccionBalances() {
 
   /** Carga el balance del mes seleccionado */
   const cargarMensual = async (mes) => {
-    console.log('[seccionBalances] cargarMensual — request recibido | mes:', mes);
     setCargandoMensual(true);
     setErrorMensual(null);
     try {
@@ -53,7 +52,6 @@ export default function SeccionBalances() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const datos = await res.json();
       setDatosMensual(datos);
-      console.log('[seccionBalances] cargarMensual — completado | ingresos_brutos:', datos.resumen?.ingresos_brutos);
     } catch (err) {
       console.error('[seccionBalances] Error en cargarMensual:', err.message);
       setErrorMensual('No se pudo cargar el balance. Intentá de nuevo.');
@@ -65,7 +63,6 @@ export default function SeccionBalances() {
   /** Carga el histórico anual (solo la primera vez que se abre el tab) */
   const cargarHistorico = async () => {
     if (datosHistorico) return; // Ya cargado
-    console.log('[seccionBalances] cargarHistorico — request recibido');
     setCargandoHistorico(true);
     setErrorHistorico(null);
     try {
@@ -73,7 +70,6 @@ export default function SeccionBalances() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const datos = await res.json();
       setDatosHistorico(datos);
-      console.log('[seccionBalances] cargarHistorico — completado | meses:', datos.length);
     } catch (err) {
       console.error('[seccionBalances] Error en cargarHistorico:', err.message);
       setErrorHistorico('No se pudo cargar el histórico. Intentá de nuevo.');
@@ -141,7 +137,6 @@ export default function SeccionBalances() {
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasEgresos), 'Egresos');
 
       XLSX.writeFile(wb, `Balance_${mesSeleccionado}.xlsx`);
-      console.log('[seccionBalances] exportarExcel — completado | mes:', mesSeleccionado);
     }
 
     if (tabActivo === 'historico' && datosHistorico) {
@@ -156,7 +151,6 @@ export default function SeccionBalances() {
       }));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Histórico');
       XLSX.writeFile(wb, 'Balances_historico.xlsx');
-      console.log('[seccionBalances] exportarExcel — completado | histórico');
     }
   };
 

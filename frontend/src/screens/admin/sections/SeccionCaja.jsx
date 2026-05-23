@@ -67,13 +67,11 @@ function TabMovimientos() {
 
   useEffect(() => {
     const cargarMovimientos = async () => {
-      console.log('[seccionCaja] cargarMovimientos — request recibido | fecha:', fecha);
       setCargando(true);
       setError(null);
       try {
         const res  = await apiFetch(`/caja/movimientos-dia?fecha=${fecha}`);
         const data = await res.json();
-        console.log('[seccionCaja] cargarMovimientos — completado | movimientos:', data.movimientos?.length);
         setMovimientos(data.movimientos || []);
       } catch (err) {
         console.error('[seccionCaja] Error en cargarMovimientos:', err.message);
@@ -101,13 +99,11 @@ function TabMovimientos() {
 
   const confirmarEliminar = async () => {
     const { tipo, id } = movimientoAEliminar;
-    console.log('[seccionCaja] confirmarEliminar — request recibido | tipo:', tipo, '| id:', id);
     setEliminando(true);
     try {
       const res = await apiFetch(`/caja/movimientos/${tipo}/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Error del servidor');
       setMovimientos(prev => prev.filter(m => m.id !== id));
-      console.log('[seccionCaja] confirmarEliminar — completado | id:', id);
     } catch (err) {
       console.error('[seccionCaja] Error en confirmarEliminar:', err.message);
     } finally {
@@ -129,7 +125,6 @@ function TabMovimientos() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Movimientos del dia');
     XLSX.writeFile(wb, `movimientos-${fecha}.xlsx`);
-    console.log('[seccionCaja] exportarExcel — completado | fecha:', fecha);
   };
 
   if (cargando) return (

@@ -136,7 +136,6 @@ export default function SeccionVentas() {
 
   useEffect(() => {
     const cargarVentas = async () => {
-      console.log('[seccionVentas] cargarVentas — request recibido | mes:', mes);
       setCargando(true);
       setError(null);
       try {
@@ -146,7 +145,6 @@ export default function SeccionVentas() {
         setVentas(data.ventas);
         setTotalesPorProd(data.totalesPorProducto);
         setTotalGeneral(data.totalGeneral);
-        console.log('[seccionVentas] cargarVentas — completado | registros:', data.ventas.length);
       } catch (err) {
         console.error('[seccionVentas] Error en cargarVentas:', err.message);
         setError('No se pudieron cargar las ventas. Intentá de nuevo.');
@@ -174,8 +172,6 @@ export default function SeccionVentas() {
 
   const confirmarEditar = async () => {
     const { id } = ventaAEditar;
-    console.log('[seccionVentas] confirmarEditar — request recibido | id:', id);
-
     if (Number(formEditar.cantidad) <= 0 || Number(formEditar.precio_unitario) <= 0) {
       setErrorEditar('Completá todos los campos correctamente.');
       return;
@@ -226,7 +222,6 @@ export default function SeccionVentas() {
         .sort((a, b) => b.monto_total - a.monto_total);
       setTotalesPorProd(nuevosTotales);
 
-      console.log('[seccionVentas] confirmarEditar — completado | id:', id);
       setVentaAEditar(null);
     } catch (err) {
       console.error('[seccionVentas] Error en confirmarEditar:', err.message);
@@ -238,7 +233,6 @@ export default function SeccionVentas() {
 
   const confirmarEliminar = async () => {
     const { id } = ventaAEliminar;
-    console.log('[seccionVentas] confirmarEliminar — request recibido | id:', id);
     setEliminando(true);
     try {
       const res = await apiFetch(`/ventas/${id}`, { method: 'DELETE' });
@@ -258,7 +252,6 @@ export default function SeccionVentas() {
         .map(([nombre, vals]) => ({ producto_nombre: nombre, ...vals }))
         .sort((a, b) => b.monto_total - a.monto_total);
       setTotalesPorProd(nuevosTotales);
-      console.log('[seccionVentas] confirmarEliminar — completado | id:', id);
     } catch (err) {
       console.error('[seccionVentas] Error en confirmarEliminar:', err.message);
     } finally {
@@ -290,7 +283,6 @@ export default function SeccionVentas() {
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasTotales), 'Totales');
     XLSX.writeFile(wb, `Ventas_${mes}.xlsx`);
-    console.log('[seccionVentas] exportarExcel — completado | mes:', mes);
   };
 
   return (

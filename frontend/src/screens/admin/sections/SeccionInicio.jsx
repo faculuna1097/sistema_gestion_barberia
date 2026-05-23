@@ -201,14 +201,12 @@ export default function SeccionInicio() {
 
   useEffect(() => {
     const cargarDatos = async () => {
-      console.log('[seccionInicio] cargarDatos — request recibido');
       try {
         const [resumenData, comparativoData, stockData] = await Promise.all([
           apiFetch('/inicio/resumen-dia').then(r => r.json()),
           apiFetch('/inicio/comparativo-mes').then(r => r.json()),
           apiFetch('/inicio/stock-bajo').then(r => r.json()),
         ]);
-        console.log('[seccionInicio] cargarDatos — completado | stock_bajo:', stockData.productos?.length);
         setResumen(resumenData);
         setComparativo(comparativoData);
         setStockBajo(stockData.productos || []);

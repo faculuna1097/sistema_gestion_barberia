@@ -155,7 +155,6 @@ export default function SeccionGastos() {
 
   useEffect(() => {
     const cargarGastos = async () => {
-      console.log('[seccionGastos] cargarGastos — request recibido | mes:', mes);
       setCargando(true);
       setError(null);
       try {
@@ -165,7 +164,6 @@ export default function SeccionGastos() {
         setGastos(data.gastos);
         setTotalesPorCat(data.totalesPorCategoria);
         setTotalGeneral(data.totalGeneral);
-        console.log('[seccionGastos] cargarGastos — completado | registros:', data.gastos.length);
       } catch (err) {
         console.error('[seccionGastos] Error en cargarGastos:', err.message);
         setError('No se pudieron cargar los gastos. Intentá de nuevo.');
@@ -193,8 +191,6 @@ export default function SeccionGastos() {
 
   const confirmarEditar = async () => {
     const { id } = gastoAEditar;
-    console.log('[seccionGastos] confirmarEditar — request recibido | id:', id);
-
     setGuardando(true);
     setErrorEditar(null);
     try {
@@ -242,7 +238,6 @@ export default function SeccionGastos() {
         .sort((a, b) => b.total - a.total);
       setTotalesPorCat(nuevosTotales);
 
-      console.log('[seccionGastos] confirmarEditar — completado | id:', id);
       setGastoAEditar(null);
     } catch (err) {
       console.error('[seccionGastos] Error en confirmarEditar:', err.message);
@@ -254,7 +249,6 @@ export default function SeccionGastos() {
 
   const confirmarEliminar = async () => {
     const { id } = gastoAEliminar;
-    console.log('[seccionGastos] confirmarEliminar — request recibido | id:', id);
     setEliminando(true);
     try {
       const res = await apiFetch(`/gastos/${id}`, { method: 'DELETE' });
@@ -274,7 +268,6 @@ export default function SeccionGastos() {
         .map(([nombre, vals]) => ({ categoria_nombre: nombre, ...vals }))
         .sort((a, b) => b.total - a.total);
       setTotalesPorCat(nuevosTotales);
-      console.log('[seccionGastos] confirmarEliminar — completado | id:', id);
     } catch (err) {
       console.error('[seccionGastos] Error en confirmarEliminar:', err.message);
     } finally {
@@ -305,7 +298,6 @@ export default function SeccionGastos() {
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasTotales), 'Totales');
     XLSX.writeFile(wb, `Gastos_${mes}.xlsx`);
-    console.log('[seccionGastos] exportarExcel — completado | mes:', mes);
   };
 
   return (
