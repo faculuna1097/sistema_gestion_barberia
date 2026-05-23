@@ -110,7 +110,6 @@ const PantallaExito = ({ montoTotal }) => {
   const [checkDrawn,  setCheckDrawn]  = useState(false);
 
   useEffect(() => {
-    console.log('[flujoCorte] PantallaExito — iniciando animaciones | total:', montoTotal);
     const t1 = setTimeout(() => setCircleDrawn(true), 60);
     const t2 = setTimeout(() => setCheckDrawn(true),  520);
     return () => { clearTimeout(t1); clearTimeout(t2); };
@@ -154,8 +153,6 @@ const PantallaExito = ({ montoTotal }) => {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function FlujoCorte({ onVolver, barberos, servicios }) {
-  console.log('[flujoCorte] montado — barberos:', barberos.length, '| servicios:', servicios.length);
-
   const [paso, setPaso] = useState(1);
 
   // ── (C) Estado de animación slide ───────────────────────────────────────────
@@ -196,7 +193,6 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
       setErrorTurnos(null);
       try {
         const turnos = await getTurnosDelDia(barberoSeleccionado.id, getFechaHoy());
-        console.log('[flujoCorte] cargarTurnos — completado |', turnos.length, 'turnos');
         setTurnosDelDia(turnos);
       } catch (err) {
         console.error('[flujoCorte] Error en cargarTurnos:', err.message);
@@ -258,19 +254,16 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
 
     // Paso 5 (propina): si estamos en el input de monto → volver a Sí/No sin cambiar de paso
     if (paso === 5 && tienePropina !== null) {
-      console.log('[flujoCorte] retroceder — volviendo a selección propina sí/no');
       setTienePropina(null);
       setMontoPropina("");
       return;
     }
 
     if (paso === 6) {
-      console.log('[flujoCorte] retroceder — reseteando propina');
       setTienePropina(null);
       setMontoPropina("");
     }
 
-    console.log('[flujoCorte] retroceder — paso:', paso, '→', paso - 1);
     navigate(paso - 1, -1);
   };
 
@@ -289,11 +282,9 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
     setEnviando(true);
     setError(null);
     try {
-      const respuesta = await registrarCorte(payload);
-      console.log('[flujoCorte] confirmarCorte — completado | corte_id:', respuesta.corte_id);
+      await registrarCorte(payload);
       setExito(true);
       setTimeout(() => {
-        console.log('[flujoCorte] confirmarCorte — redirigiendo a pantalla principal');
         onVolver();
       }, 2500);
     } catch (err) {
@@ -306,7 +297,6 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
 
   // ── Pantalla de éxito ────────────────────────────────────────────────────────
   if (exito) {
-    console.log('[flujoCorte] exito — monto total:', montoTotal);
     return (
       <PantallaExito
         montoTotal={montoTotal}
@@ -327,7 +317,6 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
                 ...(barberoSeleccionado?.id === b.id ? styles.btnOpcionActivo : {}),
               }}
               onPointerDown={() => {
-                console.log('[flujoCorte] paso 1 — barbero seleccionado:', b.nombre);
                 setBarberoSeleccionado(b);
                 // Resetear selección de turno/servicio: pudo haber quedado de
                 // un barbero elegido antes de retroceder.
@@ -377,7 +366,6 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
                     ...(turnoSeleccionado?.id === t.id ? styles.btnOpcionActivo : {}),
                   }}
                   onPointerDown={() => {
-                    console.log('[flujoCorte] paso 2 — turno seleccionado:', t.cliente_nombre);
                     setTurnoSeleccionado(t);
                     // Pre-selección del servicio del turno (editable en el paso 3).
                     // Si el servicio fue desactivado, no aparece en la lista → null.
@@ -393,7 +381,6 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
               <PressButton
                 style={styles.btnWalkIn}
                 onPointerDown={() => {
-                  console.log('[flujoCorte] paso 2 — walk-in (sin turno)');
                   setTurnoSeleccionado(null);
                   setServicioSeleccionado(null);
                   avanzar();
@@ -422,7 +409,6 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
                 ...(servicioSeleccionado?.id === s.id ? styles.btnOpcionActivo : {}),
               }}
               onPointerDown={() => {
-                console.log('[flujoCorte] paso 3 — servicio seleccionado:', s.nombre);
                 setServicioSeleccionado(s);
                 avanzar();
               }}
@@ -462,7 +448,6 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
                 ...(formaPago === op.key ? styles.btnOpcionActivo : {}),
               }}
               onPointerDown={() => {
-                console.log('[flujoCorte] paso 4 — forma de pago:', op.key);
                 setFormaPago(op.key);
                 avanzar();
               }}
@@ -484,7 +469,6 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
           <div style={styles.gridDos}>
             <PressButton style={styles.btnOpcionGrande}
               onPointerDown={() => {
-                console.log('[flujoCorte] paso 5 — propina: sí');
                 setTienePropina(true);
               }}>
               <span style={styles.emoji}>✅</span>
@@ -492,7 +476,6 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
             </PressButton>
             <PressButton style={styles.btnOpcionGrande}
               onPointerDown={() => {
-                console.log('[flujoCorte] paso 5 — propina: no');
                 avanzar();
               }}>
               <span style={styles.emoji}>❌</span>
@@ -521,7 +504,6 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
               }}
               onPointerDown={() => {
                 if (montoPropina === "") return;
-                console.log('[flujoCorte] paso 5 — propina confirmada | monto:', montoPropina);
                 avanzar();
               }}
               disabled={montoPropina === ""}
@@ -536,8 +518,6 @@ export default function FlujoCorte({ onVolver, barberos, servicios }) {
 
   // ─── PASO 6 — Resumen y confirmación ─────────────────────────────────────────
   if (paso === 6) {
-    console.log('[flujoCorte] paso 6 — resumen | barbero:', barberoSeleccionado?.nombre,
-      '| servicio:', servicioSeleccionado?.nombre, '| total:', montoTotal);
     return (
       <PasoLayout paso={6} total={6} titulo="Confirmá el corte" onVolver={retroceder} slideStyle={slideStyle}>
         <div style={styles.resumenCard}>

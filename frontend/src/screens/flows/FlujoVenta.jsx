@@ -97,7 +97,6 @@ const PantallaExito = ({ montoTotal }) => {
   const [checkDrawn,  setCheckDrawn]  = useState(false);
 
   useEffect(() => {
-    console.log('[flujoVenta] PantallaExito — iniciando animaciones | total:', montoTotal);
     const t1 = setTimeout(() => setCircleDrawn(true), 60);
     const t2 = setTimeout(() => setCheckDrawn(true),  520);
     return () => { clearTimeout(t1); clearTimeout(t2); };
@@ -138,8 +137,6 @@ const PantallaExito = ({ montoTotal }) => {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function FlujoVenta({ onVolver, productos }) {
-  console.log('[flujoVenta] montado — productos:', productos.length);
-
   const [paso, setPaso] = useState(1);
 
   // ── (C) Estado de animación slide ───────────────────────────────────────────
@@ -196,11 +193,9 @@ export default function FlujoVenta({ onVolver, productos }) {
 
   const retroceder = () => {
     if (paso === 1) {
-      console.log('[flujoVenta] retroceder — volviendo a pantalla principal');
       onVolver();
       return;
     }
-    console.log('[flujoVenta] retroceder — paso:', paso, '→', paso - 1);
     navigate(paso - 1, -1);
   };
 
@@ -217,10 +212,8 @@ export default function FlujoVenta({ onVolver, productos }) {
     setError(null);
     try {
       const respuesta = await registrarVenta(payload);
-      console.log('[flujoVenta] confirmarVenta — completado | venta_id:', respuesta.venta_id);
       setExito(true);
       setTimeout(() => {
-        console.log('[flujoVenta] confirmarVenta — redirigiendo a pantalla principal');
         onVolver();
       }, 2500);
     } catch (err) {
@@ -233,7 +226,6 @@ export default function FlujoVenta({ onVolver, productos }) {
 
   // ── Pantalla de éxito ────────────────────────────────────────────────────────
   if (exito) {
-    console.log('[flujoVenta] exito — monto total:', montoTotal);
     return <PantallaExito montoTotal={montoTotal} />;
   }
 
@@ -250,7 +242,6 @@ export default function FlujoVenta({ onVolver, productos }) {
                 ...(productoSeleccionado?.id === p.id ? styles.btnOpcionActivo : {}),
               }}
               onPointerDown={() => {
-                console.log('[flujoVenta] paso 1 — producto seleccionado:', p.nombre);
                 setProductoSeleccionado(p);
                 setCantidad(1);
                 avanzar();
@@ -324,7 +315,6 @@ export default function FlujoVenta({ onVolver, productos }) {
               ...(productoSeleccionado?.stock_actual === 0 ? styles.btnDeshabilitado : {}),
             }}
             onPointerDown={() => {
-              console.log('[flujoVenta] paso 2 — cantidad confirmada:', cantidad);
               avanzar();
             }}
             disabled={productoSeleccionado?.stock_actual === 0}
@@ -360,7 +350,6 @@ export default function FlujoVenta({ onVolver, productos }) {
                 ...(formaPago === op.key ? styles.btnOpcionActivo : {}),
               }}
               onPointerDown={() => {
-                console.log('[flujoVenta] paso 3 — forma de pago:', op.key);
                 setFormaPago(op.key);
                 avanzar();
               }}
@@ -376,8 +365,6 @@ export default function FlujoVenta({ onVolver, productos }) {
 
   // ─── PASO 4 — Resumen y confirmación ─────────────────────────────────────────
   if (paso === 4) {
-    console.log('[flujoVenta] paso 4 — resumen | producto:', productoSeleccionado?.nombre,
-      '| cantidad:', cantidad, '| total:', montoTotal);
     return (
       <PasoLayout paso={4} total={4} titulo="Confirmá la venta" onVolver={retroceder} slideStyle={slideStyle}>
         <div style={styles.resumenCard}>

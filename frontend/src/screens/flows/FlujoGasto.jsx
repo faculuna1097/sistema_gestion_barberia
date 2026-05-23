@@ -99,7 +99,6 @@ const PantallaExito = ({ montoTotal, esProducto }) => {
   const [checkDrawn,  setCheckDrawn]  = useState(false);
 
   useEffect(() => {
-    console.log('[flujoGasto] PantallaExito — iniciando animaciones | total:', montoTotal);
     const t1 = setTimeout(() => setCircleDrawn(true), 60);
     const t2 = setTimeout(() => setCheckDrawn(true),  520);
     return () => { clearTimeout(t1); clearTimeout(t2); };
@@ -149,8 +148,6 @@ const PantallaExito = ({ montoTotal, esProducto }) => {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function FlujoGasto({ onVolver, categorias }) {
-  console.log('[flujoGasto] montado — categorías:', categorias.length);
-
   const [paso, setPaso] = useState(1);
 
   // ── (C) Estado de animación slide ───────────────────────────────────────────
@@ -206,11 +203,9 @@ export default function FlujoGasto({ onVolver, categorias }) {
 
   const retroceder = () => {
     if (paso === 1) {
-      console.log('[flujoGasto] retroceder — volviendo a pantalla principal');
       onVolver();
       return;
     }
-    console.log('[flujoGasto] retroceder — paso:', paso, '→', paso - 1);
     navigate(paso - 1, -1);
   };
 
@@ -227,12 +222,10 @@ export default function FlujoGasto({ onVolver, categorias }) {
     setEnviando(true);
     setError(null);
     try {
-      const respuesta = await registrarGasto(payload);
-      console.log('[flujoGasto] confirmarGasto — completado | gasto_id:', respuesta.gasto_id);
+      await registrarGasto(payload);
       setExito(true);
       const demora = categoriaSeleccionada?.nombre === "Productos" ? 4500 : 2500;
       setTimeout(() => {
-        console.log('[flujoGasto] confirmarGasto — redirigiendo a pantalla principal');
         onVolver();
       }, demora);
     } catch (err) {
@@ -245,7 +238,6 @@ export default function FlujoGasto({ onVolver, categorias }) {
 
   // ── Pantalla de éxito ────────────────────────────────────────────────────────
   if (exito) {
-    console.log('[flujoGasto] exito — monto:', montoFinal);
     return (
       <PantallaExito
         montoTotal={montoFinal}
@@ -267,7 +259,6 @@ export default function FlujoGasto({ onVolver, categorias }) {
                 ...(categoriaSeleccionada?.id === c.id ? styles.btnOpcionActivo : {}),
               }}
               onPointerDown={() => {
-                console.log('[flujoGasto] paso 1 — categoría seleccionada:', c.nombre);
                 setCategoriaSeleccionada(c);
                 avanzar();
               }}
@@ -306,7 +297,6 @@ export default function FlujoGasto({ onVolver, categorias }) {
             }}
             onPointerDown={() => {
               if (descripcion.trim() === "") return;
-              console.log('[flujoGasto] paso 2 — descripción confirmada');
               avanzar();
             }}
             disabled={descripcion.trim() === ""}
@@ -342,7 +332,6 @@ export default function FlujoGasto({ onVolver, categorias }) {
             }}
             onPointerDown={() => {
               if (monto === "" || Number(monto) <= 0) return;
-              console.log('[flujoGasto] paso 3 — monto confirmado:', monto);
               avanzar();
             }}
             disabled={monto === "" || Number(monto) <= 0}
@@ -378,7 +367,6 @@ export default function FlujoGasto({ onVolver, categorias }) {
                 ...(formaPago === op.key ? styles.btnOpcionActivo : {}),
               }}
               onPointerDown={() => {
-                console.log('[flujoGasto] paso 4 — forma de pago:', op.key);
                 setFormaPago(op.key);
                 avanzar();
               }}
@@ -394,8 +382,6 @@ export default function FlujoGasto({ onVolver, categorias }) {
 
   // ─── PASO 5 — Resumen y confirmación ─────────────────────────────────────────
   if (paso === 5) {
-    console.log('[flujoGasto] paso 5 — resumen | categoría:', categoriaSeleccionada?.nombre,
-      '| monto:', montoFinal);
     return (
       <PasoLayout paso={5} total={5} titulo="Confirmá el gasto" onVolver={retroceder} slideStyle={slideStyle}>
         <div style={styles.resumenCard}>
