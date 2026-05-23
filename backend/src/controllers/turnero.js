@@ -38,7 +38,6 @@ const REGEX_EMAIL = /.+@.+\..+/;
  * @returns {JSON} { id, nombre, telefono, direccion, horario_atencion, feriados }
  */
 export const getTenant = async (req, res) => {
-  console.log('[turnero] getTenant — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre_negocio, telefono, direccion
@@ -57,8 +56,6 @@ export const getTenant = async (req, res) => {
     // Feriados futuros (fecha >= hoy): el cliente los usa para grisar días.
     const hoy = DateTime.now().setZone(TZ).toISODate();
     const feriados = await obtenerFeriados(req.tenant_id, hoy);
-    console.log('[turnero] getTenant — completado | nombre:', row.nombre_negocio,
-      '| días abiertos:', horarioAtencion.length, '| feriados:', feriados.length);
     res.json({
       id: row.id,
       nombre: row.nombre_negocio,
@@ -68,7 +65,7 @@ export const getTenant = async (req, res) => {
       feriados,
     });
   } catch (err) {
-    console.error('[turnero] Error en getTenant:', err.message);
+    console.error('[turnero] Error en getTenant:', err);
     res.status(500).json({ error: 'Error al obtener tenant' });
   }
 };
@@ -82,7 +79,6 @@ export const getTenant = async (req, res) => {
  * @returns {JSON} [{ id, nombre, precio, duracion_minutos }]
  */
 export const getServicios = async (req, res) => {
-  console.log('[turnero] getServicios — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT s.id,
@@ -95,10 +91,9 @@ export const getServicios = async (req, res) => {
        ORDER BY s.precio ASC`,
       [req.tenant_id]
     );
-    console.log('[turnero] getServicios — completado |', result.rows.length, 'servicios');
     res.json(result.rows);
   } catch (err) {
-    console.error('[turnero] Error en getServicios:', err.message);
+    console.error('[turnero] Error en getServicios:', err);
     res.status(500).json({ error: 'Error al obtener servicios' });
   }
 };
@@ -115,8 +110,6 @@ export const getServicios = async (req, res) => {
  * @returns {JSON} [{ id, nombre }]
  */
 export const getBarberos = async (req, res) => {
-  console.log('[turnero] getBarberos — request recibido | tenant:', req.tenant_id,
-    '| servicio_id (ignorado):', req.query.servicio_id ?? '(ninguno)');
   try {
     const result = await query(
       `SELECT id, nombre
@@ -125,10 +118,9 @@ export const getBarberos = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    console.log('[turnero] getBarberos — completado |', result.rows.length, 'barberos');
     res.json(result.rows);
   } catch (err) {
-    console.error('[turnero] Error en getBarberos:', err.message);
+    console.error('[turnero] Error en getBarberos:', err);
     res.status(500).json({ error: 'Error al obtener barberos' });
   }
 };
@@ -146,8 +138,6 @@ export const getBarberos = async (req, res) => {
  */
 export const getDisponibilidad = async (req, res) => {
   const { barbero_id, servicio_id, fecha } = req.query;
-  console.log('[turnero] getDisponibilidad — request recibido | tenant:', req.tenant_id,
-    '| barbero:', barbero_id, '| servicio:', servicio_id, '| fecha:', fecha);
 
   if (!barbero_id || !servicio_id || !fecha) {
     return res.status(400).json({ error: 'barbero_id, servicio_id y fecha son requeridos' });
@@ -163,15 +153,14 @@ export const getDisponibilidad = async (req, res) => {
       servicioId: servicio_id,
       fecha,
     });
-    console.log('[turnero] getDisponibilidad — completado |', slots.length, 'slots');
     res.json({ slots });
   } catch (err) {
     if (err instanceof DisponibilidadError) {
-      console.warn('[turnero] getDisponibilidad — error de dominio:', err.codigo, err.message);
+      console.warn('[turnero] getDisponibilidad — error de dominio:', err.codigo, err);
       const status = err.codigo === 'fecha_invalida' ? 400 : 404;
       return res.status(status).json({ error: err.message });
     }
-    console.error('[turnero] Error en getDisponibilidad:', err.message);
+    console.error('[turnero] Error en getDisponibilidad:', err);
     res.status(500).json({ error: 'Error al calcular disponibilidad' });
   }
 };
@@ -190,8 +179,6 @@ export const getDisponibilidad = async (req, res) => {
  */
 export const getDiasDisponibles = async (req, res) => {
   const { barbero_id, servicio_id, desde, hasta } = req.query;
-  console.log('[turnero] getDiasDisponibles — request recibido | tenant:', req.tenant_id,
-    '| barbero:', barbero_id, '| servicio:', servicio_id, '| desde:', desde, '| hasta:', hasta);
 
   if (!barbero_id || !servicio_id || !desde || !hasta) {
     return res.status(400).json({ error: 'barbero_id, servicio_id, desde y hasta son requeridos' });
@@ -208,15 +195,14 @@ export const getDiasDisponibles = async (req, res) => {
       desde,
       hasta,
     });
-    console.log('[turnero] getDiasDisponibles — completado |', dias.length, 'días con disponibilidad');
     res.json({ dias });
   } catch (err) {
     if (err instanceof DisponibilidadError) {
-      console.warn('[turnero] getDiasDisponibles — error de dominio:', err.codigo, err.message);
+      console.warn('[turnero] getDiasDisponibles — error de dominio:', err.codigo, err);
       const status = err.codigo === 'fecha_invalida' ? 400 : 404;
       return res.status(status).json({ error: err.message });
     }
-    console.error('[turnero] Error en getDiasDisponibles:', err.message);
+    console.error('[turnero] Error en getDiasDisponibles:', err);
     res.status(500).json({ error: 'Error al calcular días disponibles' });
   }
 };
@@ -241,8 +227,6 @@ export const getDiasDisponibles = async (req, res) => {
  * @returns {JSON} 201 { turno_id, token_gestion }
  */
 export const crearTurno = async (req, res) => {
-  console.log('[turnero] crearTurno — request recibido | tenant:', req.tenant_id);
-
   const { servicio_id, barbero_id, inicio, nombre, telefono, email } = req.body;
 
   // ── Validaciones de presencia ─────────────────────────────────────────────
@@ -317,14 +301,14 @@ export const crearTurno = async (req, res) => {
         await notificarConfirmacion(enriquecido, linkGestion);
       }
     } catch (err) {
-      console.error('[turnero] crearTurno — fallo best-effort (Calendar/mail):', err.message);
+      console.error('[turnero] crearTurno — fallo best-effort (Calendar/mail):', err);
     }
 
-    console.log('[turnero] crearTurno — completado | turno_id:', turno_id);
+    console.log('[turnero] crearTurno completado | turno_id:', turno_id);
     return res.status(201).json({ turno_id, token_gestion });
 
   } catch (err) {
-    console.error('[turnero] Error en crearTurno:', err.message);
+    console.error('[turnero] Error en crearTurno:', err);
     return res.status(500).json({ error: 'Error al crear el turno' });
   }
 };
@@ -340,9 +324,6 @@ export const crearTurno = async (req, res) => {
  * @returns {JSON} { turno, barbero, servicio, cliente }
  */
 export const getTurnoPorToken = async (req, res) => {
-  console.log('[turnero] getTurnoPorToken — request recibido | tenant:', req.tenant_id,
-    '| token:', req.params.token);
-
   try {
     const result = await query(
       `SELECT t.id, t.inicio, t.fin, t.estado,
@@ -359,11 +340,9 @@ export const getTurnoPorToken = async (req, res) => {
       [req.params.token, req.tenant_id]
     );
     if (result.rows.length === 0) {
-      console.warn('[turnero] getTurnoPorToken — turno no encontrado');
       return res.status(404).json({ error: 'Turno no encontrado' });
     }
     const r = result.rows[0];
-    console.log('[turnero] getTurnoPorToken — completado | turno_id:', r.id, '| estado:', r.estado);
     res.json({
       turno:    { id: r.id, inicio: r.inicio, fin: r.fin, estado: r.estado },
       barbero:  { id: r.barbero_id, nombre: r.barbero_nombre },
@@ -371,7 +350,7 @@ export const getTurnoPorToken = async (req, res) => {
       cliente:  { nombre: r.cliente_nombre, email: r.cliente_email, telefono: r.cliente_telefono },
     });
   } catch (err) {
-    console.error('[turnero] Error en getTurnoPorToken:', err.message);
+    console.error('[turnero] Error en getTurnoPorToken:', err);
     res.status(500).json({ error: 'Error al obtener turno' });
   }
 };
@@ -387,9 +366,6 @@ export const getTurnoPorToken = async (req, res) => {
  * @returns {JSON} { ok: true }
  */
 export const cancelarTurno = async (req, res) => {
-  console.log('[turnero] cancelarTurno — request recibido | tenant:', req.tenant_id,
-    '| token:', req.params.token);
-
   try {
     // ── Buscar turno + datos enriquecidos en una sola query ────────────────
     const lookupRes = await query(
@@ -434,10 +410,10 @@ export const cancelarTurno = async (req, res) => {
     const cliente  = { nombre: r.cliente_nombre, email: r.cliente_email, telefono: r.cliente_telefono };
     await enviarCancelacion(turnoParaServices, barbero, servicio, cliente, 'cliente');
 
-    console.log('[turnero] cancelarTurno — completado | turno_id:', r.id);
+    console.log('[turnero] cancelarTurno completado | turno_id:', r.id);
     res.json({ ok: true });
   } catch (err) {
-    console.error('[turnero] Error en cancelarTurno:', err.message);
+    console.error('[turnero] Error en cancelarTurno:', err);
     res.status(500).json({ error: 'Error al cancelar el turno' });
   }
 };
@@ -454,9 +430,6 @@ export const cancelarTurno = async (req, res) => {
  * @returns {JSON} { ok: true, turno: { id, inicio, fin } }
  */
 export const reprogramarTurno = async (req, res) => {
-  console.log('[turnero] reprogramarTurno — request recibido | tenant:', req.tenant_id,
-    '| token:', req.params.token);
-
   const { inicio } = req.body;
   if (!inicio) {
     return res.status(400).json({ error: 'inicio es requerido' });
@@ -540,10 +513,10 @@ export const reprogramarTurno = async (req, res) => {
     const linkGestion = armarLinkGestion(req, req.params.token);
     await enviarReprogramacion(nuevoTurno, barbero, servicio, cliente, linkGestion);
 
-    console.log('[turnero] reprogramarTurno — completado | turno_id:', r.id);
+    console.log('[turnero] reprogramarTurno completado | turno_id:', r.id);
     res.json({ ok: true, turno: { id: r.id, inicio: nuevoTurno.inicio, fin: nuevoTurno.fin } });
   } catch (err) {
-    console.error('[turnero] Error en reprogramarTurno:', err.message);
+    console.error('[turnero] Error en reprogramarTurno:', err);
     res.status(500).json({ error: 'Error al reprogramar el turno' });
   }
 };

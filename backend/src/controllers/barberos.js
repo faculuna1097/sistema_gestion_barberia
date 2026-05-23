@@ -11,7 +11,6 @@ import { query } from '../config/db.js';
  * @returns {JSON} Array de barberos con id y nombre
  */
 export const getBarberos = async (req, res) => {
-  console.log('[barberos] getBarberos — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre
@@ -20,10 +19,9 @@ export const getBarberos = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    console.log('[barberos] getBarberos — completado:', result.rows.length, 'barberos encontrados');
     res.json(result.rows);
   } catch (err) {
-    console.error('[barberos] Error en getBarberos:', err.message);
+    console.error('[barberos] Error en getBarberos:', err);
     res.status(500).json({ error: 'Error al obtener barberos' });
   }
 };

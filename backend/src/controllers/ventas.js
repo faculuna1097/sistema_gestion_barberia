@@ -4,12 +4,9 @@ import { query } from '../config/db.js';
 const TZ = 'America/Argentina/Buenos_Aires';
 
 export const createVenta = async (req, res) => {
-  console.log('[ventas] createVenta — request recibido | tenant:', req.tenant_id);
-
   const { producto_id, cantidad, precio_unitario, forma_pago } = req.body;
 
   if (!producto_id || !cantidad || !precio_unitario || !forma_pago) {
-    console.warn('[ventas] createVenta — validación fallida | campos faltantes:', { producto_id, cantidad, precio_unitario, forma_pago });
     return res.status(400).json({
       error: 'Faltan campos requeridos: producto_id, cantidad, precio_unitario, forma_pago'
     });
@@ -50,7 +47,7 @@ export const createVenta = async (req, res) => {
       [cantidad, producto_id]
     );
 
-    console.log('[ventas] createVenta — completado | venta_id:', ventaId, '| producto_id:', producto_id, '| cantidad:', cantidad);
+    console.log('[ventas] createVenta completado | venta_id:', ventaId);
     res.status(201).json({
       message: 'Venta registrada correctamente',
       venta_id: ventaId,
@@ -58,14 +55,12 @@ export const createVenta = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('[ventas] Error en createVenta | venta_id al momento del fallo:', ventaId, '| error:', err.message);
+    console.error('[ventas] Error en createVenta | venta_id al momento del fallo:', ventaId, '| error:', err);
 
     if (ventaId) {
-      console.warn('[ventas] createVenta — iniciando cleanup | eliminando venta huérfana:', ventaId);
       await query('DELETE FROM venta WHERE id = $1', [ventaId]).catch((cleanupErr) => {
-        console.error('[ventas] createVenta — error en cleanup:', cleanupErr.message);
+        console.error('[ventas] createVenta — error en cleanup:', cleanupErr);
       });
-      console.log('[ventas] createVenta — cleanup completado | venta eliminada:', ventaId);
     }
 
     res.status(500).json({ error: 'Error al registrar la venta' });
@@ -74,7 +69,6 @@ export const createVenta = async (req, res) => {
 
 export const getVentasMensual = async (req, res) => {
   const mes = req.query.mes || new Date().toLocaleDateString('sv-SE', { timeZone: TZ }).slice(0, 7);
-  console.log('[ventas] getVentasMensual — request recibido | mes:', mes, '| tenant:', req.tenant_id);
 
   if (!/^\d{4}-\d{2}$/.test(mes)) {
     return res.status(400).json({ error: "El parámetro 'mes' debe tener formato YYYY-MM" });
@@ -117,7 +111,6 @@ export const getVentasMensual = async (req, res) => {
       (acc, row) => acc + parseFloat(row.monto_total), 0
     );
 
-    console.log('[ventas] getVentasMensual — completado | mes:', mes, '| registros:', resultadoVentas.rows.length, '| total:', totalGeneral);
     return res.status(200).json({
       ventas: resultadoVentas.rows,
       totalesPorProducto: resultadoTotales.rows,
@@ -125,14 +118,13 @@ export const getVentasMensual = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('[ventas] Error en getVentasMensual:', err.message);
+    console.error('[ventas] Error en getVentasMensual:', err);
     return res.status(500).json({ error: 'Error interno al obtener las ventas del mes' });
   }
 };
 
 export const deleteVenta = async (req, res) => {
   const { id } = req.params;
-  console.log('[ventas] deleteVenta — request recibido | id:', id, '| tenant:', req.tenant_id);
 
   if (!id) {
     return res.status(400).json({ error: 'Falta el parámetro id' });
@@ -157,18 +149,17 @@ export const deleteVenta = async (req, res) => {
       [cantidad, producto_id]
     );
 
-    console.log('[ventas] deleteVenta — completado | venta_id:', id, '| stock restaurado | producto_id:', producto_id, '| cantidad:', cantidad);
+    console.log('[ventas] deleteVenta completado | venta_id:', id);
     return res.status(200).json({ eliminado: true, id });
 
   } catch (err) {
-    console.error('[ventas] Error en deleteVenta:', err.message);
+    console.error('[ventas] Error en deleteVenta:', err);
     return res.status(500).json({ error: 'Error interno al eliminar la venta' });
   }
 };
 
 export const updateVenta = async (req, res) => {
   const { id } = req.params;
-  console.log('[ventas] updateVenta — request recibido | id:', id, '| tenant:', req.tenant_id);
 
   const { producto_id, cantidad, precio_unitario, forma_pago } = req.body;
 
@@ -232,11 +223,11 @@ export const updateVenta = async (req, res) => {
       [cantidad, producto_id]
     );
 
-    console.log('[ventas] updateVenta — completado | venta_id:', id, '| producto_id:', producto_id, '| cantidad:', cantidad);
+    console.log('[ventas] updateVenta completado | venta_id:', id);
     return res.status(200).json({ id, producto_id, cantidad, precio_unitario, forma_pago });
 
   } catch (err) {
-    console.error('[ventas] Error en updateVenta:', err.message);
+    console.error('[ventas] Error en updateVenta:', err);
     return res.status(500).json({ error: 'Error interno al editar la venta' });
   }
 };

@@ -25,7 +25,6 @@ import { query } from '../config/db.js';
  * @param {Response} res - 200 { token } | 400 | 401 | 500.
  */
 export async function loginOperativo(req, res) {
-  console.log('[authOperativo] loginOperativo — request recibido | tenant:', req.tenant_id);
   const { usuario, password } = req.body;
   const tenant_id = req.tenant_id;
 
@@ -76,11 +75,11 @@ export async function loginOperativo(req, res) {
       { expiresIn: '30d' }
     );
 
-    console.log('[authOperativo] loginOperativo — completado | tenant:', tenant_id);
+    console.log('[authOperativo] loginOperativo completado | tenant:', tenant_id);
     return res.json({ token });
 
   } catch (err) {
-    console.error('[authOperativo] Error en loginOperativo:', err.message);
+    console.error('[authOperativo] Error en loginOperativo:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 }

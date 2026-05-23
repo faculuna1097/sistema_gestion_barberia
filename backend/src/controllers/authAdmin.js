@@ -23,7 +23,6 @@ import { TZ } from '../utils/constantes.js';
  * @param {Response} res - 200 { token, aviso_pago } | 400 | 401 | 402 | 500.
  */
 export async function loginAdmin(req, res) {
-  console.log('[authAdmin] loginAdmin — request recibido | tenant:', req.tenant_id);
   const { pin } = req.body;
   const tenant_id = req.tenant_id;
 
@@ -79,11 +78,11 @@ export async function loginAdmin(req, res) {
       { expiresIn: '30d' }
     );
 
-    console.log('[authAdmin] loginAdmin — completado | tenant:', tenant_id, '| aviso_pago:', aviso_pago);
+    console.log('[authAdmin] loginAdmin completado | tenant:', tenant_id);
     return res.json({ token, aviso_pago });
 
   } catch (err) {
-    console.error('[authAdmin] Error en loginAdmin:', err.message);
+    console.error('[authAdmin] Error en loginAdmin:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 }

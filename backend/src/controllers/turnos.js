@@ -23,8 +23,6 @@ const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
  * @returns {JSON} array de turnos con datos de barbero, servicio y cliente
  */
 export const getTurnos = async (req, res) => {
-  console.log('[turnos] getTurnos — request recibido | tenant:', req.tenant_id, '| rol:', req.rol);
-
   try {
     const filtros = { tenantId: req.tenant_id };
 
@@ -47,10 +45,9 @@ export const getTurnos = async (req, res) => {
     }
 
     const turnos = await listarTurnos(filtros);
-    console.log('[turnos] getTurnos — completado |', turnos.length, 'turnos');
     res.json(turnos);
   } catch (err) {
-    console.error('[turnos] Error en getTurnos:', err.message);
+    console.error('[turnos] Error en getTurnos:', err);
     res.status(500).json({ error: 'Error al listar turnos' });
   }
 };
@@ -64,8 +61,6 @@ export const getTurnos = async (req, res) => {
  * @returns {JSON} 201 { turno_id, token_gestion }
  */
 export const crearTurnoAdmin = async (req, res) => {
-  console.log('[turnos] crearTurnoAdmin — request recibido | tenant:', req.tenant_id, '| rol:', req.rol);
-
   const { servicio_id, inicio, nombre, telefono, email } = req.body;
 
   // barbero_id: si es barbero, forzar el propio (anti escalada horizontal)
@@ -143,14 +138,14 @@ export const crearTurnoAdmin = async (req, res) => {
         }
       }
     } catch (err) {
-      console.error('[turnos] crearTurnoAdmin — fallo best-effort (Calendar/mail):', err.message);
+      console.error('[turnos] crearTurnoAdmin — fallo best-effort (Calendar/mail):', err);
     }
 
-    console.log('[turnos] crearTurnoAdmin — completado | turno_id:', turno_id);
+    console.log('[turnos] crearTurnoAdmin completado | turno_id:', turno_id);
     return res.status(201).json({ turno_id, token_gestion });
 
   } catch (err) {
-    console.error('[turnos] Error en crearTurnoAdmin:', err.message);
+    console.error('[turnos] Error en crearTurnoAdmin:', err);
     return res.status(500).json({ error: 'Error al crear el turno' });
   }
 };
@@ -163,9 +158,6 @@ export const crearTurnoAdmin = async (req, res) => {
  * @returns {JSON} { id, estado }
  */
 export const patchEstado = async (req, res) => {
-  console.log('[turnos] patchEstado — request recibido | tenant:', req.tenant_id,
-    '| turno:', req.params.id, '| rol:', req.rol);
-
   const { estado } = req.body;
   if (!estado) {
     return res.status(400).json({ error: 'estado es requerido' });
@@ -176,7 +168,7 @@ export const patchEstado = async (req, res) => {
 
   try {
     const resultado = await cambiarEstado(req.params.id, estado, req.tenant_id, barberoId);
-    console.log('[turnos] patchEstado — completado | turno_id:', resultado.id, '| estado:', resultado.estado);
+    console.log('[turnos] patchEstado completado | turno_id:', resultado.id, '| estado:', resultado.estado);
     res.json(resultado);
   } catch (err) {
     if (err.code === 'NO_ENCONTRADO') {
@@ -185,7 +177,7 @@ export const patchEstado = async (req, res) => {
     if (err.code === 'ESTADO_INVALIDO') {
       return res.status(409).json({ error: err.message });
     }
-    console.error('[turnos] Error en patchEstado:', err.message);
+    console.error('[turnos] Error en patchEstado:', err);
     res.status(500).json({ error: 'Error al cambiar estado del turno' });
   }
 };
@@ -197,15 +189,12 @@ export const patchEstado = async (req, res) => {
  * @returns {JSON} { id, estado: 'cancelado' }
  */
 export const deleteTurno = async (req, res) => {
-  console.log('[turnos] deleteTurno — request recibido | tenant:', req.tenant_id,
-    '| turno:', req.params.id, '| rol:', req.rol);
-
   const canceladoPor = req.rol === 'barbero' ? 'barbero' : 'admin';
   const barberoId = req.rol === 'barbero' ? req.barbero_id : null;
 
   try {
     const resultado = await cancelarTurnoPorId(req.params.id, canceladoPor, req.tenant_id, barberoId);
-    console.log('[turnos] deleteTurno — completado | turno_id:', resultado.id);
+    console.log('[turnos] deleteTurno completado | turno_id:', resultado.id);
     res.json(resultado);
   } catch (err) {
     if (err.code === 'NO_ENCONTRADO') {
@@ -214,7 +203,7 @@ export const deleteTurno = async (req, res) => {
     if (err.code === 'ESTADO_INVALIDO') {
       return res.status(409).json({ error: err.message });
     }
-    console.error('[turnos] Error en deleteTurno:', err.message);
+    console.error('[turnos] Error en deleteTurno:', err);
     res.status(500).json({ error: 'Error al cancelar el turno' });
   }
 };

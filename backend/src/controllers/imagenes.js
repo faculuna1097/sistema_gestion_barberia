@@ -20,7 +20,6 @@ const TIPOS_VALIDOS = Object.keys(LIMITES_POR_TIPO);
  * @returns {JSON} array [{ id, tipo, orden, url }]
  */
 export const getImagenes = async (req, res) => {
-  console.log('[imagenes] getImagenes — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, tipo, orden, storage_path
@@ -35,10 +34,9 @@ export const getImagenes = async (req, res) => {
       orden: row.orden,
       url: urlPublica(row.storage_path),
     }));
-    console.log('[imagenes] getImagenes — completado |', imagenes.length, 'imágenes');
     res.json(imagenes);
   } catch (err) {
-    console.error('[imagenes] Error en getImagenes:', err.message);
+    console.error('[imagenes] Error en getImagenes:', err);
     res.status(500).json({ error: 'Error al obtener las imágenes' });
   }
 };
@@ -55,9 +53,6 @@ export const getImagenes = async (req, res) => {
  * @returns {JSON} 201 { id, tipo, orden, url } | 400
  */
 export const postImagen = async (req, res) => {
-  console.log('[imagenes] postImagen — request recibido | tenant:', req.tenant_id,
-    '| tipo:', req.query.tipo, '| orden:', req.query.orden);
-
   const { tipo } = req.query;
   const orden = Number(req.query.orden);
 
@@ -108,7 +103,7 @@ export const postImagen = async (req, res) => {
       fila = result.rows[0];
     }
 
-    console.log('[imagenes] postImagen — completado | id:', fila.id);
+    console.log('[imagenes] postImagen completado | imagen_id:', fila.id);
     res.status(201).json({
       id: fila.id,
       tipo: fila.tipo,
@@ -116,7 +111,7 @@ export const postImagen = async (req, res) => {
       url: urlPublica(fila.storage_path),
     });
   } catch (err) {
-    console.error('[imagenes] Error en postImagen:', err.message);
+    console.error('[imagenes] Error en postImagen:', err);
     res.status(500).json({ error: 'Error al subir la imagen' });
   }
 };
@@ -129,7 +124,6 @@ export const postImagen = async (req, res) => {
  * @returns {JSON} 200 { ok: true } | 404
  */
 export const deleteImagen = async (req, res) => {
-  console.log('[imagenes] deleteImagen — request recibido | imagen:', req.params.id);
   try {
     // El filtro por tenant_id evita que un tenant borre imágenes de otro.
     const result = await query(
@@ -142,10 +136,10 @@ export const deleteImagen = async (req, res) => {
       return res.status(404).json({ error: 'Imagen no encontrada' });
     }
     await eliminarImagen(result.rows[0].storage_path);
-    console.log('[imagenes] deleteImagen — completado | imagen:', req.params.id);
+    console.log('[imagenes] deleteImagen completado | imagen_id:', req.params.id);
     res.json({ ok: true });
   } catch (err) {
-    console.error('[imagenes] Error en deleteImagen:', err.message);
+    console.error('[imagenes] Error en deleteImagen:', err);
     res.status(500).json({ error: 'Error al eliminar la imagen' });
   }
 };

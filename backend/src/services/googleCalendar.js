@@ -75,8 +75,6 @@ const armarCuerpoEvento = (turno, barbero, servicio, cliente) => {
  * @returns {Promise<string|null>} google_event_id si OK, null si falla o se saltea
  */
 export const crearEvento = async (turno, barbero, servicio, cliente) => {
-  console.log('[googleCalendar] crearEvento — request recibido | barbero_email:', barbero?.email ?? '(null)');
-
   if (!credencialesCargadas) {
     console.warn('[googleCalendar] crearEvento — saltado: faltan credenciales');
     return null;
@@ -93,10 +91,10 @@ export const crearEvento = async (turno, barbero, servicio, cliente) => {
       requestBody: armarCuerpoEvento(turno, barbero, servicio, cliente),
     });
     const eventId = respuesta.data.id;
-    console.log('[googleCalendar] crearEvento — completado | google_event_id:', eventId);
+    console.log('[googleCalendar] crearEvento completado | google_event_id:', eventId);
     return eventId;
   } catch (err) {
-    console.error('[googleCalendar] Error en crearEvento:', err.message);
+    console.error('[googleCalendar] Error en crearEvento:', err);
     return null;
   }
 };
@@ -108,8 +106,6 @@ export const crearEvento = async (turno, barbero, servicio, cliente) => {
  * @returns {Promise<boolean>} true si OK, false si falla o se saltea
  */
 export const cancelarEvento = async (google_event_id) => {
-  console.log('[googleCalendar] cancelarEvento — request recibido | google_event_id:', google_event_id);
-
   if (!credencialesCargadas) {
     console.warn('[googleCalendar] cancelarEvento — saltado: faltan credenciales');
     return false;
@@ -125,10 +121,10 @@ export const cancelarEvento = async (google_event_id) => {
       eventId: google_event_id,
       sendUpdates: 'all',
     });
-    console.log('[googleCalendar] cancelarEvento — completado | google_event_id:', google_event_id);
+    console.log('[googleCalendar] cancelarEvento completado | google_event_id:', google_event_id);
     return true;
   } catch (err) {
-    console.error('[googleCalendar] Error en cancelarEvento:', err.message);
+    console.error('[googleCalendar] Error en cancelarEvento:', err);
     return false;
   }
 };
@@ -144,8 +140,6 @@ export const cancelarEvento = async (google_event_id) => {
  * @returns {Promise<boolean>} true si OK, false si falla o se saltea
  */
 export const actualizarEvento = async (google_event_id, nuevoTurno, barbero, servicio, cliente) => {
-  console.log('[googleCalendar] actualizarEvento — request recibido | google_event_id:', google_event_id);
-
   if (!credencialesCargadas) {
     console.warn('[googleCalendar] actualizarEvento — saltado: faltan credenciales');
     return false;
@@ -162,10 +156,10 @@ export const actualizarEvento = async (google_event_id, nuevoTurno, barbero, ser
       sendUpdates: 'all',
       requestBody: armarCuerpoEvento(nuevoTurno, barbero, servicio, cliente),
     });
-    console.log('[googleCalendar] actualizarEvento — completado | google_event_id:', google_event_id);
+    console.log('[googleCalendar] actualizarEvento completado | google_event_id:', google_event_id);
     return true;
   } catch (err) {
-    console.error('[googleCalendar] Error en actualizarEvento:', err.message);
+    console.error('[googleCalendar] Error en actualizarEvento:', err);
     return false;
   }
 };

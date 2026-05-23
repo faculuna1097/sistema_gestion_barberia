@@ -17,9 +17,6 @@ const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
  * @returns {JSON} array de { id, inicio, cliente_nombre, servicio_id }
  */
 export const getTurnosOperativos = async (req, res) => {
-  console.log('[turnosOperativo] getTurnosOperativos — request recibido | tenant:', req.tenant_id,
-    '| barbero:', req.query.barbero_id, '| fecha:', req.query.fecha);
-
   const { barbero_id, fecha } = req.query;
 
   if (!barbero_id || !fecha) {
@@ -35,10 +32,9 @@ export const getTurnosOperativos = async (req, res) => {
       barberoId: barbero_id,
       fecha,
     });
-    console.log('[turnosOperativo] getTurnosOperativos — completado |', turnos.length, 'turnos');
     res.json(turnos);
   } catch (err) {
-    console.error('[turnosOperativo] Error en getTurnosOperativos:', err.message);
+    console.error('[turnosOperativo] Error en getTurnosOperativos:', err);
     res.status(500).json({ error: 'Error al listar turnos del día' });
   }
 };

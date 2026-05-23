@@ -23,7 +23,7 @@ const pool = new Pool({
   connectionTimeoutMillis: 5000,      // falla si no conecta en 5s (evita colgar el servidor)
 });
 
-pool.on('error', (err) => console.error('[db] ❌ Error inesperado en pool:', err.message));
+pool.on('error', (err) => console.error('[db] ❌ Error inesperado en pool:', err));
 
 /**
  * query
@@ -44,7 +44,7 @@ export const testConnection = async () => {
     await pool.query('SELECT 1');
     console.log('[db] ✅ Conexión a PostgreSQL establecida correctamente');
   } catch (err) {
-    console.error('[db] ❌ Error conectando a PostgreSQL:', err.message);
+    console.error('[db] ❌ Error conectando a PostgreSQL:', err);
     console.error('[db] Verificá las variables de entorno: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD');
   }
 };

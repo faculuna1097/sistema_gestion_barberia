@@ -10,7 +10,6 @@ import { query } from '../config/db.js';
  * @returns {JSON} { duracion_slot_minutos }
  */
 export const getConfig = async (req, res) => {
-  console.log('[turneroConfig] getConfig — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT duracion_slot_minutos FROM tenant WHERE id = $1`,
@@ -19,10 +18,9 @@ export const getConfig = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Tenant no encontrado' });
     }
-    console.log('[turneroConfig] getConfig — completado | duracion_slot_minutos:', result.rows[0].duracion_slot_minutos);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[turneroConfig] Error en getConfig:', err.message);
+    console.error('[turneroConfig] Error en getConfig:', err);
     res.status(500).json({ error: 'Error al obtener configuración del turnero' });
   }
 };
@@ -34,7 +32,6 @@ export const getConfig = async (req, res) => {
  * @returns {JSON} { duracion_slot_minutos }
  */
 export const putConfig = async (req, res) => {
-  console.log('[turneroConfig] putConfig — request recibido | body:', req.body, '| tenant:', req.tenant_id);
   const { duracion_slot_minutos } = req.body;
 
   if (duracion_slot_minutos == null) {
@@ -54,10 +51,10 @@ export const putConfig = async (req, res) => {
        RETURNING duracion_slot_minutos`,
       [valor, req.tenant_id]
     );
-    console.log('[turneroConfig] putConfig — completado | duracion_slot_minutos:', result.rows[0].duracion_slot_minutos);
+    console.log('[turneroConfig] putConfig completado | duracion_slot_minutos:', result.rows[0].duracion_slot_minutos);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[turneroConfig] Error en putConfig:', err.message);
+    console.error('[turneroConfig] Error en putConfig:', err);
     res.status(500).json({ error: 'Error al actualizar configuración del turnero' });
   }
 };

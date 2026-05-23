@@ -116,9 +116,6 @@ const computarSlotsDeUnDia = ({
  * @returns {Promise<string[]>} array de ISO strings (con offset Argentina)
  */
 export const calcularSlotsDisponibles = async ({ tenantId, barberoId, servicioId, fecha }) => {
-  console.log('[disponibilidadService] calcularSlotsDisponibles — request recibido',
-    '| tenant:', tenantId, '| barbero:', barberoId, '| servicio:', servicioId, '| fecha:', fecha);
-
   // Fecha base en TZ Argentina, a las 00:00.
   const fechaArg = DateTime.fromISO(fecha, { zone: TZ });
   if (!fechaArg.isValid) {
@@ -132,7 +129,6 @@ export const calcularSlotsDisponibles = async ({ tenantId, barberoId, servicioId
   // margen ANTELACION_MINIMA_MINUTOS solo se aplica cuando la fecha es hoy.
   const ahoraTemprano = DateTime.now().setZone(TZ);
   if (finDia < ahoraTemprano) {
-    console.log('[disponibilidadService] calcularSlotsDisponibles — fecha pasada, devuelvo array vacío');
     return [];
   }
 
@@ -198,13 +194,11 @@ export const calcularSlotsDisponibles = async ({ tenantId, barberoId, servicioId
 
   // El negocio no abre ese día (sin fila en tenant_horario_atencion) → no hay slots.
   if (horarioTenantRes.rows.length === 0) {
-    console.log('[disponibilidadService] calcularSlotsDisponibles — día cerrado para el negocio, devuelvo array vacío');
     return [];
   }
 
   // La fecha es feriado → el negocio cierra el día completo, no hay slots.
   if (feriadoRes.rows.length > 0) {
-    console.log('[disponibilidadService] calcularSlotsDisponibles — fecha feriado, devuelvo array vacío');
     return [];
   }
   // No hace falta verificar que el barbero exista: si no tiene horarios para
@@ -239,8 +233,6 @@ export const calcularSlotsDisponibles = async ({ tenantId, barberoId, servicioId
     umbralMinimo,
   });
 
-  console.log('[disponibilidadService] calcularSlotsDisponibles — completado |',
-    slotsDisponibles.length, 'slots');
   return slotsDisponibles;
 };
 
@@ -266,10 +258,6 @@ export const calcularSlotsDisponibles = async ({ tenantId, barberoId, servicioId
  * @returns {Promise<string[]>} array de fechas 'YYYY-MM-DD' con ≥1 slot
  */
 export const calcularDiasConDisponibilidad = async ({ tenantId, barberoId, servicioId, desde, hasta }) => {
-  console.log('[disponibilidadService] calcularDiasConDisponibilidad — request recibido',
-    '| tenant:', tenantId, '| barbero:', barberoId, '| servicio:', servicioId,
-    '| desde:', desde, '| hasta:', hasta);
-
   const desdeArg = DateTime.fromISO(desde, { zone: TZ });
   const hastaArg = DateTime.fromISO(hasta, { zone: TZ });
   if (!desdeArg.isValid || !hastaArg.isValid) {
@@ -405,7 +393,5 @@ export const calcularDiasConDisponibilidad = async ({ tenantId, barberoId, servi
     if (slots.length > 0) diasDisponibles.push(fechaISO);
   }
 
-  console.log('[disponibilidadService] calcularDiasConDisponibilidad — completado |',
-    diasDisponibles.length, 'días con disponibilidad');
   return diasDisponibles;
 };

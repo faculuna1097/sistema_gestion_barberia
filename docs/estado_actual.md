@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-Última actualización: 2026-05-22 (contacto del tenant en la landing + grisado del calendario por disponibilidad real, en branch `feature/imagenes-tenant`).
+Última actualización: 2026-05-23 (limpieza de logs del backend — Fases 1–4 completas, en branch `feature/limpieza-logs-backend`).
 
 Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convenciones_tecnicas.md).
 
@@ -236,4 +236,5 @@ de cambios:
 - **El path `/turnos/gestionar/` está hardcodeado en tres lugares.** Backend (`turnosService.js#armarLinkGestion`), `frontend-turnero/src/App.jsx` (regex `extraerTokenDeURL`) y `frontend-turnero/src/screens/Confirmacion.jsx` (redirección post-reserva). Si la ruta cambia hay que tocar dos repos. Origen: un fix de 2026-05-20 — `armarLinkGestion` generaba `/turnos/:token` pero el frontend solo monta la pantalla de gestión con `/turnos/gestionar/:token`, así que el mail caía al wizard de reserva. Bajo riesgo, queda anotado.
 - **`MiniCalendario` del turnero — grisado de días** ✅ resuelto. El calendario (reserva y reprogramación) grisa los días sin disponibilidad real para el barbero/servicio elegido, usando el endpoint `GET /api/turnero/dias-disponibles`. Reemplazó el grisado client-side anterior (que solo cubría días cerrados del negocio + feriados, leídos de `GET /api/turnero/tenant`): el backend es ahora la fuente única de qué día es reservable.
 - **La restricción "no completar turnos futuros" es solo client-side.** `frontend-barbero` oculta las acciones "completar"/"no asistió" para turnos cuyo `inicio` todavía no pasó, pero `PATCH /api/admin/turnos/:id/estado` no valida la antelación: una request directa podría marcar `completado` un turno futuro. Blindar requeriría un check de `inicio <= now()` en `turnosService`. Bajo riesgo (la UI ya lo previene), pero queda anotado.
+- **Logger estructurado a futuro.** Hoy todo el logging del backend usa `console.log/warn/error` directo contra stdout, y Railway lo indexa así como está. Funciona porque el sistema es chico (1 backend, pocos tenants en producción). Cuando el volumen crezca — varios tenants activos, necesidad de filtrar por nivel/tenant/request_id, o integración con una plataforma de observability tipo Sentry/Datadog — corresponde migrar a un logger estructurado (Pino es la opción senior por performance; Winston si se prioriza ecosistema). Disparadores sugeridos: ≥3 tenants en producción, o contratación de Sentry/equivalente. No es convención, es decisión postergada hasta tener el problema real.
 *— Fin del documento —*

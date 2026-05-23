@@ -14,8 +14,6 @@ export const getMovimientosDia = async (req, res) => {
   const fecha = req.query.fecha
     || new Date().toLocaleDateString('sv-SE', { timeZone: TZ });
 
-  console.log(`[caja] getMovimientosDia — request recibido | fecha: ${fecha} | tenant: ${req.tenant_id}`);
-
   try {
     // ── Query 1: Cortes del día ──────────────────────────────────────────────
     const cortesResult = await query(
@@ -85,11 +83,10 @@ export const getMovimientosDia = async (req, res) => {
       ...gastosResult.rows,
     ].sort((b, a) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    console.log('[caja] getMovimientosDia — completado:', movimientos.length, 'movimientos | fecha:', fecha);
     res.json({ movimientos });
 
   } catch (err) {
-    console.error('[caja] Error en getMovimientosDia:', err.message);
+    console.error('[caja] Error en getMovimientosDia:', err);
     res.status(500).json({ error: 'Error al obtener movimientos del día' });
   }
 };
@@ -106,7 +103,6 @@ export const getMovimientosDia = async (req, res) => {
  */
 export const eliminarMovimiento = async (req, res) => {
   const { tipo, id } = req.params;
-  console.log(`[caja] eliminarMovimiento — request recibido | tipo: ${tipo} | id: ${id} | tenant: ${req.tenant_id}`);
 
   try {
     if (tipo === 'corte') {
@@ -141,7 +137,7 @@ export const eliminarMovimiento = async (req, res) => {
     res.json({ ok: true });
 
   } catch (err) {
-    console.error(`[caja] Error en eliminarMovimiento (${tipo}):`, err.message);
+    console.error(`[caja] Error en eliminarMovimiento (${tipo}):`, err);
     res.status(500).json({ error: `Error al eliminar ${tipo}` });
   }
 };

@@ -4,12 +4,9 @@ import { query } from '../config/db.js';
 const TZ = 'America/Argentina/Buenos_Aires';
 
 export const createGasto = async (req, res) => {
-  console.log('[gastos] createGasto — request recibido | tenant:', req.tenant_id);
-
   const { categoria_id, descripcion, monto, forma_pago } = req.body;
 
   if (!categoria_id || !descripcion || !monto || !forma_pago) {
-    console.warn('[gastos] createGasto — validación fallida | campos faltantes:', { categoria_id, descripcion, monto, forma_pago });
     return res.status(400).json({ error: 'Faltan campos requeridos: categoria_id, descripcion, monto, forma_pago' });
   }
 
@@ -26,18 +23,17 @@ export const createGasto = async (req, res) => {
     );
 
     const gastoCreado = resultado.rows[0];
-    console.log('[gastos] createGasto — completado | gasto_id:', gastoCreado.id, '| monto:', monto);
+    console.log('[gastos] createGasto completado | gasto_id:', gastoCreado.id);
     return res.status(201).json(gastoCreado);
 
   } catch (err) {
-    console.error('[gastos] Error en createGasto:', err.message);
+    console.error('[gastos] Error en createGasto:', err);
     return res.status(500).json({ error: 'Error interno al registrar el gasto' });
   }
 };
 
 export const getGastosMensual = async (req, res) => {
   const mes = req.query.mes || new Date().toLocaleDateString('sv-SE', { timeZone: TZ }).slice(0, 7);
-  console.log('[gastos] getGastosMensual — request recibido | mes:', mes, '| tenant:', req.tenant_id);
 
   if (!/^\d{4}-\d{2}$/.test(mes)) {
     return res.status(400).json({ error: "El parámetro 'mes' debe tener formato YYYY-MM" });
@@ -78,7 +74,6 @@ export const getGastosMensual = async (req, res) => {
 
     const totalGeneral = resultadoTotales.rows.reduce((acc, row) => acc + parseFloat(row.total), 0);
 
-    console.log('[gastos] getGastosMensual — completado | mes:', mes, '| registros:', resultadoGastos.rows.length, '| total:', totalGeneral);
     return res.status(200).json({
       gastos: resultadoGastos.rows,
       totalesPorCategoria: resultadoTotales.rows,
@@ -86,14 +81,13 @@ export const getGastosMensual = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('[gastos] Error en getGastosMensual:', err.message);
+    console.error('[gastos] Error en getGastosMensual:', err);
     return res.status(500).json({ error: 'Error interno al obtener los gastos del mes' });
   }
 };
 
 export const deleteGasto = async (req, res) => {
   const { id } = req.params;
-  console.log('[gastos] deleteGasto — request recibido | id:', id, '| tenant:', req.tenant_id);
 
   if (!id) {
     return res.status(400).json({ error: 'Falta el parámetro id' });
@@ -110,18 +104,17 @@ export const deleteGasto = async (req, res) => {
       return res.status(404).json({ error: 'Gasto no encontrado' });
     }
 
-    console.log('[gastos] deleteGasto — completado | gasto_id:', id);
+    console.log('[gastos] deleteGasto completado | gasto_id:', id);
     return res.status(200).json({ eliminado: true, id });
 
   } catch (err) {
-    console.error('[gastos] Error en deleteGasto:', err.message);
+    console.error('[gastos] Error en deleteGasto:', err);
     return res.status(500).json({ error: 'Error interno al eliminar el gasto' });
   }
 };
 
 export const updateGasto = async (req, res) => {
   const { id } = req.params;
-  console.log('[gastos] updateGasto — request recibido | id:', id, '| tenant:', req.tenant_id);
 
   const { categoria_id, descripcion, monto, forma_pago } = req.body;
 
@@ -149,11 +142,11 @@ export const updateGasto = async (req, res) => {
       return res.status(404).json({ error: 'Gasto no encontrado' });
     }
 
-    console.log('[gastos] updateGasto — completado | gasto_id:', id);
+    console.log('[gastos] updateGasto completado | gasto_id:', id);
     return res.status(200).json(resultado.rows[0]);
 
   } catch (err) {
-    console.error('[gastos] Error en updateGasto:', err.message);
+    console.error('[gastos] Error en updateGasto:', err);
     return res.status(500).json({ error: 'Error interno al editar el gasto' });
   }
 };

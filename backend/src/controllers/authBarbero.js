@@ -22,7 +22,6 @@ import { query } from '../config/db.js';
  * @param {Response} res - 200 { token, barbero: { id, nombre } } | 400 | 401 | 500.
  */
 export async function loginBarbero(req, res) {
-  console.log('[authBarbero] loginBarbero — request recibido | tenant:', req.tenant_id);
   const { barbero_id, pin } = req.body;
   const tenant_id = req.tenant_id;
 
@@ -58,11 +57,11 @@ export async function loginBarbero(req, res) {
       { expiresIn: '30d' }
     );
 
-    console.log('[authBarbero] loginBarbero — completado | barbero_id:', id, '| tenant:', tenant_id);
+    console.log('[authBarbero] loginBarbero completado | barbero_id:', id);
     return res.json({ token, barbero: { id, nombre } });
 
   } catch (err) {
-    console.error('[authBarbero] Error en loginBarbero:', err.message);
+    console.error('[authBarbero] Error en loginBarbero:', err);
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 }

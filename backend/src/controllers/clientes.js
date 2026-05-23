@@ -26,9 +26,6 @@ export const getMisClientes = async (req, res) => {
     ? req.barbero_id
     : req.query.barbero_id;
 
-  console.log('[clientes] getMisClientes — request recibido | tenant:', req.tenant_id,
-    '| barbero_id:', barbero_id ?? '(todos)');
-
   if (!barbero_id) {
     return res.status(400).json({ error: 'barbero_id es requerido' });
   }
@@ -47,18 +44,14 @@ export const getMisClientes = async (req, res) => {
        ORDER BY ultima_visita DESC`,
       [barbero_id, req.tenant_id]
     );
-    console.log('[clientes] getMisClientes — completado |', result.rows.length, 'clientes');
     res.json(result.rows);
   } catch (err) {
-    console.error('[clientes] Error en getMisClientes:', err.message);
+    console.error('[clientes] Error en getMisClientes:', err);
     res.status(500).json({ error: 'Error al obtener clientes del barbero' });
   }
 };
 
 export const getClientes = async (req, res) => {
-  console.log('[clientes] getClientes — request recibido | tenant:', req.tenant_id,
-    '| busqueda:', req.query.busqueda ?? '(vacía)');
-
   const { busqueda } = req.query;
   if (!busqueda || busqueda.trim().length < 2) {
     return res.status(400).json({ error: 'busqueda debe tener al menos 2 caracteres' });
@@ -76,10 +69,9 @@ export const getClientes = async (req, res) => {
        LIMIT 50`,
       [req.tenant_id, patron]
     );
-    console.log('[clientes] getClientes — completado |', result.rows.length, 'resultados');
     res.json(result.rows);
   } catch (err) {
-    console.error('[clientes] Error en getClientes:', err.message);
+    console.error('[clientes] Error en getClientes:', err);
     res.status(500).json({ error: 'Error al buscar clientes' });
   }
 };
