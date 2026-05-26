@@ -41,11 +41,15 @@ a la sección que corresponda. **No borrar nada hasta que esté resuelto.**
 - [x] Instalar `lucide-react` en `frontend/package.json` (lo necesita Fase 2).
 - [x] **No tocar** los archivos viejos `utils/formatos.js` y `utils/fechas.js` todavía — quedan vigentes hasta que la Fase 4 vaya migrando los imports archivo por archivo. Eliminación final anotada en Fase 6 y deuda §3-8.
 
-### Fase 2 — Primitivos universales
-- [ ] Copiar a `frontend/src/components/ui/` los 13 primitivos universales de turnero (lista en sistema de diseño §6.1).
-- [ ] Crear `frontend/src/components/ui/index.js` (barrel) con los exports.
-- [ ] Ajustar **defaults a densidad compacta** donde aplique (padding card 8–12, spacing 12–16).
-- [ ] Verificar focus visible en todos (deuda global §3, item del sistema de diseño #12).
+### Fase 2 — Primitivos universales ✅
+- [x] Copiar a `frontend/src/components/ui/` los 13 primitivos universales de turnero (lista en sistema de diseño §6.1) **idénticos**. Se sumó también `IconoAlerta` (helper SVG que turnero exporta y usamos para el glyph del `EmptyState` de error).
+- [x] Crear `frontend/src/components/ui/index.js` (barrel) con los exports.
+- [x] Verificar focus visible en todos. Resultado: todos los interactivos (Button, Card, Field, TopBar, ConfirmDialog) quedan cubiertos por el `*:focus-visible` global de `index.css` (outline indigo 2px). Field además tiene ring propio en el input. **Sin deuda nueva por focus.**
+- [x] **Diferido**: los ajustes de densidad compacta NO se aplican upfront. Se hacen puntualmente durante Fase 4 cuando una pantalla real lo pida. Si el ajuste sirve a 2+ pantallas, se sube al primitivo (regla §7.4 del sistema de diseño).
+
+**Pendiente para Fase 3** (anotado también en el header de `PageContainer.jsx`): el primitivo es mobile-first con `maxWidth: 480`. No sirve tal cual para el shell admin horizontal. Decidir en Fase 3 entre:
+- (a) modificar el primitivo agregando props `maxWidth`/`fluid` para que sirva a los dos fronts, o
+- (b) crear un `AdminPageContainer` paralelo en `frontend/src/components/ui/` que copie el patrón pero adaptado al desktop.
 
 ### Fase 3 — Shell del admin
 - [ ] Refactor de `App.jsx` (eliminar `stylesEstado` hardcodeado con verde `#1a7a4a` y DM Sans).
@@ -130,4 +134,4 @@ mover a una sección "resueltas" o dejar la nota inline.
 
 ---
 
-*Última actualización: 2026-05-26 — Fase 1 cerrada (fundamentos: tokens, utils consolidadas, index.css con Tailwind en coexistencia, Geist, lucide-react instalado). Anotada deuda §3-9 (vulns npm audit).*
+*Última actualización: 2026-05-26 — Fase 2 cerrada (13 primitivos universales + IconoAlerta + barrel, copia idéntica de turnero, focus visible OK). Pendiente para Fase 3: decisión sobre PageContainer (mobile-first) vs shell horizontal del admin.*
