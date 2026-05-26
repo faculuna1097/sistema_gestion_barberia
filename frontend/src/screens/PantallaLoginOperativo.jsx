@@ -2,43 +2,76 @@
 // Pantalla de login del modo operativo. Es la primera pantalla que ve el iPad
 // del local mientras no haya un tokenOperativo válido en localStorage.
 // Una vez logueado el operativo, esta pantalla no vuelve a aparecer hasta que:
-//   1. Alguien presione el botón de logout en la esquina superior izquierda de MainScreen, o
-//   2. El backend devuelva 401 (token expirado a los 30d, o credenciales cambiadas y blacklist a futuro).
+//   1. Alguien presione el botón de logout en MainScreen, o
+//   2. El backend devuelva 401 (token expirado a los 30d, o credenciales rotadas).
+//
+// Layout: fondo full-screen con la imagen del local (tenant_imagen tipo='local')
+// + overlay oscuro sutil para legibilidad + card sólida centrada con shadowMd.
+// El logo del tenant va dentro de un círculo arriba de la card.
 //
 // Props:
-//   onAcceso  — callback(token) tras login exitoso. App.jsx lo usa para
-//               actualizar su estado tokenOperativo y navegar a "main".
-//   logoUrl   — URL del logo del tenant para mostrarlo arriba (opcional).
+//   onAcceso     — callback(token) tras login exitoso. App.jsx lo usa para
+//                  actualizar su estado tokenOperativo y navegar a "main".
+//   imagenLogo   — URL del logo (tenant_imagen tipo='logo'). Fallback: Lock.
+//   imagenLocal  — URL de la foto del local (tenant_imagen tipo='local').
+//                  Si no hay, el fondo cae a surfaceAlt liso.
 
 import { useState } from "react";
+import { Lock } from "lucide-react";
+import { theme } from "../theme/tokens.js";
+import { Field, Button } from "../components/ui";
 import { loginOperativo } from "../services/api";
 
-// ─── Ícono de candado (visual, mismo que en login admin) ─────────────────────
-const CandadoIcon = () => (
-  <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-  </svg>
-);
-
-// ─── Componente principal ─────────────────────────────────────────────────────
 /**
+ * LogoCirculo
+ * Logo del tenant dentro de un círculo con borde + sombra. Si no hay logo,
+ * muestra el icono Lock como fallback. El logo usa object-fit: contain para
+ * no deformarse dentro del círculo.
+ */
+function LogoCirculo({ imagenLogo, size = 96 }) {
+  return (
+    <div style={{
+      width: size,
+      height: size,
+      borderRadius: 999,
+      background: theme.surface,
+      border: `1px solid ${theme.hairline}`,
+      boxShadow: theme.shadowSm,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      color: theme.accent,
+      flexShrink: 0,
+    }}>
+      {imagenLogo ? (
+        <img
+          src={imagenLogo}
+          alt="Logo del negocio"
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      ) : (
+        <Lock size={Math.round(size * 0.35)} strokeWidth={1.75} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * PantallaLoginOperativo
  * Renderiza el formulario de login operativo (usuario + password).
  * Maneja su propio estado local de inputs, error inline y flag de envío.
- * No persiste nada — la persistencia ocurre dentro de loginOperativo() en api.js.
+ * La persistencia del token ocurre dentro de loginOperativo() en api.js.
  */
-export default function PantallaLoginOperativo({ onAcceso, logoUrl }) {
+export default function PantallaLoginOperativo({ onAcceso, imagenLogo, imagenLocal }) {
   const [usuario,  setUsuario]  = useState("");
   const [password, setPassword] = useState("");
   const [error,    setError]    = useState(null);
   const [enviando, setEnviando] = useState(false);
 
   /**
-   * submit
-   * Valida que los campos no estén vacíos, llama a loginOperativo y, si todo
-   * sale bien, dispara el callback onAcceso para que App.jsx navegue.
-   * @param {Event} e - evento de submit del form
+   * submit — valida que los campos no estén vacíos, llama a loginOperativo y
+   * dispara el callback onAcceso si todo sale bien.
    */
   const submit = async (e) => {
     e.preventDefault();
@@ -60,167 +93,113 @@ export default function PantallaLoginOperativo({ onAcceso, logoUrl }) {
     }
   };
 
+  // Fondo: si hay imagen del local, la usamos como cover; si no, surfaceAlt liso.
+  const fondoStyle = imagenLocal
+    ? {
+        background: `url("${imagenLocal}") center/cover no-repeat`,
+      }
+    : { background: theme.surfaceAlt };
+
   return (
-    <div style={styles.pantalla}>
-      <div style={styles.lineaSuperior} />
+    <div style={{
+      width: '100vw',
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+      fontFamily: theme.body,
+      position: 'relative',
+      overflow: 'auto',
+      ...fondoStyle,
+    }}>
+      {/* Overlay oscuro sutil para asegurar contraste de la card sobre la imagen.
+          No es glassmorphism — es un velo plano de sombra. */}
+      {imagenLocal && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'rgba(9, 9, 11, 0.35)',
+          pointerEvents: 'none',
+        }} />
+      )}
 
-      <div style={styles.iconoArea}>
-        {logoUrl ? (
-          <img src={logoUrl} alt="Logo del negocio" style={styles.logoImage} />
-        ) : (
-          <div style={styles.iconoCirculo}>
-            <CandadoIcon />
-          </div>
-        )}
-        <h1 style={styles.titulo}>Modo operativo</h1>
-        <p style={{ ...styles.subtitulo, ...(error ? styles.subtituloError : {}) }}>
-          {error ? error : "Ingresá las credenciales del local"}
-        </p>
-      </div>
+      <form
+        onSubmit={submit}
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          width: '100%',
+          maxWidth: 380,
+          background: theme.surface,
+          border: `1px solid ${theme.hairline}`,
+          borderRadius: theme.radiusLg,
+          boxShadow: theme.shadowMd,
+          padding: 32,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 20,
+          animation: 'om-fade .26s ease-out both',
+        }}
+      >
+        <LogoCirculo imagenLogo={imagenLogo} />
 
-      <form style={styles.form} onSubmit={submit}>
-        <input
-          type="text"
-          value={usuario}
-          onChange={(e) => { setUsuario(e.target.value); setError(null); }}
-          placeholder="Usuario"
-          autoComplete="username"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          style={styles.input}
-          disabled={enviando}
-        />
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => { setPassword(e.target.value); setError(null); }}
-          placeholder="Contraseña"
-          autoComplete="current-password"
-          style={styles.input}
-          disabled={enviando}
-        />
-        <button
-          type="submit"
-          style={{
-            ...styles.btnIngresar,
-            ...(enviando ? styles.btnDeshabilitado : {}),
-          }}
-          disabled={enviando}
-        >
-          {enviando ? "Ingresando..." : "Ingresar"}
-        </button>
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <h1 style={{
+            fontFamily: theme.body,
+            fontWeight: theme.weightHeading,
+            fontSize: theme.sizeTitle,
+            color: theme.ink,
+            letterSpacing: '-0.02em',
+            margin: 0,
+          }}>
+            Modo operativo
+          </h1>
+          <p style={{
+            fontFamily: theme.body,
+            fontSize: theme.sizeBody,
+            fontWeight: error ? theme.weightMedium : theme.weightRegular,
+            color: error ? theme.danger : theme.muted,
+            margin: 0,
+            minHeight: 22,
+            transition: `color ${theme.transitionFast}`,
+          }}>
+            {error || "Ingresá las credenciales del local"}
+          </p>
+        </div>
+
+        <div style={{
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+        }}>
+          <Field
+            label="Usuario"
+            value={usuario}
+            onChange={(v) => { setUsuario(v); setError(null); }}
+            placeholder="usuario"
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            disabled={enviando}
+          />
+          <Field
+            label="Contraseña"
+            value={password}
+            onChange={(v) => { setPassword(v); setError(null); }}
+            placeholder="contraseña"
+            type="password"
+            autoComplete="current-password"
+            disabled={enviando}
+          />
+          <Button type="submit" disabled={enviando}>
+            {enviando ? 'Ingresando…' : 'Ingresar'}
+          </Button>
+        </div>
       </form>
     </div>
   );
 }
-
-// ─── Estilos ──────────────────────────────────────────────────────────────────
-// Layout consistente con PantallaLoginAdmin: línea verde arriba, área de ícono
-// + título + subtítulo, y bloque de formulario centrado. Sin botón de cancelar
-// porque esta es la pantalla inicial — no hay a dónde "volver".
-const styles = {
-  pantalla: {
-    width: "100vw",
-    height: "100vh",
-    backgroundColor: "#ffffff",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
-    position: "relative",
-    padding: "0 5vw",
-  },
-  lineaSuperior: {
-    position: "absolute",
-    top: 0, left: 0, right: 0,
-    height: "4px",
-    background: "linear-gradient(90deg, #1a7a4a 0%, #2dba6e 50%, #1a7a4a 100%)",
-  },
-  iconoArea: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: "12px",
-    marginBottom: "5vh",
-  },
-  iconoCirculo: {
-    width: "72px",
-    height: "72px",
-    borderRadius: "50%",
-    border: "2px solid #1a7a4a",
-    color: "#1a7a4a",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logoImage: {
-    maxHeight: "160px",
-    maxWidth: "320px",
-    objectFit: "contain",
-    marginBottom: "8px",
-  },
-  titulo: {
-    fontSize: "clamp(22px, 3vw, 30px)",
-    fontWeight: "700",
-    color: "#111111",
-    margin: 0,
-    letterSpacing: "-0.02em",
-  },
-  subtitulo: {
-    fontSize: "clamp(14px, 1.5vw, 16px)",
-    color: "#888888",
-    margin: 0,
-    minHeight: "22px",
-    textAlign: "center",
-    maxWidth: "360px",
-    lineHeight: 1.4,
-  },
-  // Cuando hay error, el subtítulo se pinta rojo y más pesado para que se
-  // distinga del placeholder gris.
-  subtituloError: {
-    color: "#e74c3c",
-    fontWeight: 500,
-  },
-  form: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-    width: "100%",
-    maxWidth: "360px",
-  },
-  input: {
-    width: "100%",
-    padding: "18px 20px",
-    borderRadius: "14px",
-    border: "1.5px solid #e0e0e0",
-    backgroundColor: "#fafafa",
-    fontSize: "17px",
-    color: "#111111",
-    fontFamily: "inherit",
-    outline: "none",
-    boxSizing: "border-box",
-    transition: "border-color 0.15s ease",
-  },
-  btnIngresar: {
-    marginTop: "8px",
-    padding: "18px 0",
-    borderRadius: "14px",
-    border: "none",
-    backgroundColor: "#1a7a4a",
-    color: "#ffffff",
-    fontSize: "17px",
-    fontWeight: "600",
-    cursor: "pointer",
-    fontFamily: "inherit",
-    boxShadow: "0 4px 20px rgba(26, 122, 74, 0.25)",
-    transition: "background-color 0.15s ease",
-  },
-  btnDeshabilitado: {
-    backgroundColor: "#cccccc",
-    boxShadow: "none",
-    cursor: "not-allowed",
-  },
-};

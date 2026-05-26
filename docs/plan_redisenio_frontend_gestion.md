@@ -65,7 +65,12 @@ Sub-pasos:
 ### Fase 4 — Migración por sección
 Orden acordado. **Los 3 flujos de `MainScreen` (Corte/Venta/Gasto) van al final.**
 
-- [ ] `PantallaLoginAdmin.jsx` y `PantallaLoginOperativo.jsx`.
+- [x] `PantallaLoginAdmin.jsx` y `PantallaLoginOperativo.jsx`. Cambios principales:
+  - Logo en ambas pantallas viene de `getImagenesNegocio()` (filtro `tipo === 'logo'`, ordenado por `orden`). El campo `tenant.logo` legacy ya no se lee desde el front; queda anotado para limpieza al mergear feature/turnero a main (ver §3-12).
+  - Login admin: `PageContainer` + `TopBar` con "Cancelar"/"Volver" + logo o `Lock` (Lucide) como fallback + título centrado + indicadores 4 puntos + numpad táctil 3×4 (`TeclaNum` local) + teclado físico. Pantalla bloqueada usa `EmptyState` + `IconoAlerta` + `Card` de contacto. `onPointerDown` → `onClick`. Animación shake migrada de inline `<style>` al keyframe `om-shake` en `index.css`.
+  - Login operativo: `PageContainer` + logo o `Lock` fallback + `Field` (usuario, contraseña) + `Button`. Error inline en el subtitle con `theme.danger`.
+  - Extensión del primitivo `Field`: nuevos props `disabled`, `autoComplete`, `autoCapitalize`, `autoCorrect`, `spellCheck`. Visual de disabled: fondo `surfaceAlt`, texto `muted`, opacity 0.7, cursor `not-allowed`. **Pendiente backport a turnero** (deuda §3-13).
+  - Sumado `getImagenesNegocio()` a `services/api.js` (copiado del turnero). `App.jsx` ahora hace `Promise.all([getNegocio, getImagenesNegocio])` para cargar tenant + logo en paralelo.
 - [ ] `SeccionInicio.jsx` (validación del sistema con una sección chica).
 - [ ] `SeccionCaja.jsx`.
 - [ ] `SeccionVentas.jsx`.
@@ -143,7 +148,11 @@ mover a una sección "resueltas" o dejar la nota inline.
 7. `PantallaCargando` y `PantallaError` (en `App.jsx`) son ad-hoc y duplican la responsabilidad de los primitivos `Skeleton` y `EmptyState`. Se eliminan en Fase 3.
 8. Convivencia temporal de `utils/formato.js` (nuevo, singular) y `utils/formatos.js` (viejo, plural). Misma situación con `fecha.js` y `fechas.js`. **No es deuda permanente** — se cierra en Fase 6, pero hay riesgo de imports cruzados si no se controla. Mientras dure: cuando se toque un archivo, migrar sus imports al singular nuevo.
 10. **Doble fetch de `getNegocio`**: `App.jsx` lo llama para `logoUrl`/`bookingUrl`/`document.title`, y `PanelAdmin.jsx` lo llama de nuevo para `nombre_negocio`. El backend devuelve todo en una sola request. Pasar `nombreNegocio` por prop desde `App.jsx` o subir un context. Atacar durante Fase 3 al refactorizar PanelAdmin.
-11. **`onPointerDown` usado en `MainScreen.jsx` y `PanelAdmin.jsx`** — prohibido por sistema de diseño §4.3 (rompe accesibilidad por teclado, no se puede cancelar deslizando). Reemplazar por `onClick` en Fase 3 (PanelAdmin) y Fase 5.5 (MainScreen).
+11. **`onPointerDown` usado en `MainScreen.jsx` y `PanelAdmin.jsx`** — prohibido por sistema de diseño §4.3 (rompe accesibilidad por teclado, no se puede cancelar deslizando). Reemplazar por `onClick` en Fase 3 (PanelAdmin) y Fase 5.5 (MainScreen). **Resuelto en PanelAdmin (Fase 3) y en los dos logins (Fase 4)**; queda MainScreen para 5.5.
+12. **Campo `tenant.logo` legacy** — el backend todavía expone `logo` en `GET /negocio`. El front ya no lo lee (el logo viene de `tenant_imagen` tipo='logo'). Limpieza del backend pendiente para el merge de feature/turnero a main (anotada por el usuario, posiblemente ya esté en `estado_actual.md`).
+13. **`Field` divergente entre fronts**: `frontend/src/components/ui/Field.jsx` ganó props (`disabled`, `autoComplete`, `autoCapitalize`, `autoCorrect`, `spellCheck`) que `frontend-turnero/src/components/ui/Field.jsx` no tiene. Son props estándar de HTML útiles para cualquier formulario. **Backport a turnero** cuando se toque alguna pantalla con formulario allá, o como parte de un futuro `packages/ui/`.
+14. **`LogoCirculo` duplicado**: el helper que muestra el logo del tenant dentro de un círculo (con fallback a icono `Lock`) está implementado dos veces, una en `PantallaLoginAdmin.jsx` y otra en `PantallaLoginOperativo.jsx`. Dos usos = momento de promover a `components/ui/` per §7.1, pero hay matiz: la versión admin acepta `lockColor` para reflejar el estado del PIN. **Plan**: promover a primitivo cuando MainScreen necesite el mismo patrón en Fase 5.5 (tercer caso). Mientras tanto, mantenerlas sincronizadas si se modifica alguna. Implementación actual: `object-fit: cover` para que el logo llene el círculo (caveat: logos no-cuadrados pueden recortarse — iterar si aparece en producción).
+15. **Excepción a regla "Skeleton no spinner"**: `PantallaCargando` en `App.jsx` usa un spinner (Lucide `Loader2` + keyframe `spin`) en lugar de Skeleton. Razón: el loading de boot no tiene una silueta de contenido conocida a la cual aspirar — el Skeleton se veía descontextualizado. **No es deuda permanente**; es una excepción consciente y documentada que conviene anotar en `docs/sistema_de_disenio.md` cuando se actualice ese doc.
 9. **Vulnerabilidades reportadas por `npm audit`** (detectadas al instalar `lucide-react` en Fase 1 — no las introdujo lucide, son preexistentes en el árbol de dependencias):
    - **Con fix disponible** (resolver con `npm audit fix`): `vite` (3 advisories, alta), `postcss` (XSS, moderada), `picomatch` (ReDoS + injection, alta), `brace-expansion` (DoS, moderada), `flatted` (prototype pollution, alta).
    - **Sin fix oficial**: `xlsx` (prototype pollution + ReDoS, alta). SheetJS no publica fix en npm. Evaluar migrar a `exceljs` o aceptar el riesgo documentado.
@@ -151,4 +160,4 @@ mover a una sección "resueltas" o dejar la nota inline.
 
 ---
 
-*Última actualización: 2026-05-26 — Fase 3 cerrada (App.jsx con Skeleton + EmptyState para boot; PanelAdmin con sidebar claro, Lucide icons, tokens, sin onPointerDown, sin doble fetch de getNegocio). Deuda #10 resuelta, deuda #11 resuelta parcial (queda MainScreen para 5.5).*
+*Última actualización: 2026-05-26 — Fase 4 logins cerrados. Login operativo con foto del local de fondo + card sólida + logo en círculo (`object-fit: cover`). Login admin con card 480, Cancelar/Volver en esquina superior izquierda, logo en círculo idéntico. `PantallaCargando` con spinner. Próximo chat: arrancar secciones del admin empezando por `SeccionInicio` (Fase 4 sigue, orden ya definido: Inicio → Caja → Ventas → Gastos → Planillas → Balances → Turnero → Gestión → Flujos).*

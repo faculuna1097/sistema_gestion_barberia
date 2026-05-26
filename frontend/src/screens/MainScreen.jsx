@@ -88,7 +88,7 @@ export default function MainScreen({
   onAdminAccess,
   onSpotify,
   onLogoutOperativo,
-  logoUrl,
+  imagenLogo,
   bookingUrl,
 }) {
   const [pressed, setPressed] = useState(null);
@@ -136,10 +136,10 @@ export default function MainScreen({
       )}
 
       <div style={styles.centerContent}>
-        {logoUrl && (
+        {imagenLogo && (
           <>
             <div style={styles.logoArea}>
-              <img src={logoUrl} alt="Logo del negocio" style={styles.logoImage} />
+              <img src={imagenLogo} alt="Logo del negocio" style={styles.logoImage} />
             </div>
             <div style={styles.divider} />
           </>

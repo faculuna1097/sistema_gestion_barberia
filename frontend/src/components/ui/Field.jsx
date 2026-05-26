@@ -17,6 +17,11 @@ import { theme } from '../../theme/tokens.js';
  * @param {boolean} [props.invalid=false] - Marca el field con border de error
  * @param {string} [props.helper] - Texto auxiliar bajo el input
  * @param {string} [props.error] - Si está presente, reemplaza al helper en rojo
+ * @param {boolean} [props.disabled=false] - Deshabilita el input
+ * @param {string} [props.autoComplete] - Hint para password managers / autofill
+ * @param {string} [props.autoCapitalize] - Hint de capitalización (mobile keyboards)
+ * @param {string} [props.autoCorrect] - 'on'|'off' (Safari)
+ * @param {boolean} [props.spellCheck] - Habilita / deshabilita corrector ortográfico
  */
 function Field({
   label,
@@ -28,6 +33,11 @@ function Field({
   invalid = false,
   helper,
   error,
+  disabled = false,
+  autoComplete,
+  autoCapitalize,
+  autoCorrect,
+  spellCheck,
 }) {
   const [focus, setFocus] = useState(false);
 
@@ -50,18 +60,25 @@ function Field({
         type={type}
         value={value}
         placeholder={placeholder}
+        disabled={disabled}
+        autoComplete={autoComplete}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={autoCorrect}
+        spellCheck={spellCheck}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocus(true)}
         onBlur={() => { setFocus(false); if (onBlur) onBlur(); }}
         style={{
           width: '100%',
           padding: '12px 14px',
-          background: theme.surface,
+          background: disabled ? theme.surfaceAlt : theme.surface,
           border: `1px solid ${borderColor}`,
           borderRadius: theme.radius,
           fontFamily: theme.body,
           fontSize: 15,
-          color: theme.ink,
+          color: disabled ? theme.muted : theme.ink,
+          opacity: disabled ? 0.7 : 1,
+          cursor: disabled ? 'not-allowed' : 'text',
           transition: `border-color ${theme.transitionFast}, box-shadow ${theme.transitionFast}`,
           boxShadow: focus ? `0 0 0 3px ${theme.accent}26` : 'none',
         }}

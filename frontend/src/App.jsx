@@ -7,14 +7,16 @@ import FlujoGasto from "./screens/flows/FlujoGasto";
 import PantallaLoginAdmin from "./screens/PantallaLoginAdmin";
 import PantallaLoginOperativo from "./screens/PantallaLoginOperativo";
 import PanelAdmin from "./screens/admin/PanelAdmin";
+import { Loader2 } from "lucide-react";
 import { theme } from "./theme/tokens.js";
-import { Skeleton, EmptyState, Button, IconoAlerta } from "./components/ui";
+import { EmptyState, Button, IconoAlerta } from "./components/ui";
 import {
   getBarberosOperativo,
   getServicios,
   getProductos,
   getCategorias,
   getNegocio,
+  getImagenesNegocio,
   setAuthToken,
   clearAuthToken,
   clearAuthTokenOperativo,
@@ -54,23 +56,21 @@ const ContenedorBoot = ({ children }) => (
 
 /**
  * PantallaCargando — placeholder mientras se hidratan los catálogos al boot.
- * No conoce qué pantalla viene después, así que muestra una silueta neutra
- * con 3 Skeletons en una columna angosta centrada.
+ * No conoce qué pantalla viene después; mostramos un spinner circular en
+ * lugar de un Skeleton porque no hay una silueta de contenido específica a
+ * la cual aspirar (excepción consciente a la regla del sistema de diseño §4.5).
+ * Usa el keyframe `spin` ya definido en index.css.
  */
 const PantallaCargando = () => (
   <ContenedorBoot>
-    <div style={{
-      width: '100%',
-      maxWidth: 280,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 12,
-      animation: 'om-fade .26s ease-out both',
-    }}>
-      <Skeleton height={20} width="60%" />
-      <Skeleton height={14} width="90%" />
-      <Skeleton height={14} width="75%" />
-    </div>
+    <Loader2
+      size={32}
+      strokeWidth={1.75}
+      style={{
+        color: theme.muted,
+        animation: 'spin 1s linear infinite',
+      }}
+    />
   </ContenedorBoot>
 );
 
@@ -95,9 +95,15 @@ export default function App() {
   const [tokenOperativo, setTokenOperativo] = useState(leerTokenOperativoInicial);
   const [currentScreen, setCurrentScreen] = useState(tokenOperativo ? "main" : "loginOperativo");
   const [token, setToken] = useState(null);
-  const [logoUrl, setLogoUrl] = useState(null);
+  // imagenLogo: URL del logo del tenant — viene de tenant_imagen tipo='logo'.
+  // Nombre evita confusión con el campo legacy tenant.logo (que se elimina al
+  // mergear feature/turnero a main).
+  const [imagenLogo, setImagenLogo] = useState(null);
+  // imagenLocal: URL de la foto del local — viene de tenant_imagen tipo='local'.
+  // La usa PantallaLoginOperativo como fondo full-screen.
+  const [imagenLocal, setImagenLocal] = useState(null);
   const [bookingUrl, setBookingUrl] = useState(null);
-  // nombreNegocio se hidrata en cargarLogo y se pasa por prop a PanelAdmin
+  // nombreNegocio se hidrata en cargarDatosTenant y se pasa por prop a PanelAdmin
   // para evitar un segundo fetch de getNegocio en el sidebar (deuda #10).
   const [nombreNegocio, setNombreNegocio] = useState('');
   const [avisosPago, setAvisosPago] = useState(false);
@@ -124,24 +130,41 @@ export default function App() {
   }, []);
 
   /**
-   * cargarLogo — obtiene logo y booking_url desde la DB.
+   * cargarDatosTenant — obtiene logo y booking_url desde la DB.
    * No forma parte de precargarDatos porque no cambia durante el uso normal.
    */
-  const cargarLogo = useCallback(async () => {
+  // cargarDatosTenant — hidrata nombre, booking y logo en paralelo.
+  // El logo viene de tenant_imagen (tipo='logo'); ya NO se lee tenant.logo
+  // (campo legacy que se elimina al mergear feature/turnero).
+  const cargarDatosTenant = useCallback(async () => {
     try {
-      const data = await getNegocio();
-      setLogoUrl(data.logo || null);
-      setBookingUrl(data.booking_url || null);
-      setNombreNegocio(data.nombre_negocio || '');
-      if (data.nombre_negocio) document.title = data.nombre_negocio;
+      const [negocio, imagenes] = await Promise.all([
+        getNegocio(),
+        getImagenesNegocio(),
+      ]);
+      setBookingUrl(negocio.booking_url || null);
+      setNombreNegocio(negocio.nombre_negocio || '');
+      if (negocio.nombre_negocio) document.title = negocio.nombre_negocio;
+
+      // Logo: primera imagen de tipo='logo' ordenada por `orden`.
+      const logos = (imagenes || [])
+        .filter((i) => i.tipo === 'logo')
+        .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+      setImagenLogo(logos[0]?.url || null);
+
+      // Foto del local: primera imagen de tipo='local' ordenada por `orden`.
+      const locales = (imagenes || [])
+        .filter((i) => i.tipo === 'local')
+        .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+      setImagenLocal(locales[0]?.url || null);
     } catch (err) {
-      console.error('[app] Error en cargarLogo:', err.message);
+      console.error('[app] Error en cargarDatosTenant:', err.message);
     }
   }, []);
 
   useEffect(() => {
-    cargarLogo();
-  }, [cargarLogo]);
+    cargarDatosTenant();
+  }, [cargarDatosTenant]);
 
   const precargarDatos = useCallback(async () => {
     setDatos(prev => ({ ...prev, cargando: true, error: null }));
@@ -168,8 +191,8 @@ export default function App() {
 
   const reintentar = useCallback(() => {
     precargarDatos();
-    cargarLogo();
-  }, [precargarDatos, cargarLogo]);
+    cargarDatosTenant();
+  }, [precargarDatos, cargarDatosTenant]);
 
   const volverAlInicio = () => {
     setCurrentScreen("main");
@@ -201,7 +224,8 @@ export default function App() {
   if (currentScreen === "loginOperativo") {
     return (
       <PantallaLoginOperativo
-        logoUrl={logoUrl}
+        imagenLogo={imagenLogo}
+        imagenLocal={imagenLocal}
         onAcceso={(tokenRecibido) => {
           setTokenOperativo(tokenRecibido);
           setCurrentScreen("main");
@@ -238,6 +262,7 @@ export default function App() {
   if (currentScreen === "loginAdmin") {
     return (
       <PantallaLoginAdmin
+        imagenLogo={imagenLogo}
         onAcceso={(tokenRecibido, aviso_pago) => {
           setToken(tokenRecibido);
           setAuthToken(tokenRecibido);
@@ -271,7 +296,7 @@ export default function App() {
         window.open("https://open.spotify.com", "_blank");
       }}
       onLogoutOperativo={cerrarSesionOperativo}
-      logoUrl={logoUrl}
+      imagenLogo={imagenLogo}
       bookingUrl={bookingUrl}
     />
   );

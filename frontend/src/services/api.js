@@ -296,12 +296,27 @@ export const registrarGasto = async (datos) => {
 
 /**
  * getNegocio
- * Obtiene los datos del negocio (nombre, logo) del tenant.
- * @returns {Promise<Object>} { nombre_negocio, logo }
+ * Obtiene los datos del negocio (nombre, booking_url) del tenant.
+ * @returns {Promise<Object>} { nombre_negocio, booking_url, logo (legacy) }
+ *
+ * Nota: el campo `logo` queda como legacy y se va a eliminar cuando se mergee
+ * feature/turnero a main. El logo del producto se lee ahora desde getImagenesNegocio().
  */
 export const getNegocio = async () => {
   const response = await fetch(`${BASE_URL}/negocio`, { headers: publicHeaders });
   if (!response.ok) throw new Error('Error al obtener datos del negocio');
+  return response.json();
+};
+
+/**
+ * getImagenesNegocio
+ * Obtiene las imágenes públicas del tenant (logo, fotos del local, cortes).
+ * Endpoint público — no requiere token. El backend devuelve la URL pública ya armada.
+ * @returns {Promise<Array>} [{ id, tipo: 'local'|'corte'|'logo', orden, url }]
+ */
+export const getImagenesNegocio = async () => {
+  const response = await fetch(`${BASE_URL}/negocio/imagenes`, { headers: publicHeaders });
+  if (!response.ok) throw new Error('Error al obtener imágenes del negocio');
   return response.json();
 };
 
