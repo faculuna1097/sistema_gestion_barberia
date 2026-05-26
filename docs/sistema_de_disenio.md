@@ -219,6 +219,14 @@ nativos del navegador. En su lugar:
 - Empty / error → `EmptyState` con icon + title + body.
 - Confirmación destructiva → `ConfirmDialog`.
 
+**Excepción por superficie — panel de gestión (admin)**: las secciones del
+admin usan `LoadingState` (spinner Lucide `Loader2` centrado) en lugar de
+`Skeleton`. Razón: los layouts son muy heterogéneos (KPIs, tablas densas,
+formularios) y mantener un Skeleton fiel pantalla por pantalla agrega ruido
+sin beneficio. El turnero y el barbero (vistas más uniformes mobile-first)
+siguen usando `Skeleton` como regla. Decisión formalizada en el plan de
+rediseño del front gestión (D6).
+
 ### 4.6 Layout responsive
 
 **Mobile-first.** Todos los layouts arrancan asumiendo ~390 px de ancho.
@@ -323,6 +331,7 @@ pantalla.
 | `ConfirmDialog` | Modal de confirmación (ESC + click fuera + loading state). |
 | `AvatarIniciales` | Círculo con iniciales y tono determinístico por nombre. |
 | `SummaryRow` | Fila label/value con border-bottom sutil. |
+| `LoadingState` | Spinner centrado (Lucide `Loader2`). Para uso en admin como excepción a §4.5 (ver ahí). |
 
 ### 6.2 Específicas del wizard de reserva (NO usar en otros fronts)
 
@@ -431,4 +440,4 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-05-22 — deuda 3 resuelta (endpoint `dias-disponibles` + grisado del calendario por disponibilidad real del barbero; el backend es fuente única).*
+*Última actualización: 2026-05-26 — §4.5 amplía con excepción para el panel de gestión (admin usa `LoadingState` en vez de `Skeleton`). Inventario §6.1 suma `LoadingState`. Decisión documentada en detalle en el plan de rediseño del front gestión (D6).*

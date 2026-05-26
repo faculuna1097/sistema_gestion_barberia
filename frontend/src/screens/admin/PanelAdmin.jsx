@@ -344,10 +344,13 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago, nombreNegocio }
         overflow: 'hidden',
       }}>
         {mostrarAviso && <BannerAviso onCerrar={() => setMostrarAviso(false)} />}
+        {/* Fondo `surfaceAlt` (gris suave) para que las cards blancas de las
+            secciones tengan contraste y se lea claramente la jerarquía. Regla
+            general del admin — las secciones NO deben override su contenedor. */}
         <main style={{
           flex: 1,
           overflow: 'auto',
-          background: theme.bg,
+          background: theme.surfaceAlt,
         }}>
           {SeccionActual && <SeccionActual />}
         </main>
