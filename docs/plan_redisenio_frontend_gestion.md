@@ -51,10 +51,16 @@ a la sección que corresponda. **No borrar nada hasta que esté resuelto.**
 - (a) modificar el primitivo agregando props `maxWidth`/`fluid` para que sirva a los dos fronts, o
 - (b) crear un `AdminPageContainer` paralelo en `frontend/src/components/ui/` que copie el patrón pero adaptado al desktop.
 
-### Fase 3 — Shell del admin
-- [ ] Refactor de `App.jsx` (eliminar `stylesEstado` hardcodeado con verde `#1a7a4a` y DM Sans).
-- [ ] `PantallaCargando` → `Skeleton`. `PantallaError` → `EmptyState`.
-- [ ] `MainScreen.jsx` y `PanelAdmin.jsx` con el shell nuevo (`PageContainer` adaptado a desktop, `TopBar`, navegación entre secciones).
+### Fase 3 — Shell del admin ✅
+**Alcance**: solo `App.jsx` y `PanelAdmin.jsx`. `MainScreen.jsx` queda **fuera** y se ataca en su propia fase con chat dedicado (ver Fase 5.5).
+
+Decisiones tomadas:
+- **PageContainer**: queda intacto (mobile-first). El admin tiene su propio wrapper raíz porque su layout es `flex row` (sidebar + contenido), no columna centrada con max-width. El primitivo lo usarán los logins en Fase 4.
+- **Sidebar**: pasa a **claro** (coherente con el norte "Luz / Stripe/Clerk"). Reversible si en la práctica no convence.
+
+Sub-pasos:
+- [x] Refactor de `App.jsx`: `stylesEstado` eliminado. `PantallaCargando` ahora usa 3 `Skeleton` en columna centrada. `PantallaError` usa `EmptyState` + `IconoAlerta` + `Button`. Se sumó `nombreNegocio` al estado y se pasa como prop a `PanelAdmin` (resuelve deuda #10). El keyframe `spin` queda en `index.css` porque lo usan 4 secciones todavía — se borra al final de Fase 4.
+- [x] Refactor de `PanelAdmin.jsx`: sidebar claro (`theme.surface` + border `theme.hairline`), tokens del theme, Geist, **iconos Lucide** (Home, DollarSign, ClipboardList, BarChart3, ShoppingBag, Receipt, Calendar, Settings, LogOut, ChevronLeft/Right, AlertTriangle, X), `onClick` en todos los botones, conservada funcionalidad de colapso (220 ↔ 64 px) y banner de aviso de pago (re-estilado con `theme.warning`/`theme.warningSoft`). Item activo: `bg theme.accentSoft` + `color theme.accent` + indicador lateral indigo de 3×18 px. Hover en navItems y botón cerrar sesión vía `useState` (8 items, costo trivial). Resuelve deuda #10 (sin fetch propio de getNegocio) y resuelve parcialmente deuda #11 (PanelAdmin); MainScreen pendiente en Fase 5.5.
 
 ### Fase 4 — Migración por sección
 Orden acordado. **Los 3 flujos de `MainScreen` (Corte/Venta/Gasto) van al final.**
@@ -69,6 +75,15 @@ Orden acordado. **Los 3 flujos de `MainScreen` (Corte/Venta/Gasto) van al final.
 - [ ] `SeccionTurnero.jsx`.
 - [ ] `SeccionGestion.jsx` + tabs (`TabProductos`, `TabServicios`, `TabTurnero`, `TabNegocio`, `TabSeguridad`, `TabBarberos`, `BloqueHorarioAtencion`, `BloqueFeriados`, `BloqueImagenes`).
 - [ ] `FlujoCorte.jsx`, `FlujoVenta.jsx`, `FlujoGasto.jsx` (último).
+
+### Fase 5.5 — Rediseño de MainScreen (chat dedicado)
+**Pantalla operativa del local (la "home" del iPad).** Decisión del usuario: se ataca en su propio chat porque además del rediseño visual se va a sumar la imagen del local + logo, y se quiere dedicar tiempo a que quede bien.
+
+Pendientes a resolver en ese chat:
+- Migración de los 3 botones gigantes (Corte / Venta / Gasto) al sistema (probablemente como cards de acción locales a MainScreen — regla §7.1).
+- Decisión final sobre los colores actuales (verde/rojo) vs el "solo indigo" del sistema. Opciones planteadas en este chat: (a) todo indigo, (b) mantener verde/rojo como excepción consciente, (c) usar `theme.success` / `theme.danger` como acentos de acción.
+- Sumar foto del local + logo al diseño.
+- Eliminar `onPointerDown` (§4.3) y `clamp()`/vh-vw arbitrarios.
 
 ### Fase 5 — Primitivos específicos del front gestión
 A construir cuando aparezcan durante Fase 4 (regla §7.5 del sistema de diseño: cuando el primer caso real lo necesite).
@@ -127,6 +142,8 @@ mover a una sección "resueltas" o dejar la nota inline.
 6. Deuda heredada del sistema de diseño **#9** (contraste WCAG no verificado) — auditar en Fase 6.
 7. `PantallaCargando` y `PantallaError` (en `App.jsx`) son ad-hoc y duplican la responsabilidad de los primitivos `Skeleton` y `EmptyState`. Se eliminan en Fase 3.
 8. Convivencia temporal de `utils/formato.js` (nuevo, singular) y `utils/formatos.js` (viejo, plural). Misma situación con `fecha.js` y `fechas.js`. **No es deuda permanente** — se cierra en Fase 6, pero hay riesgo de imports cruzados si no se controla. Mientras dure: cuando se toque un archivo, migrar sus imports al singular nuevo.
+10. **Doble fetch de `getNegocio`**: `App.jsx` lo llama para `logoUrl`/`bookingUrl`/`document.title`, y `PanelAdmin.jsx` lo llama de nuevo para `nombre_negocio`. El backend devuelve todo en una sola request. Pasar `nombreNegocio` por prop desde `App.jsx` o subir un context. Atacar durante Fase 3 al refactorizar PanelAdmin.
+11. **`onPointerDown` usado en `MainScreen.jsx` y `PanelAdmin.jsx`** — prohibido por sistema de diseño §4.3 (rompe accesibilidad por teclado, no se puede cancelar deslizando). Reemplazar por `onClick` en Fase 3 (PanelAdmin) y Fase 5.5 (MainScreen).
 9. **Vulnerabilidades reportadas por `npm audit`** (detectadas al instalar `lucide-react` en Fase 1 — no las introdujo lucide, son preexistentes en el árbol de dependencias):
    - **Con fix disponible** (resolver con `npm audit fix`): `vite` (3 advisories, alta), `postcss` (XSS, moderada), `picomatch` (ReDoS + injection, alta), `brace-expansion` (DoS, moderada), `flatted` (prototype pollution, alta).
    - **Sin fix oficial**: `xlsx` (prototype pollution + ReDoS, alta). SheetJS no publica fix en npm. Evaluar migrar a `exceljs` o aceptar el riesgo documentado.
@@ -134,4 +151,4 @@ mover a una sección "resueltas" o dejar la nota inline.
 
 ---
 
-*Última actualización: 2026-05-26 — Fase 2 cerrada (13 primitivos universales + IconoAlerta + barrel, copia idéntica de turnero, focus visible OK). Pendiente para Fase 3: decisión sobre PageContainer (mobile-first) vs shell horizontal del admin.*
+*Última actualización: 2026-05-26 — Fase 3 cerrada (App.jsx con Skeleton + EmptyState para boot; PanelAdmin con sidebar claro, Lucide icons, tokens, sin onPointerDown, sin doble fetch de getNegocio). Deuda #10 resuelta, deuda #11 resuelta parcial (queda MainScreen para 5.5).*

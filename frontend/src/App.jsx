@@ -7,6 +7,8 @@ import FlujoGasto from "./screens/flows/FlujoGasto";
 import PantallaLoginAdmin from "./screens/PantallaLoginAdmin";
 import PantallaLoginOperativo from "./screens/PantallaLoginOperativo";
 import PanelAdmin from "./screens/admin/PanelAdmin";
+import { theme } from "./theme/tokens.js";
+import { Skeleton, EmptyState, Button, IconoAlerta } from "./components/ui";
 import {
   getBarberosOperativo,
   getServicios,
@@ -32,83 +34,60 @@ const leerTokenOperativoInicial = () => {
   }
 };
 
+/**
+ * Wrapper full-screen centrado con fondo del theme. Usado por las pantallas
+ * de boot (Cargando / Error) que no entran al shell normal de la app.
+ */
+const ContenedorBoot = ({ children }) => (
+  <div style={{
+    width: '100vw',
+    height: '100vh',
+    background: theme.bg,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  }}>
+    {children}
+  </div>
+);
+
+/**
+ * PantallaCargando — placeholder mientras se hidratan los catálogos al boot.
+ * No conoce qué pantalla viene después, así que muestra una silueta neutra
+ * con 3 Skeletons en una columna angosta centrada.
+ */
 const PantallaCargando = () => (
-  <div style={stylesEstado.pantalla}>
-    <div style={stylesEstado.lineaSuperior} />
-    <div style={stylesEstado.spinner} />
-    <p style={stylesEstado.mensaje}>Cargando...</p>
-  </div>
+  <ContenedorBoot>
+    <div style={{
+      width: '100%',
+      maxWidth: 280,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 12,
+      animation: 'om-fade .26s ease-out both',
+    }}>
+      <Skeleton height={20} width="60%" />
+      <Skeleton height={14} width="90%" />
+      <Skeleton height={14} width="75%" />
+    </div>
+  </ContenedorBoot>
 );
 
+/**
+ * PantallaError — pantalla full-screen cuando la precarga falla.
+ * Usa el primitivo EmptyState con IconoAlerta + acción de reintentar.
+ */
 const PantallaError = ({ onReintentar }) => (
-  <div style={stylesEstado.pantalla}>
-    <div style={stylesEstado.lineaSuperior} />
-    <div style={stylesEstado.iconoError}>⚠️</div>
-    <p style={stylesEstado.titulo}>Sin conexión</p>
-    <p style={stylesEstado.mensaje}>Revisá el WiFi e intentá de nuevo.</p>
-    <button style={stylesEstado.btnReintentar} onClick={onReintentar}>
-      Reintentar
-    </button>
-  </div>
+  <ContenedorBoot>
+    <EmptyState
+      glyph={<IconoAlerta size={32} />}
+      title="Sin conexión"
+      body="Revisá el WiFi e intentá de nuevo."
+      action={<Button onClick={onReintentar} full={false}>Reintentar</Button>}
+    />
+  </ContenedorBoot>
 );
-
-const stylesEstado = {
-  pantalla: {
-    width: "100vw",
-    height: "100vh",
-    backgroundColor: "#ffffff",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "20px",
-    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
-    position: "relative",
-  },
-  lineaSuperior: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: "4px",
-    background: "linear-gradient(90deg, #1a7a4a 0%, #2dba6e 50%, #1a7a4a 100%)",
-  },
-  spinner: {
-    width: "44px",
-    height: "44px",
-    borderRadius: "50%",
-    border: "4px solid #e8e8e8",
-    borderTopColor: "#1a7a4a",
-    animation: "spin 0.8s linear infinite",
-  },
-  iconoError: {
-    fontSize: "52px",
-    lineHeight: 1,
-  },
-  titulo: {
-    fontSize: "22px",
-    fontWeight: "700",
-    color: "#111111",
-    margin: 0,
-  },
-  mensaje: {
-    fontSize: "16px",
-    color: "#888888",
-    margin: 0,
-  },
-  btnReintentar: {
-    marginTop: "8px",
-    padding: "14px 40px",
-    borderRadius: "14px",
-    border: "none",
-    backgroundColor: "#1a7a4a",
-    color: "#ffffff",
-    fontSize: "17px",
-    fontWeight: "600",
-    cursor: "pointer",
-    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
-  },
-};
 
 export default function App() {
   // tokenOperativo: hidratado desde localStorage al primer render (lazy init).
@@ -118,6 +97,9 @@ export default function App() {
   const [token, setToken] = useState(null);
   const [logoUrl, setLogoUrl] = useState(null);
   const [bookingUrl, setBookingUrl] = useState(null);
+  // nombreNegocio se hidrata en cargarLogo y se pasa por prop a PanelAdmin
+  // para evitar un segundo fetch de getNegocio en el sidebar (deuda #10).
+  const [nombreNegocio, setNombreNegocio] = useState('');
   const [avisosPago, setAvisosPago] = useState(false);
   const [datos, setDatos] = useState({
     barberos: [],
@@ -150,7 +132,8 @@ export default function App() {
       const data = await getNegocio();
       setLogoUrl(data.logo || null);
       setBookingUrl(data.booking_url || null);
-      if (data.nombre_negocio) document.title = data.nombre_negocio; // ← NUEVO
+      setNombreNegocio(data.nombre_negocio || '');
+      if (data.nombre_negocio) document.title = data.nombre_negocio;
     } catch (err) {
       console.error('[app] Error en cargarLogo:', err.message);
     }
@@ -267,7 +250,7 @@ export default function App() {
   }
 
   if (currentScreen === "admin") {
-    return <PanelAdmin onCerrarSesion={cerrarSesionAdmin} avisosPago={avisosPago} />;
+    return <PanelAdmin onCerrarSesion={cerrarSesionAdmin} avisosPago={avisosPago} nombreNegocio={nombreNegocio} />;
   }
 
   return (
