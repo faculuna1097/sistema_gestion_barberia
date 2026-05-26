@@ -31,15 +31,15 @@ a la sección que corresponda. **No borrar nada hasta que esté resuelto.**
 ### Fase 0 — Decisión arquitectónica ✅
 - [x] Definir D2 (inline-styles) y D3 (coexistencia Tailwind).
 
-### Fase 1 — Fundamentos
-- [ ] Copiar `theme/tokens.js` desde `frontend-turnero` a `frontend/src/theme/tokens.js` (idéntico).
-- [ ] Crear `frontend/src/utils/formato.js` (singular) **consolidado** — ver §2.1.
-- [ ] Crear `frontend/src/utils/fecha.js` (singular) **consolidado** — ver §2.1.
-- [ ] Reemplazar `frontend/src/index.css` por la versión de turnero (reset + Geist + keyframes), **manteniendo** el `@import "tailwindcss"` arriba mientras dure la coexistencia.
-- [ ] Borrar `frontend/src/App.css` y todo import a él (verificar que no quede ninguno).
-- [ ] `frontend/index.html`: `lang="es"` y reemplazar el `<link>` de Raleway por el de Geist + Geist Mono.
-- [ ] Instalar `lucide-react` en `frontend/package.json` (lo necesita Fase 2).
-- [ ] **No tocar** los archivos viejos `utils/formatos.js` y `utils/fechas.js` todavía — quedan vigentes hasta que la Fase 4 vaya migrando los imports archivo por archivo. Anotar en §3 que hay que eliminarlos al final.
+### Fase 1 — Fundamentos ✅
+- [x] Copiar `theme/tokens.js` desde `frontend-turnero` a `frontend/src/theme/tokens.js` (idéntico, con nota de que `maxWidth` no se usa en el shell admin).
+- [x] Crear `frontend/src/utils/formato.js` (singular) **consolidado** — ver §2.1.
+- [x] Crear `frontend/src/utils/fecha.js` (singular) **consolidado** — ver §2.1.
+- [x] Reemplazar `frontend/src/index.css` por la versión de turnero (reset + Geist + keyframes), **manteniendo** el `@import "tailwindcss"` arriba mientras dure la coexistencia. Se conserva también el keyframe `spin` legacy hasta Fase 3 (lo usa el spinner ad-hoc de `App.jsx`).
+- [x] Borrar `frontend/src/App.css` y todo import a él (verificado con grep: nadie lo importaba).
+- [x] `frontend/index.html`: `lang="es"` y reemplazar el `<link>` de Raleway por el de Geist + Geist Mono.
+- [x] Instalar `lucide-react` en `frontend/package.json` (lo necesita Fase 2).
+- [x] **No tocar** los archivos viejos `utils/formatos.js` y `utils/fechas.js` todavía — quedan vigentes hasta que la Fase 4 vaya migrando los imports archivo por archivo. Eliminación final anotada en Fase 6 y deuda §3-8.
 
 ### Fase 2 — Primitivos universales
 - [ ] Copiar a `frontend/src/components/ui/` los 13 primitivos universales de turnero (lista en sistema de diseño §6.1).
@@ -79,6 +79,7 @@ A construir cuando aparezcan durante Fase 4 (regla §7.5 del sistema de diseño:
 - [ ] Desinstalar Tailwind: quitar `@import "tailwindcss"` de `index.css`, sacar `tailwindcss`, `@tailwindcss/postcss`, `autoprefixer`, `postcss` de `package.json` (si no los usa otra cosa), `npm install` para limpiar.
 - [ ] Auditoría WCAG (deuda global del sistema de diseño #9).
 - [ ] Revisitar deuda #8: ¿necesitamos `:hover` scoped para las tablas densas? Medir.
+- [ ] Resolver vulnerabilidades de `npm audit` (deuda §3-9): correr `npm audit fix` para las 5 con fix disponible (`vite`, `postcss`, `picomatch`, `brace-expansion`, `flatted`). Decidir aparte qué hacer con `xlsx` (sin fix oficial — evaluar migrar a `exceljs`).
 
 ---
 
@@ -122,7 +123,11 @@ mover a una sección "resueltas" o dejar la nota inline.
 6. Deuda heredada del sistema de diseño **#9** (contraste WCAG no verificado) — auditar en Fase 6.
 7. `PantallaCargando` y `PantallaError` (en `App.jsx`) son ad-hoc y duplican la responsabilidad de los primitivos `Skeleton` y `EmptyState`. Se eliminan en Fase 3.
 8. Convivencia temporal de `utils/formato.js` (nuevo, singular) y `utils/formatos.js` (viejo, plural). Misma situación con `fecha.js` y `fechas.js`. **No es deuda permanente** — se cierra en Fase 6, pero hay riesgo de imports cruzados si no se controla. Mientras dure: cuando se toque un archivo, migrar sus imports al singular nuevo.
+9. **Vulnerabilidades reportadas por `npm audit`** (detectadas al instalar `lucide-react` en Fase 1 — no las introdujo lucide, son preexistentes en el árbol de dependencias):
+   - **Con fix disponible** (resolver con `npm audit fix`): `vite` (3 advisories, alta), `postcss` (XSS, moderada), `picomatch` (ReDoS + injection, alta), `brace-expansion` (DoS, moderada), `flatted` (prototype pollution, alta).
+   - **Sin fix oficial**: `xlsx` (prototype pollution + ReDoS, alta). SheetJS no publica fix en npm. Evaluar migrar a `exceljs` o aceptar el riesgo documentado.
+   - Tratamiento: resolver al final de todo (Fase 6) para no mezclar scope con el rediseño visual.
 
 ---
 
-*Última actualización: 2026-05-26 — documento creado, Fase 0 cerrada.*
+*Última actualización: 2026-05-26 — Fase 1 cerrada (fundamentos: tokens, utils consolidadas, index.css con Tailwind en coexistencia, Geist, lucide-react instalado). Anotada deuda §3-9 (vulns npm audit).*

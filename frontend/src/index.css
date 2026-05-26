@@ -1,5 +1,92 @@
+/* /frontend/src/index.css
+   Reset global + carga de fuentes + animaciones reutilizables.
+   No define estilos de componentes — eso vive en los .jsx de /components/ui/.
+
+   NOTA TRANSITORIA: mientras dure la migración a inline-styles + theme,
+   se mantiene `@import "tailwindcss"` al tope para no romper las pantallas
+   viejas que todavía usan utility classes. Se quita en Fase 6
+   (ver docs/plan_redisenio_frontend_gestion.md). */
+
 @import "tailwindcss";
 
+/* ── Geist + Geist Mono via Google Fonts ─────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+
+/* ── Reset moderno mínimo ────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: 'Geist', 'DM Sans', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #09090B;
+  background: #FAFAFA;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Quita outline default — cada componente define su focus ring vía boxShadow */
+*:focus { outline: none; }
+*:focus-visible { outline: 2px solid #4F46E5; outline-offset: 2px; }
+
+/* Scrollbar discreto en navegadores webkit */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #E4E4E7; border-radius: 999px; border: 2px solid #FAFAFA; }
+::-webkit-scrollbar-thumb:hover { background: #A1A1AA; }
+
+/* ── Animaciones reutilizables ───────────────────────────────── */
+@keyframes om-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes om-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes om-pop {
+  0%   { opacity: 0; transform: scale(0.6); }
+  60%  { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes om-stroke {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes om-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes om-dialog-in {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Keyframe legacy (lo usa el spinner ad-hoc de App.jsx). Se elimina en Fase 3
+   cuando ese spinner sea reemplazado por Skeleton. */
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
