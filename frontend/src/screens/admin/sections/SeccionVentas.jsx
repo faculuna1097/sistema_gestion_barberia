@@ -319,7 +319,7 @@ export default function SeccionVentas() {
         <div />
         <SelectorMes value={mes} onChange={setMes} />
         <div style={{ justifySelf: 'end' }}>
-          <BotonExportarExcel onPointerDown={exportarExcel} disabled={ventas.length === 0} />
+          <BotonExportarExcel onClick={exportarExcel} disabled={ventas.length === 0} />
         </div>
       </div>
 

@@ -1,6 +1,5 @@
 // /frontend/src/components/ui/ConfirmDialog.jsx
 // Modal de confirmación. Reemplaza al window.confirm() nativo.
-// Copia idéntica del primitivo de frontend-turnero.
 
 import { useEffect } from 'react';
 import { theme } from '../../theme/tokens.js';
@@ -13,6 +12,7 @@ import Button from './Button.jsx';
  * @param {boolean} props.open - Si el modal está visible
  * @param {string} props.title - Título corto
  * @param {string} props.message - Texto del cuerpo
+ * @param {ReactNode} [props.children] - Contenido extra debajo del message (ej. detalle estructurado del recurso afectado)
  * @param {string} [props.confirmLabel='Confirmar']
  * @param {string} [props.cancelLabel='Cancelar']
  * @param {'primary'|'danger'} [props.confirmVariant='danger'] - Variante del botón de confirmar
@@ -24,6 +24,7 @@ function ConfirmDialog({
   open,
   title,
   message,
+  children,
   confirmLabel = 'Confirmar',
   cancelLabel = 'Cancelar',
   confirmVariant = 'danger',
@@ -89,6 +90,8 @@ function ConfirmDialog({
           lineHeight: 1.5,
           marginTop: 6,
         }}>{message}</div>
+
+        {children && <div style={{ marginTop: 16 }}>{children}</div>}
 
         <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
           <Button variant="secondary" onClick={onCancel} disabled={loading}>

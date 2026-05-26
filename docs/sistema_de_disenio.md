@@ -415,6 +415,32 @@ Si en algún momento el dolor de mantener los duplicados es alto, evaluar
 mover todo a un paquete compartido (`packages/ui/`) con npm/pnpm
 workspaces. Hoy es **premature abstraction**.
 
+### Política de divergencia entre fronts
+
+Lo que se mantiene **consistente** entre fronts son los **estilos
+estéticos** (tokens, look & feel, identidad visual del sistema). Las
+**APIs** (props, contenido, estructura interna) de un primitivo **pueden
+divergir** legítimamente cuando un front necesita capacidades que el
+otro no — esto **no es deuda técnica**.
+
+Ejemplos válidos de divergencia:
+- `Field` del admin acepta props HTML adicionales (`disabled`,
+  `autoComplete`, etc.) que el del turnero no necesita.
+- `ConfirmDialog` del admin acepta `children` para mostrar detalle
+  estructurado del recurso a eliminar; el del turnero no lo necesita
+  (sus confirmaciones son más simples).
+- Un `EmptyState` puede ganar una prop `tone` en un front sin que el
+  otro la implemente.
+
+Si más adelante el otro front necesita la misma capacidad, se readapta
+el componente con la API que tenga sentido allá — sin obligación de
+reflejar 1:1 lo del primer front. La consistencia que importa es
+**visual**, no estructural.
+
+**Cuándo sí es deuda real**: cuando los **estilos** divergen (un mismo
+primitivo se ve distinto entre fronts sin razón). Eso sí hay que
+reconciliarlo.
+
 ---
 
 ## 9. Deudas técnicas conocidas

@@ -239,7 +239,7 @@ export default function SeccionPlanillas() {
         <SelectorSemana value={semana} onChange={setSemana} />
 
         <div style={{ justifySelf: "end" }}>
-          <BotonExportarExcel onPointerDown={tabActiva === "detalle" ? exportarDetalle : exportarResumen} />
+          <BotonExportarExcel onClick={tabActiva === "detalle" ? exportarDetalle : exportarResumen} />
         </div>
       </div>
 

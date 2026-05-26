@@ -21,3 +21,4 @@ export { default as AvatarIniciales } from './AvatarIniciales.jsx';
 export { default as SummaryRow }      from './SummaryRow.jsx';
 export { default as IconoAlerta }     from './IconoAlerta.jsx';
 export { default as LoadingState }    from './LoadingState.jsx';
+export { default as Tabs }            from './Tabs.jsx';

@@ -210,7 +210,7 @@ export default function SeccionBalances() {
             </div>
 
             <div style={{ justifySelf: 'end' }}>
-              <BotonExportarExcel onPointerDown={exportarExcel} disabled={!puedeExportar} />
+              <BotonExportarExcel onClick={exportarExcel} disabled={!puedeExportar} />
             </div>
           </div>
 
@@ -393,7 +393,7 @@ export default function SeccionBalances() {
             <span style={styles.labelSecundario}>Últimos 12 meses</span>
 
             <div style={{ justifySelf: 'end' }}>
-              <BotonExportarExcel onPointerDown={exportarExcel} disabled={!puedeExportar} />
+              <BotonExportarExcel onClick={exportarExcel} disabled={!puedeExportar} />
             </div>
           </div>
 

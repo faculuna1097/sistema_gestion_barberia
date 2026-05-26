@@ -1,6 +1,5 @@
 // /frontend/src/components/ui/Field.jsx
 // Input de formulario con label superior, helper opcional y estado invalid.
-// Copia idéntica del primitivo de frontend-turnero.
 
 import { useState } from 'react';
 import { theme } from '../../theme/tokens.js';
