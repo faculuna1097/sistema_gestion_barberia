@@ -1,132 +1,434 @@
 // /frontend/src/screens/admin/sections/SeccionVentas.jsx
+//
+// Sección Ventas del panel de administrador.
+// Lista las ventas de productos del mes seleccionado con edición y
+// eliminación por fila, más una tabla de resumen por producto.
+//
+// Sistema de diseño: tokens + Geist + Lucide + onClick. Densidad compacta.
+// Fondo lo da PanelAdmin (theme.surfaceAlt, D7). Loading via LoadingState (D6).
+// DataTable se posterga hasta tener un caso con sort/filtros reales (deuda #20).
 
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { Pencil, Trash2, Package, RefreshCw } from 'lucide-react';
+
 import { apiFetch } from '../../../services/api';
 import SelectorMes from '../../../components/SelectorMes';
 import BadgeFormaPago from '../../../components/BadgeFormaPago';
 import BotonExportarExcel from '../../../components/BotonExportarExcel';
-import { mesALabel, getMesActual } from '../../../utils/fechas';
-import { formatARS } from '../../../utils/formatos';
+import { mesALabel, getMesActual } from '../../../utils/fecha';
+import { fmtPesos } from '../../../utils/formato';
+import {
+  ScreenHeader,
+  LoadingState,
+  EmptyState,
+  ConfirmDialog,
+  Modal,
+  Select,
+  Button,
+  Field,
+  BotonIconoFila,
+  DetalleRecurso,
+  IconoAlerta,
+} from '../../../components/ui';
+import { theme } from '../../../theme/tokens.js';
 
-function ModalEditarVenta({ venta, form, onChange, onGuardar, onCancelar, guardando, errorEditar }) {
+// ─── Sub-componentes locales ──────────────────────────────────────────────────
+
+/**
+ * CampoFijo
+ * Display de valor no editable con estética de input deshabilitado. Local —
+ * único en Ventas hoy (Producto + Precio unitario en el modal de edición).
+ * Promover a primitivo si aparece un segundo uso fuera de esta sección.
+ *
+ * @param {object} props
+ * @param {string} props.label
+ * @param {ReactNode} props.children
+ * @param {boolean} [props.numeric]
+ */
+function CampoFijo({ label, children, numeric }) {
   return (
-    <div style={styles.modalOverlay}>
-      <div style={{ ...styles.modalCard, width: '480px' }}>
-        <p style={styles.modalTitulo}>Editar venta</p>
-        <p style={styles.modalSubtitulo}>Fecha original: {venta.fecha}</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span style={{
+        fontFamily: theme.mono,
+        fontWeight: theme.weightMedium,
+        fontSize: theme.sizeMicro,
+        letterSpacing: '0.04em',
+        textTransform: 'uppercase',
+        color: theme.muted,
+      }}>{label}</span>
+      <div style={{
+        padding: '12px 14px',
+        background: theme.surfaceAlt,
+        border: `1px solid ${theme.hairline}`,
+        borderRadius: theme.radius,
+        fontFamily: theme.body,
+        fontSize: 15,
+        color: theme.muted,
+        fontVariantNumeric: numeric ? 'tabular-nums' : 'normal',
+      }}>{children}</div>
+    </div>
+  );
+}
 
-        <div style={styles.formGrupo}>
-          <label style={styles.formLabel}>Producto</label>
-          <div style={styles.campoFijo}>{venta.producto_nombre}</div>
-        </div>
+/**
+ * TablaVentas
+ * Tabla densa con detalle por venta + footer "Total del mes" en theme.accent.
+ * Hover de fila vía :hover scoped con <style> inline (excepción §4.2, deuda #21).
+ *
+ * @param {object} props
+ * @param {Array} props.ventas
+ * @param {number} props.totalGeneral
+ * @param {(v: object) => void} props.onEditar
+ * @param {(v: object) => void} props.onEliminar
+ * @param {boolean} props.accionesDeshabilitadas
+ */
+function TablaVentas({ ventas, totalGeneral, onEditar, onEliminar, accionesDeshabilitadas }) {
+  const columnas = [
+    { label: 'Fecha',           align: 'left'   },
+    { label: 'Producto',        align: 'left'   },
+    { label: 'Cantidad',        align: 'center' },
+    { label: 'Precio unitario', align: 'right'  },
+    { label: 'Total',           align: 'right'  },
+    { label: 'Forma de pago',   align: 'left'   },
+    { label: '',                align: 'center', width: 88 },
+  ];
 
-        <div style={styles.formFila}>
-          <div style={{ ...styles.formGrupo, flex: 1 }}>
-            <label style={styles.formLabel}>Cantidad</label>
-            <input
-              type="number"
-              min="1"
-              style={styles.input}
-              value={form.cantidad}
-              onChange={e => onChange('cantidad', e.target.value)}
-            />
-          </div>
-          <div style={{ ...styles.formGrupo, flex: 1 }}>
-            <label style={styles.formLabel}>Precio unitario</label>
-            <div style={styles.campoFijo}>{formatARS(form.precio_unitario)}</div>
-          </div>
-        </div>
+  return (
+    <div style={{
+      background: theme.surface,
+      border: `1px solid ${theme.hairline}`,
+      borderRadius: theme.radius,
+      overflow: 'hidden',
+    }}>
+      <style>{`
+        .om-ventas-fila { transition: background ${theme.transitionFast}; }
+        .om-ventas-fila:hover { background: ${theme.surfaceAlt}; }
+      `}</style>
 
-        <div style={styles.formGrupo}>
-          <label style={styles.formLabel}>Forma de pago</label>
-          <select
-            style={styles.select}
-            value={form.forma_pago}
-            onChange={e => onChange('forma_pago', e.target.value)}
-          >
-            <option value="efectivo">Efectivo</option>
-            <option value="mercado_pago">Mercado Pago</option>
-          </select>
-        </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            {columnas.map((c, i) => (
+              <th key={i} style={{
+                padding: '10px 12px',
+                fontFamily: theme.mono,
+                fontSize: theme.sizeMicro,
+                fontWeight: theme.weightMedium,
+                color: theme.muted,
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                background: theme.surfaceAlt,
+                borderBottom: `1px solid ${theme.hairline}`,
+                textAlign: c.align,
+                whiteSpace: 'nowrap',
+                width: c.width,
+              }}>{c.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {ventas.map((v) => {
+            const tdBase = {
+              padding: '10px 12px',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              color: theme.ink,
+              borderBottom: `1px solid ${theme.hairlineSoft}`,
+              verticalAlign: 'middle',
+            };
+            return (
+              <tr key={v.id} className="om-ventas-fila">
+                <td style={{ ...tdBase, color: theme.muted, whiteSpace: 'nowrap' }}>{v.fecha}</td>
+                <td style={{ ...tdBase, fontWeight: theme.weightMedium }}>{v.producto_nombre}</td>
+                <td style={{ ...tdBase, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{v.cantidad}</td>
+                <td style={{ ...tdBase, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtPesos(v.precio_unitario)}</td>
+                <td style={{ ...tdBase, textAlign: 'right', fontWeight: theme.weightHeading, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtPesos(v.total)}</td>
+                <td style={tdBase}><BadgeFormaPago forma={v.forma_pago} /></td>
+                <td style={{ ...tdBase, padding: '6px 8px', textAlign: 'center', width: 88 }}>
+                  <div style={{ display: 'inline-flex', gap: 6 }}>
+                    <BotonIconoFila
+                      tono="accent"
+                      icono={<Pencil size={14} strokeWidth={1.75} />}
+                      ariaLabel={`Editar venta de ${v.producto_nombre}`}
+                      onClick={() => onEditar(v)}
+                      disabled={accionesDeshabilitadas}
+                    />
+                    <BotonIconoFila
+                      tono="danger"
+                      icono={<Trash2 size={14} strokeWidth={1.75} />}
+                      ariaLabel={`Eliminar venta de ${v.producto_nombre}`}
+                      onClick={() => onEliminar(v)}
+                      disabled={accionesDeshabilitadas}
+                    />
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colSpan={4} style={{
+              padding: '12px 12px',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              fontWeight: theme.weightHeading,
+              color: theme.ink,
+              background: theme.surfaceAlt,
+              borderTop: `1px solid ${theme.hairline}`,
+              textAlign: 'left',
+            }}>Total del mes</td>
+            <td style={{
+              padding: '12px 12px',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              fontWeight: theme.weightHeading,
+              color: theme.accent,
+              background: theme.surfaceAlt,
+              borderTop: `1px solid ${theme.hairline}`,
+              textAlign: 'right',
+              fontVariantNumeric: 'tabular-nums',
+              whiteSpace: 'nowrap',
+            }}>{fmtPesos(totalGeneral)}</td>
+            <td colSpan={2} style={{
+              background: theme.surfaceAlt,
+              borderTop: `1px solid ${theme.hairline}`,
+            }} />
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
 
-        {Number(form.cantidad) > 0 && (
-          <div style={styles.totalPreview}>
-            <span style={styles.totalPreviewLabel}>Total calculado</span>
-            <span style={styles.totalPreviewValor}>
-              {formatARS(Number(form.cantidad) * Number(form.precio_unitario))}
-            </span>
-          </div>
-        )}
+/**
+ * TablaResumen
+ * Tabla densa secundaria con unidades y monto por producto. Footer
+ * "Total general" en theme.accent. Ancho acotado (subordinada a la principal).
+ *
+ * @param {object} props
+ * @param {Array} props.totales - [{ producto_nombre, cantidad_total, monto_total }]
+ * @param {number} props.totalGeneral
+ * @param {number} props.cantidadTotal
+ */
+function TablaResumen({ totales, totalGeneral, cantidadTotal }) {
+  return (
+    <div style={{
+      background: theme.surface,
+      border: `1px solid ${theme.hairline}`,
+      borderRadius: theme.radius,
+      overflow: 'hidden',
+      maxWidth: 560,
+    }}>
+      <div style={{
+        padding: '12px 14px',
+        background: theme.surfaceAlt,
+        borderBottom: `1px solid ${theme.hairline}`,
+        fontFamily: theme.body,
+        fontSize: theme.sizeHeading,
+        fontWeight: theme.weightHeading,
+        color: theme.ink,
+        letterSpacing: '-0.01em',
+      }}>Resumen del mes</div>
 
-        {errorEditar && (
-          <div style={styles.errorModal}>{errorEditar}</div>
-        )}
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            {[
+              { label: 'Producto', align: 'left'   },
+              { label: 'Unidades', align: 'center' },
+              { label: 'Total',    align: 'right'  },
+            ].map((c, i) => (
+              <th key={i} style={{
+                padding: '10px 12px',
+                fontFamily: theme.mono,
+                fontSize: theme.sizeMicro,
+                fontWeight: theme.weightMedium,
+                color: theme.muted,
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                background: theme.surface,
+                borderBottom: `1px solid ${theme.hairlineSoft}`,
+                textAlign: c.align,
+                whiteSpace: 'nowrap',
+              }}>{c.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {totales.map((t) => {
+            const tdBase = {
+              padding: '10px 12px',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              color: theme.ink,
+              borderBottom: `1px solid ${theme.hairlineSoft}`,
+            };
+            return (
+              <tr key={t.producto_nombre}>
+                <td style={{ ...tdBase, fontWeight: theme.weightMedium }}>{t.producto_nombre}</td>
+                <td style={{ ...tdBase, textAlign: 'center', color: theme.muted, fontVariantNumeric: 'tabular-nums' }}>{t.cantidad_total}</td>
+                <td style={{ ...tdBase, textAlign: 'right', fontWeight: theme.weightHeading, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtPesos(t.monto_total)}</td>
+              </tr>
+            );
+          })}
+          <tr>
+            <td style={{
+              padding: '12px 12px',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              fontWeight: theme.weightHeading,
+              color: theme.ink,
+              background: theme.surfaceAlt,
+              borderTop: `1px solid ${theme.hairline}`,
+              textAlign: 'left',
+            }}>Total general</td>
+            <td style={{
+              padding: '12px 12px',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              color: theme.muted,
+              background: theme.surfaceAlt,
+              borderTop: `1px solid ${theme.hairline}`,
+              textAlign: 'center',
+              fontVariantNumeric: 'tabular-nums',
+              whiteSpace: 'nowrap',
+            }}>{cantidadTotal} unidades</td>
+            <td style={{
+              padding: '12px 12px',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              fontWeight: theme.weightHeading,
+              color: theme.accent,
+              background: theme.surfaceAlt,
+              borderTop: `1px solid ${theme.hairline}`,
+              textAlign: 'right',
+              fontVariantNumeric: 'tabular-nums',
+              whiteSpace: 'nowrap',
+            }}>{fmtPesos(totalGeneral)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
-        <div style={styles.modalBotones}>
-          <button style={styles.btnCancelar} onPointerDown={onCancelar} disabled={guardando}>
+// ─── Modal de edición ─────────────────────────────────────────────────────────
+
+const OPCIONES_FORMA_PAGO = [
+  { value: 'efectivo',     label: 'Efectivo' },
+  { value: 'mercado_pago', label: 'Mercado Pago' },
+];
+
+/**
+ * ModalEditarVenta
+ * Modal de edición de venta. Usa el primitivo `Modal`. Producto y precio
+ * unitario no son editables (la venta se "edita" sólo en cantidad y forma
+ * de pago — preserva precio original).
+ */
+function ModalEditarVenta({ open, venta, form, onChange, onGuardar, onCancelar, guardando, errorEditar }) {
+  const totalCalculado = venta && Number(form.cantidad) > 0
+    ? Number(form.cantidad) * Number(form.precio_unitario)
+    : null;
+
+  return (
+    <Modal
+      open={open}
+      onClose={onCancelar}
+      loading={guardando}
+      title="Editar venta"
+      subtitle={venta ? `Fecha original: ${venta.fecha}` : undefined}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onCancelar} disabled={guardando}>
             Cancelar
-          </button>
-          <button
-            style={{ ...styles.btnGuardar, ...(guardando ? styles.btnGuardarDeshabilitado : {}) }}
-            onPointerDown={onGuardar}
-            disabled={guardando}
-          >
-            {guardando ? 'Guardando...' : 'Guardar cambios'}
-          </button>
+          </Button>
+          <Button variant="primary" onClick={onGuardar} disabled={guardando}>
+            {guardando ? 'Guardando…' : 'Guardar cambios'}
+          </Button>
+        </>
+      }
+    >
+      {venta && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <CampoFijo label="Producto">{venta.producto_nombre}</CampoFijo>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field
+              label="Cantidad"
+              type="number"
+              value={form.cantidad}
+              onChange={(v) => onChange('cantidad', v)}
+            />
+            <CampoFijo label="Precio unitario" numeric>{fmtPesos(form.precio_unitario)}</CampoFijo>
+          </div>
+
+          <Select
+            label="Forma de pago"
+            value={form.forma_pago}
+            onChange={(v) => onChange('forma_pago', v)}
+            options={OPCIONES_FORMA_PAGO}
+          />
+
+          {totalCalculado !== null && (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '12px 14px',
+              borderRadius: theme.radius,
+              background: theme.accentSoft,
+              border: `1px solid ${theme.accentSoft}`,
+            }}>
+              <span style={{
+                fontFamily: theme.body,
+                fontSize: theme.sizeBody,
+                color: theme.inkSoft,
+              }}>Total calculado</span>
+              <span style={{
+                fontFamily: theme.body,
+                fontSize: theme.sizeHeading,
+                fontWeight: theme.weightHeading,
+                color: theme.accent,
+                fontVariantNumeric: 'tabular-nums',
+              }}>{fmtPesos(totalCalculado)}</span>
+            </div>
+          )}
+
+          {errorEditar && (
+            <div style={{
+              padding: '10px 12px',
+              borderRadius: theme.radius,
+              background: theme.dangerSoft,
+              color: theme.danger,
+              fontFamily: theme.body,
+              fontSize: 13,
+              textAlign: 'center',
+            }}>{errorEditar}</div>
+          )}
         </div>
-      </div>
-    </div>
+      )}
+    </Modal>
   );
 }
 
-function ModalConfirmarEliminar({ venta, onConfirmar, onCancelar }) {
-  return (
-    <div style={styles.modalOverlay}>
-      <div style={styles.modalCard}>
-        <p style={styles.modalTitulo}>¿Eliminar esta venta?</p>
-        <p style={styles.modalAdvertencia}>Esta acción no se puede deshacer. El stock será restaurado.</p>
+// ─── Root ─────────────────────────────────────────────────────────────────────
 
-        <div style={styles.modalDetalle}>
-          <div style={styles.modalFila}>
-            <span style={styles.modalLabel}>Fecha</span>
-            <span style={styles.modalValor}>{venta.fecha}</span>
-          </div>
-          <div style={styles.modalDivider} />
-          <div style={styles.modalFila}>
-            <span style={styles.modalLabel}>Producto</span>
-            <span style={styles.modalValor}>{venta.producto_nombre}</span>
-          </div>
-          <div style={styles.modalDivider} />
-          <div style={styles.modalFila}>
-            <span style={styles.modalLabel}>Cantidad</span>
-            <span style={styles.modalValor}>{venta.cantidad}</span>
-          </div>
-          <div style={styles.modalDivider} />
-          <div style={styles.modalFila}>
-            <span style={styles.modalLabel}>Total</span>
-            <span style={{ ...styles.modalValor, color: '#1a7a4a', fontWeight: '700' }}>
-              {formatARS(venta.total)}
-            </span>
-          </div>
-        </div>
-
-        <div style={styles.modalBotones}>
-          <button style={styles.btnCancelar} onPointerDown={onCancelar}>Cancelar</button>
-          <button style={styles.btnEliminarConfirm} onPointerDown={onConfirmar}>Sí, eliminar</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+/**
+ * SeccionVentas
+ * Vista principal de Ventas. Carga las ventas del mes, las muestra en una
+ * tabla densa con acciones editar/eliminar por fila y agrega una tabla de
+ * resumen por producto. Permite exportar a Excel.
+ */
 export default function SeccionVentas() {
   const [mes, setMes]                           = useState(getMesActual);
   const [ventas, setVentas]                     = useState([]);
   const [totalesPorProducto, setTotalesPorProd] = useState([]);
   const [totalGeneral, setTotalGeneral]         = useState(0);
-  const [cargando, setCargando]                 = useState(false);
+  const [cargando, setCargando]                 = useState(true);
   const [error, setError]                       = useState(null);
+  const [intento, setIntento]                   = useState(0);
   const [ventaAEliminar, setVentaAEliminar]     = useState(null);
   const [eliminando, setEliminando]             = useState(false);
   const [ventaAEditar, setVentaAEditar]         = useState(null);
@@ -134,26 +436,52 @@ export default function SeccionVentas() {
   const [guardando, setGuardando]               = useState(false);
   const [errorEditar, setErrorEditar]           = useState(null);
 
+  // Carga de ventas del mes. `intento` re-dispara el efecto en "Reintentar".
   useEffect(() => {
+    let cancelado = false;
     const cargarVentas = async () => {
       setCargando(true);
       setError(null);
       try {
-        const res  = await apiFetch(`/ventas/mensual?mes=${mes}`);
+        const res = await apiFetch(`/ventas/mensual?mes=${mes}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        if (cancelado) return;
         setVentas(data.ventas);
         setTotalesPorProd(data.totalesPorProducto);
         setTotalGeneral(data.totalGeneral);
       } catch (err) {
         console.error('[seccionVentas] Error en cargarVentas:', err.message);
-        setError('No se pudieron cargar las ventas. Intentá de nuevo.');
+        if (!cancelado) setError('No se pudieron cargar las ventas. Intentá de nuevo.');
       } finally {
-        setCargando(false);
+        if (!cancelado) setCargando(false);
       }
     };
     cargarVentas();
-  }, [mes]);
+    return () => { cancelado = true; };
+  }, [mes, intento]);
+
+  /**
+   * Recalcula totales (general y por producto) localmente a partir de la
+   * lista de ventas. Se usa tras editar o eliminar para no pegarle al server.
+   * @param {Array} lista
+   * @returns {{ totalGen: number, totalesOrdenados: Array }}
+   */
+  const recalcularTotales = (lista) => {
+    const totalGen = lista.reduce((acc, v) => acc + Number(v.total), 0);
+    const totalesMap = {};
+    lista.forEach((v) => {
+      if (!totalesMap[v.producto_nombre]) {
+        totalesMap[v.producto_nombre] = { cantidad_total: 0, monto_total: 0 };
+      }
+      totalesMap[v.producto_nombre].cantidad_total += Number(v.cantidad);
+      totalesMap[v.producto_nombre].monto_total    += Number(v.total);
+    });
+    const totalesOrdenados = Object.entries(totalesMap)
+      .map(([nombre, vals]) => ({ producto_nombre: nombre, ...vals }))
+      .sort((a, b) => b.monto_total - a.monto_total);
+    return { totalGen, totalesOrdenados };
+  };
 
   const abrirEditar = (v) => {
     setErrorEditar(null);
@@ -167,7 +495,7 @@ export default function SeccionVentas() {
   };
 
   const handleChangeForm = (campo, valor) => {
-    setFormEditar(f => ({ ...f, [campo]: valor }));
+    setFormEditar((f) => ({ ...f, [campo]: valor }));
   };
 
   const confirmarEditar = async () => {
@@ -176,7 +504,6 @@ export default function SeccionVentas() {
       setErrorEditar('Completá todos los campos correctamente.');
       return;
     }
-
     setGuardando(true);
     setErrorEditar(null);
     try {
@@ -189,39 +516,22 @@ export default function SeccionVentas() {
           forma_pago:      formEditar.forma_pago,
         }),
       });
-
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Error del servidor');
       }
-
       const nuevoTotal = Number(formEditar.cantidad) * Number(formEditar.precio_unitario);
-
-      const nuevasVentas = ventas.map(v => v.id === id ? {
+      const nuevasVentas = ventas.map((v) => v.id === id ? {
         ...v,
         cantidad:        Number(formEditar.cantidad),
         precio_unitario: Number(formEditar.precio_unitario),
         total:           nuevoTotal,
         forma_pago:      formEditar.forma_pago,
       } : v);
-
+      const { totalGen, totalesOrdenados } = recalcularTotales(nuevasVentas);
       setVentas(nuevasVentas);
-
-      const totalGen = nuevasVentas.reduce((acc, v) => acc + Number(v.total), 0);
       setTotalGeneral(totalGen);
-
-      const totalesMap = {};
-      nuevasVentas.forEach(v => {
-        if (!totalesMap[v.producto_nombre])
-          totalesMap[v.producto_nombre] = { cantidad_total: 0, monto_total: 0 };
-        totalesMap[v.producto_nombre].cantidad_total += Number(v.cantidad);
-        totalesMap[v.producto_nombre].monto_total    += Number(v.total);
-      });
-      const nuevosTotales = Object.entries(totalesMap)
-        .map(([nombre, vals]) => ({ producto_nombre: nombre, ...vals }))
-        .sort((a, b) => b.monto_total - a.monto_total);
-      setTotalesPorProd(nuevosTotales);
-
+      setTotalesPorProd(totalesOrdenados);
       setVentaAEditar(null);
     } catch (err) {
       console.error('[seccionVentas] Error en confirmarEditar:', err.message);
@@ -237,21 +547,11 @@ export default function SeccionVentas() {
     try {
       const res = await apiFetch(`/ventas/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Error del servidor');
-      const nuevasVentas = ventas.filter(v => v.id !== id);
+      const nuevasVentas = ventas.filter((v) => v.id !== id);
+      const { totalGen, totalesOrdenados } = recalcularTotales(nuevasVentas);
       setVentas(nuevasVentas);
-      const nuevoTotal = nuevasVentas.reduce((acc, v) => acc + Number(v.total), 0);
-      setTotalGeneral(nuevoTotal);
-      const totalesMap = {};
-      nuevasVentas.forEach(v => {
-        if (!totalesMap[v.producto_nombre])
-          totalesMap[v.producto_nombre] = { cantidad_total: 0, monto_total: 0 };
-        totalesMap[v.producto_nombre].cantidad_total += Number(v.cantidad);
-        totalesMap[v.producto_nombre].monto_total    += Number(v.total);
-      });
-      const nuevosTotales = Object.entries(totalesMap)
-        .map(([nombre, vals]) => ({ producto_nombre: nombre, ...vals }))
-        .sort((a, b) => b.monto_total - a.monto_total);
-      setTotalesPorProd(nuevosTotales);
+      setTotalGeneral(totalGen);
+      setTotalesPorProd(totalesOrdenados);
     } catch (err) {
       console.error('[seccionVentas] Error en confirmarEliminar:', err.message);
     } finally {
@@ -262,7 +562,7 @@ export default function SeccionVentas() {
 
   const exportarExcel = () => {
     const wb = XLSX.utils.book_new();
-    const filas = ventas.map(v => ({
+    const filas = ventas.map((v) => ({
       Fecha:             v.fecha,
       Producto:          v.producto_nombre,
       Cantidad:          Number(v.cantidad),
@@ -271,10 +571,11 @@ export default function SeccionVentas() {
       'Forma de pago':   v.forma_pago === 'efectivo' ? 'Efectivo' : 'Mercado Pago',
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Ventas');
-    const filasTotales = totalesPorProducto.map(t => ({
-      Producto:             t.producto_nombre,
-      'Unidades vendidas':  Number(t.cantidad_total),
-      Total:                Number(t.monto_total),
+
+    const filasTotales = totalesPorProducto.map((t) => ({
+      Producto:            t.producto_nombre,
+      'Unidades vendidas': Number(t.cantidad_total),
+      Total:               Number(t.monto_total),
     }));
     filasTotales.push({
       Producto:            'TOTAL GENERAL',
@@ -285,37 +586,57 @@ export default function SeccionVentas() {
     XLSX.writeFile(wb, `Ventas_${mes}.xlsx`);
   };
 
+  const cantidadTotal = ventas.reduce((acc, v) => acc + Number(v.cantidad), 0);
+  const accionesDeshabilitadas = eliminando || guardando;
+
+  // Filas del ConfirmDialog de delete — armado en el render para que el
+  // primitivo DetalleRecurso reciba el shape exacto que necesita.
+  const filasDelete = ventaAEliminar ? [
+    { label: 'Fecha',    valor: ventaAEliminar.fecha },
+    { label: 'Producto', valor: ventaAEliminar.producto_nombre },
+    { label: 'Cantidad', valor: String(ventaAEliminar.cantidad), numeric: true },
+    {
+      label: 'Total',
+      valor: fmtPesos(ventaAEliminar.total),
+      numeric: true,
+      valorColor: theme.accent,
+      valorWeight: theme.weightHeading,
+    },
+  ] : [];
+
   return (
-    <div style={styles.contenedor}>
+    <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <ScreenHeader title="Ventas" subtitle="Productos vendidos por mes" />
 
-      {ventaAEditar && (
-        <ModalEditarVenta
-          venta={ventaAEditar}
-          form={formEditar}
-          onChange={handleChangeForm}
-          onGuardar={confirmarEditar}
-          onCancelar={() => setVentaAEditar(null)}
-          guardando={guardando}
-          errorEditar={errorEditar}
-        />
-      )}
+      <ConfirmDialog
+        open={!!ventaAEliminar}
+        title="¿Eliminar esta venta?"
+        message="Esta acción no se puede deshacer. El stock será restaurado."
+        confirmLabel="Sí, eliminar"
+        loading={eliminando}
+        onConfirm={confirmarEliminar}
+        onCancel={() => setVentaAEliminar(null)}
+      >
+        {ventaAEliminar && <DetalleRecurso filas={filasDelete} />}
+      </ConfirmDialog>
 
-      {ventaAEliminar && (
-        <ModalConfirmarEliminar
-          venta={ventaAEliminar}
-          onConfirmar={confirmarEliminar}
-          onCancelar={() => setVentaAEliminar(null)}
-        />
-      )}
+      <ModalEditarVenta
+        open={!!ventaAEditar}
+        venta={ventaAEditar}
+        form={formEditar}
+        onChange={handleChangeForm}
+        onGuardar={confirmarEditar}
+        onCancelar={() => setVentaAEditar(null)}
+        guardando={guardando}
+        errorEditar={errorEditar}
+      />
 
-      <div style={styles.encabezado}>
-        <div>
-          <h2 style={styles.titulo}>Ventas</h2>
-          <p style={styles.subtitulo}>Productos vendidos por mes</p>
-        </div>
-      </div>
-
-      <div style={styles.selectorMesWrapper}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr auto 1fr',
+        alignItems: 'center',
+        gap: 16,
+      }}>
         <div />
         <SelectorMes value={mes} onChange={setMes} />
         <div style={{ justifySelf: 'end' }}>
@@ -323,284 +644,42 @@ export default function SeccionVentas() {
         </div>
       </div>
 
-      {cargando && (
-        <div style={styles.estadoCentrado}>
-          <div style={styles.spinner} />
-          <p style={styles.estadoTexto}>Cargando ventas...</p>
-        </div>
-      )}
-
-      {!cargando && error && (
-        <div style={styles.errorBox}>{error}</div>
-      )}
-
-      {!cargando && !error && ventas.length === 0 && (
-        <div style={styles.estadoCentrado}>
-          <p style={styles.estadoTexto}>No hay ventas de productos registradas en {mesALabel(mes)}.</p>
-        </div>
-      )}
-
-      {!cargando && !error && ventas.length > 0 && (
+      {cargando ? (
+        <LoadingState />
+      ) : error ? (
+        <EmptyState
+          glyph={<IconoAlerta />}
+          title="No se pudo cargar"
+          body={error}
+          action={
+            <Button variant="secondary" full={false} onClick={() => setIntento((n) => n + 1)}>
+              <RefreshCw size={16} strokeWidth={1.75} />
+              Reintentar
+            </Button>
+          }
+        />
+      ) : ventas.length === 0 ? (
+        <EmptyState
+          glyph={<Package size={28} strokeWidth={1.5} />}
+          title="Sin ventas"
+          body={`No hay ventas de productos registradas en ${mesALabel(mes)}.`}
+        />
+      ) : (
         <>
-          <div style={styles.tablaWrapper}>
-            <table style={styles.tabla}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Fecha</th>
-                  <th style={styles.th}>Producto</th>
-                  <th style={{ ...styles.th, textAlign: 'center' }}>Cantidad</th>
-                  <th style={styles.th}>Precio unitario</th>
-                  <th style={styles.th}>Total</th>
-                  <th style={styles.th}>Forma de pago</th>
-                  <th style={styles.thAccion}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {ventas.map((v, i) => (
-                  <tr key={v.id} style={i % 2 === 0 ? styles.filaImpar : styles.filaPar}>
-                    <td style={styles.td}>{v.fecha}</td>
-                    <td style={{ ...styles.td, fontWeight: '500' }}>{v.producto_nombre}</td>
-                    <td style={{ ...styles.td, textAlign: 'center' }}>{v.cantidad}</td>
-                    <td style={styles.td}>{formatARS(v.precio_unitario)}</td>
-                    <td style={{ ...styles.td, fontWeight: '600', color: '#1a7a4a', whiteSpace: 'nowrap' }}>
-                      {formatARS(v.total)}
-                    </td>
-                    <td style={styles.td}><BadgeFormaPago forma={v.forma_pago} /></td>
-                    <td style={styles.tdAccion}>
-                      <div style={styles.accionBotones}>
-                        <button
-                          style={styles.btnEditar}
-                          onPointerDown={() => abrirEditar(v)}
-                          disabled={eliminando || guardando}
-                          aria-label="Editar venta"
-                        >✎</button>
-                        <button
-                          style={styles.btnX}
-                          onPointerDown={() => setVentaAEliminar(v)}
-                          disabled={eliminando || guardando}
-                          aria-label="Eliminar venta"
-                        >✕</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr style={styles.filaTotalGeneral}>
-                  <td colSpan={4} style={{ ...styles.tdTotal, textAlign: 'left' }}>Total del mes</td>
-                  <td style={{ ...styles.tdTotal, color: '#1a7a4a' }}>{formatARS(totalGeneral)}</td>
-                  <td style={styles.tdTotal} />
-                  <td style={styles.tdTotal} />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          <div style={styles.totalesWrapper}>
-            <h3 style={styles.tituloTotales}>Resumen del mes</h3>
-            <table style={styles.tablaTotales}>
-              <thead>
-                <tr>
-                  <th style={{ ...styles.th, textAlign: 'left' }}>Producto</th>
-                  <th style={{ ...styles.th, textAlign: 'center' }}>Unidades</th>
-                  <th style={{ ...styles.th, textAlign: 'right' }}>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {totalesPorProducto.map((t, i) => (
-                  <tr key={t.producto_nombre} style={i % 2 === 0 ? styles.filaImpar : styles.filaPar}>
-                    <td style={{ ...styles.td, fontWeight: '500' }}>{t.producto_nombre}</td>
-                    <td style={{ ...styles.td, textAlign: 'center', color: '#666' }}>{t.cantidad_total}</td>
-                    <td style={{ ...styles.td, textAlign: 'right', fontWeight: '600' }}>
-                      {formatARS(t.monto_total)}
-                    </td>
-                  </tr>
-                ))}
-                <tr style={styles.filaTotalGeneral}>
-                  <td style={{ ...styles.tdTotal, textAlign: 'left' }}>Total general</td>
-                  <td style={{ ...styles.tdTotal, textAlign: 'center', color: '#888', fontSize: '13px', fontWeight: '500' }}>
-                    {ventas.reduce((acc, v) => acc + Number(v.cantidad), 0)} unidades
-                  </td>
-                  <td style={{ ...styles.tdTotal, textAlign: 'right', color: '#1a7a4a' }}>
-                    {formatARS(totalGeneral)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <TablaVentas
+            ventas={ventas}
+            totalGeneral={totalGeneral}
+            onEditar={abrirEditar}
+            onEliminar={setVentaAEliminar}
+            accionesDeshabilitadas={accionesDeshabilitadas}
+          />
+          <TablaResumen
+            totales={totalesPorProducto}
+            totalGeneral={totalGeneral}
+            cantidadTotal={cantidadTotal}
+          />
         </>
       )}
     </div>
   );
 }
-
-const styles = {
-  contenedor: {
-    padding: '32px 36px',
-    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
-  },
-  encabezado: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-    marginBottom: '24px',
-  },
-  titulo:    { fontSize: '24px', fontWeight: '700', color: '#111', margin: '0 0 4px' },
-  subtitulo: { fontSize: '14px', color: '#888', margin: 0 },
-  tablaWrapper: {
-    borderRadius: '12px', border: '1.5px solid #eeeeee',
-    overflow: 'hidden', marginBottom: '32px', overflowX: 'auto',
-  },
-  selectorMesWrapper: {
-    display: 'grid',
-    gridTemplateColumns: '1fr auto 1fr',
-    alignItems: 'center',
-    gap: '16px',
-    marginBottom: '28px',
-  },
-  tabla: { width: '100%', borderCollapse: 'collapse', fontSize: '14px' },
-  th: {
-    padding: '13px 16px', backgroundColor: '#fafafa',
-    color: '#888', fontWeight: '600', fontSize: '11px',
-    textTransform: 'uppercase', letterSpacing: '0.07em',
-    textAlign: 'left', borderBottom: '1.5px solid #eeeeee', whiteSpace: 'nowrap',
-  },
-  thAccion: {
-    padding: '13px 12px', width: '80px',
-    borderBottom: '1.5px solid #eeeeee', backgroundColor: '#fafafa',
-  },
-  td: {
-    padding: '13px 16px', color: '#333',
-    borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle', fontSize: '14px',
-  },
-  tdAccion: {
-    padding: '8px 12px', borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle',
-  },
-  accionBotones: {
-    display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'center',
-  },
-  filaImpar: { backgroundColor: '#ffffff' },
-  filaPar:   { backgroundColor: '#fafafa' },
-  btnEditar: {
-    width: '30px', height: '30px', borderRadius: '8px',
-    border: '1.5px solid #c5dcf5', backgroundColor: '#f0f6ff',
-    color: '#1565c0', fontSize: '15px', cursor: 'pointer',
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
-  },
-  btnX: {
-    width: '30px', height: '30px', borderRadius: '8px',
-    border: '1.5px solid #f5c6c6', backgroundColor: '#fff5f5',
-    color: '#c0392b', fontSize: '13px', cursor: 'pointer',
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
-  },
-  totalesWrapper: {
-    borderRadius: '12px', border: '1.5px solid #eeeeee',
-    overflow: 'hidden', maxWidth: '520px',
-  },
-  tituloTotales: {
-    fontSize: '15px', fontWeight: '700', color: '#111',
-    margin: '0', padding: '14px 16px', backgroundColor: '#fafafa',
-    borderBottom: '1.5px solid #eeeeee',
-  },
-  tablaTotales:     { width: '100%', borderCollapse: 'collapse', fontSize: '14px' },
-  filaTotalGeneral: { backgroundColor: '#f0faf5', borderTop: '2px solid #e8e8e8' },
-  tdTotal:          { padding: '14px 16px', fontWeight: '700', fontSize: '15px', color: '#111' },
-  estadoCentrado: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    justifyContent: 'center', padding: '60px 0', gap: '16px',
-  },
-  estadoTexto: { fontSize: '15px', color: '#888', margin: 0 },
-  errorBox: {
-    padding: '16px 20px', borderRadius: '10px',
-    backgroundColor: '#fdecea', color: '#c0392b',
-    fontSize: '14px', marginBottom: '16px',
-  },
-  errorModal: {
-    padding: '10px 14px', borderRadius: '8px',
-    backgroundColor: '#fdecea', color: '#c0392b',
-    fontSize: '13px', marginBottom: '16px', textAlign: 'center',
-  },
-  spinner: {
-    width: '32px', height: '32px', borderRadius: '50%',
-    border: '3px solid #e8e8e8', borderTopColor: '#1a7a4a',
-    animation: 'spin 0.8s linear infinite',
-  },
-  modalOverlay: {
-    position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-  },
-  modalCard: {
-    backgroundColor: '#ffffff', borderRadius: '20px',
-    padding: '32px', width: '420px', maxWidth: '90vw',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  modalTitulo: {
-    fontSize: '20px', fontWeight: '700', color: '#111111',
-    margin: '0 0 6px', textAlign: 'center',
-  },
-  modalSubtitulo: {
-    fontSize: '13px', color: '#888', textAlign: 'center', margin: '0 0 20px',
-  },
-  modalAdvertencia: {
-    fontSize: '13px', color: '#c0392b', textAlign: 'center', margin: '0 0 24px',
-  },
-  modalDetalle: {
-    backgroundColor: '#fafafa', borderRadius: '12px',
-    border: '1.5px solid #eeeeee', padding: '16px 20px',
-    marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '10px',
-  },
-  modalFila:    { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  modalLabel:   { fontSize: '13px', color: '#888888' },
-  modalValor:   { fontSize: '14px', color: '#111111', fontWeight: '600' },
-  modalDivider: { height: '1px', backgroundColor: '#eeeeee' },
-  modalBotones: { display: 'flex', gap: '12px' },
-  btnCancelar: {
-    flex: 1, padding: '13px 0', borderRadius: '12px',
-    border: '1.5px solid #e0e0e0', backgroundColor: '#ffffff',
-    color: '#444444', fontSize: '15px', fontWeight: '500',
-    cursor: 'pointer', fontFamily: 'inherit',
-  },
-  btnEliminarConfirm: {
-    flex: 1, padding: '13px 0', borderRadius: '12px',
-    border: 'none', backgroundColor: '#c0392b',
-    color: '#ffffff', fontSize: '15px', fontWeight: '600',
-    cursor: 'pointer', fontFamily: 'inherit',
-  },
-  formGrupo:   { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' },
-  formFila:    { display: 'flex', gap: '12px' },
-  formLabel: {
-    fontSize: '11px', fontWeight: '600', color: '#666',
-    textTransform: 'uppercase', letterSpacing: '0.05em',
-  },
-  input: {
-    padding: '10px 14px', borderRadius: '8px',
-    border: '1.5px solid #e0e0e0', fontSize: '14px',
-    fontFamily: 'inherit', color: '#111', outline: 'none',
-    width: '100%', boxSizing: 'border-box',
-  },
-  select: {
-    padding: '10px 14px', borderRadius: '8px',
-    border: '1.5px solid #e0e0e0', fontSize: '14px',
-    fontFamily: 'inherit', color: '#111', outline: 'none',
-    backgroundColor: '#fff', width: '100%', boxSizing: 'border-box',
-  },
-  totalPreview: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '12px 16px', borderRadius: '10px',
-    backgroundColor: '#f0faf5', border: '1.5px solid #c8e6d4',
-    marginBottom: '20px',
-  },
-  totalPreviewLabel: { fontSize: '13px', color: '#555', fontWeight: '500' },
-  totalPreviewValor: { fontSize: '17px', fontWeight: '700', color: '#1a7a4a' },
-  btnGuardar: {
-    flex: 1, padding: '13px 0', borderRadius: '12px',
-    border: 'none', backgroundColor: '#1a7a4a',
-    color: '#ffffff', fontSize: '15px', fontWeight: '600',
-    cursor: 'pointer', fontFamily: 'inherit',
-  },
-  btnGuardarDeshabilitado: { backgroundColor: '#a8cdb8', cursor: 'not-allowed' },
-  campoFijo: {
-    padding: '10px 14px', borderRadius: '8px',
-    border: '1.5px solid #f0f0f0', backgroundColor: '#fafafa',
-    fontSize: '14px', color: '#555', fontFamily: 'inherit',
-  },
-};

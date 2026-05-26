@@ -27,6 +27,8 @@ import {
   EmptyState,
   ConfirmDialog,
   Button,
+  BotonIconoFila,
+  DetalleRecurso,
   IconoAlerta,
 } from '../../../components/ui';
 import { theme } from '../../../theme/tokens.js';
@@ -63,48 +65,25 @@ function TipoMovimientoPill({ tipo }) {
 }
 
 /**
- * DetalleMovimientoConfirm
- * Bloque de detalle (hora / detalle / barbero / monto) que se inserta
- * dentro del ConfirmDialog como children, para que el dueño confirme que
- * está eliminando la fila correcta.
- * @param {object} props
- * @param {object} props.movimiento
+ * filasDetalleMovimiento
+ * Arma el array de filas que se pasa al primitivo DetalleRecurso para mostrar
+ * el detalle del movimiento dentro del ConfirmDialog de eliminación.
+ * @param {object} m - Movimiento
+ * @returns {Array}
  */
-function DetalleMovimientoConfirm({ movimiento }) {
-  const filas = [
-    { label: 'Hora', valor: movimiento.hora },
-    { label: 'Detalle', valor: movimiento.detalle },
-    ...(movimiento.barbero_nombre ? [{ label: 'Barbero', valor: movimiento.barbero_nombre }] : []),
+function filasDetalleMovimiento(m) {
+  return [
+    { label: 'Hora',    valor: m.hora },
+    { label: 'Detalle', valor: m.detalle },
+    ...(m.barbero_nombre ? [{ label: 'Barbero', valor: m.barbero_nombre }] : []),
     {
       label: 'Monto',
-      valor: fmtPesos(movimiento.monto),
-      valorColor: movimiento.tipo === 'gasto' ? theme.danger : theme.ink,
+      valor: fmtPesos(m.monto),
+      numeric: true,
+      valorColor: m.tipo === 'gasto' ? theme.danger : theme.ink,
       valorWeight: theme.weightHeading,
     },
   ];
-  return (
-    <div style={{
-      background: theme.surfaceAlt,
-      border: `1px solid ${theme.hairline}`,
-      borderRadius: theme.radius,
-      padding: '10px 12px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 6,
-    }}>
-      {filas.map((f, i) => (
-        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: theme.sizeBody, fontFamily: theme.body }}>
-          <span style={{ color: theme.muted }}>{f.label}</span>
-          <span style={{
-            color: f.valorColor ?? theme.ink,
-            fontWeight: f.valorWeight ?? theme.weightMedium,
-            textAlign: 'right',
-            fontVariantNumeric: f.label === 'Monto' ? 'tabular-nums' : 'normal',
-          }}>{f.valor}</span>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 /**
@@ -131,8 +110,6 @@ function TablaMovimientos({ movimientos, onEliminar }) {
       <style>{`
         .om-caja-fila { transition: background ${theme.transitionFast}; }
         .om-caja-fila:hover { background: ${theme.surfaceAlt}; }
-        .om-caja-btn-x { transition: color ${theme.transitionFast}, background ${theme.transitionFast}; }
-        .om-caja-btn-x:hover { color: ${theme.danger}; background: ${theme.dangerSoft}; }
       `}</style>
 
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -151,7 +128,7 @@ function TablaMovimientos({ movimientos, onEliminar }) {
                 borderBottom: `1px solid ${theme.hairline}`,
                 textAlign: col === 'Monto' ? 'right' : 'left',
                 whiteSpace: 'nowrap',
-                width: col === '' ? 40 : undefined,
+                width: col === '' ? 48 : undefined,
               }}>{col}</th>
             ))}
           </tr>
@@ -182,27 +159,13 @@ function TablaMovimientos({ movimientos, onEliminar }) {
                   whiteSpace: 'nowrap',
                 }}>{esGasto ? '− ' : ''}{fmtPesos(m.monto)}</td>
                 <td style={tdBase}><BadgeFormaPago forma={m.forma_pago} /></td>
-                <td style={{ ...tdBase, padding: '6px 8px', textAlign: 'center', width: 40 }}>
-                  <button
-                    type="button"
+                <td style={{ ...tdBase, padding: '6px 8px', textAlign: 'center', width: 48 }}>
+                  <BotonIconoFila
+                    tono="danger"
+                    icono={<Trash2 size={14} strokeWidth={1.75} />}
+                    ariaLabel={`Eliminar movimiento de las ${m.hora}`}
                     onClick={() => onEliminar(m)}
-                    aria-label={`Eliminar movimiento de las ${m.hora}`}
-                    className="om-caja-btn-x"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 28,
-                      height: 28,
-                      borderRadius: theme.radiusSm,
-                      border: 'none',
-                      background: 'transparent',
-                      color: theme.muted,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <Trash2 size={16} strokeWidth={1.75} />
-                  </button>
+                  />
                 </td>
               </tr>
             );
@@ -390,7 +353,7 @@ function TabMovimientos() {
         onConfirm={confirmarEliminar}
         onCancel={() => setMovimientoAEliminar(null)}
       >
-        {movimientoAEliminar && <DetalleMovimientoConfirm movimiento={movimientoAEliminar} />}
+        {movimientoAEliminar && <DetalleRecurso filas={filasDetalleMovimiento(movimientoAEliminar)} />}
       </ConfirmDialog>
 
       <div style={{ display: 'flex', gap: 12 }}>

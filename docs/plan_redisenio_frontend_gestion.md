@@ -95,8 +95,30 @@ Orden acordado. **Los 3 flujos de `MainScreen` (Corte/Venta/Gasto) van al final.
   - Loading via `LoadingState` (D6). Error via `EmptyState` + `IconoAlerta` + botón "Reintentar" con trigger por estado `intento` y guard de cancelación (mismo patrón que SeccionInicio).
   - Comentario inline explicando la semántica del filtro "Solo Barberos" (saca cortes con comisión 100% porque van directo al bolsillo del barbero, no a la caja del local) — para que el próximo lector entienda sin contexto.
   - Resuelve deuda #11 para SeccionCaja (eliminado todo `onPointerDown`).
-- [ ] `SeccionVentas.jsx`.
-- [ ] `SeccionGastos.jsx`.
+- [x] `SeccionVentas.jsx`. Cambios principales:
+  - `ScreenHeader` ("Ventas" / "Productos vendidos por mes"), `LoadingState` (D6), error con `EmptyState` + `IconoAlerta` + botón "Reintentar" (trigger por `intento` y guard de cancelación, mismo patrón que Caja/Inicio), empty con `EmptyState` + Lucide `Package`.
+  - Tabla densa ad-hoc (sin zebra, `:hover` scoped via `<style>` inline — excepción #21). `DataTable` postergado: la tabla no tiene sort/filtros/paginación, sigue siendo la misma complejidad que Caja, esperar a Balances (deuda #20).
+  - Footer "Total del mes" en `theme.accent` (decisión nueva del chat: jerarquía del total via indigo + bold + tabular-nums, no via color verde). Mismo tratamiento en `TablaResumen` ("Total general").
+  - Acciones por fila: nuevo sub-componente local `BotonIconoFila` (28×28, border `hairline`, hover muta border/bg/color según prop `tono` — `accent` para editar, `danger` para eliminar). Lucide `Pencil` + `Trash2`. Reemplaza los emojis ✎ ✕ y los `onPointerDown` del original.
+  - `ModalConfirmarEliminar` ad-hoc → `ConfirmDialog` con `children` (`DetalleVentaConfirm` con Fecha/Producto/Cantidad/Total).
+  - `ModalEditarVenta` re-armado como modal ad-hoc reutilizando el **shell visual** de `ConfirmDialog` (overlay `rgba(9,9,11,0.5)`, card `surface`, animaciones `om-overlay-in`/`om-dialog-in`, ESC cierra). Inputs con primitivo `Field` para Cantidad. Sub-componentes locales nuevos: `SelectFormaPago` (select nativo estilado con tokens, focus ring indigo) y `CampoFijo` (input no editable estético). Sin promover a `Modal` primitivo: esperar segundo form modal (deuda #23).
+  - Helper interno `recalcularTotales(lista)` para evitar la duplicación que tenía el original entre `confirmarEditar` y `confirmarEliminar`.
+  - Imports migrados: `utils/fecha.js` (singular, `mesALabel`, `getMesActual`) y `utils/formato.js` (singular, `fmtPesos` reemplaza `formatARS`).
+  - Resuelve deuda #11 en SeccionVentas (eliminado todo `onPointerDown`). Eliminados todos los colores hardcoded (`#1a7a4a`, `#c0392b`, `#888`, `#eee`, etc.) y el spinner ad-hoc.
+- [x] `SeccionGastos.jsx`. Cambios principales (cerrados en el mismo chat que Ventas para extraer primitivos comunes):
+  - **4 primitivos nuevos** en `components/ui/` (cierre anticipado de la mayor parte de la deuda #23):
+    - `Modal` — shell genérico de modal (overlay + card + animaciones `om-overlay-in`/`om-dialog-in` + ESC + click fuera + loading-guard). Lo usan los modales de edición de Ventas y Gastos. `ConfirmDialog` todavía no lo usa internamente — anotado como deuda #24.
+    - `Select` — select nativo estilado con tokens (focus ring indigo, eyebrow uppercase). Pareja visual de `Field`. Usos: Ventas (forma_pago), Gastos (categoría dinámica + forma_pago).
+    - `BotonIconoFila` — icon-button compacto (28×28) con caja para acciones de fila. Variantes por `tono` (`'accent'|'danger'`). Migrado a su vez en `SeccionCaja` (botón de eliminar fila) — **cierra deuda #22**.
+    - `DetalleRecurso` — lista vertical de pares label/valor para insertar como `children` del `ConfirmDialog`. Migrado a su vez en `SeccionCaja` (reemplaza `DetalleMovimientoConfirm` local — ahora se arma vía helper `filasDetalleMovimiento(m)`).
+  - `SeccionGastos`: mismo patrón estructural que Ventas — `ScreenHeader` + `SelectorMes`/Exportar + `LoadingState`/`EmptyState`(con `Receipt`)/error con `IconoAlerta` y `Reintentar` + `TablaGastos` ad-hoc densa con `:hover` scoped + `TablaResumen` + `ConfirmDialog` con `DetalleRecurso` + `ModalEditarGasto` (`Modal` + 2 `Field` + 2 `Select`).
+  - Decisiones visuales nuevas (siguiendo recomendaciones del chat):
+    - Monto por fila en `theme.danger` (semántica de egreso, consistente con la fila de gasto en Caja).
+    - Total del mes y total general en `theme.accent` (regla "indigo para destacar totales" — heredada de Ventas).
+    - Sub-componente local `BadgeCategoria` (pill neutro con tokens: `surfaceAlt`/`inkSoft`, sin border).
+  - Sub-componentes locales eliminados de Ventas al promover primitivos: `SelectFormaPago` (→ `Select`), `BotonIconoFila` local (→ primitivo), `DetalleVentaConfirm` (→ filas inline + `DetalleRecurso`), shell ad-hoc del `ModalEditarVenta` (→ `Modal`). Queda local solo `CampoFijo` (único en Ventas hoy, deuda #23 reducida).
+  - Imports migrados: `utils/fecha.js` y `utils/formato.js` (singulares). Eliminados `onPointerDown`, emojis, DM Sans, todos los colores hardcoded (`#1a7a4a`, `#c0392b`, `#888`, `#eee`...) y el spinner ad-hoc.
+  - Resuelve deuda #11 en SeccionGastos (sin `onPointerDown`).
 - [ ] `SeccionPlanillas.jsx`.
 - [ ] `SeccionBalances.jsx`.
 - [ ] `SeccionTurnero.jsx`.
@@ -118,6 +140,7 @@ A construir cuando aparezcan durante Fase 4 (regla §7.5 del sistema de diseño:
 - [ ] `DataTable` denso (filas 36–40 px). Primer front que la necesita.
 - [ ] Evaluar consolidación de `SelectorMes` / `SelectorSemana` / `SelectorDia` / `SelectorPeriodo` en un `PeriodSelector` único.
 - [ ] Migrar a primitivos: `TogglePill`, `BadgeFormaPago`, `BotonExportarExcel`.
+- [x] **Adelantado en chat de Gastos**: `Modal`, `Select`, `BotonIconoFila`, `DetalleRecurso` ya viven en `components/ui/` (4 primitivos nuevos).
 
 ### Fase 6 — Cleanup final
 - [ ] Eliminar `frontend/src/utils/formatos.js` (plural) y `frontend/src/utils/fechas.js` (plural) — ya no debería quedar ningún import.
@@ -179,7 +202,16 @@ mover a una sección "resueltas" o dejar la nota inline.
 17. **`EmptyState` no acepta `tone`** *(mejora opcional, no deuda contra otros fronts — D9)*: el wrapper del glyph fija `color: theme.muted`, por lo que cuando se usa con `IconoAlerta` (estado de error en `SeccionInicio`/`SeccionCaja`), el ícono se ve gris en lugar de rojo. **Plan**: agregar prop `tone` (`'muted' | 'success' | 'danger' | 'warning'`) al primitivo `EmptyState` del admin que pinte el color del wrapper del glyph. Atacar cuando una pantalla lo pida fuerte o como parte de un pase de QA de la fase.
 18. **Tabla ad-hoc con `role="table"/"row"/"cell"` en `SeccionInicio`**: parche de accesibilidad mientras `DataTable` no exista. Se reemplaza naturalmente cuando se construya el primitivo en Fase 5 (esperado durante Ventas/Balances).
 20. **`DataTable` postergado a Fase 5**: `SeccionCaja` resolvió su tabla densa ad-hoc (sin sort, filtros complejos ni paginación; un único filtro toggle). El primer caso real que justifique construir el primitivo se espera en `SeccionVentas` o `SeccionBalances`, donde aparecerán sort + filtros + totales por fila. Mientras tanto, las tablas se construyen ad-hoc con tokens.
-21. **Hover de fila vía `:hover` scoped en `SeccionCaja`**: para la tabla densa se usó un `<style>` inline con clase única (`om-caja-fila:hover`) en vez del patrón `useState` por fila, porque éste último explota re-renders al pasar el mouse en tablas con N filas. Excepción consciente al patrón general (§4.2). Si la deuda #8 se ataca con `:hover` scoped vía `<style>` reutilizable, este caso se absorbe.
+21. **Hover de fila vía `:hover` scoped en `SeccionCaja` y `SeccionVentas`**: para las tablas densas se usó un `<style>` inline con clase única (`om-caja-fila:hover`, `om-ventas-fila:hover`) en vez del patrón `useState` por fila, porque éste último explota re-renders al pasar el mouse en tablas con N filas. Excepción consciente al patrón general (§4.2). Si la deuda #8 se ataca con `:hover` scoped vía `<style>` reutilizable, este caso se absorbe.
+22. ~~**Inconsistencia visual del botón eliminar entre Caja y Ventas/Gastos**~~ — **Resuelta** al promover `BotonIconoFila` a primitivo y migrar el botón de Caja al mismo patrón con caja (chat de Gastos).
+23. **Sub-componentes locales candidatos a primitivos** (estado actualizado tras chat de Gastos):
+    - ~~`BotonIconoFila`~~ — **promovido** a `components/ui/BotonIconoFila.jsx`. Usos: Ventas, Gastos, Caja.
+    - ~~Shell visual del modal de edición~~ — **promovido** como primitivo `Modal`. Usos: Ventas (`ModalEditarVenta`), Gastos (`ModalEditarGasto`).
+    - ~~`SelectFormaPago`~~ — **promovido** como primitivo genérico `Select`. Usos: Ventas, Gastos (incluye categoría dinámica).
+    - ~~`DetalleVentaConfirm` / `DetalleMovimientoConfirm`~~ — **promovido** como primitivo `DetalleRecurso`. Los callers arman el array de filas. Usos: Ventas, Gastos, Caja.
+    - `CampoFijo` — sigue local en Ventas (único uso). Promover si aparece en otra sección.
+24. **`ConfirmDialog` no usa internamente el primitivo `Modal`**: tienen shells visuales casi idénticos (overlay + card + animaciones + ESC). El refactor de `ConfirmDialog` para reusar `Modal` quedó fuera de scope del chat de Gastos (`ConfirmDialog` viene heredado idéntico de turnero y refactorizarlo significa rotar también el turnero, o introducir divergencia). Plan: evaluar en Fase 6 (cleanup) — si quedan ambos, está OK (D9: APIs pueden divergir), pero hay duplicación visual que conviene unificar.
+25. **`Modal` primitivo usa id estático `om-modal-title` para `aria-labelledby`**: si dos modales del primitivo se abrieran simultáneamente, los ids colisionarían. Hoy nunca pasa (los flujos del admin son monomodal). Si en algún futuro se anidan modales o aparecen modales superpuestos, generar id único con `useId()`.
 9. **Vulnerabilidades reportadas por `npm audit`** (detectadas al instalar `lucide-react` en Fase 1 — no las introdujo lucide, son preexistentes en el árbol de dependencias):
    - **Con fix disponible** (resolver con `npm audit fix`): `vite` (3 advisories, alta), `postcss` (XSS, moderada), `picomatch` (ReDoS + injection, alta), `brace-expansion` (DoS, moderada), `flatted` (prototype pollution, alta).
    - **Sin fix oficial**: `xlsx` (prototype pollution + ReDoS, alta). SheetJS no publica fix en npm. Evaluar migrar a `exceljs` o aceptar el riesgo documentado.

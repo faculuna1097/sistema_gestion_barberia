@@ -1,178 +1,484 @@
 // /frontend/src/screens/admin/sections/SeccionGastos.jsx
+//
+// Sección Gastos del panel de administrador.
+// Lista los gastos del mes seleccionado con edición y eliminación por fila,
+// más una tabla de resumen por categoría.
+//
+// Espejo estructural de SeccionVentas — comparten primitivos:
+//   Modal, Select, BotonIconoFila, DetalleRecurso (todos en /ui).
+//
+// Sistema de diseño: tokens + Geist + Lucide + onClick. Densidad compacta.
+// Fondo lo da PanelAdmin (theme.surfaceAlt, D7). Loading via LoadingState (D6).
+// Monto por fila en theme.danger (semántica de egreso, consistente con
+// la fila de gasto en SeccionCaja). Total del mes y resumen en theme.accent.
 
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { Pencil, Trash2, Receipt, RefreshCw } from 'lucide-react';
+
 import { apiFetch } from '../../../services/api';
 import SelectorMes from '../../../components/SelectorMes';
 import BadgeFormaPago from '../../../components/BadgeFormaPago';
 import BotonExportarExcel from '../../../components/BotonExportarExcel';
-import { getMesActual, mesALabel } from '../../../utils/fechas';
-import { formatARS } from '../../../utils/formatos';
+import { mesALabel, getMesActual } from '../../../utils/fecha';
+import { fmtPesos } from '../../../utils/formato';
+import {
+  ScreenHeader,
+  LoadingState,
+  EmptyState,
+  ConfirmDialog,
+  Modal,
+  Select,
+  Button,
+  Field,
+  BotonIconoFila,
+  DetalleRecurso,
+  IconoAlerta,
+} from '../../../components/ui';
+import { theme } from '../../../theme/tokens.js';
 
-function ModalEditarGasto({ gasto, categorias, form, onChange, onGuardar, onCancelar, guardando, errorEditar }) {
+// ─── Sub-componentes locales ──────────────────────────────────────────────────
+
+/**
+ * BadgeCategoria
+ * Pill neutro tipo tag para mostrar la categoría en cada fila. Estilos de
+ * tokens (`surfaceAlt`/`inkSoft`), sin border. Local — promover si aparece
+ * un segundo uso fuera de Gastos.
+ *
+ * @param {object} props
+ * @param {string} props.nombre
+ */
+function BadgeCategoria({ nombre }) {
   return (
-    <div style={styles.modalOverlay}>
-      <div style={{ ...styles.modalCard, width: '480px' }}>
-        <p style={styles.modalTitulo}>Editar gasto</p>
-        <p style={styles.modalSubtitulo}>Fecha original: {gasto.fecha}</p>
+    <span style={{
+      display: 'inline-block',
+      padding: '2px 8px',
+      borderRadius: theme.radiusSm,
+      fontFamily: theme.body,
+      fontSize: theme.sizeMicro,
+      fontWeight: theme.weightMedium,
+      letterSpacing: '0.02em',
+      background: theme.surfaceAlt,
+      color: theme.inkSoft,
+    }}>{nombre}</span>
+  );
+}
 
-        <div style={styles.formGrupo}>
-          <label style={styles.formLabel}>Categoría</label>
-          <select
-            style={styles.select}
-            value={form.categoria_id}
-            onChange={e => onChange('categoria_id', e.target.value)}
-          >
-            {categorias.map(c => (
-              <option key={c.id} value={c.id}>{c.nombre}</option>
+/**
+ * TablaGastos
+ * Tabla densa con detalle por gasto + footer "Total del mes" en theme.accent.
+ * Monto por fila en theme.danger (egreso). Hover scoped (#21).
+ *
+ * @param {object} props
+ * @param {Array} props.gastos
+ * @param {number} props.totalGeneral
+ * @param {(g: object) => void} props.onEditar
+ * @param {(g: object) => void} props.onEliminar
+ * @param {boolean} props.accionesDeshabilitadas
+ */
+function TablaGastos({ gastos, totalGeneral, onEditar, onEliminar, accionesDeshabilitadas }) {
+  const columnas = [
+    { label: 'Fecha',         align: 'left'   },
+    { label: 'Categoría',     align: 'left'   },
+    { label: 'Descripción',   align: 'left'   },
+    { label: 'Monto',         align: 'right'  },
+    { label: 'Forma de pago', align: 'left'   },
+    { label: '',              align: 'center', width: 88 },
+  ];
+
+  return (
+    <div style={{
+      background: theme.surface,
+      border: `1px solid ${theme.hairline}`,
+      borderRadius: theme.radius,
+      overflow: 'hidden',
+    }}>
+      <style>{`
+        .om-gastos-fila { transition: background ${theme.transitionFast}; }
+        .om-gastos-fila:hover { background: ${theme.surfaceAlt}; }
+      `}</style>
+
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            {columnas.map((c, i) => (
+              <th key={i} style={{
+                padding: '10px 12px',
+                fontFamily: theme.mono,
+                fontSize: theme.sizeMicro,
+                fontWeight: theme.weightMedium,
+                color: theme.muted,
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                background: theme.surfaceAlt,
+                borderBottom: `1px solid ${theme.hairline}`,
+                textAlign: c.align,
+                whiteSpace: 'nowrap',
+                width: c.width,
+              }}>{c.label}</th>
             ))}
-          </select>
-        </div>
+          </tr>
+        </thead>
+        <tbody>
+          {gastos.map((g) => {
+            const tdBase = {
+              padding: '10px 12px',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              color: theme.ink,
+              borderBottom: `1px solid ${theme.hairlineSoft}`,
+              verticalAlign: 'middle',
+            };
+            return (
+              <tr key={g.id} className="om-gastos-fila">
+                <td style={{ ...tdBase, color: theme.muted, whiteSpace: 'nowrap' }}>{g.fecha}</td>
+                <td style={tdBase}><BadgeCategoria nombre={g.categoria_nombre} /></td>
+                <td style={{ ...tdBase, color: theme.inkSoft }}>{g.descripcion}</td>
+                <td style={{
+                  ...tdBase,
+                  textAlign: 'right',
+                  fontWeight: theme.weightHeading,
+                  color: theme.danger,
+                  fontVariantNumeric: 'tabular-nums',
+                  whiteSpace: 'nowrap',
+                }}>{fmtPesos(g.monto)}</td>
+                <td style={tdBase}><BadgeFormaPago forma={g.forma_pago} /></td>
+                <td style={{ ...tdBase, padding: '6px 8px', textAlign: 'center', width: 88 }}>
+                  <div style={{ display: 'inline-flex', gap: 6 }}>
+                    <BotonIconoFila
+                      tono="accent"
+                      icono={<Pencil size={14} strokeWidth={1.75} />}
+                      ariaLabel={`Editar gasto ${g.descripcion}`}
+                      onClick={() => onEditar(g)}
+                      disabled={accionesDeshabilitadas}
+                    />
+                    <BotonIconoFila
+                      tono="danger"
+                      icono={<Trash2 size={14} strokeWidth={1.75} />}
+                      ariaLabel={`Eliminar gasto ${g.descripcion}`}
+                      onClick={() => onEliminar(g)}
+                      disabled={accionesDeshabilitadas}
+                    />
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colSpan={3} style={{
+              padding: '12px 12px',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              fontWeight: theme.weightHeading,
+              color: theme.ink,
+              background: theme.surfaceAlt,
+              borderTop: `1px solid ${theme.hairline}`,
+              textAlign: 'left',
+            }}>Total del mes</td>
+            <td style={{
+              padding: '12px 12px',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              fontWeight: theme.weightHeading,
+              color: theme.accent,
+              background: theme.surfaceAlt,
+              borderTop: `1px solid ${theme.hairline}`,
+              textAlign: 'right',
+              fontVariantNumeric: 'tabular-nums',
+              whiteSpace: 'nowrap',
+            }}>{fmtPesos(totalGeneral)}</td>
+            <td colSpan={2} style={{
+              background: theme.surfaceAlt,
+              borderTop: `1px solid ${theme.hairline}`,
+            }} />
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
 
-        <div style={styles.formGrupo}>
-          <label style={styles.formLabel}>Descripción</label>
-          <input
-            type="text"
-            style={styles.input}
+/**
+ * TablaResumen
+ * Tabla densa secundaria con cantidad de gastos y monto por categoría.
+ *
+ * @param {object} props
+ * @param {Array} props.totales - [{ categoria_nombre, cantidad, total }]
+ * @param {number} props.totalGeneral
+ * @param {number} props.cantidadGastos - Cantidad total de filas
+ */
+function TablaResumen({ totales, totalGeneral, cantidadGastos }) {
+  return (
+    <div style={{
+      background: theme.surface,
+      border: `1px solid ${theme.hairline}`,
+      borderRadius: theme.radius,
+      overflow: 'hidden',
+      maxWidth: 560,
+    }}>
+      <div style={{
+        padding: '12px 14px',
+        background: theme.surfaceAlt,
+        borderBottom: `1px solid ${theme.hairline}`,
+        fontFamily: theme.body,
+        fontSize: theme.sizeHeading,
+        fontWeight: theme.weightHeading,
+        color: theme.ink,
+        letterSpacing: '-0.01em',
+      }}>Resumen del mes</div>
+
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            {[
+              { label: 'Categoría', align: 'left'   },
+              { label: 'Cantidad',  align: 'center' },
+              { label: 'Total',     align: 'right'  },
+            ].map((c, i) => (
+              <th key={i} style={{
+                padding: '10px 12px',
+                fontFamily: theme.mono,
+                fontSize: theme.sizeMicro,
+                fontWeight: theme.weightMedium,
+                color: theme.muted,
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                background: theme.surface,
+                borderBottom: `1px solid ${theme.hairlineSoft}`,
+                textAlign: c.align,
+                whiteSpace: 'nowrap',
+              }}>{c.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {totales.map((t) => {
+            const tdBase = {
+              padding: '10px 12px',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              color: theme.ink,
+              borderBottom: `1px solid ${theme.hairlineSoft}`,
+            };
+            return (
+              <tr key={t.categoria_nombre}>
+                <td style={{ ...tdBase, fontWeight: theme.weightMedium }}>{t.categoria_nombre}</td>
+                <td style={{ ...tdBase, textAlign: 'center', color: theme.muted, fontVariantNumeric: 'tabular-nums' }}>{t.cantidad}</td>
+                <td style={{ ...tdBase, textAlign: 'right', fontWeight: theme.weightHeading, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtPesos(t.total)}</td>
+              </tr>
+            );
+          })}
+          <tr>
+            <td style={{
+              padding: '12px 12px',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              fontWeight: theme.weightHeading,
+              color: theme.ink,
+              background: theme.surfaceAlt,
+              borderTop: `1px solid ${theme.hairline}`,
+              textAlign: 'left',
+            }}>Total general</td>
+            <td style={{
+              padding: '12px 12px',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              color: theme.muted,
+              background: theme.surfaceAlt,
+              borderTop: `1px solid ${theme.hairline}`,
+              textAlign: 'center',
+              fontVariantNumeric: 'tabular-nums',
+              whiteSpace: 'nowrap',
+            }}>{cantidadGastos} {cantidadGastos === 1 ? 'gasto' : 'gastos'}</td>
+            <td style={{
+              padding: '12px 12px',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              fontWeight: theme.weightHeading,
+              color: theme.accent,
+              background: theme.surfaceAlt,
+              borderTop: `1px solid ${theme.hairline}`,
+              textAlign: 'right',
+              fontVariantNumeric: 'tabular-nums',
+              whiteSpace: 'nowrap',
+            }}>{fmtPesos(totalGeneral)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── Modal de edición ─────────────────────────────────────────────────────────
+
+const OPCIONES_FORMA_PAGO = [
+  { value: 'efectivo',     label: 'Efectivo' },
+  { value: 'mercado_pago', label: 'Mercado Pago' },
+];
+
+/**
+ * ModalEditarGasto
+ * Modal de edición de gasto. 4 campos editables: categoría, descripción,
+ * monto, forma de pago. Sin preview (el monto editado es directo).
+ */
+function ModalEditarGasto({ open, gasto, categorias, form, onChange, onGuardar, onCancelar, guardando, errorEditar }) {
+  const opcionesCategoria = categorias.map((c) => ({ value: c.id, label: c.nombre }));
+
+  return (
+    <Modal
+      open={open}
+      onClose={onCancelar}
+      loading={guardando}
+      title="Editar gasto"
+      subtitle={gasto ? `Fecha original: ${gasto.fecha}` : undefined}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onCancelar} disabled={guardando}>
+            Cancelar
+          </Button>
+          <Button variant="primary" onClick={onGuardar} disabled={guardando}>
+            {guardando ? 'Guardando…' : 'Guardar cambios'}
+          </Button>
+        </>
+      }
+    >
+      {gasto && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Select
+            label="Categoría"
+            value={form.categoria_id}
+            onChange={(v) => onChange('categoria_id', v)}
+            options={opcionesCategoria}
+          />
+
+          <Field
+            label="Descripción"
             value={form.descripcion}
-            onChange={e => onChange('descripcion', e.target.value)}
+            onChange={(v) => onChange('descripcion', v)}
             placeholder="Descripción del gasto"
           />
-        </div>
 
-        <div style={styles.formGrupo}>
-          <label style={styles.formLabel}>Monto</label>
-          <input
+          <Field
+            label="Monto"
             type="number"
-            min="0"
-            style={styles.input}
             value={form.monto}
-            onChange={e => onChange('monto', e.target.value)}
+            onChange={(v) => onChange('monto', v)}
           />
-        </div>
 
-        <div style={styles.formGrupo}>
-          <label style={styles.formLabel}>Forma de pago</label>
-          <select
-            style={styles.select}
+          <Select
+            label="Forma de pago"
             value={form.forma_pago}
-            onChange={e => onChange('forma_pago', e.target.value)}
-          >
-            <option value="efectivo">Efectivo</option>
-            <option value="mercado_pago">Mercado Pago</option>
-          </select>
-        </div>
+            onChange={(v) => onChange('forma_pago', v)}
+            options={OPCIONES_FORMA_PAGO}
+          />
 
-        {errorEditar && (
-          <div style={styles.errorModal}>{errorEditar}</div>
-        )}
-
-        <div style={styles.modalBotones}>
-          <button style={styles.btnCancelar} onPointerDown={onCancelar} disabled={guardando}>
-            Cancelar
-          </button>
-          <button
-            style={{ ...styles.btnGuardar, ...(guardando ? styles.btnGuardarDeshabilitado : {}) }}
-            onPointerDown={onGuardar}
-            disabled={guardando}
-          >
-            {guardando ? 'Guardando...' : 'Guardar cambios'}
-          </button>
+          {errorEditar && (
+            <div style={{
+              padding: '10px 12px',
+              borderRadius: theme.radius,
+              background: theme.dangerSoft,
+              color: theme.danger,
+              fontFamily: theme.body,
+              fontSize: 13,
+              textAlign: 'center',
+            }}>{errorEditar}</div>
+          )}
         </div>
-      </div>
-    </div>
+      )}
+    </Modal>
   );
 }
 
-function ModalConfirmarEliminar({ gasto, onConfirmar, onCancelar }) {
-  return (
-    <div style={styles.modalOverlay}>
-      <div style={styles.modalCard}>
-        <p style={styles.modalTitulo}>¿Eliminar este gasto?</p>
-        <p style={styles.modalAdvertencia}>Esta acción no se puede deshacer.</p>
+// ─── Root ─────────────────────────────────────────────────────────────────────
 
-        <div style={styles.modalDetalle}>
-          <div style={styles.modalFila}>
-            <span style={styles.modalLabel}>Fecha</span>
-            <span style={styles.modalValor}>{gasto.fecha}</span>
-          </div>
-          <div style={styles.modalDivider} />
-          <div style={styles.modalFila}>
-            <span style={styles.modalLabel}>Categoría</span>
-            <span style={styles.modalValor}>{gasto.categoria_nombre}</span>
-          </div>
-          <div style={styles.modalDivider} />
-          <div style={styles.modalFila}>
-            <span style={styles.modalLabel}>Descripción</span>
-            <span style={styles.modalValor}>{gasto.descripcion}</span>
-          </div>
-          <div style={styles.modalDivider} />
-          <div style={styles.modalFila}>
-            <span style={styles.modalLabel}>Monto</span>
-            <span style={{ ...styles.modalValor, color: '#c0392b', fontWeight: '700' }}>
-              {formatARS(gasto.monto)}
-            </span>
-          </div>
-        </div>
-
-        <div style={styles.modalBotones}>
-          <button style={styles.btnCancelar} onPointerDown={onCancelar}>Cancelar</button>
-          <button style={styles.btnEliminarConfirm} onPointerDown={onConfirmar}>Sí, eliminar</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+/**
+ * SeccionGastos
+ * Vista principal de Gastos. Carga gastos del mes + categorías, los muestra
+ * en una tabla densa con acciones editar/eliminar y una tabla de resumen
+ * por categoría. Exportable a Excel.
+ */
 export default function SeccionGastos() {
   const [mes, setMes]                           = useState(getMesActual);
   const [gastos, setGastos]                     = useState([]);
   const [totalesPorCategoria, setTotalesPorCat] = useState([]);
   const [totalGeneral, setTotalGeneral]         = useState(0);
-  const [cargando, setCargando]                 = useState(false);
+  const [cargando, setCargando]                 = useState(true);
   const [error, setError]                       = useState(null);
+  const [intento, setIntento]                   = useState(0);
+  const [categorias, setCategorias]             = useState([]);
   const [gastoAEliminar, setGastoAEliminar]     = useState(null);
   const [eliminando, setEliminando]             = useState(false);
-  const [categorias, setCategorias]             = useState([]);
   const [gastoAEditar, setGastoAEditar]         = useState(null);
   const [formEditar, setFormEditar]             = useState({});
   const [guardando, setGuardando]               = useState(false);
   const [errorEditar, setErrorEditar]           = useState(null);
 
+  // Carga one-shot de categorías. Si falla queda como array vacío — el
+  // select del modal queda sin opciones, pero la sección no se rompe.
   useEffect(() => {
+    let cancelado = false;
     const cargarCategorias = async () => {
       try {
         const res = await apiFetch('/categorias');
         if (!res.ok) return;
         const data = await res.json();
-        setCategorias(Array.isArray(data) ? data : []);
+        if (!cancelado) setCategorias(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error('[seccionGastos] Error en cargarCategorias:', err.message);
       }
     };
     cargarCategorias();
+    return () => { cancelado = true; };
   }, []);
 
+  // Carga de gastos del mes. `intento` re-dispara el efecto en "Reintentar".
   useEffect(() => {
+    let cancelado = false;
     const cargarGastos = async () => {
       setCargando(true);
       setError(null);
       try {
-        const res  = await apiFetch(`/gastos/mensual?mes=${mes}`);
+        const res = await apiFetch(`/gastos/mensual?mes=${mes}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        if (cancelado) return;
         setGastos(data.gastos);
         setTotalesPorCat(data.totalesPorCategoria);
         setTotalGeneral(data.totalGeneral);
       } catch (err) {
         console.error('[seccionGastos] Error en cargarGastos:', err.message);
-        setError('No se pudieron cargar los gastos. Intentá de nuevo.');
+        if (!cancelado) setError('No se pudieron cargar los gastos. Intentá de nuevo.');
       } finally {
-        setCargando(false);
+        if (!cancelado) setCargando(false);
       }
     };
     cargarGastos();
-  }, [mes]);
+    return () => { cancelado = true; };
+  }, [mes, intento]);
+
+  /**
+   * Recalcula totales (general y por categoría) localmente. Se usa tras
+   * editar o eliminar para no pegarle al server.
+   * @param {Array} lista
+   * @returns {{ totalGen: number, totalesOrdenados: Array }}
+   */
+  const recalcularTotales = (lista) => {
+    const totalGen = lista.reduce((acc, g) => acc + Number(g.monto), 0);
+    const totalesMap = {};
+    lista.forEach((g) => {
+      if (!totalesMap[g.categoria_nombre]) {
+        totalesMap[g.categoria_nombre] = { total: 0, cantidad: 0 };
+      }
+      totalesMap[g.categoria_nombre].total    += Number(g.monto);
+      totalesMap[g.categoria_nombre].cantidad += 1;
+    });
+    const totalesOrdenados = Object.entries(totalesMap)
+      .map(([nombre, vals]) => ({ categoria_nombre: nombre, ...vals }))
+      .sort((a, b) => b.total - a.total);
+    return { totalGen, totalesOrdenados };
+  };
 
   const abrirEditar = (g) => {
     setErrorEditar(null);
@@ -186,7 +492,7 @@ export default function SeccionGastos() {
   };
 
   const handleChangeForm = (campo, valor) => {
-    setFormEditar(f => ({ ...f, [campo]: valor }));
+    setFormEditar((f) => ({ ...f, [campo]: valor }));
   };
 
   const confirmarEditar = async () => {
@@ -203,16 +509,16 @@ export default function SeccionGastos() {
           forma_pago:   formEditar.forma_pago,
         }),
       });
-
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Error del servidor');
       }
-
-      const categoriaNombre = categorias.find(c => c.id === formEditar.categoria_id)?.nombre
+      // El select devuelve strings; las categorías traen id numérico desde
+      // el server. Comparamos con coerción para que el lookup funcione.
+      const categoriaNombre = categorias.find((c) => String(c.id) === String(formEditar.categoria_id))?.nombre
         || gastoAEditar.categoria_nombre;
 
-      const nuevosGastos = gastos.map(g => g.id === id ? {
+      const nuevosGastos = gastos.map((g) => g.id === id ? {
         ...g,
         categoria_id:     formEditar.categoria_id,
         categoria_nombre: categoriaNombre,
@@ -221,23 +527,10 @@ export default function SeccionGastos() {
         forma_pago:       formEditar.forma_pago,
       } : g);
 
+      const { totalGen, totalesOrdenados } = recalcularTotales(nuevosGastos);
       setGastos(nuevosGastos);
-
-      const totalGen = nuevosGastos.reduce((acc, g) => acc + Number(g.monto), 0);
       setTotalGeneral(totalGen);
-
-      const totalesMap = {};
-      nuevosGastos.forEach(g => {
-        if (!totalesMap[g.categoria_nombre])
-          totalesMap[g.categoria_nombre] = { total: 0, cantidad: 0 };
-        totalesMap[g.categoria_nombre].total    += Number(g.monto);
-        totalesMap[g.categoria_nombre].cantidad += 1;
-      });
-      const nuevosTotales = Object.entries(totalesMap)
-        .map(([nombre, vals]) => ({ categoria_nombre: nombre, ...vals }))
-        .sort((a, b) => b.total - a.total);
-      setTotalesPorCat(nuevosTotales);
-
+      setTotalesPorCat(totalesOrdenados);
       setGastoAEditar(null);
     } catch (err) {
       console.error('[seccionGastos] Error en confirmarEditar:', err.message);
@@ -253,21 +546,11 @@ export default function SeccionGastos() {
     try {
       const res = await apiFetch(`/gastos/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Error del servidor');
-      const nuevosGastos = gastos.filter(g => g.id !== id);
+      const nuevosGastos = gastos.filter((g) => g.id !== id);
+      const { totalGen, totalesOrdenados } = recalcularTotales(nuevosGastos);
       setGastos(nuevosGastos);
-      const nuevoTotal = nuevosGastos.reduce((acc, g) => acc + Number(g.monto), 0);
-      setTotalGeneral(nuevoTotal);
-      const totalesMap = {};
-      nuevosGastos.forEach(g => {
-        if (!totalesMap[g.categoria_nombre])
-          totalesMap[g.categoria_nombre] = { total: 0, cantidad: 0 };
-        totalesMap[g.categoria_nombre].total    += Number(g.monto);
-        totalesMap[g.categoria_nombre].cantidad += 1;
-      });
-      const nuevosTotales = Object.entries(totalesMap)
-        .map(([nombre, vals]) => ({ categoria_nombre: nombre, ...vals }))
-        .sort((a, b) => b.total - a.total);
-      setTotalesPorCat(nuevosTotales);
+      setTotalGeneral(totalGen);
+      setTotalesPorCat(totalesOrdenados);
     } catch (err) {
       console.error('[seccionGastos] Error en confirmarEliminar:', err.message);
     } finally {
@@ -278,7 +561,7 @@ export default function SeccionGastos() {
 
   const exportarExcel = () => {
     const wb = XLSX.utils.book_new();
-    const filas = gastos.map(g => ({
+    const filas = gastos.map((g) => ({
       Fecha:           g.fecha,
       Categoría:       g.categoria_nombre,
       Descripción:     g.descripcion,
@@ -286,7 +569,8 @@ export default function SeccionGastos() {
       'Forma de pago': g.forma_pago === 'efectivo' ? 'Efectivo' : 'Mercado Pago',
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Gastos');
-    const filasTotales = totalesPorCategoria.map(t => ({
+
+    const filasTotales = totalesPorCategoria.map((t) => ({
       Categoría:            t.categoria_nombre,
       'Cantidad de gastos': Number(t.cantidad),
       Total:                Number(t.total),
@@ -300,38 +584,56 @@ export default function SeccionGastos() {
     XLSX.writeFile(wb, `Gastos_${mes}.xlsx`);
   };
 
+  const accionesDeshabilitadas = eliminando || guardando;
+
+  // Filas del ConfirmDialog de delete — armado en el render.
+  const filasDelete = gastoAEliminar ? [
+    { label: 'Fecha',       valor: gastoAEliminar.fecha },
+    { label: 'Categoría',   valor: gastoAEliminar.categoria_nombre },
+    { label: 'Descripción', valor: gastoAEliminar.descripcion },
+    {
+      label: 'Monto',
+      valor: fmtPesos(gastoAEliminar.monto),
+      numeric: true,
+      valorColor: theme.danger,
+      valorWeight: theme.weightHeading,
+    },
+  ] : [];
+
   return (
-    <div style={styles.contenedor}>
+    <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <ScreenHeader title="Gastos" subtitle="Registro mensual de egresos" />
 
-      {gastoAEditar && (
-        <ModalEditarGasto
-          gasto={gastoAEditar}
-          categorias={categorias}
-          form={formEditar}
-          onChange={handleChangeForm}
-          onGuardar={confirmarEditar}
-          onCancelar={() => setGastoAEditar(null)}
-          guardando={guardando}
-          errorEditar={errorEditar}
-        />
-      )}
+      <ConfirmDialog
+        open={!!gastoAEliminar}
+        title="¿Eliminar este gasto?"
+        message="Esta acción no se puede deshacer."
+        confirmLabel="Sí, eliminar"
+        loading={eliminando}
+        onConfirm={confirmarEliminar}
+        onCancel={() => setGastoAEliminar(null)}
+      >
+        {gastoAEliminar && <DetalleRecurso filas={filasDelete} />}
+      </ConfirmDialog>
 
-      {gastoAEliminar && (
-        <ModalConfirmarEliminar
-          gasto={gastoAEliminar}
-          onConfirmar={confirmarEliminar}
-          onCancelar={() => setGastoAEliminar(null)}
-        />
-      )}
+      <ModalEditarGasto
+        open={!!gastoAEditar}
+        gasto={gastoAEditar}
+        categorias={categorias}
+        form={formEditar}
+        onChange={handleChangeForm}
+        onGuardar={confirmarEditar}
+        onCancelar={() => setGastoAEditar(null)}
+        guardando={guardando}
+        errorEditar={errorEditar}
+      />
 
-      <div style={styles.encabezado}>
-        <div>
-          <h2 style={styles.titulo}>Gastos</h2>
-          <p style={styles.subtitulo}>Registro mensual de egresos</p>
-        </div>
-      </div>
-
-      <div style={styles.selectorMesWrapper}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr auto 1fr',
+        alignItems: 'center',
+        gap: 16,
+      }}>
         <div />
         <SelectorMes value={mes} onChange={setMes} />
         <div style={{ justifySelf: 'end' }}>
@@ -339,276 +641,42 @@ export default function SeccionGastos() {
         </div>
       </div>
 
-      {cargando && (
-        <div style={styles.estadoCentrado}>
-          <div style={styles.spinner} />
-          <p style={styles.estadoTexto}>Cargando gastos...</p>
-        </div>
-      )}
-
-      {!cargando && error && (
-        <div style={styles.errorBox}>{error}</div>
-      )}
-
-      {!cargando && !error && gastos.length === 0 && (
-        <div style={styles.estadoCentrado}>
-          <p style={styles.estadoTexto}>No hay gastos registrados en {mesALabel(mes)}.</p>
-        </div>
-      )}
-
-      {!cargando && !error && gastos.length > 0 && (
+      {cargando ? (
+        <LoadingState />
+      ) : error ? (
+        <EmptyState
+          glyph={<IconoAlerta />}
+          title="No se pudo cargar"
+          body={error}
+          action={
+            <Button variant="secondary" full={false} onClick={() => setIntento((n) => n + 1)}>
+              <RefreshCw size={16} strokeWidth={1.75} />
+              Reintentar
+            </Button>
+          }
+        />
+      ) : gastos.length === 0 ? (
+        <EmptyState
+          glyph={<Receipt size={28} strokeWidth={1.5} />}
+          title="Sin gastos"
+          body={`No hay gastos registrados en ${mesALabel(mes)}.`}
+        />
+      ) : (
         <>
-          <div style={styles.tablaWrapper}>
-            <table style={styles.tabla}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Fecha</th>
-                  <th style={styles.th}>Categoría</th>
-                  <th style={{ ...styles.th, width: '35%' }}>Descripción</th>
-                  <th style={styles.th}>Monto</th>
-                  <th style={styles.th}>Forma de pago</th>
-                  <th style={styles.thAccion}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {gastos.map((g, i) => (
-                  <tr key={g.id} style={i % 2 === 0 ? styles.filaImpar : styles.filaPar}>
-                    <td style={styles.td}>{g.fecha}</td>
-                    <td style={styles.td}>
-                      <span style={styles.badgeCategoria}>{g.categoria_nombre}</span>
-                    </td>
-                    <td style={{ ...styles.td, color: '#444' }}>{g.descripcion}</td>
-                    <td style={{ ...styles.td, fontWeight: '600', color: '#c0392b', whiteSpace: 'nowrap' }}>
-                      {formatARS(g.monto)}
-                    </td>
-                    <td style={styles.td}><BadgeFormaPago forma={g.forma_pago} /></td>
-                    <td style={styles.tdAccion}>
-                      <div style={styles.accionBotones}>
-                        <button
-                          style={styles.btnEditar}
-                          onPointerDown={() => abrirEditar(g)}
-                          disabled={eliminando || guardando}
-                          aria-label="Editar gasto"
-                        >✎</button>
-                        <button
-                          style={styles.btnX}
-                          onPointerDown={() => setGastoAEliminar(g)}
-                          disabled={eliminando || guardando}
-                          aria-label="Eliminar gasto"
-                        >✕</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr style={styles.filaTotalGeneral}>
-                  <td colSpan={4} style={{ ...styles.tdTotal, textAlign: 'left' }}>Total del mes</td>
-                  <td style={{ ...styles.tdTotal, textAlign: 'right', color: '#c0392b' }}>
-                    {formatARS(totalGeneral)}
-                  </td>
-                  <td style={styles.tdTotal} />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          <div style={styles.totalesWrapper}>
-            <h3 style={styles.tituloTotales}>Resumen del mes</h3>
-            <table style={styles.tablaTotales}>
-              <thead>
-                <tr>
-                  <th style={{ ...styles.th, textAlign: 'left' }}>Categoría</th>
-                  <th style={{ ...styles.th, textAlign: 'center' }}>Cantidad</th>
-                  <th style={{ ...styles.th, textAlign: 'right' }}>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {totalesPorCategoria.map((t, i) => (
-                  <tr key={t.categoria_nombre} style={i % 2 === 0 ? styles.filaImpar : styles.filaPar}>
-                    <td style={{ ...styles.td, fontWeight: '500' }}>{t.categoria_nombre}</td>
-                    <td style={{ ...styles.td, textAlign: 'center', color: '#666' }}>{t.cantidad}</td>
-                    <td style={{ ...styles.td, textAlign: 'right', fontWeight: '600' }}>
-                      {formatARS(t.total)}
-                    </td>
-                  </tr>
-                ))}
-                <tr style={styles.filaTotalGeneral}>
-                  <td style={{ ...styles.tdTotal, textAlign: 'left' }}>Total general</td>
-                  <td style={{ ...styles.tdTotal, textAlign: 'center', color: '#888', fontSize: '13px', fontWeight: '500' }}>
-                    {gastos.length} {gastos.length === 1 ? 'gasto' : 'gastos'}
-                  </td>
-                  <td style={{ ...styles.tdTotal, textAlign: 'right', color: '#c0392b' }}>
-                    {formatARS(totalGeneral)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <TablaGastos
+            gastos={gastos}
+            totalGeneral={totalGeneral}
+            onEditar={abrirEditar}
+            onEliminar={setGastoAEliminar}
+            accionesDeshabilitadas={accionesDeshabilitadas}
+          />
+          <TablaResumen
+            totales={totalesPorCategoria}
+            totalGeneral={totalGeneral}
+            cantidadGastos={gastos.length}
+          />
         </>
       )}
     </div>
   );
 }
-
-const styles = {
-  contenedor: {
-    padding: '32px 36px',
-    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
-  },
-  encabezado: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-    marginBottom: '24px',
-  },
-  titulo:    { fontSize: '24px', fontWeight: '700', color: '#111', margin: '0 0 4px' },
-  subtitulo: { fontSize: '14px', color: '#888', margin: 0 },
-  selectorMesWrapper: {
-    display: 'grid',
-    gridTemplateColumns: '1fr auto 1fr',
-    alignItems: 'center',
-    gap: '16px',
-    marginBottom: '28px',
-  },
-  tablaWrapper: {
-    borderRadius: '12px', border: '1.5px solid #eeeeee',
-    overflow: 'hidden', marginBottom: '32px', overflowX: 'auto',
-  },
-  tabla:    { width: '100%', borderCollapse: 'collapse', fontSize: '14px' },
-  th: {
-    padding: '13px 16px', backgroundColor: '#fafafa',
-    color: '#888', fontWeight: '600', fontSize: '11px',
-    textTransform: 'uppercase', letterSpacing: '0.07em',
-    textAlign: 'left', borderBottom: '1.5px solid #eeeeee', whiteSpace: 'nowrap',
-  },
-  thAccion: {
-    padding: '13px 12px', width: '80px',
-    borderBottom: '1.5px solid #eeeeee', backgroundColor: '#fafafa',
-  },
-  td: {
-    padding: '13px 16px', color: '#333',
-    borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle', fontSize: '14px',
-  },
-  tdAccion: {
-    padding: '8px 12px', borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle',
-  },
-  accionBotones: {
-    display: 'flex', gap: '6px', alignItems: 'center', justifyContent: 'center',
-  },
-  filaImpar: { backgroundColor: '#ffffff' },
-  filaPar:   { backgroundColor: '#fafafa' },
-  btnEditar: {
-    width: '30px', height: '30px', borderRadius: '8px',
-    border: '1.5px solid #c5dcf5', backgroundColor: '#f0f6ff',
-    color: '#1565c0', fontSize: '15px', cursor: 'pointer',
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
-  },
-  btnX: {
-    width: '30px', height: '30px', borderRadius: '8px',
-    border: '1.5px solid #f5c6c6', backgroundColor: '#fff5f5',
-    color: '#c0392b', fontSize: '13px', cursor: 'pointer',
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
-  },
-  badgeCategoria: {
-    display: 'inline-block', padding: '3px 10px',
-    borderRadius: '20px', fontSize: '12px', fontWeight: '500',
-    backgroundColor: '#f3f4f6', color: '#374151',
-  },
-  totalesWrapper: {
-    borderRadius: '12px', border: '1.5px solid #eeeeee',
-    overflow: 'hidden', maxWidth: '520px',
-  },
-  tituloTotales: {
-    fontSize: '15px', fontWeight: '700', color: '#111',
-    margin: '0', padding: '14px 16px', backgroundColor: '#fafafa',
-    borderBottom: '1.5px solid #eeeeee',
-  },
-  tablaTotales:     { width: '100%', borderCollapse: 'collapse', fontSize: '14px' },
-  filaTotalGeneral: { backgroundColor: '#fff8f8', borderTop: '2px solid #e8e8e8' },
-  tdTotal:          { padding: '14px 16px', fontWeight: '700', fontSize: '15px', color: '#111' },
-  estadoCentrado: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    justifyContent: 'center', padding: '60px 0', gap: '16px',
-  },
-  estadoTexto: { fontSize: '15px', color: '#888', margin: 0 },
-  errorBox: {
-    padding: '16px 20px', borderRadius: '10px',
-    backgroundColor: '#fdecea', color: '#c0392b',
-    fontSize: '14px', marginBottom: '16px',
-  },
-  errorModal: {
-    padding: '10px 14px', borderRadius: '8px',
-    backgroundColor: '#fdecea', color: '#c0392b',
-    fontSize: '13px', marginBottom: '16px', textAlign: 'center',
-  },
-  spinner: {
-    width: '32px', height: '32px', borderRadius: '50%',
-    border: '3px solid #e8e8e8', borderTopColor: '#1a7a4a',
-    animation: 'spin 0.8s linear infinite',
-  },
-  modalOverlay: {
-    position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-  },
-  modalCard: {
-    backgroundColor: '#ffffff', borderRadius: '20px',
-    padding: '32px', width: '420px', maxWidth: '90vw',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  modalTitulo: {
-    fontSize: '20px', fontWeight: '700', color: '#111111',
-    margin: '0 0 6px', textAlign: 'center',
-  },
-  modalSubtitulo: {
-    fontSize: '13px', color: '#888', textAlign: 'center', margin: '0 0 20px',
-  },
-  modalAdvertencia: {
-    fontSize: '13px', color: '#c0392b', textAlign: 'center', margin: '0 0 24px',
-  },
-  modalDetalle: {
-    backgroundColor: '#fafafa', borderRadius: '12px',
-    border: '1.5px solid #eeeeee', padding: '16px 20px',
-    marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '10px',
-  },
-  modalFila:    { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  modalLabel:   { fontSize: '13px', color: '#888888' },
-  modalValor:   { fontSize: '14px', color: '#111111', fontWeight: '600' },
-  modalDivider: { height: '1px', backgroundColor: '#eeeeee' },
-  modalBotones: { display: 'flex', gap: '12px' },
-  btnCancelar: {
-    flex: 1, padding: '13px 0', borderRadius: '12px',
-    border: '1.5px solid #e0e0e0', backgroundColor: '#ffffff',
-    color: '#444444', fontSize: '15px', fontWeight: '500',
-    cursor: 'pointer', fontFamily: 'inherit',
-  },
-  btnEliminarConfirm: {
-    flex: 1, padding: '13px 0', borderRadius: '12px',
-    border: 'none', backgroundColor: '#c0392b',
-    color: '#ffffff', fontSize: '15px', fontWeight: '600',
-    cursor: 'pointer', fontFamily: 'inherit',
-  },
-  formGrupo:   { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' },
-  formLabel: {
-    fontSize: '11px', fontWeight: '600', color: '#666',
-    textTransform: 'uppercase', letterSpacing: '0.05em',
-  },
-  input: {
-    padding: '10px 14px', borderRadius: '8px',
-    border: '1.5px solid #e0e0e0', fontSize: '14px',
-    fontFamily: 'inherit', color: '#111', outline: 'none',
-    width: '100%', boxSizing: 'border-box',
-  },
-  select: {
-    padding: '10px 14px', borderRadius: '8px',
-    border: '1.5px solid #e0e0e0', fontSize: '14px',
-    fontFamily: 'inherit', color: '#111', outline: 'none',
-    backgroundColor: '#fff', width: '100%', boxSizing: 'border-box',
-  },
-  btnGuardar: {
-    flex: 1, padding: '13px 0', borderRadius: '12px',
-    border: 'none', backgroundColor: '#1a7a4a',
-    color: '#ffffff', fontSize: '15px', fontWeight: '600',
-    cursor: 'pointer', fontFamily: 'inherit',
-  },
-  btnGuardarDeshabilitado: { backgroundColor: '#a8cdb8', cursor: 'not-allowed' },
-};

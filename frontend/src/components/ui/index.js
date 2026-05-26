@@ -22,3 +22,7 @@ export { default as SummaryRow }      from './SummaryRow.jsx';
 export { default as IconoAlerta }     from './IconoAlerta.jsx';
 export { default as LoadingState }    from './LoadingState.jsx';
 export { default as Tabs }            from './Tabs.jsx';
+export { default as Modal }           from './Modal.jsx';
+export { default as Select }          from './Select.jsx';
+export { default as BotonIconoFila }  from './BotonIconoFila.jsx';
+export { default as DetalleRecurso }  from './DetalleRecurso.jsx';
