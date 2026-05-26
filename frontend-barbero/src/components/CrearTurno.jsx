@@ -91,7 +91,6 @@ export default function CrearTurno({ barbero, onVolver, onExito }) {
     try {
       const data = await getServicios();
       setServicios(data);
-      console.log('[CrearTurno] getServicios — cargados:', data.length);
     } catch (err) {
       console.error('[CrearTurno] Error cargando servicios:', err.message);
       setErrorCarga('No se pudieron cargar los servicios.');
@@ -114,7 +113,6 @@ export default function CrearTurno({ barbero, onVolver, onExito }) {
     try {
       const data = await getDisponibilidad(barbero.id, reserva.servicio.id, reserva.fecha);
       setSlots(data.slots || []);
-      console.log('[CrearTurno] getDisponibilidad — slots:', (data.slots || []).length);
     } catch (err) {
       console.error('[CrearTurno] Error cargando disponibilidad:', err.message);
       setErrorCarga('No se pudo cargar la disponibilidad.');
@@ -144,7 +142,6 @@ export default function CrearTurno({ barbero, onVolver, onExito }) {
         ...(reserva.email.trim() ? { email: reserva.email.trim() } : {}),
       };
       const res = await crearTurnoAdmin(datos);
-      console.log('[CrearTurno] confirmar — completado | turno_id:', res.turno_id);
       setResultado(res);
     } catch (err) {
       console.error('[CrearTurno] Error al crear turno:', err.message);

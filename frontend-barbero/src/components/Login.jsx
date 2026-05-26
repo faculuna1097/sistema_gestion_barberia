@@ -61,7 +61,6 @@ export default function Login({ onAcceso }) {
     try {
       const data = await getBarberos();
       setBarberos(data);
-      console.log('[Login] getBarberos — cargados:', data.length);
     } catch (err) {
       console.error('[Login] Error cargando barberos:', err.message);
       setErrorCarga('No se pudo cargar la lista de barberos.');
@@ -81,7 +80,6 @@ export default function Login({ onAcceso }) {
         if (!activo) return;
         const logo = imagenes.find((img) => img.tipo === 'logo' && img.orden === 1);
         if (logo) setLogoUrl(logo.url);
-        console.log('[Login] getImagenesNegocio — logo:', logo ? 'encontrado' : 'sin logo');
       })
       .catch((err) => {
         console.warn('[Login] getImagenesNegocio — falló, login sin logo:', err.message);
@@ -101,7 +99,6 @@ export default function Login({ onAcceso }) {
    * Avanza a la fase de PIN con el barbero elegido.
    */
   const seleccionarBarbero = (b) => {
-    console.log('[Login] seleccionarBarbero —', b.nombre);
     setBarberoSel(b);
     setFase('pin');
   };
@@ -360,10 +357,8 @@ function PantallaPin({ barbero, onVolver, onAcceso }) {
    * y error (shake + reset).
    */
   const validarPin = useCallback(async (pinIngresado) => {
-    console.log('[Login] validarPin — request iniciado');
     try {
       const { token, barbero: bDevuelto } = await loginBarbero(barbero.id, pinIngresado);
-      console.log('[Login] validarPin — acceso concedido');
       setEstado(PIN_ESTADO.EXITO);
       setTimeout(() => onAcceso(token, bDevuelto), 600);
     } catch (err) {

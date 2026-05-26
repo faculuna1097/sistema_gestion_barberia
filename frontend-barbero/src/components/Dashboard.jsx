@@ -98,7 +98,6 @@ export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
       const data = await getTurnos({ fecha: hoy });
       setTurnos(data);
       setErrorCarga(null);
-      console.log('[Dashboard] cargarTurnos — completado |', data.length, 'turnos');
     } catch (err) {
       console.error('[Dashboard] Error cargando turnos:', err.message);
       setErrorCarga('No se pudieron cargar los turnos.');
@@ -141,7 +140,6 @@ export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
         const nuevoEstado = accion === 'completar' ? 'completado' : 'no_asistio';
         await patchEstadoTurno(turno.id, nuevoEstado);
       }
-      console.log('[Dashboard] ejecutarAccion — OK |', turno.id, '→', accion);
       setConfirma({ open: false, accion: null, turno: null });
       await cargarTurnos();
     } catch (err) {

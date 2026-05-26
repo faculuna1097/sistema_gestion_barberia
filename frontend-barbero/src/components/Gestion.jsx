@@ -205,7 +205,6 @@ function TabHorarios({ barbero }) {
       ]);
       setBloques(data);
       setHorarioTenant(tenant.horario_atencion || []);
-      console.log('[Gestion/Horarios] cargar — completado |', data.length, 'bloques');
     } catch (err) {
       console.error('[Gestion/Horarios] Error cargando horarios:', err.message);
       setErrorCarga('No se pudo cargar el horario.');
@@ -282,7 +281,6 @@ function TabHorarios({ barbero }) {
       const resultado = await putHorarios(barbero.id, payload);
       setBloques(resultado);
       mostrarFeedback('ok', 'Horarios guardados correctamente.');
-      console.log('[Gestion/Horarios] guardar — completado');
     } catch (err) {
       console.error('[Gestion/Horarios] Error guardando:', err.message);
       mostrarFeedback('error', `Error al guardar: ${err.message}`);
@@ -558,7 +556,6 @@ function TabSuspensiones({ barbero }) {
     try {
       const data = await getSuspensiones();
       setSuspensiones(data);
-      console.log('[Gestion/Suspensiones] cargar — completado |', data.length);
     } catch (err) {
       console.error('[Gestion/Suspensiones] Error cargando:', err.message);
       setErrorCarga('No se pudieron cargar las suspensiones.');
@@ -642,7 +639,6 @@ function TabSuspensiones({ barbero }) {
     setEliminando(true);
     try {
       await eliminarSuspension(confirmEliminar.id);
-      console.log('[Gestion/Suspensiones] eliminar — completado |', confirmEliminar.id);
       setConfirmEliminar(null);
       mostrarFeedback('ok', 'Suspensión eliminada.');
       await cargar();

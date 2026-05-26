@@ -32,7 +32,6 @@ let authToken = null;
  */
 export const setAuthToken = (token) => {
   authToken = token;
-  console.log('[api] setAuthToken — completado');
 };
 
 /**
@@ -41,7 +40,6 @@ export const setAuthToken = (token) => {
  */
 export const clearAuthToken = () => {
   authToken = null;
-  console.log('[api] clearAuthToken — completado');
 };
 
 /**

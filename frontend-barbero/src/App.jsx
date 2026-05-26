@@ -57,7 +57,6 @@ function App() {
    * @param {{id, nombre}} barberoData
    */
   const onLogin = useCallback((tokenRecibido, barberoData) => {
-    console.log('[App] onLogin — acceso concedido | barbero:', barberoData.nombre);
     setToken(tokenRecibido);
     setAuthToken(tokenRecibido);
     setBarbero(barberoData);
@@ -69,7 +68,6 @@ function App() {
    * Limpia token y vuelve al login.
    */
   const cerrarSesion = useCallback(() => {
-    console.log('[App] cerrarSesion — iniciado');
     setToken(null);
     clearAuthToken();
     setBarbero(null);

@@ -135,7 +135,6 @@ export default function Agenda() {
     try {
       const data = await getTurnos({ fecha });
       setTurnos(data);
-      console.log('[Agenda] cargarTurnos — completado |', fecha, '|', data.length);
     } catch (err) {
       console.error('[Agenda] Error cargando turnos:', err.message);
       setErrorCarga('No se pudieron cargar los turnos.');
@@ -179,7 +178,6 @@ export default function Agenda() {
         const nuevoEstado = accion === 'completar' ? 'completado' : 'no_asistio';
         await patchEstadoTurno(turno.id, nuevoEstado);
       }
-      console.log('[Agenda] ejecutarAccion — OK |', turno.id, '→', accion);
       setConfirma({ open: false, accion: null, turno: null });
       await cargarTurnos();
     } catch (err) {

@@ -135,7 +135,6 @@ export default function MiPlanilla() {
       ]);
       setDetalle(det);
       setResumen(res);
-      console.log('[MiPlanilla] cargar — completado | semana:', semana);
     } catch (err) {
       console.error('[MiPlanilla] Error cargando planilla:', err.message);
       setErrorCarga('No se pudo cargar la planilla.');

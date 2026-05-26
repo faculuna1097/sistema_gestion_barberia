@@ -76,7 +76,6 @@ export default function Clientes({ onVolver }) {
     try {
       const data = await getMisClientes();
       setClientes(data);
-      console.log('[Clientes] cargar — completado |', data.length, 'clientes');
     } catch (err) {
       console.error('[Clientes] Error cargando clientes:', err.message);
       setError('No se pudo cargar la lista de clientes.');
