@@ -392,7 +392,7 @@ function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisi
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '10px 14px',
-          background: esHoy ? theme.accentSoft : theme.surfaceAlt,
+          background: esHoy ? theme.accentSoft : theme.surface,
           border: 'none',
           borderBottom: `1px solid ${theme.hairline}`,
           cursor: 'pointer',
@@ -465,7 +465,7 @@ function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisi
           </>
         )}
         <tfoot>
-          <tr style={{ background: theme.surfaceAlt, borderTop: `1px solid ${theme.hairline}` }}>
+          <tr style={{ borderTop: `2px solid ${theme.accent}` }}>
             <td colSpan={2} style={{ ...tdTotalBase, color: theme.ink }}>
               Subtotal — {cortesDelDia.length} corte{cortesDelDia.length !== 1 ? 's' : ''}
             </td>
@@ -557,7 +557,7 @@ function TablaResumen({ resumenData, mostrarComisiones }) {
           ))}
         </tbody>
         <tfoot>
-          <tr style={{ background: theme.surfaceAlt, borderTop: `1px solid ${theme.hairline}` }}>
+          <tr style={{ borderTop: `2px solid ${theme.accent}` }}>
             <td style={tdTotalBase}>TOTAL</td>
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>{totales.cantidad_cortes}</td>
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>{fmtPesos(totales.monto_servicios)}</td>
@@ -633,12 +633,11 @@ function ThCelda({ children, alinear = 'left' }) {
       padding: '8px 14px',
       fontFamily: theme.mono,
       fontSize: theme.sizeMicro,
-      fontWeight: theme.weightMedium,
-      color: theme.muted,
+      fontWeight: theme.weightHeading,
+      color: theme.inkSoft,
       textTransform: 'uppercase',
       letterSpacing: '0.06em',
       textAlign: alinear,
-      background: theme.surfaceAlt,
       borderBottom: `1px solid ${theme.hairline}`,
     }}>
       {children}

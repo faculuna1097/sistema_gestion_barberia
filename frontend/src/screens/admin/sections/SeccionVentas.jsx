@@ -114,11 +114,10 @@ function TablaVentas({ ventas, totalGeneral, onEditar, onEliminar, accionesDesha
                 padding: '10px 12px',
                 fontFamily: theme.mono,
                 fontSize: theme.sizeMicro,
-                fontWeight: theme.weightMedium,
-                color: theme.muted,
+                fontWeight: theme.weightHeading,
+                color: theme.inkSoft,
                 textTransform: 'uppercase',
                 letterSpacing: '0.04em',
-                background: theme.surfaceAlt,
                 borderBottom: `1px solid ${theme.hairline}`,
                 textAlign: c.align,
                 whiteSpace: 'nowrap',
@@ -170,30 +169,27 @@ function TablaVentas({ ventas, totalGeneral, onEditar, onEliminar, accionesDesha
         <tfoot>
           <tr>
             <td colSpan={4} style={{
-              padding: '12px 12px',
+              padding: '14px 12px',
               fontFamily: theme.body,
               fontSize: theme.sizeBody,
               fontWeight: theme.weightHeading,
               color: theme.ink,
-              background: theme.surfaceAlt,
-              borderTop: `1px solid ${theme.hairline}`,
+              borderTop: `2px solid ${theme.accent}`,
               textAlign: 'left',
             }}>Total del mes</td>
             <td style={{
-              padding: '12px 12px',
+              padding: '14px 12px',
               fontFamily: theme.body,
               fontSize: theme.sizeBody,
               fontWeight: theme.weightHeading,
               color: theme.accent,
-              background: theme.surfaceAlt,
-              borderTop: `1px solid ${theme.hairline}`,
+              borderTop: `2px solid ${theme.accent}`,
               textAlign: 'right',
               fontVariantNumeric: 'tabular-nums',
               whiteSpace: 'nowrap',
             }}>{fmtPesos(totalGeneral)}</td>
             <td colSpan={2} style={{
-              background: theme.surfaceAlt,
-              borderTop: `1px solid ${theme.hairline}`,
+              borderTop: `2px solid ${theme.accent}`,
             }} />
           </tr>
         </tfoot>
@@ -223,7 +219,6 @@ function TablaResumen({ totales, totalGeneral, cantidadTotal }) {
     }}>
       <div style={{
         padding: '12px 14px',
-        background: theme.surfaceAlt,
         borderBottom: `1px solid ${theme.hairline}`,
         fontFamily: theme.body,
         fontSize: theme.sizeHeading,
@@ -244,12 +239,11 @@ function TablaResumen({ totales, totalGeneral, cantidadTotal }) {
                 padding: '10px 12px',
                 fontFamily: theme.mono,
                 fontSize: theme.sizeMicro,
-                fontWeight: theme.weightMedium,
-                color: theme.muted,
+                fontWeight: theme.weightHeading,
+                color: theme.inkSoft,
                 textTransform: 'uppercase',
                 letterSpacing: '0.04em',
-                background: theme.surface,
-                borderBottom: `1px solid ${theme.hairlineSoft}`,
+                borderBottom: `1px solid ${theme.hairline}`,
                 textAlign: c.align,
                 whiteSpace: 'nowrap',
               }}>{c.label}</th>
@@ -275,34 +269,31 @@ function TablaResumen({ totales, totalGeneral, cantidadTotal }) {
           })}
           <tr>
             <td style={{
-              padding: '12px 12px',
+              padding: '14px 12px',
               fontFamily: theme.body,
               fontSize: theme.sizeBody,
               fontWeight: theme.weightHeading,
               color: theme.ink,
-              background: theme.surfaceAlt,
-              borderTop: `1px solid ${theme.hairline}`,
+              borderTop: `2px solid ${theme.accent}`,
               textAlign: 'left',
             }}>Total general</td>
             <td style={{
-              padding: '12px 12px',
+              padding: '14px 12px',
               fontFamily: theme.body,
               fontSize: theme.sizeBody,
               color: theme.muted,
-              background: theme.surfaceAlt,
-              borderTop: `1px solid ${theme.hairline}`,
+              borderTop: `2px solid ${theme.accent}`,
               textAlign: 'center',
               fontVariantNumeric: 'tabular-nums',
               whiteSpace: 'nowrap',
             }}>{cantidadTotal} unidades</td>
             <td style={{
-              padding: '12px 12px',
+              padding: '14px 12px',
               fontFamily: theme.body,
               fontSize: theme.sizeBody,
               fontWeight: theme.weightHeading,
               color: theme.accent,
-              background: theme.surfaceAlt,
-              borderTop: `1px solid ${theme.hairline}`,
+              borderTop: `2px solid ${theme.accent}`,
               textAlign: 'right',
               fontVariantNumeric: 'tabular-nums',
               whiteSpace: 'nowrap',

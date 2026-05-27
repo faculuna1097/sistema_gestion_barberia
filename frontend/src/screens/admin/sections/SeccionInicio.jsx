@@ -9,8 +9,6 @@ import {
   DollarSign,
   Package,
   CheckCircle2,
-  TrendingUp,
-  TrendingDown,
   RefreshCw,
 } from 'lucide-react';
 
@@ -24,6 +22,7 @@ import {
   IconoAlerta,
   Button,
   LoadingState,
+  BadgeVariacion,
 } from '../../../components/ui';
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
@@ -101,55 +100,6 @@ function Metrica({ icon, valor, label, tintColor }) {
         }}>{label}</span>
       </div>
     </div>
-  );
-}
-
-/**
- * BadgeVariacion
- * Badge de comparativa porcentual con ícono ▲/▼.
- * Verde (success) si pct ≥ 0, rojo (danger) si pct < 0.
- * Si pct es null, muestra un fallback neutro con sinDatosLabel.
- *
- * Candidato a promover a primitivo cuando aparezca el segundo caso
- * de uso (Balances/Ventas seguramente lo van a pedir).
- *
- * @param {number|null} props.pct - Porcentaje de variación.
- * @param {string} [props.sinDatosLabel] - Texto del fallback.
- */
-function BadgeVariacion({ pct, sinDatosLabel = 'Sin datos previos' }) {
-  if (pct === null || pct === undefined) {
-    return (
-      <span style={{
-        fontFamily: theme.body,
-        fontSize: theme.sizeBody,
-        color: theme.mutedSoft,
-        fontWeight: theme.weightMedium,
-      }}>{sinDatosLabel}</span>
-    );
-  }
-
-  const subiendo = pct >= 0;
-  const Icon = subiendo ? TrendingUp : TrendingDown;
-  const fg = subiendo ? theme.success : theme.danger;
-  const bg = subiendo ? theme.successSoft : theme.dangerSoft;
-
-  return (
-    <span style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 6,
-      padding: '4px 10px',
-      borderRadius: 999,
-      background: bg,
-      color: fg,
-      fontFamily: theme.body,
-      fontSize: theme.sizeBody,
-      fontWeight: theme.weightMedium,
-      letterSpacing: '-0.005em',
-    }}>
-      <Icon size={14} strokeWidth={2} />
-      {Math.abs(pct)}%
-    </span>
   );
 }
 
