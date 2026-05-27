@@ -1,36 +1,61 @@
 // /frontend/src/screens/admin/sections/SeccionPlanillas.jsx
+//
+// Sección Planillas del panel de administrador (read-only).
+//
+// Tab Detalle por barbero:
+//   - Segunda barra de tabs (underline) para elegir barbero activo.
+//   - Un bloque colapsable por día con la tabla de cortes + subtotal del día.
+//   - El subtotal queda visible aunque el bloque esté contraído (panorama rápido
+//     de la semana sin necesidad de expandir cada día).
+//   - Con comisiones ON, el slot "Pago" del subtotal muestra el monto a pagar al
+//     barbero ese día (comisión + propinas). Esta semántica se hereda del
+//     diseño original (Paso 2 del rediseño consideró cambiarlo y se descartó —
+//     ver pregunta 3 del chat: opción c).
+//
+// Tab Resumen semanal:
+//   - Tabla consolidada por barbero con totales de la semana + columna
+//     Comisión opcional (toggle global).
+//
+// Comisión por día: comisión calculada sobre monto_servicios (nunca sobre
+// propinas), según comision_tipo del barbero ("porcentaje" o "fijo" por corte).
+//
+// Sistema de diseño: tokens + Geist + Lucide + onClick. Densidad compacta.
+// El fondo del contenedor lo da PanelAdmin (theme.surfaceAlt, D7 del plan).
+// Loading via primitivo LoadingState (D6). Hover de filas via :hover scoped con
+// <style> inline (excepción consciente §4.2, deuda #21).
 
-// Sección de planillas semanales del panel de administrador.
-//
-// Layout:
-//   Fila 1 — título | tabs Detalle/Resumen
-//   Fila 2 — toggle comisiones | selector de semana | exportar Excel
-//   Fila 3 — pills de barberos (solo en tab Detalle)
-//
-// Tab Detalle: una tabla por día del barbero seleccionado.
-//   Con comisiones ON: agrega columna "Comisión" en la fila de subtotal de cada día.
-//   La comisión se calcula sobre monto_servicios del día (nunca sobre propinas).
-//
-// Tab Resumen: tabla consolidada por barbero.
-//   Con comisiones ON: muestra columna "Comisión" con porcentaje aplicado.
-//
-// No recibe props de datos — carga sus propios datos con useEffect.
+import { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
+import { ChevronRight, ChevronDown, Scissors, RefreshCw } from 'lucide-react';
 
-import { useState, useEffect } from "react";
-import * as XLSX from "xlsx";
 import { apiFetch } from '../../../services/api';
 import SelectorSemana from '../../../components/SelectorSemana';
+import BadgeFormaPago from '../../../components/BadgeFormaPago';
 import BotonExportarExcel from '../../../components/BotonExportarExcel';
 import TogglePill from '../../../components/TogglePill';
-import { getFechaHoy, formatFechaCorta, getSemanaActual, semanaAFechaLunes } from '../../../utils/fechas';
-import { formatARS, formatPago } from '../../../utils/formatos';
+import {
+  getFechaHoy,
+  formatFechaCorta,
+  getSemanaActual,
+  semanaAFechaLunes,
+} from '../../../utils/fecha';
+import { fmtPesos, formatPago } from '../../../utils/formato';
+import {
+  ScreenHeader,
+  Tabs,
+  LoadingState,
+  EmptyState,
+  Button,
+  IconoAlerta,
+} from '../../../components/ui';
+import { theme } from '../../../theme/tokens.js';
 
-// ─── Helpers de semana ────────────────────────────────────────────────────────
-
+// ─── Helpers de dominio ───────────────────────────────────────────────────────
 
 /**
- * Agrupa un array de cortes por fecha.
- * @returns {Array} [{ fecha, cortes[] }] ordenado cronológicamente
+ * Agrupa un array de cortes por fecha (YYYY-MM-DD) y ordena cronológicamente.
+ * @param {Array} cortes
+ * @returns {Array<{fecha: string, cortes: Array}>}
  */
 function agruparPorDia(cortes) {
   const mapa = new Map();
@@ -44,36 +69,46 @@ function agruparPorDia(cortes) {
 }
 
 /**
- * Calcula la comisión sobre el monto de servicios de un día.
- * @param {number} montoServicios - Suma de precios de servicios del día
- * @param {string} tipo           - "porcentaje" | "fijo"
- * @param {number} valor          - Valor de comisión del barbero
- * @param {number} cantidadCortes - Cantidad de cortes del día (para tipo fijo)
+ * Calcula la comisión del día sobre el monto de servicios.
+ * @param {number} montoServicios
+ * @param {'porcentaje'|'fijo'} tipo
+ * @param {number} valor
+ * @param {number} cantidadCortes
  * @returns {number}
  */
 function calcularComisionDia(montoServicios, tipo, valor, cantidadCortes) {
-  if (tipo === "porcentaje") return montoServicios * valor / 100;
-  return valor * cantidadCortes; // fijo por corte
+  if (tipo === 'porcentaje') return montoServicios * valor / 100;
+  return valor * cantidadCortes;
 }
+
+// ─── Constantes ───────────────────────────────────────────────────────────────
+const TABS_PRINCIPALES = [
+  { key: 'detalle', label: 'Detalle por barbero' },
+  { key: 'resumen', label: 'Resumen semanal' },
+];
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function SeccionPlanillas() {
-  const [semana, setSemana]               = useState(getSemanaActual);
-  const [tabActiva, setTabActiva]         = useState("detalle");
-  const [detalleData, setDetalleData]     = useState([]);
-  const [resumenData, setResumenData]     = useState(null);
-  const [barberoActivo, setBarberoActivo] = useState(null);
+  const [semana, setSemana]                       = useState(getSemanaActual);
+  const [tabActiva, setTabActiva]                 = useState('detalle');
+  const [detalleData, setDetalleData]             = useState([]);
+  const [resumenData, setResumenData]             = useState(null);
+  const [barberoActivo, setBarberoActivo]         = useState(null);
   const [mostrarComisiones, setMostrarComisiones] = useState(true);
-  const [loading, setLoading]             = useState(false);
-  const [error, setError]                 = useState(null);
-  // Set de fechas (YYYY-MM-DD) actualmente expandidas en el tab Detalle.
-  // Por defecto solo el día de hoy arranca expandido; el resto contraído.
+  const [cargando, setCargando]                   = useState(false);
+  const [error, setError]                         = useState(null);
+  const [intento, setIntento]                     = useState(0);
+  // Fechas (YYYY-MM-DD) actualmente expandidas en el tab Detalle.
+  // Por defecto solo el día de hoy arranca expandido al cargar la semana.
   const [diasExpandidos, setDiasExpandidos] = useState(new Set());
 
   // ── Carga de datos ────────────────────────────────────────────────────────
+  // `intento` re-dispara el efecto al hacer "Reintentar". `cancelado` evita
+  // setState sobre un efecto vencido (cambio rápido de semana o desmonte).
   useEffect(() => {
+    let cancelado = false;
     const cargarDatos = async () => {
-      setLoading(true);
+      setCargando(true);
       setError(null);
       try {
         const fechaLunes = semanaAFechaLunes(semana);
@@ -81,25 +116,23 @@ export default function SeccionPlanillas() {
           apiFetch(`/admin/planilla?semana=${fechaLunes}`),
           apiFetch(`/admin/planilla/resumen?semana=${fechaLunes}`),
         ]);
-        if (!resDetalle.ok || !resResumen.ok) throw new Error("Error en la respuesta del servidor");
-        const [detalle, resumen] = await Promise.all([
-          resDetalle.json(),
-          resResumen.json(),
-        ]);
+        if (!resDetalle.ok || !resResumen.ok) throw new Error('Error en la respuesta del servidor');
+        const [detalle, resumen] = await Promise.all([resDetalle.json(), resResumen.json()]);
+        if (cancelado) return;
         setDetalleData(detalle);
         setResumenData(resumen);
         if (detalle.length > 0) setBarberoActivo(detalle[0].barbero_id);
-        // Solo el día de hoy arranca expandido al cargar la semana.
         setDiasExpandidos(new Set([getFechaHoy()]));
       } catch (err) {
-        console.error("[seccionPlanillas] Error en cargarDatos:", err.message);
-        setError("No se pudieron cargar los datos. Revisá la conexión.");
+        console.error('[seccionPlanillas] Error en cargarDatos:', err.message);
+        if (!cancelado) setError('No se pudieron cargar los datos. Revisá la conexión.');
       } finally {
-        setLoading(false);
+        if (!cancelado) setCargando(false);
       }
     };
     cargarDatos();
-  }, [semana]);
+    return () => { cancelado = true; };
+  }, [semana, intento]);
 
   // ── Exportación Excel — Detalle ───────────────────────────────────────────
   const exportarDetalle = () => {
@@ -109,44 +142,49 @@ export default function SeccionPlanillas() {
       const infoComision = resumenData?.barberos.find((b) => b.barbero_id === barbero.barbero_id);
       filas.push({
         Barbero: `── ${barbero.barbero_nombre} ──`,
-        Fecha: "", Hora: "", Servicio: "", "Monto ($)": "", "Propina ($)": "", "Total ($)": "",
-        ...(mostrarComisiones ? { "Comisión ($)": "" } : {}),
-        "Forma de pago": "",
+        Fecha: '', Hora: '', Servicio: '', 'Monto ($)': '', 'Propina ($)': '', 'Total ($)': '',
+        ...(mostrarComisiones ? { 'Comisión ($)': '' } : {}),
+        'Forma de pago': '',
       });
       agruparPorDia(barbero.cortes).forEach(({ fecha, cortes: cd }) => {
         cd.forEach((c) => {
           filas.push({
-            Barbero: "", Fecha: formatFechaCorta(c.fecha), Hora: c.hora, Servicio: c.servicio_nombre,
-            "Monto ($)": c.monto_servicios, "Propina ($)": c.propina,
-            "Total ($)": c.monto_servicios + c.propina,
-            ...(mostrarComisiones ? { "Comisión ($)": "" } : {}),
-            "Forma de pago": formatPago(c.forma_pago),
+            Barbero: '', Fecha: formatFechaCorta(c.fecha), Hora: c.hora, Servicio: c.servicio_nombre,
+            'Monto ($)': c.monto_servicios, 'Propina ($)': c.propina,
+            'Total ($)': c.monto_servicios + c.propina,
+            ...(mostrarComisiones ? { 'Comisión ($)': '' } : {}),
+            'Forma de pago': formatPago(c.forma_pago),
           });
         });
         if (mostrarComisiones && infoComision) {
           const montoDelDia = cd.reduce((s, c) => s + c.monto_servicios, 0);
-          const comisionDelDia = calcularComisionDia(montoDelDia, infoComision.comision_tipo, infoComision.comision_valor, cd.length);
+          const comisionDelDia = calcularComisionDia(
+            montoDelDia,
+            infoComision.comision_tipo,
+            infoComision.comision_valor,
+            cd.length,
+          );
           filas.push({
-            Barbero: `Subtotal (${cd.length} cortes)`, Fecha: "", Hora: "", Servicio: "",
-            "Monto ($)": montoDelDia,
-            "Propina ($)": cd.reduce((s, c) => s + c.propina, 0),
-            "Total ($)": montoDelDia + cd.reduce((s, c) => s + c.propina, 0),
-            "Comisión ($)": comisionDelDia, "Forma de pago": "",
+            Barbero: `Subtotal (${cd.length} cortes)`, Fecha: '', Hora: '', Servicio: '',
+            'Monto ($)': montoDelDia,
+            'Propina ($)': cd.reduce((s, c) => s + c.propina, 0),
+            'Total ($)': montoDelDia + cd.reduce((s, c) => s + c.propina, 0),
+            'Comisión ($)': comisionDelDia, 'Forma de pago': '',
           });
         }
       });
       const totalMonto   = barbero.cortes.reduce((s, c) => s + c.monto_servicios, 0);
       const totalPropina = barbero.cortes.reduce((s, c) => s + c.propina, 0);
       filas.push({
-        Barbero: `Subtotal semana (${barbero.cortes.length} cortes)`, Fecha: "", Hora: "", Servicio: "",
-        "Monto ($)": totalMonto, "Propina ($)": totalPropina, "Total ($)": totalMonto + totalPropina,
-        ...(mostrarComisiones && infoComision ? { "Comisión ($)": infoComision.comision } : {}),
-        "Forma de pago": "",
+        Barbero: `Subtotal semana (${barbero.cortes.length} cortes)`, Fecha: '', Hora: '', Servicio: '',
+        'Monto ($)': totalMonto, 'Propina ($)': totalPropina, 'Total ($)': totalMonto + totalPropina,
+        ...(mostrarComisiones && infoComision ? { 'Comisión ($)': infoComision.comision } : {}),
+        'Forma de pago': '',
       });
-      filas.push({ Barbero: "", Fecha: "", Hora: "", Servicio: "", "Monto ($)": "", "Propina ($)": "", "Total ($)": "", "Forma de pago": "" });
+      filas.push({ Barbero: '', Fecha: '', Hora: '', Servicio: '', 'Monto ($)': '', 'Propina ($)': '', 'Total ($)': '', 'Forma de pago': '' });
     });
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), "Detalle semanal");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Detalle semanal');
     XLSX.writeFile(wb, `detalle-semanal-${semana}.xlsx`);
   };
 
@@ -155,19 +193,19 @@ export default function SeccionPlanillas() {
     if (!resumenData?.barberos.length) return;
     const filas = resumenData.barberos.map((b) => ({
       Barbero: b.barbero_nombre, Cortes: b.cantidad_cortes,
-      "Monto servicios ($)": b.monto_servicios, "Propinas ($)": b.propinas,
-      "Total generado ($)": b.total_generado,
-      ...(mostrarComisiones ? { "Comisión ($)": b.comision } : {}),
+      'Monto servicios ($)': b.monto_servicios, 'Propinas ($)': b.propinas,
+      'Total generado ($)': b.total_generado,
+      ...(mostrarComisiones ? { 'Comisión ($)': b.comision } : {}),
     }));
     const t = resumenData.totales;
     filas.push({
-      Barbero: "TOTAL", Cortes: t.cantidad_cortes,
-      "Monto servicios ($)": t.monto_servicios, "Propinas ($)": t.propinas,
-      "Total generado ($)": t.total_generado,
-      ...(mostrarComisiones ? { "Comisión ($)": t.comision } : {}),
+      Barbero: 'TOTAL', Cortes: t.cantidad_cortes,
+      'Monto servicios ($)': t.monto_servicios, 'Propinas ($)': t.propinas,
+      'Total generado ($)': t.total_generado,
+      ...(mostrarComisiones ? { 'Comisión ($)': t.comision } : {}),
     });
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), "Resumen semanal");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Resumen semanal');
     XLSX.writeFile(wb, `resumen-semanal-${semana}.xlsx`);
   };
 
@@ -179,7 +217,6 @@ export default function SeccionPlanillas() {
 
   /**
    * Alterna la expansión de un bloque de día.
-   * Si la fecha está en el Set, la quita (contrae); si no, la agrega (expande).
    */
   const toggleDia = (fecha) => {
     setDiasExpandidos((prev) => {
@@ -191,443 +228,455 @@ export default function SeccionPlanillas() {
   };
 
   /**
-   * Cambia de barbero activo y resetea los días expandidos a solo hoy.
-   * Evita que quede "expandido" un día que el nuevo barbero no trabajó.
+   * Cambia el barbero activo y resetea los días expandidos a solo hoy
+   * (evita que quede expandido un día que el nuevo barbero no trabajó).
    */
   const cambiarBarbero = (barberoId) => {
     setBarberoActivo(barberoId);
     setDiasExpandidos(new Set([hoy]));
   };
 
+  // ── Early returns: loading / error ────────────────────────────────────────
+  if (cargando) return <LoadingState />;
+
+  if (error) return (
+    <EmptyState
+      glyph={<IconoAlerta />}
+      title="No se pudo cargar"
+      body={error}
+      action={
+        <Button variant="secondary" full={false} onClick={() => setIntento(n => n + 1)}>
+          <RefreshCw size={16} strokeWidth={1.75} />
+          Reintentar
+        </Button>
+      }
+    />
+  );
+
+  // ── Disabled de exportación según tab activa ──────────────────────────────
+  const exportDisabled = tabActiva === 'detalle'
+    ? detalleData.length === 0
+    : !resumenData?.barberos?.length;
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={styles.contenedor}>
+    <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Hover scoped para filas de cuerpo de tabla (excepción consciente §4.2, deuda #21). */}
+      <style>{`.om-planillas-fila:hover { background: ${theme.surfaceAlt}; }`}</style>
 
-      {/* ── FILA 1: título | tabs principales ────────────────────────── */}
-      <div style={styles.fila1}>
-        <div>
-          <h2 style={styles.titulo}>Planillas</h2>
-          <p style={styles.subtitulo}>Cortes y comisiones por barbero, semana a semana</p>
+      <ScreenHeader title="Planillas" subtitle="Cortes y comisiones por barbero, semana a semana" />
+
+      <Tabs items={TABS_PRINCIPALES} value={tabActiva} onChange={setTabActiva} />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', gap: 16 }}>
+        <TogglePill
+          activo={mostrarComisiones}
+          onToggle={() => setMostrarComisiones(v => !v)}
+          labelOn="Con comisiones"
+          labelOff="Sin comisiones"
+        />
+        <div style={{ justifySelf: 'center' }}>
+          <SelectorSemana value={semana} onChange={setSemana} />
         </div>
-        <div style={styles.tabsContainer}>
-          {[
-            { id: "detalle", label: "Detalle por barbero" },
-            { id: "resumen", label: "Resumen semanal" },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              style={{ ...styles.tabBtn, ...(tabActiva === tab.id ? styles.tabBtnActivo : {}) }}
-              onPointerDown={() => setTabActiva(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <BotonExportarExcel
+          onClick={tabActiva === 'detalle' ? exportarDetalle : exportarResumen}
+          disabled={exportDisabled}
+        />
       </div>
 
-      {/* ── FILA 2: toggle comisiones | selector semana | exportar Excel ─ */}
-      <div style={styles.fila2}>
-        <div style={{ justifySelf: "start" }}>
-          <TogglePill
-            activo={mostrarComisiones}
-            onToggle={() => setMostrarComisiones((v) => !v)}
-            labelOn="Con comisiones"
-            labelOff="Sin comisiones"
+      {/* ── TAB DETALLE ───────────────────────────────────────────────────── */}
+      {tabActiva === 'detalle' && (
+        detalleData.length === 0 ? (
+          <EmptyState
+            glyph={<Scissors size={28} strokeWidth={1.5} />}
+            title="Sin cortes esta semana"
+            body="No hay cortes registrados en la semana seleccionada."
           />
-        </div>
-
-        <SelectorSemana value={semana} onChange={setSemana} />
-
-        <div style={{ justifySelf: "end" }}>
-          <BotonExportarExcel onClick={tabActiva === "detalle" ? exportarDetalle : exportarResumen} />
-        </div>
-      </div>
-
-      {/* ── CONTENIDO ────────────────────────────────────────────────────── */}
-      <div style={styles.tabContenido}>
-
-        {loading && <p style={styles.estadoTexto}>Cargando...</p>}
-        {!loading && error && <p style={styles.errorTexto}>{error}</p>}
-
-        {/* ── TAB: DETALLE ─────────────────────────────────────────────── */}
-        {!loading && !error && tabActiva === "detalle" && (
+        ) : (
           <>
-            {detalleData.length === 0 && (
-              <p style={styles.estadoTexto}>No hay cortes registrados esta semana.</p>
-            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {detalleData.map((b) => (
+                <ChipBarbero
+                  key={b.barbero_id}
+                  label={b.barbero_nombre}
+                  activo={barberoActivo === b.barbero_id}
+                  onClick={() => cambiarBarbero(b.barbero_id)}
+                />
+              ))}
+            </div>
 
-            {detalleData.length > 0 && (
-              <>
-                {/* Fila 3 — pills de barberos */}
-                <div style={styles.fila3}>
-                  <div style={styles.tabsContainer}>
-                    {detalleData.map((b) => (
-                      <button
-                        key={b.barbero_id}
-                        style={{ ...styles.tabBtn, ...(barberoActivo === b.barbero_id ? styles.tabBtnActivo : {}) }}
-                        onPointerDown={() => cambiarBarbero(b.barbero_id)}
-                      >
-                        {b.barbero_nombre}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {diasDelBarbero.length === 0 && (
-                  <p style={styles.estadoTexto}>Este barbero no tiene cortes esta semana.</p>
-                )}
-
-                {diasDelBarbero.map(({ fecha, cortes: cortesDelDia }) => {
-                  const esHoy           = fecha === hoy;
-                  const totalMonto      = cortesDelDia.reduce((s, c) => s + c.monto_servicios, 0);
-                  const totalProp       = cortesDelDia.reduce((s, c) => s + c.propina, 0);
-                  const totalGeneral    = totalMonto + totalProp;
-                  const comisionDelDia  = infoComisionActiva
-                    ? calcularComisionDia(totalMonto, infoComisionActiva.comision_tipo, infoComisionActiva.comision_valor, cortesDelDia.length)
-                    : 0;
-
-                  return (
-                    <div key={fecha} style={styles.bloque}>
-                      <div
-                        style={{
-                          ...styles.bloqueTituloRow,
-                          backgroundColor: esHoy ? "#f0faf5" : "#fafafa",
-                          cursor: "pointer",
-                        }}
-                        onPointerDown={() => toggleDia(fecha)}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <span style={styles.bloqueTituloTexto}>{formatFechaCorta(fecha)}</span>
-                          {esHoy && <span style={styles.badgeHoy}>Hoy</span>}
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                          <span style={styles.bloqueCantidad}>
-                            {cortesDelDia.length} corte{cortesDelDia.length !== 1 ? "s" : ""}
-                          </span>
-                          <span style={styles.chevron}>
-                            {diasExpandidos.has(fecha) ? "▼" : "▶"}
-                          </span>
-                        </div>
-                      </div>
-
-                      <table style={styles.tabla}>
-                        {diasExpandidos.has(fecha) && (
-                          <thead>
-                            <tr>
-                              <th style={styles.th}>Hora</th>
-                              <th style={styles.th}>Servicio</th>
-                              <th style={{ ...styles.th, textAlign: "right" }}>Monto</th>
-                              <th style={{ ...styles.th, textAlign: "right" }}>Propina</th>
-                              <th style={{ ...styles.th, textAlign: "right" }}>Total</th>
-                              <th style={styles.th}>Pago</th>
-                            </tr>
-                          </thead>
-                        )}
-                        {diasExpandidos.has(fecha) && (
-                          <tbody>
-                            {cortesDelDia.map((c) => (
-                              <tr key={c.corte_id}>
-                                <td style={styles.td}>{c.hora}</td>
-                                <td style={styles.td}>{c.servicio_nombre}</td>
-                                <td style={{ ...styles.td, textAlign: "right" }}>{formatARS(c.monto_servicios)}</td>
-                                <td style={{ ...styles.td, textAlign: "right" }}>
-                                  {c.propina > 0 ? formatARS(c.propina) : <span style={styles.sinPropina}>—</span>}
-                                </td>
-                                <td style={{ ...styles.td, textAlign: "right", fontWeight: "600" }}>
-                                  {formatARS(c.monto_servicios + c.propina)}
-                                </td>
-                                <td style={styles.td}>
-                                  <span style={{ ...styles.badgePago, ...(c.forma_pago === "efectivo" ? styles.badgeEfectivo : styles.badgeMP) }}>
-                                    {formatPago(c.forma_pago)}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        )}
-                        <tfoot>
-                          <tr style={styles.trTotal}>
-                            <td style={styles.tdTotal} colSpan={2}>
-                              Subtotal — {cortesDelDia.length} corte{cortesDelDia.length !== 1 ? "s" : ""}
-                            </td>
-                            <td style={{ ...styles.tdTotal, textAlign: "right" }}>{formatARS(totalMonto)}</td>
-                            <td style={{ ...styles.tdTotal, textAlign: "right" }}>{formatARS(totalProp)}</td>
-                            <td style={{ ...styles.tdTotal, textAlign: "right", color: "#1a7a4a" }}>{formatARS(totalGeneral)}</td>
-                            <td style={{ ...styles.tdTotal, textAlign: "right" }}>
-                              {mostrarComisiones && infoComisionActiva ? (
-                                <span style={styles.comisionValor}>
-                                  {formatARS(comisionDelDia + totalProp)}
-                                  <span style={styles.comisionTipo}>
-                                    {infoComisionActiva.comision_tipo === "porcentaje"
-                                      ? ` (${infoComisionActiva.comision_valor}% + prop)`
-                                      : ` ($${infoComisionActiva.comision_valor}/c + prop)`}
-                                  </span>
-                                </span>
-                              ) : null}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  );
-                })}
-              </>
-            )}
-          </>
-        )}
-
-        {/* ── TAB: RESUMEN ─────────────────────────────────────────────── */}
-        {!loading && !error && tabActiva === "resumen" && (
-          <>
-            {(!resumenData || resumenData.barberos.length === 0) && (
-              <p style={styles.estadoTexto}>No hay cortes registrados esta semana.</p>
-            )}
-
-            {resumenData && resumenData.barberos.length > 0 && (
-              <div style={styles.bloque}>
-                <table style={styles.tabla}>
-                  <thead>
-                    <tr>
-                      <th style={styles.th}>Barbero</th>
-                      <th style={{ ...styles.th, textAlign: "right" }}>Cortes</th>
-                      <th style={{ ...styles.th, textAlign: "right" }}>Monto servicios</th>
-                      <th style={{ ...styles.th, textAlign: "right" }}>Propinas</th>
-                      <th style={{ ...styles.th, textAlign: "right" }}>Total generado</th>
-                      {mostrarComisiones && (
-                        <th style={{ ...styles.th, textAlign: "right" }}>Comisión</th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {resumenData.barberos.map((b) => (
-                      <tr key={b.barbero_id}>
-                        <td style={{ ...styles.td, fontWeight: "600" }}>{b.barbero_nombre}</td>
-                        <td style={{ ...styles.td, textAlign: "right" }}>{b.cantidad_cortes}</td>
-                        <td style={{ ...styles.td, textAlign: "right" }}>{formatARS(b.monto_servicios)}</td>
-                        <td style={{ ...styles.td, textAlign: "right" }}>{formatARS(b.propinas)}</td>
-                        <td style={{ ...styles.td, textAlign: "right", fontWeight: "600" }}>{formatARS(b.total_generado)}</td>
-                        {mostrarComisiones && (
-                          <td style={{ ...styles.td, textAlign: "right", color: "#1a7a4a", fontWeight: "600" }}>
-                            {formatARS(b.comision)}
-                            <span style={styles.comisionTipo}>
-                              {b.comision_tipo === "porcentaje" ? ` (${b.comision_valor}%)` : ` ($${b.comision_valor}/c)`}
-                            </span>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr style={styles.trTotal}>
-                      <td style={styles.tdTotal}>TOTAL</td>
-                      <td style={{ ...styles.tdTotal, textAlign: "right" }}>{resumenData.totales.cantidad_cortes}</td>
-                      <td style={{ ...styles.tdTotal, textAlign: "right" }}>{formatARS(resumenData.totales.monto_servicios)}</td>
-                      <td style={{ ...styles.tdTotal, textAlign: "right" }}>{formatARS(resumenData.totales.propinas)}</td>
-                      <td style={{ ...styles.tdTotal, textAlign: "right" }}>{formatARS(resumenData.totales.total_generado)}</td>
-                      {mostrarComisiones && (
-                        <td style={{ ...styles.tdTotal, textAlign: "right", color: "#1a7a4a" }}>
-                          {formatARS(resumenData.totales.comision)}
-                        </td>
-                      )}
-                    </tr>
-                  </tfoot>
-                </table>
+            {diasDelBarbero.length === 0 ? (
+              <EmptyState
+                glyph={<Scissors size={28} strokeWidth={1.5} />}
+                title="Sin cortes"
+                body="Este barbero no tiene cortes en la semana seleccionada."
+              />
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {diasDelBarbero.map(({ fecha, cortes: cortesDelDia }) => (
+                  <BloqueDia
+                    key={fecha}
+                    fecha={fecha}
+                    cortesDelDia={cortesDelDia}
+                    expandido={diasExpandidos.has(fecha)}
+                    esHoy={fecha === hoy}
+                    onToggle={() => toggleDia(fecha)}
+                    infoComisionActiva={infoComisionActiva}
+                    mostrarComisiones={mostrarComisiones}
+                  />
+                ))}
               </div>
             )}
           </>
-        )}
-      </div>
+        )
+      )}
+
+      {/* ── TAB RESUMEN ───────────────────────────────────────────────────── */}
+      {tabActiva === 'resumen' && (
+        !resumenData || resumenData.barberos.length === 0 ? (
+          <EmptyState
+            glyph={<Scissors size={28} strokeWidth={1.5} />}
+            title="Sin cortes esta semana"
+            body="No hay cortes registrados en la semana seleccionada."
+          />
+        ) : (
+          <TablaResumen resumenData={resumenData} mostrarComisiones={mostrarComisiones} />
+        )
+      )}
     </div>
   );
 }
 
+// ─── Sub-componente: BloqueDia ────────────────────────────────────────────────
 
-// ─── Estilos ──────────────────────────────────────────────────────────────────
-const styles = {
+/**
+ * BloqueDia
+ * Card colapsable de un día del barbero. Header con fecha + pill "Hoy" opcional
+ * + cantidad de cortes + chevron. Tabla expandible con los cortes y un tfoot
+ * con el subtotal que queda siempre visible.
+ *
+ * @param {object} props
+ * @param {string} props.fecha - YYYY-MM-DD
+ * @param {Array} props.cortesDelDia
+ * @param {boolean} props.expandido
+ * @param {boolean} props.esHoy
+ * @param {() => void} props.onToggle
+ * @param {object|null} props.infoComisionActiva - Info de comisión del barbero
+ *   (tipo, valor, etc.) tomada del resumen. `null` si no se cargó.
+ * @param {boolean} props.mostrarComisiones
+ */
+function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisionActiva, mostrarComisiones }) {
+  const totalMonto   = cortesDelDia.reduce((s, c) => s + c.monto_servicios, 0);
+  const totalPropina = cortesDelDia.reduce((s, c) => s + c.propina, 0);
+  const totalGeneral = totalMonto + totalPropina;
+  const comisionDelDia = infoComisionActiva
+    ? calcularComisionDia(totalMonto, infoComisionActiva.comision_tipo, infoComisionActiva.comision_valor, cortesDelDia.length)
+    : 0;
 
-  contenedor: {
-    padding: "36px 40px",
-    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
-    color: "#111111",
-  },
+  const Chevron = expandido ? ChevronDown : ChevronRight;
 
-  // ── Fila 1: título | tabs ────────────────────────────────────────────────
-  fila1: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: "20px",
-    flexWrap: "wrap",
-    gap: "16px",
-  },
-    titulo: {
-    fontSize: '24px', fontWeight: '700', color: '#111', margin: '0 0 4px',
-  },
-  subtitulo: {
-    fontSize: '14px', color: '#888', margin: 0,
-  },
+  return (
+    <div style={{
+      background: theme.surface,
+      border: `1px solid ${theme.hairline}`,
+      borderRadius: theme.radiusLg,
+      overflow: 'hidden',
+    }}>
+      {/* Header clickable */}
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          display: 'flex',
+          width: '100%',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 14px',
+          background: esHoy ? theme.accentSoft : theme.surfaceAlt,
+          border: 'none',
+          borderBottom: `1px solid ${theme.hairline}`,
+          cursor: 'pointer',
+          fontFamily: theme.body,
+          textAlign: 'left',
+        }}
+        aria-expanded={expandido}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{
+            fontSize: theme.sizeBody,
+            fontWeight: theme.weightHeading,
+            color: esHoy ? theme.accent : theme.ink,
+            letterSpacing: '-0.005em',
+          }}>
+            {formatFechaCorta(fecha)}
+          </span>
+          {esHoy && (
+            <span style={{
+              fontFamily: theme.mono,
+              fontSize: theme.sizeMicro,
+              fontWeight: theme.weightMedium,
+              background: theme.accent,
+              color: theme.accentInk,
+              padding: '2px 8px',
+              borderRadius: theme.radiusSm,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+            }}>HOY</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: theme.sizeBody, color: theme.muted }}>
+            {cortesDelDia.length} corte{cortesDelDia.length !== 1 ? 's' : ''}
+          </span>
+          <Chevron size={16} strokeWidth={1.75} color={theme.muted} />
+        </div>
+      </button>
 
-  // ── Fila 2: toggle | selector semana | exportar ──────────────────────────
-  fila2: {
-    display: "grid",
-    gridTemplateColumns: "1fr auto 1fr",
-    alignItems: "center",
-    gap: "16px",
-    marginBottom: "20px",
-  },
+      {/* Tabla del día */}
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        {expandido && (
+          <>
+            <thead>
+              <tr>
+                <ThCelda>Hora</ThCelda>
+                <ThCelda>Servicio</ThCelda>
+                <ThCelda alinear="right">Monto</ThCelda>
+                <ThCelda alinear="right">Propina</ThCelda>
+                <ThCelda alinear="right">Total</ThCelda>
+                <ThCelda>Pago</ThCelda>
+              </tr>
+            </thead>
+            <tbody>
+              {cortesDelDia.map((c) => (
+                <tr key={c.corte_id} className="om-planillas-fila">
+                  <TdCelda>{c.hora}</TdCelda>
+                  <TdCelda>{c.servicio_nombre}</TdCelda>
+                  <TdCelda alinear="right">{fmtPesos(c.monto_servicios)}</TdCelda>
+                  <TdCelda alinear="right">
+                    {c.propina > 0
+                      ? fmtPesos(c.propina)
+                      : <span style={{ color: theme.mutedSoft }}>—</span>}
+                  </TdCelda>
+                  <TdCelda alinear="right" bold>{fmtPesos(c.monto_servicios + c.propina)}</TdCelda>
+                  <TdCelda><BadgeFormaPago forma={c.forma_pago} /></TdCelda>
+                </tr>
+              ))}
+            </tbody>
+          </>
+        )}
+        <tfoot>
+          <tr style={{ background: theme.surfaceAlt, borderTop: `1px solid ${theme.hairline}` }}>
+            <td colSpan={2} style={{ ...tdTotalBase, color: theme.ink }}>
+              Subtotal — {cortesDelDia.length} corte{cortesDelDia.length !== 1 ? 's' : ''}
+            </td>
+            <td style={{ ...tdTotalBase, textAlign: 'right' }}>{fmtPesos(totalMonto)}</td>
+            <td style={{ ...tdTotalBase, textAlign: 'right' }}>{fmtPesos(totalPropina)}</td>
+            <td style={{ ...tdTotalBase, textAlign: 'right', color: theme.accent }}>
+              {fmtPesos(totalGeneral)}
+            </td>
+            <td style={{ ...tdTotalBase, textAlign: 'right' }}>
+              {mostrarComisiones && infoComisionActiva ? (
+                <span style={{ color: theme.accent, fontWeight: theme.weightHeading }}>
+                  {fmtPesos(comisionDelDia + totalPropina)}
+                  <span style={{
+                    fontFamily: theme.mono,
+                    fontSize: theme.sizeMicro,
+                    fontWeight: theme.weightMedium,
+                    color: theme.muted,
+                    marginLeft: 6,
+                    letterSpacing: '0.02em',
+                  }}>
+                    {infoComisionActiva.comision_tipo === 'porcentaje'
+                      ? `${infoComisionActiva.comision_valor}% + prop`
+                      : `$${infoComisionActiva.comision_valor}/c + prop`}
+                  </span>
+                </span>
+              ) : null}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
 
-  // ── Fila 3: pills de barberos (solo Detalle) ─────────────────────────────
-  fila3: {
-    display: "flex",
-    alignItems: "center",
-  },
+// ─── Sub-componente: TablaResumen ─────────────────────────────────────────────
 
+/**
+ * TablaResumen
+ * Tabla consolidada del tab Resumen. Una fila por barbero + fila TOTAL.
+ *
+ * @param {object} props
+ * @param {{ barberos: Array, totales: object }} props.resumenData
+ * @param {boolean} props.mostrarComisiones
+ */
+function TablaResumen({ resumenData, mostrarComisiones }) {
+  const { barberos, totales } = resumenData;
+  return (
+    <div style={{
+      background: theme.surface,
+      border: `1px solid ${theme.hairline}`,
+      borderRadius: theme.radiusLg,
+      overflow: 'hidden',
+    }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <ThCelda>Barbero</ThCelda>
+            <ThCelda alinear="right">Cortes</ThCelda>
+            <ThCelda alinear="right">Monto servicios</ThCelda>
+            <ThCelda alinear="right">Propinas</ThCelda>
+            <ThCelda alinear="right">Total generado</ThCelda>
+            {mostrarComisiones && <ThCelda alinear="right">Comisión</ThCelda>}
+          </tr>
+        </thead>
+        <tbody>
+          {barberos.map((b) => (
+            <tr key={b.barbero_id} className="om-planillas-fila">
+              <TdCelda bold>{b.barbero_nombre}</TdCelda>
+              <TdCelda alinear="right">{b.cantidad_cortes}</TdCelda>
+              <TdCelda alinear="right">{fmtPesos(b.monto_servicios)}</TdCelda>
+              <TdCelda alinear="right">{fmtPesos(b.propinas)}</TdCelda>
+              <TdCelda alinear="right" bold>{fmtPesos(b.total_generado)}</TdCelda>
+              {mostrarComisiones && (
+                <td style={{ ...tdBase, textAlign: 'right', color: theme.accent, fontWeight: theme.weightHeading }}>
+                  {fmtPesos(b.comision)}
+                  <span style={{
+                    fontFamily: theme.mono,
+                    fontSize: theme.sizeMicro,
+                    fontWeight: theme.weightMedium,
+                    color: theme.muted,
+                    marginLeft: 6,
+                    letterSpacing: '0.02em',
+                  }}>
+                    {b.comision_tipo === 'porcentaje' ? `${b.comision_valor}%` : `$${b.comision_valor}/c`}
+                  </span>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr style={{ background: theme.surfaceAlt, borderTop: `1px solid ${theme.hairline}` }}>
+            <td style={tdTotalBase}>TOTAL</td>
+            <td style={{ ...tdTotalBase, textAlign: 'right' }}>{totales.cantidad_cortes}</td>
+            <td style={{ ...tdTotalBase, textAlign: 'right' }}>{fmtPesos(totales.monto_servicios)}</td>
+            <td style={{ ...tdTotalBase, textAlign: 'right' }}>{fmtPesos(totales.propinas)}</td>
+            <td style={{ ...tdTotalBase, textAlign: 'right', color: theme.accent }}>
+              {fmtPesos(totales.total_generado)}
+            </td>
+            {mostrarComisiones && (
+              <td style={{ ...tdTotalBase, textAlign: 'right', color: theme.accent }}>
+                {fmtPesos(totales.comision)}
+              </td>
+            )}
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
 
-  // ── Tabs pill ─────────────────────────────────────────────────────────────
-  tabsContainer: {
-    display: "flex",
-    gap: "4px",
-    backgroundColor: "#f5f5f5",
-    borderRadius: "12px",
-    padding: "4px",
-  },
-  tabBtn: {
-    padding: "8px 20px",
-    borderRadius: "9px",
-    border: "none",
-    backgroundColor: "transparent",
-    color: "#888888",
-    fontSize: "14px",
-    fontWeight: "500",
-    cursor: "pointer",
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  tabBtnActivo: {
-    backgroundColor: "#ffffff",
-    color: "#111111",
-    fontWeight: "600",
-    boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
-  },
+// ─── Sub-componente: ChipBarbero ──────────────────────────────────────────────
 
-  // ── Contenido ────────────────────────────────────────────────────────────
-  tabContenido: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "20px",
-  },
+/**
+ * ChipBarbero
+ * Chip de filtro (compacto, radius pill). Inactivo: ghost con border hairline.
+ * Activo: tinted con accentSoft + texto y border en accent.
+ * Local a esta sección — promover a primitivo si aparece un segundo caso de
+ * uso de chips de filtro en otra sección (§7.1).
+ *
+ * @param {object} props
+ * @param {string} props.label
+ * @param {boolean} props.activo
+ * @param {() => void} props.onClick
+ */
+function ChipBarbero({ label, activo, onClick }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      aria-pressed={activo}
+      style={{
+        padding: '6px 12px',
+        borderRadius: 999,
+        border: `1px solid ${activo ? theme.accent : theme.hairline}`,
+        background: activo ? theme.accentSoft : (hover ? theme.surfaceAlt : 'transparent'),
+        color: activo ? theme.accent : theme.inkSoft,
+        fontFamily: theme.body,
+        fontSize: theme.sizeBody,
+        fontWeight: activo ? theme.weightHeading : theme.weightMedium,
+        letterSpacing: '-0.005em',
+        cursor: 'pointer',
+        transition: `background ${theme.transitionFast}, color ${theme.transitionFast}, border-color ${theme.transitionFast}`,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
 
-  // ── Bloque de día ────────────────────────────────────────────────────────
-  bloque: {
-    backgroundColor: "#ffffff",
-    border: "1.5px solid #eeeeee",
-    borderRadius: "16px",
-    overflow: "hidden",
-  },
-  bloqueTituloRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "14px 20px",
-    borderBottom: "1px solid #f0f0f0",
-  },
-  bloqueTituloTexto: {
-    fontSize: "14px",
-    fontWeight: "700",
-    color: "#333333",
-    letterSpacing: "0.01em",
-  },
-  bloqueCantidad: {
-    fontSize: "13px",
-    color: "#888888",
-    fontWeight: "500",
-  },
-  chevron: {
-    fontSize: "12px",
-    color: "#888888",
-    lineHeight: 1,
-    userSelect: "none",
-  },
-  badgeHoy: {
-    fontSize: "10px",
-    fontWeight: "700",
-    backgroundColor: "#1a7a4a",
-    color: "#ffffff",
-    padding: "2px 8px",
-    borderRadius: "8px",
-    letterSpacing: "0.02em",
-    textTransform: "uppercase",
-  },
+// ─── Sub-componentes de tabla (cell helpers) ──────────────────────────────────
 
-  // ── Tabla ────────────────────────────────────────────────────────────────
-  tabla: {
-    width: "100%",
-    borderCollapse: "collapse",
-  },
-  th: {
-    padding: "12px 20px",
-    fontSize: "11px",
-    fontWeight: "700",
-    color: "#999999",
-    textTransform: "uppercase",
-    letterSpacing: "0.06em",
-    textAlign: "left",
-    backgroundColor: "#fafafa",
-    borderBottom: "1px solid #f0f0f0",
-  },
-  td: {
-    padding: "14px 20px",
-    fontSize: "14px",
-    color: "#333333",
-    borderBottom: "1px solid #f7f7f7",
-  },
-  trTotal: {
-    backgroundColor: "#eeeeee",
-    borderTop: "2px solid #eeeeee",
-  },
-  tdTotal: {
-    padding: "14px 20px",
-    fontSize: "14px",
-    fontWeight: "700",
-    color: "#111111",
-  },
+/**
+ * ThCelda
+ * Celda de header con eyebrow mono uppercase + tokens.
+ * @param {{children, alinear?: 'left'|'right'}} props
+ */
+function ThCelda({ children, alinear = 'left' }) {
+  return (
+    <th style={{
+      padding: '8px 14px',
+      fontFamily: theme.mono,
+      fontSize: theme.sizeMicro,
+      fontWeight: theme.weightMedium,
+      color: theme.muted,
+      textTransform: 'uppercase',
+      letterSpacing: '0.06em',
+      textAlign: alinear,
+      background: theme.surfaceAlt,
+      borderBottom: `1px solid ${theme.hairline}`,
+    }}>
+      {children}
+    </th>
+  );
+}
 
-  // ── Badges ───────────────────────────────────────────────────────────────
-  badgePago: {
-    display: "inline-block",
-    padding: "3px 10px",
-    borderRadius: "20px",
-    fontSize: "12px",
-    fontWeight: "600",
-  },
-  badgeEfectivo: { backgroundColor: "#e8f5e9", color: "#2e7d32" },
-  badgeMP:       { backgroundColor: "#e3f2fd", color: "#1565c0" },
-  sinPropina:    { color: "#cccccc" },
+/**
+ * TdCelda
+ * Celda de cuerpo con tokens y opcionalmente alineada a derecha / en negrita.
+ * @param {{children, alinear?: 'left'|'right', bold?: boolean}} props
+ */
+function TdCelda({ children, alinear = 'left', bold = false }) {
+  return (
+    <td style={{
+      ...tdBase,
+      textAlign: alinear,
+      fontWeight: bold ? theme.weightHeading : theme.weightRegular,
+      fontVariantNumeric: alinear === 'right' ? 'tabular-nums' : 'normal',
+    }}>
+      {children}
+    </td>
+  );
+}
 
-  // Comisión en subtotal del día
-  comisionValor: {
-    color: "#1a7a4a",
-    fontWeight: "600",
-  },
-  comisionTipo: {
-    fontSize: "11px",
-    fontWeight: "400",
-    color: "#888888",
-    marginLeft: "4px",
-  },
+const tdBase = {
+  padding: '8px 14px',
+  fontFamily: theme.body,
+  fontSize: theme.sizeBody,
+  color: theme.ink,
+  borderBottom: `1px solid ${theme.hairlineSoft}`,
+};
 
-  // ── Estados ──────────────────────────────────────────────────────────────
-  estadoTexto: {
-    textAlign: "center",
-    color: "#999999",
-    fontSize: "15px",
-    padding: "40px 0",
-    margin: 0,
-  },
-  errorTexto: {
-    textAlign: "center",
-    color: "#c0392b",
-    fontSize: "14px",
-    padding: "20px 0",
-    margin: 0,
-  },
+const tdTotalBase = {
+  padding: '10px 14px',
+  fontFamily: theme.body,
+  fontSize: theme.sizeBody,
+  fontWeight: theme.weightHeading,
+  color: theme.ink,
+  fontVariantNumeric: 'tabular-nums',
 };
