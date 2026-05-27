@@ -3,7 +3,7 @@
 // Sección Planillas del panel de administrador (read-only).
 //
 // Tab Detalle por barbero:
-//   - Segunda barra de tabs (underline) para elegir barbero activo.
+//   - Fila de ChipFiltro (primitivo) para elegir barbero activo.
 //   - Un bloque colapsable por día con la tabla de cortes + subtotal del día.
 //   - El subtotal queda visible aunque el bloque esté contraído (panorama rápido
 //     de la semana sin necesidad de expandir cada día).
@@ -47,6 +47,7 @@ import {
   EmptyState,
   Button,
   IconoAlerta,
+  ChipFiltro,
 } from '../../../components/ui';
 import { theme } from '../../../theme/tokens.js';
 
@@ -146,7 +147,7 @@ export default function SeccionPlanillas() {
         ...(mostrarComisiones ? { 'Comisión ($)': '' } : {}),
         'Forma de pago': '',
       });
-      agruparPorDia(barbero.cortes).forEach(({ fecha, cortes: cd }) => {
+      agruparPorDia(barbero.cortes).forEach(({ cortes: cd }) => {
         cd.forEach((c) => {
           filas.push({
             Barbero: '', Fecha: formatFechaCorta(c.fecha), Hora: c.hora, Servicio: c.servicio_nombre,
@@ -296,7 +297,7 @@ export default function SeccionPlanillas() {
           <>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {detalleData.map((b) => (
-                <ChipBarbero
+                <ChipFiltro
                   key={b.barbero_id}
                   label={b.barbero_nombre}
                   activo={barberoActivo === b.barbero_id}
@@ -574,49 +575,6 @@ function TablaResumen({ resumenData, mostrarComisiones }) {
         </tfoot>
       </table>
     </div>
-  );
-}
-
-// ─── Sub-componente: ChipBarbero ──────────────────────────────────────────────
-
-/**
- * ChipBarbero
- * Chip de filtro (compacto, radius pill). Inactivo: ghost con border hairline.
- * Activo: tinted con accentSoft + texto y border en accent.
- * Local a esta sección — promover a primitivo si aparece un segundo caso de
- * uso de chips de filtro en otra sección (§7.1).
- *
- * @param {object} props
- * @param {string} props.label
- * @param {boolean} props.activo
- * @param {() => void} props.onClick
- */
-function ChipBarbero({ label, activo, onClick }) {
-  const [hover, setHover] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      aria-pressed={activo}
-      style={{
-        padding: '6px 12px',
-        borderRadius: 999,
-        border: `1px solid ${activo ? theme.accent : theme.hairline}`,
-        background: activo ? theme.accentSoft : (hover ? theme.surfaceAlt : 'transparent'),
-        color: activo ? theme.accent : theme.inkSoft,
-        fontFamily: theme.body,
-        fontSize: theme.sizeBody,
-        fontWeight: activo ? theme.weightHeading : theme.weightMedium,
-        letterSpacing: '-0.005em',
-        cursor: 'pointer',
-        transition: `background ${theme.transitionFast}, color ${theme.transitionFast}, border-color ${theme.transitionFast}`,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {label}
-    </button>
   );
 }
 

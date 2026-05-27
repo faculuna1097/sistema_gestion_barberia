@@ -1,99 +1,979 @@
 // /frontend/src/screens/admin/sections/SeccionTurnero.jsx
-// Vista global de turnos del día para el admin.
 //
-// Layout:
-//   Fila 1 — título + subtítulo
-//   Fila 2 — selector de fecha (← hoy →)
-//   Fila 3 — pills de barberos (estilo SeccionPlanillas) con opción "Todos"
-//   Contenido — tabla de turnos, agrupada por barbero cuando se ve "Todos"
+// Sección Turnero del panel admin — vista global de turnos del día.
 //
-// Acciones por turno: cambiar estado (completado / no_asistio), cancelar.
-// No recibe props — carga sus datos con useEffect.
+// Decisiones de diseño puntuales de esta sección:
+//   - SIN ScreenHeader: para maximizar la verticalidad de la agenda, el título
+//     se omite (excepción consciente al patrón del resto del admin).
+//   - DOS vistas en toggle: "Agenda" (default) y "Lista".
+//     * Agenda: grilla CSS hecha a mano. Eje vertical = horas de la jornada,
+//       columnas = barberos visibles. Cada turno es un bloque dimensionado por
+//       su duración real. Si la fecha es hoy y la hora actual está dentro del
+//       rango, se dibuja una línea horizontal indigo de "ahora".
+//     * Lista: tabla densa D10 (sin bandas grises, hover scoped). Click en
+//       fila abre el mismo Modal de detalle que la agenda.
+//   - Filtros: chips de barbero (primarios, tamaño md) + chips de estado
+//     (secundarios, tamaño sm) usando el primitivo ChipFiltro.
+//   - KPIs del día (Total / Reservados / Completados / Sin éxito) calculados
+//     sobre el dataset completo del día (no respeta filtros), así representan
+//     siempre "lo que hay en el día".
+//   - Errores de acción (cambiar estado / cancelar) se muestran como banner
+//     inline con auto-dismiss. NO se usa alert() ni Toast (Toast queda como
+//     deuda — construir cuando aparezca el segundo caso).
+//   - El rango horario de la agenda se deriva del min/max de los turnos del
+//     día (con padding 1h por extremo) y se clampa al menos a 08:00–22:00.
+//     Si no hay turnos, se usa 08:00–22:00 directo. El endpoint admin no
+//     expone el horario_atencion global del tenant (deuda backend anotada).
 
-import { useState, useEffect } from 'react';
-import { getBarberosAdmin, getAdminTurnos, patchAdminTurnoEstado, cancelarAdminTurno } from '../../../services/api';
-import { getFechaHoy, formatHora } from '../../../utils/fechas';
+import { useState, useEffect, useRef } from 'react';
+import {
+  Check,
+  UserX,
+  Trash2,
+  AlertTriangle,
+  X,
+  Calendar,
+  Phone,
+  Mail,
+  Copy,
+  CheckCircle2,
+  CalendarDays,
+  Hourglass,
+  RefreshCw,
+} from 'lucide-react';
+
+import {
+  getBarberosAdmin,
+  getAdminTurnos,
+  patchAdminTurnoEstado,
+  cancelarAdminTurno,
+} from '../../../services/api';
+import { getFechaHoy, formatHora, TZ } from '../../../utils/fecha';
+import { theme } from '../../../theme/tokens.js';
 import SelectorDia from '../../../components/SelectorDia';
+import {
+  LoadingState,
+  EmptyState,
+  IconoAlerta,
+  Button,
+  ChipFiltro,
+  Modal,
+  DetalleRecurso,
+  AvatarIniciales,
+} from '../../../components/ui';
 
-// Colores por estado de turno
-const COLORES_ESTADO = {
-  reservado:  { bg: '#e3f2fd', color: '#1565c0' },
-  completado: { bg: '#e8f5e9', color: '#2e7d32' },
-  no_asistio: { bg: '#fff8e1', color: '#f57f17' },
-  cancelado:  { bg: '#fce4ec', color: '#c62828' },
+// ═══════════════════════════════════════════════════════════════════════════
+// Constantes y maps
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Mapa de estado → colores semánticos del admin + labels + ícono.
+// Diferente del primitivo StatusPill (que mapea para el flujo del cliente —
+// allí "reservado" = success). Per D9, está OK divergir: en el admin,
+// "reservado" significa "abierto, requiere atención" → accent (indigo).
+const ESTADO_MAP = {
+  reservado:  { bg: theme.accentSoft,  fg: theme.accent,  border: theme.accent,  label: 'Reservado',  Icon: Calendar },
+  completado: { bg: theme.successSoft, fg: theme.success, border: theme.success, label: 'Completado', Icon: CheckCircle2 },
+  no_asistio: { bg: theme.warningSoft, fg: theme.warning, border: theme.warning, label: 'No asistió', Icon: UserX },
+  cancelado:  { bg: theme.surfaceAlt,  fg: theme.muted,   border: theme.muted,   label: 'Cancelado',  Icon: X },
 };
 
-// Labels legibles para el estado
-const LABEL_ESTADO = {
-  reservado:  'Reservado',
-  completado: 'Completado',
-  no_asistio: 'No asistió',
-  cancelado:  'Cancelado',
-};
+// Lista de estados filtrables, en el orden visual deseado.
+const ESTADOS_FILTRO = ['reservado', 'completado', 'no_asistio', 'cancelado'];
 
-// ─── Modal de confirmación de cancelación ────────────────────────────────────
+// Altura de cada hora en la grilla de agenda (px).
+const ALTO_HORA_PX = 60;
+
+// Rango horario fallback (cuando no hay turnos cargados).
+const FALLBACK_INICIO = 8 * 60;   // 08:00
+const FALLBACK_FIN    = 22 * 60;  // 22:00
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Helpers de tiempo
+// ═══════════════════════════════════════════════════════════════════════════
+
 /**
- * ModalCancelarTurno
- * Muestra los datos del turno y pide confirmación antes de cancelar.
- * @param {Object}   turno       - turno a cancelar
- * @param {function} onConfirmar - callback al confirmar
- * @param {function} onCerrar    - callback al cancelar/cerrar
- * @param {boolean}  cancelando  - true mientras se procesa la cancelación
+ * minutosDelDia
+ * Convierte un timestamp ISO a "minutos desde 00:00 del día" en TZ Argentina.
+ * @param {string} iso
+ * @returns {number}
  */
-function ModalCancelarTurno({ turno, onConfirmar, onCerrar, cancelando }) {
+function minutosDelDia(iso) {
+  const [hh, mm] = formatHora(iso).split(':').map(Number);
+  return hh * 60 + mm;
+}
+
+/**
+ * minutosAhoraEnTZ
+ * Minutos del día actual en TZ Argentina (para la línea "ahora").
+ * @returns {number}
+ */
+function minutosAhoraEnTZ() {
+  const ahora = new Date();
+  const hhmm = ahora.toLocaleTimeString('es-AR', {
+    timeZone: TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const [hh, mm] = hhmm.split(':').map(Number);
+  return hh * 60 + mm;
+}
+
+/**
+ * calcularRangoAgenda
+ * Deriva [inicio, fin] en minutos a partir de los turnos del día.
+ * Padding de 1h por extremo. Clamp externo a 08:00–22:00 (la agenda
+ * solo se expande, nunca se contrae por debajo del default).
+ * @param {Array} turnos
+ * @returns {{ inicio: number, fin: number }}
+ */
+function calcularRangoAgenda(turnos) {
+  if (!turnos || turnos.length === 0) {
+    return { inicio: FALLBACK_INICIO, fin: FALLBACK_FIN };
+  }
+  const todos = turnos.flatMap(t => [minutosDelDia(t.inicio), minutosDelDia(t.fin)]);
+  const min = Math.min(...todos) - 60;
+  const max = Math.max(...todos) + 60;
+  return {
+    inicio: Math.min(FALLBACK_INICIO, Math.max(0, Math.floor(min / 60) * 60)),
+    fin:    Math.max(FALLBACK_FIN,    Math.min(24 * 60, Math.ceil(max / 60) * 60)),
+  };
+}
+
+/**
+ * duracionMinutos
+ * Calcula la duración de un turno (fin − inicio) en minutos.
+ * @param {Object} turno
+ * @returns {number}
+ */
+function duracionMinutos(turno) {
+  return minutosDelDia(turno.fin) - minutosDelDia(turno.inicio);
+}
+
+/**
+ * formatDuracion
+ * "30 min" / "1 h" / "1 h 30 min".
+ * @param {number} mins
+ * @returns {string}
+ */
+function formatDuracion(mins) {
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (m === 0) return `${h} h`;
+  return `${h} h ${m} min`;
+}
+
+/**
+ * esHoy
+ * @param {string} fechaStr - 'YYYY-MM-DD'
+ * @returns {boolean}
+ */
+function esHoy(fechaStr) {
+  return fechaStr === getFechaHoy();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Sub-componentes
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * BannerError
+ * Banner sticky para errores de acción (reemplaza alert()).
+ */
+function BannerError({ mensaje, onCerrar }) {
   return (
-    <div style={styles.modalOverlay}>
-      <div style={styles.modalCard}>
-        <p style={styles.modalTitulo}>¿Cancelar este turno?</p>
-        <p style={styles.modalAdvertencia}>Se notificará al cliente por email si tiene uno registrado.</p>
+    <div
+      role="alert"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '10px 14px',
+        marginBottom: 12,
+        background: theme.dangerSoft,
+        border: `1px solid ${theme.danger}`,
+        borderRadius: theme.radius,
+        color: theme.danger,
+        fontFamily: theme.body,
+        fontSize: theme.sizeBody,
+      }}
+    >
+      <AlertTriangle size={16} strokeWidth={2} />
+      <span style={{ flex: 1 }}>{mensaje}</span>
+      <button
+        type="button"
+        onClick={onCerrar}
+        aria-label="Cerrar mensaje de error"
+        style={{
+          background: 'transparent',
+          border: 'none',
+          padding: 4,
+          cursor: 'pointer',
+          color: theme.danger,
+          display: 'inline-flex',
+        }}
+      >
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
 
-        <div style={styles.modalDetalle}>
-          <div style={styles.modalFila}>
-            <span style={styles.modalLabel}>Hora</span>
-            <span style={styles.modalValor}>{formatHora(turno.inicio)}</span>
-          </div>
-          <div style={styles.modalDivider} />
-          <div style={styles.modalFila}>
-            <span style={styles.modalLabel}>Cliente</span>
-            <span style={styles.modalValor}>{turno.cliente_nombre}</span>
-          </div>
-          <div style={styles.modalDivider} />
-          <div style={styles.modalFila}>
-            <span style={styles.modalLabel}>Servicio</span>
-            <span style={styles.modalValor}>{turno.servicio_nombre}</span>
-          </div>
-          <div style={styles.modalDivider} />
-          <div style={styles.modalFila}>
-            <span style={styles.modalLabel}>Barbero</span>
-            <span style={styles.modalValor}>{turno.barbero_nombre}</span>
-          </div>
-        </div>
+/**
+ * SegmentedVista
+ * Par de botones adyacentes para alternar entre vista Agenda y Lista.
+ * Local — segundo caso de "segmented binario visual" en el admin (el
+ * primero es la toggle de Caja, que usa otro componente: TogglePill).
+ * Si aparece un tercer caso, evaluar primitivo `Segmented`.
+ */
+function SegmentedVista({ valor, onChange }) {
+  const opciones = [
+    { id: 'agenda', label: 'Agenda', Icon: CalendarDays },
+    { id: 'lista',  label: 'Lista',  Icon: Hourglass },
+  ];
+  return (
+    <div
+      role="tablist"
+      aria-label="Vista del turnero"
+      style={{
+        display: 'inline-flex',
+        border: `1px solid ${theme.hairline}`,
+        borderRadius: theme.radius,
+        overflow: 'hidden',
+        background: theme.surface,
+      }}
+    >
+      {opciones.map((op, idx) => {
+        const activo = valor === op.id;
+        return (
+          <button
+            key={op.id}
+            role="tab"
+            aria-selected={activo}
+            type="button"
+            onClick={() => onChange(op.id)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '7px 14px',
+              background: activo ? theme.accentSoft : 'transparent',
+              color: activo ? theme.accent : theme.inkSoft,
+              border: 'none',
+              borderRight: idx === 0 ? `1px solid ${theme.hairline}` : 'none',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              fontWeight: activo ? theme.weightHeading : theme.weightMedium,
+              cursor: 'pointer',
+              transition: `background ${theme.transitionFast}, color ${theme.transitionFast}`,
+            }}
+          >
+            <op.Icon size={14} strokeWidth={2} />
+            {op.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
-        <div style={styles.modalBotones}>
-          <button style={styles.btnModalCancelar} onPointerDown={onCerrar} disabled={cancelando}>
-            Volver
-          </button>
-          <button style={styles.btnModalConfirmar} onPointerDown={onConfirmar} disabled={cancelando}>
-            {cancelando ? 'Cancelando...' : 'Sí, cancelar turno'}
-          </button>
-        </div>
+/**
+ * KpiMini
+ * Mini-card de KPI del día. Eyebrow + número grande.
+ */
+function KpiMini({ label, valor, tono }) {
+  const colorNum = {
+    accent:  theme.accent,
+    success: theme.success,
+    warning: theme.warning,
+    muted:   theme.muted,
+    ink:     theme.ink,
+  }[tono || 'ink'];
+
+  return (
+    <div
+      style={{
+        flex: 1,
+        background: theme.surface,
+        border: `1px solid ${theme.hairline}`,
+        borderRadius: theme.radius,
+        padding: '12px 16px',
+        minWidth: 120,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: theme.mono,
+          fontSize: theme.sizeMicro,
+          fontWeight: theme.weightHeading,
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          color: theme.inkSoft,
+          marginBottom: 4,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontFamily: theme.body,
+          fontSize: 22,
+          fontWeight: theme.weightHeading,
+          color: colorNum,
+          fontVariantNumeric: 'tabular-nums',
+          letterSpacing: '-0.01em',
+        }}
+      >
+        {valor}
       </div>
     </div>
   );
 }
 
-// ─── Componente principal ────────────────────────────────────────────────────
-export default function SeccionTurnero() {
-  const [fecha, setFecha]               = useState(getFechaHoy);
-  const [barberos, setBarberos]         = useState([]);
-  const [barberoActivo, setBarberoActivo] = useState(null); // null = "Todos"
-  const [turnos, setTurnos]             = useState([]);
-  const [cargando, setCargando]         = useState(true);
-  const [error, setError]               = useState(null);
-  const [accionando, setAccionando]     = useState(null);
-  const [turnoACancelar, setTurnoACancelar] = useState(null);
+/**
+ * EstadoTurnoPill
+ * Pill compacta del estado de un turno. Mapeo del dominio admin.
+ */
+function EstadoTurnoPill({ estado }) {
+  const c = ESTADO_MAP[estado] || ESTADO_MAP.cancelado;
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '3px 8px',
+        borderRadius: 999,
+        background: c.bg,
+        color: c.fg,
+        fontFamily: theme.body,
+        fontSize: 12,
+        fontWeight: theme.weightHeading,
+        letterSpacing: '-0.005em',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <c.Icon size={11} strokeWidth={2.4} />
+      {c.label}
+    </span>
+  );
+}
 
-  // ── Carga de barberos (una sola vez) ──────────────────────────────────────
+/**
+ * BloqueAgenda
+ * Un turno renderizado como bloque absolute-positioned dentro de la columna
+ * del barbero. Altura proporcional a la duración del turno.
+ */
+function BloqueAgenda({ turno, rangoInicio, onClick }) {
+  const [hover, setHover] = useState(false);
+  const ini = minutosDelDia(turno.inicio);
+  const fin = minutosDelDia(turno.fin);
+  const top    = ((ini - rangoInicio) / 60) * ALTO_HORA_PX;
+  const height = ((fin - ini)         / 60) * ALTO_HORA_PX;
+  const c = ESTADO_MAP[turno.estado] || ESTADO_MAP.cancelado;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        position: 'absolute',
+        top: `${top}px`,
+        left: 4,
+        right: 4,
+        height: `${Math.max(height - 2, 22)}px`,
+        background: c.bg,
+        border: `1px solid ${c.border}`,
+        borderLeftWidth: 3,
+        borderRadius: theme.radiusSm,
+        padding: '4px 8px',
+        textAlign: 'left',
+        color: c.fg,
+        fontFamily: theme.body,
+        cursor: 'pointer',
+        overflow: 'hidden',
+        boxShadow: hover ? theme.shadowSm : 'none',
+        transform: hover ? 'translateY(-1px)' : 'none',
+        transition: `transform ${theme.transitionFast}, box-shadow ${theme.transitionFast}`,
+        zIndex: 2,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          fontFamily: theme.mono,
+          fontWeight: theme.weightHeading,
+          opacity: 0.85,
+          marginBottom: 2,
+          fontVariantNumeric: 'tabular-nums',
+          letterSpacing: '0.02em',
+        }}
+      >
+        {formatHora(turno.inicio)}–{formatHora(turno.fin)}
+      </div>
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: theme.weightHeading,
+          color: theme.ink,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        {turno.cliente_nombre}
+      </div>
+      {height >= 50 && (
+        <div
+          style={{
+            fontSize: 12,
+            color: theme.inkSoft,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            marginTop: 1,
+          }}
+        >
+          {turno.servicio_nombre}
+        </div>
+      )}
+    </button>
+  );
+}
+
+/**
+ * LineaAhora
+ * Línea horizontal indigo + dot, posicionada en el minuto actual del día.
+ * Se redibuja cada 60s.
+ */
+function LineaAhora({ rangoInicio, rangoFin }) {
+  const [mins, setMins] = useState(minutosAhoraEnTZ());
+
+  useEffect(() => {
+    const id = setInterval(() => setMins(minutosAhoraEnTZ()), 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (mins < rangoInicio || mins > rangoFin) return null;
+  const top = ((mins - rangoInicio) / 60) * ALTO_HORA_PX;
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        top: `${top}px`,
+        height: 0,
+        borderTop: `2px solid ${theme.accent}`,
+        zIndex: 5,
+        pointerEvents: 'none',
+      }}
+    >
+      <span
+        style={{
+          position: 'absolute',
+          left: -5,
+          top: -5,
+          width: 10,
+          height: 10,
+          borderRadius: 999,
+          background: theme.accent,
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * AgendaVista
+ * Grilla barbero × hora. Columna izq fija con etiquetas de hora (cada hora
+ * completa). Filas/columnas dibujadas con border + position absolute para
+ * los bloques.
+ */
+function AgendaVista({ turnos, barberosVisibles, rangoInicio, rangoFin, fecha, onTurnoClick }) {
+  const totalHoras = (rangoFin - rangoInicio) / 60;
+  const horas = Array.from({ length: totalHoras + 1 }, (_, i) => rangoInicio + i * 60);
+
+  // Agrupar turnos por barbero_id para asignar a la columna correcta.
+  const turnosPorBarbero = new Map();
+  for (const t of turnos) {
+    if (!turnosPorBarbero.has(t.barbero_id)) turnosPorBarbero.set(t.barbero_id, []);
+    turnosPorBarbero.get(t.barbero_id).push(t);
+  }
+
+  return (
+    <div
+      style={{
+        background: theme.surface,
+        border: `1px solid ${theme.hairline}`,
+        borderRadius: theme.radiusLg,
+        overflow: 'hidden',
+      }}
+    >
+      {/* Header columnas: hora + barberos */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `64px repeat(${barberosVisibles.length}, 1fr)`,
+          borderBottom: `1px solid ${theme.hairline}`,
+        }}
+      >
+        <div style={{ padding: '10px 8px' }} />
+        {barberosVisibles.map((b) => (
+          <div
+            key={b.id}
+            style={{
+              padding: '10px 12px',
+              fontFamily: theme.mono,
+              fontSize: theme.sizeMicro,
+              fontWeight: theme.weightHeading,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              color: theme.inkSoft,
+              borderLeft: `1px solid ${theme.hairline}`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <AvatarIniciales nombre={b.nombre} size={20} />
+            <span style={{ color: theme.ink }}>{b.nombre}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Cuerpo: grilla con horas (izq) y columnas de barberos */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `64px repeat(${barberosVisibles.length}, 1fr)`,
+          position: 'relative',
+        }}
+      >
+        {/* Columna de horas */}
+        <div style={{ position: 'relative', height: `${totalHoras * ALTO_HORA_PX}px` }}>
+          {horas.map((h, idx) => (
+            <div
+              key={h}
+              style={{
+                position: 'absolute',
+                top: `${idx * ALTO_HORA_PX}px`,
+                right: 8,
+                fontFamily: theme.mono,
+                fontSize: theme.sizeMicro,
+                color: theme.muted,
+                fontVariantNumeric: 'tabular-nums',
+                transform: 'translateY(-50%)',
+              }}
+            >
+              {idx === 0 ? '' : `${String(Math.floor(h / 60)).padStart(2, '0')}:00`}
+            </div>
+          ))}
+        </div>
+
+        {/* Columnas de barberos */}
+        {barberosVisibles.map((b) => (
+          <div
+            key={b.id}
+            style={{
+              position: 'relative',
+              height: `${totalHoras * ALTO_HORA_PX}px`,
+              borderLeft: `1px solid ${theme.hairline}`,
+            }}
+          >
+            {/* Líneas guía cada hora */}
+            {horas.slice(1).map((h, idx) => (
+              <div
+                key={h}
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  top: `${(idx + 1) * ALTO_HORA_PX}px`,
+                  left: 0,
+                  right: 0,
+                  height: 0,
+                  borderTop: `1px solid ${theme.hairlineSoft}`,
+                }}
+              />
+            ))}
+            {/* Bloques de turnos */}
+            {(turnosPorBarbero.get(b.id) || []).map((t) => (
+              <BloqueAgenda
+                key={t.id}
+                turno={t}
+                rangoInicio={rangoInicio}
+                onClick={() => onTurnoClick(t)}
+              />
+            ))}
+          </div>
+        ))}
+
+        {/* Línea "ahora" si la fecha es hoy */}
+        {esHoy(fecha) && (
+          <div
+            style={{
+              position: 'absolute',
+              left: 64,
+              right: 0,
+              top: 0,
+              bottom: 0,
+              pointerEvents: 'none',
+            }}
+          >
+            <LineaAhora rangoInicio={rangoInicio} rangoFin={rangoFin} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ListaVista
+ * Tabla densa de turnos (D10). Click en fila abre el modal de detalle.
+ */
+function ListaVista({ turnos, mostrarBarbero, onTurnoClick }) {
+  return (
+    <div
+      style={{
+        background: theme.surface,
+        border: `1px solid ${theme.hairline}`,
+        borderRadius: theme.radiusLg,
+        overflow: 'hidden',
+      }}
+    >
+      <style>{`
+        .om-turnero-fila { transition: background ${theme.transitionFast}; cursor: pointer; }
+        .om-turnero-fila:hover { background: ${theme.surfaceAlt}; }
+      `}</style>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <Th>Hora</Th>
+            <Th>Duración</Th>
+            {mostrarBarbero && <Th>Barbero</Th>}
+            <Th>Cliente</Th>
+            <Th>Servicio</Th>
+            <Th>Estado</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {turnos.map((t) => (
+            <tr
+              key={t.id}
+              className="om-turnero-fila"
+              onClick={() => onTurnoClick(t)}
+            >
+              <Td mono>{formatHora(t.inicio)}</Td>
+              <Td muted>{formatDuracion(duracionMinutos(t))}</Td>
+              {mostrarBarbero && (
+                <Td>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <AvatarIniciales nombre={t.barbero_nombre} size={20} />
+                    {t.barbero_nombre}
+                  </span>
+                </Td>
+              )}
+              <Td bold>{t.cliente_nombre}</Td>
+              <Td>{t.servicio_nombre}</Td>
+              <Td><EstadoTurnoPill estado={t.estado} /></Td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * Th / Td — cell helpers de la tabla de Lista (D10).
+ */
+function Th({ children }) {
+  return (
+    <th
+      style={{
+        padding: '10px 14px',
+        fontFamily: theme.mono,
+        fontSize: theme.sizeMicro,
+        fontWeight: theme.weightHeading,
+        color: theme.inkSoft,
+        textTransform: 'uppercase',
+        letterSpacing: '0.06em',
+        textAlign: 'left',
+        borderBottom: `1px solid ${theme.hairline}`,
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+
+function Td({ children, mono, muted, bold }) {
+  return (
+    <td
+      style={{
+        padding: '10px 14px',
+        fontFamily: mono ? theme.mono : theme.body,
+        fontSize: theme.sizeBody,
+        color: muted ? theme.muted : theme.ink,
+        fontWeight: bold ? theme.weightHeading : theme.weightRegular,
+        fontVariantNumeric: mono ? 'tabular-nums' : 'normal',
+        borderBottom: `1px solid ${theme.hairlineSoft}`,
+      }}
+    >
+      {children}
+    </td>
+  );
+}
+
+/**
+ * FilaDetalleConCopia
+ * Fila label/valor con botón de copiar al portapapeles. "Copiado" 1.5s.
+ * Usada en el modal para teléfono / email.
+ */
+function FilaDetalleConCopia({ label, valor, Icon }) {
+  const [copiado, setCopiado] = useState(false);
+
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(valor);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 1500);
+    } catch {
+      // Sin clipboard API o permiso denegado: no-op silencioso.
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+      <span
+        style={{
+          fontFamily: theme.mono,
+          fontSize: theme.sizeMicro,
+          fontWeight: theme.weightHeading,
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          color: theme.inkSoft,
+        }}
+      >
+        {label}
+      </span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        {Icon && <Icon size={14} color={theme.muted} strokeWidth={2} />}
+        <span style={{ fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.ink }}>
+          {valor}
+        </span>
+        <button
+          type="button"
+          onClick={copiar}
+          aria-label={`Copiar ${label}`}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            padding: 4,
+            cursor: 'pointer',
+            color: copiado ? theme.success : theme.muted,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            fontFamily: theme.mono,
+            fontSize: theme.sizeMicro,
+          }}
+        >
+          {copiado ? <><Check size={12} /> Copiado</> : <Copy size={12} />}
+        </button>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * ModalDetalleTurno
+ * Modal único de detalle + acciones para un turno.
+ * Tiene dos "modos" internos:
+ *   - 'detalle': listado + acciones (según estado del turno).
+ *   - 'confirmando': vista de confirmación para cancelar (sin anidar modales).
+ */
+function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCancelar, accionando }) {
+  const [modo, setModo] = useState('detalle');
+
+  const esReservado = turno.estado === 'reservado';
+  // Si el turno ya comenzó (hora de inicio <= ahora) ocultamos "Cancelar
+  // turno" — a esa altura las opciones reales son completado o no asistió.
+  const yaComenzo = new Date(turno.inicio) <= new Date();
+
+  // Filas estáticas del DetalleRecurso (label/valor simples).
+  const filasBase = [
+    { label: 'Estado',    valor: <EstadoTurnoPill estado={turno.estado} /> },
+    { label: 'Hora',      valor: `${formatHora(turno.inicio)} – ${formatHora(turno.fin)}` },
+    { label: 'Duración',  valor: formatDuracion(duracionMinutos(turno)) },
+    { label: 'Servicio',  valor: turno.servicio_nombre },
+    { label: 'Barbero',   valor: turno.barbero_nombre },
+    { label: 'Cliente',   valor: turno.cliente_nombre },
+  ];
+
+  return (
+    <Modal
+      open
+      title={modo === 'detalle' ? 'Detalle del turno' : 'Cancelar este turno'}
+      onClose={onCerrar}
+      loading={accionando}
+      maxWidth={460}
+    >
+      {modo === 'detalle' ? (
+        <>
+          <DetalleRecurso filas={filasBase} />
+
+          {/* Contacto del cliente (con botones de copiar) — solo si hay datos */}
+          {(turno.cliente_telefono || turno.cliente_email) && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 12,
+                background: theme.surfaceAlt,
+                border: `1px solid ${theme.hairline}`,
+                borderRadius: theme.radius,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+              }}
+            >
+              {turno.cliente_telefono && (
+                <FilaDetalleConCopia label="Teléfono" valor={turno.cliente_telefono} Icon={Phone} />
+              )}
+              {turno.cliente_email && (
+                <FilaDetalleConCopia label="Email" valor={turno.cliente_email} Icon={Mail} />
+              )}
+            </div>
+          )}
+
+          {/* Acciones — solo si el turno está reservado.
+              Fila 1: Completado + No asistió, cada uno ocupa la mitad
+              (flex: 1) para llenar el ancho del modal.
+              Fila 2 (solo si el turno NO empezó todavía): Cancelar turno,
+              centrado en su propio div con ancho natural. */}
+          {esReservado && (
+            <>
+              <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+                <Button
+                  variant="primary"
+                  full={false}
+                  onClick={() => onCambiarEstado(turno.id, 'completado')}
+                  disabled={accionando}
+                  style={{ flex: 1 }}
+                >
+                  <Check size={14} strokeWidth={2.5} />
+                  Marcar completado
+                </Button>
+                <Button
+                  variant="secondary"
+                  full={false}
+                  onClick={() => onCambiarEstado(turno.id, 'no_asistio')}
+                  disabled={accionando}
+                  style={{ flex: 1 }}
+                >
+                  <UserX size={14} strokeWidth={2} />
+                  No asistió
+                </Button>
+              </div>
+              {!yaComenzo && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+                  <Button
+                    variant="ghost"
+                    full={false}
+                    onClick={() => setModo('confirmando')}
+                    disabled={accionando}
+                    style={{ color: theme.danger }}
+                  >
+                    <Trash2 size={14} strokeWidth={2} />
+                    Cancelar turno
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      ) : (
+        // ── Modo confirmación de cancelación ─────────────────────────────
+        <>
+          <p
+            style={{
+              margin: '0 0 16px',
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              color: theme.inkSoft,
+            }}
+          >
+            Se notificará al cliente por email si tiene uno registrado.
+            Esta acción no se puede deshacer.
+          </p>
+          <DetalleRecurso
+            filas={[
+              { label: 'Hora',     valor: formatHora(turno.inicio) },
+              { label: 'Cliente',  valor: turno.cliente_nombre },
+              { label: 'Servicio', valor: turno.servicio_nombre },
+              { label: 'Barbero',  valor: turno.barbero_nombre },
+            ]}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+            <Button
+              variant="secondary"
+              full={false}
+              onClick={() => setModo('detalle')}
+              disabled={accionando}
+              style={{ flex: 1 }}
+            >
+              Volver
+            </Button>
+            <Button
+              variant="danger"
+              full={false}
+              onClick={() => onCancelar(turno.id)}
+              disabled={accionando}
+              style={{ flex: 1 }}
+            >
+              {accionando ? 'Cancelando…' : 'Sí, cancelar turno'}
+            </Button>
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Componente principal
+// ═══════════════════════════════════════════════════════════════════════════
+
+export default function SeccionTurnero() {
+  const [fecha, setFecha]                 = useState(getFechaHoy);
+  const [vista, setVista]                 = useState('agenda'); // 'agenda' | 'lista'
+  const [barberos, setBarberos]           = useState([]);
+  const [barberoActivo, setBarberoActivo] = useState(null); // null = Todos
+  const [estadoActivo, setEstadoActivo]   = useState(null); // null = Todos
+  const [turnos, setTurnos]               = useState([]);
+  const [cargando, setCargando]           = useState(true);
+  const [error, setError]                 = useState(null);
+  const [intento, setIntento]             = useState(0);
+  const [accionando, setAccionando]       = useState(null);
+  const [errorAccion, setErrorAccion]     = useState(null);
+  const [turnoSeleccionado, setTurnoSeleccionado] = useState(null);
+
+  const errorAccionTimer = useRef(null);
+
+  // ── Mostrar error de acción con auto-dismiss 6s ─────────────────────────
+  const mostrarErrorAccion = (mensaje) => {
+    setErrorAccion(mensaje);
+    if (errorAccionTimer.current) clearTimeout(errorAccionTimer.current);
+    errorAccionTimer.current = setTimeout(() => setErrorAccion(null), 6000);
+  };
+
+  // ── Carga inicial de barberos ───────────────────────────────────────────
   useEffect(() => {
     const cargar = async () => {
       try {
@@ -106,500 +986,241 @@ export default function SeccionTurnero() {
     cargar();
   }, []);
 
-  // ── Carga de turnos (cada vez que cambia fecha o barbero) ─────────────────
+  // ── Carga de turnos (cuando cambia fecha / barbero / intento) ───────────
+  // Nota: el filtro por estado se aplica client-side (no impacta el fetch),
+  // así no se rehace la request cada vez que se togglean los chips de estado.
   useEffect(() => {
+    let cancelado = false;
     const cargar = async () => {
       setCargando(true);
       setError(null);
       try {
         const data = await getAdminTurnos(fecha, barberoActivo);
-        setTurnos(data);
+        if (!cancelado) setTurnos(data);
       } catch (err) {
         console.error('[seccionTurnero] Error en cargarTurnos:', err.message);
-        setError('No se pudieron cargar los turnos.');
+        if (!cancelado) setError('No se pudieron cargar los turnos.');
       } finally {
-        setCargando(false);
+        if (!cancelado) setCargando(false);
       }
     };
     cargar();
-  }, [fecha, barberoActivo]);
+    return () => { cancelado = true; };
+  }, [fecha, barberoActivo, intento]);
 
-  // ── Acciones sobre turnos ─────────────────────────────────────────────────
-
-  /**
-   * cambiarEstado
-   * Cambia el estado de un turno y actualiza la lista local.
-   * @param {string} turnoId
-   * @param {string} nuevoEstado - 'completado' | 'no_asistio'
-   */
+  // ── Acciones ────────────────────────────────────────────────────────────
   const cambiarEstado = async (turnoId, nuevoEstado) => {
     setAccionando(turnoId);
     try {
       const actualizado = await patchAdminTurnoEstado(turnoId, nuevoEstado);
-      setTurnos(prev => prev.map(t => t.id === turnoId ? { ...t, estado: actualizado.estado } : t));
+      setTurnos((prev) =>
+        prev.map((t) => (t.id === turnoId ? { ...t, estado: actualizado.estado } : t)),
+      );
+      setTurnoSeleccionado((prev) =>
+        prev && prev.id === turnoId ? { ...prev, estado: actualizado.estado } : prev,
+      );
     } catch (err) {
       console.error('[seccionTurnero] Error en cambiarEstado:', err.message);
-      alert('Error al cambiar estado: ' + err.message);
+      mostrarErrorAccion(`No se pudo cambiar el estado: ${err.message}`);
     } finally {
       setAccionando(null);
     }
   };
 
-  /**
-   * confirmarCancelacion
-   * Ejecuta la cancelación del turno seleccionado en el modal.
-   */
-  const confirmarCancelacion = async () => {
-    const turnoId = turnoACancelar.id;
+  const cancelarTurno = async (turnoId) => {
     setAccionando(turnoId);
     try {
       await cancelarAdminTurno(turnoId);
-      setTurnos(prev => prev.map(t => t.id === turnoId ? { ...t, estado: 'cancelado' } : t));
-      setTurnoACancelar(null);
+      setTurnos((prev) =>
+        prev.map((t) => (t.id === turnoId ? { ...t, estado: 'cancelado' } : t)),
+      );
+      setTurnoSeleccionado(null);
     } catch (err) {
-      console.error('[seccionTurnero] Error en confirmarCancelacion:', err.message);
-      alert('Error al cancelar turno: ' + err.message);
+      console.error('[seccionTurnero] Error en cancelarTurno:', err.message);
+      mostrarErrorAccion(`No se pudo cancelar el turno: ${err.message}`);
     } finally {
       setAccionando(null);
     }
   };
 
-  // ── Agrupar turnos por barbero (para vista "Todos") ───────────────────────
-  /**
-   * agruparPorBarbero
-   * Agrupa un array de turnos por barbero_id.
-   * @param {Array} lista
-   * @returns {Array<{ barbero_id, barbero_nombre, turnos[] }>}
-   */
-  const agruparPorBarbero = (lista) => {
-    const mapa = new Map();
-    for (const t of lista) {
-      if (!mapa.has(t.barbero_id)) {
-        mapa.set(t.barbero_id, { barbero_id: t.barbero_id, barbero_nombre: t.barbero_nombre, turnos: [] });
-      }
-      mapa.get(t.barbero_id).turnos.push(t);
-    }
-    return Array.from(mapa.values());
+  // ── Derivados ───────────────────────────────────────────────────────────
+  // KPIs del día: SIEMPRE sobre el dataset completo (no respeta filtros).
+  const kpisDia = {
+    total:      turnos.length,
+    reservado:  turnos.filter((t) => t.estado === 'reservado').length,
+    completado: turnos.filter((t) => t.estado === 'completado').length,
+    sinExito:   turnos.filter((t) => t.estado === 'no_asistio' || t.estado === 'cancelado').length,
   };
 
-  // Turnos filtrados que no estén cancelados en la vista activa
-  const turnosVisibles = turnos;
-  const grupos = barberoActivo === null ? agruparPorBarbero(turnosVisibles) : null;
+  // Turnos visibles: aplica filtro de estado (el de barbero ya viene del fetch).
+  const turnosVisibles = estadoActivo
+    ? turnos.filter((t) => t.estado === estadoActivo)
+    : turnos;
 
-  // ── Render de una fila de turno ───────────────────────────────────────────
-  /**
-   * renderFilaTurno
-   * Renderiza una fila <tr> para un turno individual.
-   * @param {Object} turno
-   * @param {boolean} mostrarBarbero - true cuando se ve un barbero individual
-   *                                   (no se muestra columna barbero en agrupado)
-   */
-  const renderFilaTurno = (turno, mostrarBarbero = false) => {
-    const estadoInfo = COLORES_ESTADO[turno.estado] || COLORES_ESTADO.reservado;
-    const deshabilitado = accionando === turno.id;
-    const esActivo = turno.estado === 'reservado';
+  // Barberos visibles en la agenda (columnas).
+  const barberosVisibles = barberoActivo
+    ? barberos.filter((b) => b.id === barberoActivo)
+    : barberos;
 
-    return (
-      <tr key={turno.id}>
-        <td style={styles.td}>{formatHora(turno.inicio)}</td>
-        {mostrarBarbero && <td style={styles.td}>{turno.barbero_nombre}</td>}
-        <td style={styles.td}>{turno.cliente_nombre}</td>
-        <td style={styles.td}>{turno.servicio_nombre}</td>
-        <td style={styles.td}>
-          <span style={{ ...styles.badge, backgroundColor: estadoInfo.bg, color: estadoInfo.color }}>
-            {LABEL_ESTADO[turno.estado] || turno.estado}
-          </span>
-        </td>
-        <td style={styles.tdAcciones}>
-          {esActivo && (
-            <div style={styles.accionesRow}>
-              <button
-                style={styles.btnCompletado}
-                onPointerDown={() => cambiarEstado(turno.id, 'completado')}
-                disabled={deshabilitado}
-                title="Marcar como completado"
-              >
-                ✓
-              </button>
-              <button
-                style={styles.btnNoAsistio}
-                onPointerDown={() => cambiarEstado(turno.id, 'no_asistio')}
-                disabled={deshabilitado}
-                title="Marcar como no asistió"
-              >
-                ✗
-              </button>
-              <button
-                style={styles.btnCancelarTurno}
-                onPointerDown={() => setTurnoACancelar(turno)}
-                disabled={deshabilitado}
-                title="Cancelar turno"
-              >
-                🗑
-              </button>
-            </div>
-          )}
-        </td>
-      </tr>
-    );
-  };
+  // Rango horario de la agenda — derivado del dataset completo del día
+  // (no de los filtrados), así no "pega saltos" cuando cambia el chip de estado.
+  const rangoAgenda = calcularRangoAgenda(turnos);
 
-  // ── Render principal ──────────────────────────────────────────────────────
+  // ── Render ──────────────────────────────────────────────────────────────
   return (
-    <div style={styles.contenedor}>
+    <div style={{ padding: '24px 32px', fontFamily: theme.body, color: theme.ink }}>
 
-      {/* ── Modal de cancelación ── */}
-      {turnoACancelar && (
-        <ModalCancelarTurno
-          turno={turnoACancelar}
-          onConfirmar={confirmarCancelacion}
-          onCerrar={() => setTurnoACancelar(null)}
-          cancelando={accionando === turnoACancelar.id}
-        />
+      {/* Banner de error de acción */}
+      {errorAccion && (
+        <BannerError mensaje={errorAccion} onCerrar={() => setErrorAccion(null)} />
       )}
 
-      {/* ── FILA 1: título ──────────────────────────────────────────────── */}
-      <div style={styles.fila1}>
-        <div>
-          <h2 style={styles.titulo}>Turnero</h2>
-          <p style={styles.subtitulo}>Vista global de turnos del día</p>
+      {/* ── FILA CONTROLES ─────────────────────────────────────────────── */}
+      {/* Grid de 3 columnas (1fr / auto / 1fr) — el SelectorDia queda
+          ópticamente centrado independientemente del ancho del toggle. */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr auto 1fr',
+          alignItems: 'center',
+          gap: 16,
+          marginBottom: 16,
+        }}
+      >
+        <div />
+        <SelectorDia value={fecha} onChange={setFecha} permitirFuturo />
+        <div style={{ justifySelf: 'end' }}>
+          <SegmentedVista valor={vista} onChange={setVista} />
         </div>
       </div>
 
-      {/* ── FILA 2: selector de fecha ───────────────────────────────────── */}
-      <div style={styles.filaFecha}>
-        <SelectorDia value={fecha} onChange={setFecha} permitirFuturo />
+      {/* ── KPIs DEL DÍA ───────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <KpiMini label="Total del día" valor={kpisDia.total}      tono="ink" />
+        <KpiMini label="Reservados"    valor={kpisDia.reservado}  tono="accent" />
+        <KpiMini label="Completados"   valor={kpisDia.completado} tono="success" />
+        <KpiMini label="Sin éxito"     valor={kpisDia.sinExito}   tono="muted" />
       </div>
 
-      {/* ── FILA 3: pills de barberos ───────────────────────────────────── */}
+      {/* ── FILTRO PRIMARIO: BARBEROS ──────────────────────────────────── */}
       {barberos.length > 0 && (
-        <div style={styles.filaBarberos}>
-          <div style={styles.tabsContainer}>
-            <button
-              style={{ ...styles.tabBtn, ...(barberoActivo === null ? styles.tabBtnActivo : {}) }}
-              onPointerDown={() => setBarberoActivo(null)}
-            >
-              Todos
-            </button>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <ChipFiltro
+              label="Todos"
+              activo={barberoActivo === null}
+              onClick={() => setBarberoActivo(null)}
+            />
             {barberos.map((b) => (
-              <button
+              <ChipFiltro
                 key={b.id}
-                style={{ ...styles.tabBtn, ...(barberoActivo === b.id ? styles.tabBtnActivo : {}) }}
-                onPointerDown={() => setBarberoActivo(b.id)}
-              >
-                {b.nombre}
-              </button>
+                label={b.nombre}
+                activo={barberoActivo === b.id}
+                onClick={() => setBarberoActivo(b.id)}
+              />
             ))}
           </div>
         </div>
       )}
 
-      {/* ── CONTENIDO ───────────────────────────────────────────────────── */}
-      <div style={styles.contenido}>
-        {cargando && <p style={styles.estadoTexto}>Cargando turnos...</p>}
-        {!cargando && error && <p style={styles.errorTexto}>{error}</p>}
-
-        {!cargando && !error && turnosVisibles.length === 0 && (
-          <p style={styles.estadoTexto}>No hay turnos para este día.</p>
-        )}
-
-        {/* ── Vista con barbero seleccionado (tabla plana) ── */}
-        {!cargando && !error && turnosVisibles.length > 0 && barberoActivo !== null && (
-          <div style={styles.bloque}>
-            <table style={styles.tabla}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Hora</th>
-                  <th style={styles.th}>Cliente</th>
-                  <th style={styles.th}>Servicio</th>
-                  <th style={styles.th}>Estado</th>
-                  <th style={styles.thAcciones}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {turnosVisibles.map(t => renderFilaTurno(t, false))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* ── Vista "Todos" (agrupado por barbero) ── */}
-        {!cargando && !error && turnosVisibles.length > 0 && barberoActivo === null && (
-          grupos.map(grupo => (
-            <div key={grupo.barbero_id} style={styles.bloque}>
-              <div style={styles.grupoHeader}>
-                <span style={styles.grupoNombre}>{grupo.barbero_nombre}</span>
-                <span style={styles.grupoCantidad}>
-                  {grupo.turnos.length} turno{grupo.turnos.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-              <table style={styles.tabla}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>Hora</th>
-                    <th style={styles.th}>Cliente</th>
-                    <th style={styles.th}>Servicio</th>
-                    <th style={styles.th}>Estado</th>
-                    <th style={styles.thAcciones}>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {grupo.turnos.map(t => renderFilaTurno(t, false))}
-                </tbody>
-              </table>
-            </div>
-          ))
-        )}
+      {/* ── FILTRO SECUNDARIO: ESTADO ──────────────────────────────────── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          marginBottom: 18,
+          flexWrap: 'wrap',
+        }}
+      >
+        <span
+          style={{
+            fontFamily: theme.mono,
+            fontSize: theme.sizeMicro,
+            fontWeight: theme.weightHeading,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            color: theme.inkSoft,
+          }}
+        >
+          Estado
+        </span>
+        <ChipFiltro
+          size="sm"
+          label="Todos"
+          activo={estadoActivo === null}
+          onClick={() => setEstadoActivo(null)}
+        />
+        {ESTADOS_FILTRO.map((e) => (
+          <ChipFiltro
+            key={e}
+            size="sm"
+            label={ESTADO_MAP[e].label}
+            activo={estadoActivo === e}
+            onClick={() => setEstadoActivo(e)}
+          />
+        ))}
       </div>
+
+      {/* ── CONTENIDO ──────────────────────────────────────────────────── */}
+      {cargando && <LoadingState />}
+
+      {!cargando && error && (
+        <EmptyState
+          glyph={<IconoAlerta />}
+          title="Algo salió mal"
+          body={error}
+          action={
+            <Button variant="primary" full={false} onClick={() => setIntento((n) => n + 1)}>
+              <RefreshCw size={14} strokeWidth={2} />
+              Reintentar
+            </Button>
+          }
+        />
+      )}
+
+      {/* La agenda / lista siempre se renderiza si hay barberos cargados,
+          aunque no haya turnos visibles. El calendario "vacío" sigue siendo
+          la representación correcta del día (huecos visibles, columnas
+          presentes). EmptyState se reserva para el caso edge de no tener
+          ningún barbero cargado en el tenant. */}
+      {!cargando && !error && barberosVisibles.length === 0 && (
+        <EmptyState
+          glyph={<Calendar size={28} strokeWidth={1.5} />}
+          title="Sin barberos cargados"
+          body="No hay barberos activos para mostrar la agenda. Cargá al menos uno desde Gestión."
+        />
+      )}
+
+      {!cargando && !error && barberosVisibles.length > 0 && vista === 'agenda' && (
+        <AgendaVista
+          turnos={turnosVisibles}
+          barberosVisibles={barberosVisibles}
+          rangoInicio={rangoAgenda.inicio}
+          rangoFin={rangoAgenda.fin}
+          fecha={fecha}
+          onTurnoClick={setTurnoSeleccionado}
+        />
+      )}
+
+      {!cargando && !error && barberosVisibles.length > 0 && vista === 'lista' && (
+        <ListaVista
+          turnos={turnosVisibles}
+          mostrarBarbero={barberoActivo === null}
+          onTurnoClick={setTurnoSeleccionado}
+        />
+      )}
+
+      {/* ── MODAL DE DETALLE ───────────────────────────────────────────── */}
+      {turnoSeleccionado && (
+        <ModalDetalleTurno
+          turno={turnoSeleccionado}
+          onCerrar={() => setTurnoSeleccionado(null)}
+          onCambiarEstado={cambiarEstado}
+          onCancelar={cancelarTurno}
+          accionando={accionando === turnoSeleccionado.id}
+        />
+      )}
     </div>
   );
 }
-
-// ─── Estilos ─────────────────────────────────────────────────────────────────
-const styles = {
-  contenedor: {
-    padding: '36px 40px',
-    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
-    color: '#111111',
-  },
-
-  // ── Fila 1: título ──────────────────────────────────────────────────────
-  fila1: {
-    marginBottom: '20px',
-  },
-  titulo: {
-    fontSize: '24px', fontWeight: '700', color: '#111', margin: '0 0 4px',
-  },
-  subtitulo: {
-    fontSize: '14px', color: '#888', margin: 0,
-  },
-
-  // ── Fila 2: selector de fecha ───────────────────────────────────────────
-  filaFecha: {
-    display: 'flex',
-    justifyContent: 'center',
-    marginBottom: '16px',
-  },
-
-  // ── Fila 3: pills de barberos ───────────────────────────────────────────
-  filaBarberos: {
-    display: 'flex',
-    alignItems: 'center',
-    marginBottom: '20px',
-  },
-  tabsContainer: {
-    display: 'flex',
-    gap: '4px',
-    backgroundColor: '#f5f5f5',
-    borderRadius: '12px',
-    padding: '4px',
-  },
-  tabBtn: {
-    padding: '8px 20px',
-    borderRadius: '9px',
-    border: 'none',
-    backgroundColor: 'transparent',
-    color: '#888888',
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  tabBtnActivo: {
-    backgroundColor: '#ffffff',
-    color: '#111111',
-    fontWeight: '600',
-    boxShadow: '0 1px 4px rgba(0,0,0,0.10)',
-  },
-
-  // ── Contenido ───────────────────────────────────────────────────────────
-  contenido: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-  },
-
-  // ── Bloque (tabla envuelta en card) ─────────────────────────────────────
-  bloque: {
-    backgroundColor: '#ffffff',
-    border: '1.5px solid #eeeeee',
-    borderRadius: '16px',
-    overflow: 'hidden',
-  },
-
-  // ── Header de grupo (vista "Todos") ─────────────────────────────────────
-  grupoHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '14px 20px',
-    backgroundColor: '#fafafa',
-    borderBottom: '1px solid #f0f0f0',
-  },
-  grupoNombre: {
-    fontSize: '14px',
-    fontWeight: '700',
-    color: '#333',
-  },
-  grupoCantidad: {
-    fontSize: '13px',
-    color: '#888',
-    fontWeight: '500',
-  },
-
-  // ── Tabla ───────────────────────────────────────────────────────────────
-  tabla: {
-    width: '100%',
-    borderCollapse: 'collapse',
-  },
-  th: {
-    padding: '12px 20px',
-    fontSize: '11px',
-    fontWeight: '700',
-    color: '#999999',
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-    textAlign: 'left',
-    backgroundColor: '#fafafa',
-    borderBottom: '1px solid #f0f0f0',
-  },
-  thAcciones: {
-    padding: '12px 20px',
-    fontSize: '11px',
-    fontWeight: '700',
-    color: '#999999',
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-    textAlign: 'center',
-    backgroundColor: '#fafafa',
-    borderBottom: '1px solid #f0f0f0',
-  },
-  td: {
-    padding: '14px 20px',
-    fontSize: '14px',
-    color: '#333333',
-    borderBottom: '1px solid #f7f7f7',
-  },
-  tdAcciones: {
-    padding: '10px 20px',
-    textAlign: 'center',
-    borderBottom: '1px solid #f7f7f7',
-  },
-
-  // ── Badge de estado ─────────────────────────────────────────────────────
-  badge: {
-    display: 'inline-block',
-    padding: '3px 10px',
-    borderRadius: '20px',
-    fontSize: '12px',
-    fontWeight: '600',
-  },
-
-  // ── Botones de acción ───────────────────────────────────────────────────
-  accionesRow: {
-    display: 'flex',
-    gap: '6px',
-    justifyContent: 'center',
-  },
-  btnCompletado: {
-    width: '30px',
-    height: '30px',
-    borderRadius: '8px',
-    border: '1.5px solid #c8e6c9',
-    backgroundColor: '#e8f5e9',
-    color: '#2e7d32',
-    fontSize: '14px',
-    fontWeight: '700',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  btnNoAsistio: {
-    width: '30px',
-    height: '30px',
-    borderRadius: '8px',
-    border: '1.5px solid #ffe0b2',
-    backgroundColor: '#fff8e1',
-    color: '#f57f17',
-    fontSize: '14px',
-    fontWeight: '700',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  btnCancelarTurno: {
-    width: '30px',
-    height: '30px',
-    borderRadius: '8px',
-    border: '1.5px solid #f0f0f0',
-    backgroundColor: '#ffffff',
-    color: '#999',
-    fontSize: '13px',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-
-  // ── Modal de cancelación ─────────────────────────────────────────────────
-  modalOverlay: {
-    position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-  },
-  modalCard: {
-    backgroundColor: '#ffffff', borderRadius: '20px',
-    padding: '32px', width: '420px', maxWidth: '90vw',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  modalTitulo: {
-    fontSize: '20px', fontWeight: '700', color: '#111111',
-    margin: '0 0 6px', textAlign: 'center',
-  },
-  modalAdvertencia: {
-    fontSize: '13px', color: '#c0392b', textAlign: 'center', margin: '0 0 24px',
-  },
-  modalDetalle: {
-    backgroundColor: '#fafafa', borderRadius: '12px',
-    border: '1.5px solid #eeeeee', padding: '16px 20px',
-    marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '10px',
-  },
-  modalFila:    { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  modalLabel:   { fontSize: '13px', color: '#888888' },
-  modalValor:   { fontSize: '14px', color: '#111111', fontWeight: '600' },
-  modalDivider: { height: '1px', backgroundColor: '#eeeeee' },
-  modalBotones: { display: 'flex', gap: '12px' },
-  btnModalCancelar: {
-    flex: 1, padding: '13px 0', borderRadius: '12px',
-    border: '1.5px solid #e0e0e0', backgroundColor: '#ffffff',
-    color: '#444444', fontSize: '15px', fontWeight: '500',
-    cursor: 'pointer', fontFamily: 'inherit',
-  },
-  btnModalConfirmar: {
-    flex: 1, padding: '13px 0', borderRadius: '12px',
-    border: 'none', backgroundColor: '#c0392b',
-    color: '#ffffff', fontSize: '15px', fontWeight: '600',
-    cursor: 'pointer', fontFamily: 'inherit',
-  },
-
-  // ── Estados ─────────────────────────────────────────────────────────────
-  estadoTexto: {
-    textAlign: 'center',
-    color: '#999999',
-    fontSize: '15px',
-    padding: '40px 0',
-    margin: 0,
-  },
-  errorTexto: {
-    textAlign: 'center',
-    color: '#c0392b',
-    fontSize: '14px',
-    padding: '20px 0',
-    margin: 0,
-  },
-};

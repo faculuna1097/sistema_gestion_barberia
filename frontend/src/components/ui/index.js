@@ -27,3 +27,4 @@ export { default as Select }          from './Select.jsx';
 export { default as BotonIconoFila }  from './BotonIconoFila.jsx';
 export { default as DetalleRecurso }  from './DetalleRecurso.jsx';
 export { default as BadgeVariacion }  from './BadgeVariacion.jsx';
+export { default as ChipFiltro }      from './ChipFiltro.jsx';
