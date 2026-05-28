@@ -1,217 +1,222 @@
 // /frontend/src/screens/admin/sections/gestion/TabTurnero.jsx
-// Configuración del turnero: duración de slots.
-// Lee y actualiza duracion_slot_minutos del tenant vía PUT /api/admin/turnero/config.
+// Configuración del booking online del turnero. Hoy: única opción es la
+// duración del slot en minutos (1-240). La estructura está preparada para
+// sumar más cards de config (anticipación, días habilitados, etc.) en
+// fases siguientes — cada una sería otra card stackeada en el mismo wrapper.
+//
+// Sistema de diseño: tokens + Geist + Lucide + onClick. Loading via
+// LoadingState (D6). Feedback inline (sin modal): success / error en un
+// banner discreto encima del botón Guardar.
 
 import { useState, useEffect } from 'react';
+import { CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
+
 import { getAdminTurneroConfig, putAdminTurneroConfig } from '../../../../services/api';
+import {
+  Button,
+  Field,
+  EmptyState,
+  LoadingState,
+  IconoAlerta,
+} from '../../../../components/ui';
+import { theme } from '../../../../theme/tokens.js';
 
+// ─── Sub-componente local ─────────────────────────────────────────────────────
+
+/**
+ * MensajeFeedback
+ * Banner inline para mostrar resultado de una operación de guardado. Variante
+ * success / danger con su ícono Lucide correspondiente y bg / color tinted.
+ * Local a esta sección por ahora — segundo caso del patrón podría disparar el
+ * primitivo Toast (deuda #30 del plan).
+ *
+ * @param {object} props
+ * @param {'success'|'danger'} props.tipo
+ * @param {string} props.children - Texto del mensaje.
+ */
+function MensajeFeedback({ tipo, children }) {
+  const cfg = tipo === 'success'
+    ? { bg: theme.successSoft, color: theme.success, Icon: CheckCircle2 }
+    : { bg: theme.dangerSoft,  color: theme.danger,  Icon: AlertTriangle };
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '10px 12px',
+      background: cfg.bg,
+      border: `1px solid ${cfg.color}33`,
+      borderRadius: theme.radius,
+      color: cfg.color,
+      fontFamily: theme.body,
+      fontSize: theme.sizeBody,
+    }}>
+      <cfg.Icon size={16} strokeWidth={1.75} />
+      <span>{children}</span>
+    </div>
+  );
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
+
+/**
+ * TabTurnero
+ * Tab de configuración del booking online. Carga la config del tenant al
+ * montar; guarda PUT solo cuando hay cambios y el valor es válido.
+ *
+ * @returns {JSX.Element}
+ */
 export default function TabTurnero() {
-  const [duracion, setDuracion]     = useState('');
-  const [original, setOriginal]     = useState('');
-  const [cargando, setCargando]     = useState(true);
-  const [guardando, setGuardando]   = useState(false);
-  const [mensaje, setMensaje]       = useState(null);
-  const [error, setError]           = useState(null);
+  const [duracion, setDuracion]   = useState('');
+  const [original, setOriginal]   = useState('');
+  const [cargando, setCargando]   = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [intento, setIntento]     = useState(0);
+  const [feedback, setFeedback]   = useState(null); // { tipo: 'success'|'danger', texto: string } | null
+  const [errorCarga, setErrorCarga] = useState(null);
 
+  // ── Carga inicial / reintentos ────────────────────────────────────────────
   useEffect(() => {
-    async function cargar() {
+    let cancelado = false;
+    const cargar = async () => {
+      setCargando(true);
+      setErrorCarga(null);
       try {
         const data = await getAdminTurneroConfig();
         const valor = String(data.duracion_slot_minutos);
-        setDuracion(valor);
-        setOriginal(valor);
+        if (!cancelado) {
+          setDuracion(valor);
+          setOriginal(valor);
+        }
       } catch (err) {
         console.error('[tabTurnero] Error cargando config:', err.message);
-        setError('No se pudo cargar la configuración del turnero.');
+        if (!cancelado) setErrorCarga('No se pudo cargar la configuración del turnero.');
       } finally {
-        setCargando(false);
+        if (!cancelado) setCargando(false);
       }
-    }
+    };
     cargar();
-  }, []);
+    return () => { cancelado = true; };
+  }, [intento]);
+
+  // ── Validación derivada ───────────────────────────────────────────────────
+  const valorNumero  = Number(duracion);
+  const valorValido  = duracion !== '' && Number.isInteger(valorNumero) && valorNumero >= 1 && valorNumero <= 240;
+  const hayCambios   = duracion !== original;
+  const puedeGuardar = hayCambios && valorValido && !guardando;
 
   /**
-   * guardar — envía la nueva duración al backend.
+   * guardar
+   * Envía el PUT con la nueva duración. En éxito, sincroniza `original` con
+   * el valor confirmado por el backend y muestra feedback success.
    */
   const guardar = async () => {
-    const valor = Number(duracion);
-    if (!Number.isInteger(valor) || valor < 1 || valor > 240) {
-      setMensaje('La duración debe ser un número entero entre 1 y 240 minutos.');
-      return;
-    }
-
+    if (!puedeGuardar) return;
     setGuardando(true);
-    setMensaje(null);
+    setFeedback(null);
     try {
-      const data = await putAdminTurneroConfig({ duracion_slot_minutos: valor });
+      const data = await putAdminTurneroConfig({ duracion_slot_minutos: valorNumero });
       const nuevoValor = String(data.duracion_slot_minutos);
       setDuracion(nuevoValor);
       setOriginal(nuevoValor);
-      setMensaje('Configuración guardada correctamente.');
+      setFeedback({ tipo: 'success', texto: 'Configuración guardada correctamente.' });
     } catch (err) {
       console.error('[tabTurnero] Error guardando:', err.message);
-      setMensaje('Error: ' + err.message);
+      setFeedback({ tipo: 'danger', texto: err.message || 'No se pudo guardar la configuración.' });
     } finally {
       setGuardando(false);
     }
   };
 
-  const hayCambios = duracion !== original;
-  const valorValido = duracion !== '' && Number.isInteger(Number(duracion)) && Number(duracion) >= 1 && Number(duracion) <= 240;
+  /**
+   * onChangeDuracion
+   * Filtra a solo dígitos (mismo patrón que Servicios/Productos para inputs
+   * numéricos con type=text + inputMode=numeric) y limpia el feedback previo.
+   */
+  const onChangeDuracion = (v) => {
+    setDuracion(v.replace(/\D/g, ''));
+    setFeedback(null);
+  };
 
-  if (cargando) return <p style={styles.estadoTexto}>Cargando configuración...</p>;
-  if (error)    return <p style={styles.errorTexto}>{error}</p>;
+  // ── Estados de carga / error ──────────────────────────────────────────────
+  if (cargando) return <LoadingState />;
+  if (errorCarga) {
+    return (
+      <EmptyState
+        glyph={<IconoAlerta />}
+        title="No se pudo cargar la configuración"
+        body={errorCarga}
+        action={
+          <Button variant="secondary" onClick={() => setIntento((n) => n + 1)} full={false}>
+            <RefreshCw size={16} strokeWidth={1.75} /> Reintentar
+          </Button>
+        }
+      />
+    );
+  }
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={styles.contenedor}>
-      <div style={styles.card}>
-        <p style={styles.cardTitulo}>Duración de slots</p>
-        <p style={styles.cardDescripcion}>
-          Define la unidad mínima de tiempo del turnero. Cada servicio ocupa uno o más slots.
-          Por ejemplo, con slots de 30 minutos, un servicio de 1 slot dura 30 min y uno de 2 slots dura 60 min.
-        </p>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 16,
+      maxWidth: 600,
+    }}>
 
-        <div style={styles.campoRow}>
-          <div style={styles.campoGrupo}>
-            <label style={styles.campoLabel}>Minutos por slot</label>
-            <div style={styles.inputRow}>
-              <input
-                type="number"
-                min="1"
-                max="240"
-                value={duracion}
-                onChange={(e) => { setDuracion(e.target.value); setMensaje(null); }}
-                style={{
-                  ...styles.campoInput,
-                  borderColor: duracion !== '' && !valorValido ? '#c0392b' : '#e0e0e0',
-                }}
-              />
-              <span style={styles.sufijo}>min</span>
-            </div>
-            {duracion !== '' && !valorValido && (
-              <p style={styles.campoError}>Debe ser un número entero entre 1 y 240.</p>
-            )}
+      <div style={{
+        background: theme.surface,
+        border: `1px solid ${theme.hairline}`,
+        borderRadius: theme.radiusLg,
+        padding: 20,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+      }}>
+        <div>
+          <div style={{
+            fontFamily: theme.body,
+            fontWeight: theme.weightHeading,
+            fontSize: theme.sizeHeading,
+            color: theme.ink,
+            letterSpacing: '-0.01em',
+          }}>
+            Duración de slots
+          </div>
+          <div style={{
+            fontFamily: theme.body,
+            fontSize: theme.sizeBody,
+            color: theme.muted,
+            lineHeight: 1.5,
+            marginTop: 6,
+          }}>
+            Define la unidad mínima de tiempo del turnero. Cada servicio ocupa uno o más slots — con slots de 30 min, un servicio de 1 slot dura 30 min y uno de 2 slots, 60 min.
           </div>
         </div>
 
-        {mensaje && (
-          <p style={{
-            ...styles.mensaje,
-            color: mensaje.startsWith('Error') ? '#c0392b' : '#2e7d32',
-          }}>
-            {mensaje}
-          </p>
+        <Field
+          label="Minutos por slot"
+          type="text"
+          inputMode="numeric"
+          value={duracion}
+          onChange={onChangeDuracion}
+          placeholder="Ej: 30"
+          helper="Entre 1 y 240."
+          invalid={duracion !== '' && !valorValido}
+        />
+
+        {feedback && (
+          <MensajeFeedback tipo={feedback.tipo}>{feedback.texto}</MensajeFeedback>
         )}
 
-        <button
-          onPointerDown={guardar}
-          disabled={!hayCambios || !valorValido || guardando}
-          style={{
-            ...styles.btnGuardar,
-            ...(!hayCambios || !valorValido || guardando ? styles.btnDeshabilitado : {}),
-          }}
-        >
-          {guardando ? 'Guardando...' : 'Guardar'}
-        </button>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Button variant="primary" onClick={guardar} disabled={!puedeGuardar} full={false}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </div>
       </div>
+
     </div>
   );
 }
-
-const styles = {
-  estadoTexto: {
-    textAlign: 'center',
-    color: '#888888',
-    fontSize: '15px',
-    padding: '48px 0',
-    margin: 0,
-  },
-  errorTexto: {
-    textAlign: 'center',
-    color: '#c0392b',
-    fontSize: '15px',
-    padding: '48px 0',
-    margin: 0,
-  },
-  contenedor: {
-    maxWidth: '580px',
-    margin: '0 auto',
-  },
-  card: {
-    padding: '24px',
-    backgroundColor: '#ffffff',
-    borderRadius: '12px',
-    border: '1.5px solid #eeeeee',
-  },
-  cardTitulo: {
-    fontSize: '16px',
-    fontWeight: '600',
-    color: '#111111',
-    margin: '0 0 8px',
-  },
-  cardDescripcion: {
-    fontSize: '13px',
-    color: '#888888',
-    margin: '0 0 20px',
-    lineHeight: '1.5',
-  },
-  campoRow: {
-    marginBottom: '16px',
-  },
-  campoGrupo: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  campoLabel: {
-    fontSize: '13px',
-    fontWeight: '600',
-    color: '#555555',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  inputRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  campoInput: {
-    padding: '11px 14px',
-    borderRadius: '10px',
-    border: '1.5px solid #e0e0e0',
-    fontSize: '15px',
-    color: '#111111',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-    outline: 'none',
-    width: '120px',
-  },
-  sufijo: {
-    fontSize: '15px',
-    color: '#888888',
-    fontWeight: '500',
-  },
-  campoError: {
-    fontSize: '12px',
-    color: '#c0392b',
-    margin: 0,
-  },
-  mensaje: {
-    fontSize: '13px',
-    margin: '0 0 12px',
-  },
-  btnGuardar: {
-    padding: '10px 24px',
-    borderRadius: '10px',
-    border: 'none',
-    backgroundColor: '#1a7a4a',
-    color: '#ffffff',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  btnDeshabilitado: {
-    backgroundColor: '#cccccc',
-    cursor: 'not-allowed',
-  },
-};

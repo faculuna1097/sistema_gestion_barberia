@@ -1,159 +1,256 @@
 // /frontend/src/screens/admin/sections/gestion/TabSeguridad.jsx
-// Tab "Seguridad" del panel admin. Agrupa todas las credenciales de acceso
-// del sistema en una sola pantalla:
+// Tab "Seguridad" del panel admin. Agrupa credenciales de acceso del sistema:
 //   - PIN del administrador (acceso al panel desde tablets / desktop).
 //   - Usuario y contraseña del modo operativo (login del iPad del local).
 //
-// Layout: cards con filas tipo "campo · valor · botón editar".
-// Cada botón de editar abre un modal con su formulario propio.
+// Layout: dos cards stackeadas, una por concepto. Cada credencial es una
+// fila label · valor enmascarado · botón editar — el click en el botón abre
+// un modal específico con el form propio del cambio.
 //
-// Por qué cada campo abre un modal en vez de un formulario inline:
-//   - Mantiene la vista principal limpia y declarativa.
-//   - Permite distintos campos / validaciones por modal sin acumular estado
-//     en el componente padre.
-//   - Cierra cleanly tras éxito y resetea el form sin guardar borrador.
+// Sistema de diseño: tokens + Geist + Lucide + onClick. Loading inline para
+// el usuario operativo. Feedback de éxito vía primitivo Toast (auto-dismiss).
+//
+// Deudas detectadas y anotadas en el plan:
+// - Cambiar contraseña / usuario operativo no pide la contraseña actual.
+// - El reintento de la carga del usuario operativo no está expuesto (si falla
+//   queda "Sin configurar" — semánticamente erróneo).
 
 import { useState, useEffect } from 'react';
+import { Pencil } from 'lucide-react';
+
 import {
   apiFetch,
   getCredencialesOperativas,
   actualizarCredencialesOperativas,
 } from '../../../../services/api';
+import {
+  Button,
+  Field,
+  Modal,
+  Toast,
+  BotonIconoFila,
+} from '../../../../components/ui';
+import { theme } from '../../../../theme/tokens.js';
 
-// ─── Ícono de editar (lápiz) ──────────────────────────────────────────────────
-const EditIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-  </svg>
-);
+// ─── Sub-componentes locales ──────────────────────────────────────────────────
+
+/**
+ * CardConfig
+ * Card de bloque de configuración con título heading + descripción muted +
+ * children (filas de credenciales).
+ * Local — específica del layout de esta tab. Promover si aparece un patrón
+ * idéntico en otra tab (probable en TabNegocio en el chat B).
+ *
+ * @param {object} props
+ * @param {string} props.titulo
+ * @param {string} props.descripcion
+ * @param {React.ReactNode} props.children
+ */
+function CardConfig({ titulo, descripcion, children }) {
+  return (
+    <div style={{
+      background: theme.surface,
+      border: `1px solid ${theme.hairline}`,
+      borderRadius: theme.radiusLg,
+      padding: 20,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 14,
+    }}>
+      <div>
+        <div style={{
+          fontFamily: theme.body,
+          fontWeight: theme.weightHeading,
+          fontSize: theme.sizeHeading,
+          color: theme.ink,
+          letterSpacing: '-0.01em',
+        }}>{titulo}</div>
+        <div style={{
+          fontFamily: theme.body,
+          fontSize: theme.sizeBody,
+          color: theme.muted,
+          lineHeight: 1.5,
+          marginTop: 6,
+        }}>{descripcion}</div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * FilaCredencial
+ * Fila label · valor · botón editar. Separador inferior hairlineSoft excepto
+ * en la última (controlado por prop `last`).
+ *
+ * @param {object} props
+ * @param {string} props.label - Texto en eyebrow mono uppercase.
+ * @param {React.ReactNode} props.valor - Valor enmascarado / texto.
+ * @param {() => void} props.onEditar - Click del botón lápiz.
+ * @param {boolean} [props.disabled=false] - Deshabilita el botón.
+ * @param {boolean} [props.last=false] - Si true, no renderiza border-bottom.
+ */
+function FilaCredencial({ label, valor, onEditar, disabled = false, last = false }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 16,
+      padding: '12px 0',
+      borderBottom: last ? 'none' : `1px solid ${theme.hairlineSoft}`,
+    }}>
+      <span style={{
+        fontFamily: theme.mono,
+        fontWeight: theme.weightMedium,
+        fontSize: theme.sizeMicro,
+        letterSpacing: '0.04em',
+        textTransform: 'uppercase',
+        color: theme.muted,
+        minWidth: 110,
+      }}>{label}</span>
+      <span style={{
+        flex: 1,
+        fontFamily: theme.body,
+        fontSize: theme.sizeBody,
+        color: theme.ink,
+      }}>{valor}</span>
+      <BotonIconoFila
+        icono={<Pencil size={14} strokeWidth={1.75} />}
+        tono="accent"
+        onClick={onEditar}
+        disabled={disabled}
+        ariaLabel={`Cambiar ${label.toLowerCase()}`}
+      />
+    </div>
+  );
+}
+
+/**
+ * PillSinConfigurar
+ * Pill warning para indicar que un campo de credencial está vacío. Más
+ * declarativo que un texto rojo italic.
+ */
+function PillSinConfigurar() {
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '2px 8px',
+      borderRadius: theme.radiusSm,
+      fontFamily: theme.body,
+      fontSize: theme.sizeMicro,
+      fontWeight: theme.weightMedium,
+      letterSpacing: '0.02em',
+      textTransform: 'uppercase',
+      background: theme.warningSoft,
+      color: theme.warning,
+    }}>
+      Sin configurar
+    </span>
+  );
+}
 
 // ─── Componente principal ─────────────────────────────────────────────────────
+
+/**
+ * TabSeguridad
+ * Tab de gestión de credenciales: PIN admin + usuario/contraseña operativos.
+ *
+ * @returns {JSX.Element}
+ */
 export default function TabSeguridad() {
-  // Usuario operativo actual — precargado para el modal de cambio de usuario.
   const [usuarioOperativo, setUsuarioOperativo] = useState(null);
-  const [cargandoUsuario, setCargandoUsuario] = useState(true);
+  const [cargandoUsuario, setCargandoUsuario]   = useState(true);
+  const [modalAbierto, setModalAbierto]         = useState(null); // 'pin'|'usuario'|'password'|null
+  const [toast, setToast]                       = useState(null); // { tone, texto }
 
-  // Modal activo: 'pin' | 'usuario' | 'password' | null
-  const [modalAbierto, setModalAbierto] = useState(null);
-
-  // Mensaje de éxito tras un cambio (toast simple). Se autoborra a los 4s.
-  const [mensajeExito, setMensajeExito] = useState(null);
-
-  // Cargar usuario operativo al montar para poder precargarlo en el modal.
+  // ── Pre-carga del usuario operativo ───────────────────────────────────────
   useEffect(() => {
+    let cancelado = false;
     (async () => {
       try {
         const data = await getCredencialesOperativas();
-        setUsuarioOperativo(data.usuario);
+        if (!cancelado) setUsuarioOperativo(data.usuario);
       } catch (err) {
         console.error('[tabSeguridad] Error cargando usuario operativo:', err.message);
-        setUsuarioOperativo(null);
+        if (!cancelado) setUsuarioOperativo(null);
       } finally {
-        setCargandoUsuario(false);
+        if (!cancelado) setCargandoUsuario(false);
       }
     })();
+    return () => { cancelado = true; };
   }, []);
 
   const cerrarModal = () => setModalAbierto(null);
 
-  const mostrarExito = (texto) => {
-    setMensajeExito(texto);
-    setTimeout(() => setMensajeExito(null), 4000);
-  };
+  const mostrarExito = (texto) => setToast({ tone: 'success', texto });
 
-  /** Callback al cerrar el modal de cambio de usuario con éxito. */
   const trasCambioUsuario = (nuevoUsuario) => {
     setUsuarioOperativo(nuevoUsuario);
-    mostrarExito('✓ Usuario actualizado correctamente.');
+    mostrarExito('Usuario actualizado correctamente.');
     cerrarModal();
   };
-
-  /** Callback al cerrar el modal de cambio de contraseña operativo con éxito. */
   const trasCambioPassword = () => {
-    mostrarExito('✓ Contraseña actualizada correctamente.');
+    mostrarExito('Contraseña actualizada correctamente.');
+    cerrarModal();
+  };
+  const trasCambioPin = () => {
+    mostrarExito('PIN actualizado correctamente.');
     cerrarModal();
   };
 
-  /** Callback al cerrar el modal de cambio de PIN admin con éxito. */
-  const trasCambioPin = () => {
-    mostrarExito('✓ PIN actualizado correctamente.');
-    cerrarModal();
-  };
+  // ── Render del valor de "Usuario" según estado ────────────────────────────
+  const valorUsuario = cargandoUsuario
+    ? <span style={{ color: theme.muted }}>—</span>
+    : (usuarioOperativo || <PillSinConfigurar />);
 
   return (
-    <div style={styles.contenedor}>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 16,
+      maxWidth: 600,
+    }}>
+      {toast && (
+        <Toast
+          key={toast.texto}
+          tone={toast.tone}
+          autoDismissMs={4000}
+          onDismiss={() => setToast(null)}
+        >{toast.texto}</Toast>
+      )}
 
-      {/* Toast global de éxito */}
-      {mensajeExito && <p style={styles.toastExito}>{mensajeExito}</p>}
+      <CardConfig
+        titulo="PIN de administrador"
+        descripcion="Se usa para acceder al panel desde cualquier dispositivo. 4 dígitos numéricos."
+      >
+        <FilaCredencial
+          label="PIN"
+          valor="••••"
+          onEditar={() => setModalAbierto('pin')}
+          last
+        />
+      </CardConfig>
 
-      {/* ── Card única con ambas secciones ─────────────────────────────────── */}
-      <div style={styles.card}>
+      <CardConfig
+        titulo="Modo operativo"
+        descripcion="Credenciales que usa el iPad del local para acceder a los flujos operativos (corte, venta, gasto)."
+      >
+        <FilaCredencial
+          label="Usuario"
+          valor={valorUsuario}
+          onEditar={() => setModalAbierto('usuario')}
+          disabled={cargandoUsuario}
+        />
+        <FilaCredencial
+          label="Contraseña"
+          valor="••••••••"
+          onEditar={() => setModalAbierto('password')}
+          last
+        />
+      </CardConfig>
 
-        {/* Sub-sección: PIN admin */}
-        <p style={styles.cardTitulo}>PIN de administrador</p>
-        <p style={styles.cardHint}>
-          Se usa para acceder al panel desde cualquier dispositivo. 4 dígitos numéricos.
-        </p>
-
-        <div style={styles.fila}>
-          <span style={styles.filaLabel}>PIN</span>
-          <span style={styles.filaValor}>••••</span>
-          <button
-            style={styles.btnEditar}
-            onClick={() => setModalAbierto('pin')}
-            aria-label="Cambiar PIN"
-            title="Cambiar PIN"
-          >
-            <EditIcon />
-          </button>
-        </div>
-
-        <div style={styles.separadorSeccion} />
-
-        {/* Sub-sección: Modo operativo */}
-        <p style={styles.cardTitulo}>Modo operativo</p>
-        <p style={styles.cardHint}>
-          Credenciales que usa el iPad del local para acceder a los flujos
-          operativos (corte, venta, gasto).
-        </p>
-
-        <div style={styles.fila}>
-          <span style={styles.filaLabel}>Usuario</span>
-          <span style={styles.filaValor}>
-            {cargandoUsuario
-              ? <span style={styles.cargando}>cargando…</span>
-              : (usuarioOperativo || <span style={styles.sinValor}>sin configurar</span>)}
-          </span>
-          <button
-            style={styles.btnEditar}
-            onClick={() => setModalAbierto('usuario')}
-            aria-label="Cambiar usuario"
-            title="Cambiar usuario"
-            disabled={cargandoUsuario}
-          >
-            <EditIcon />
-          </button>
-        </div>
-
-        <div style={styles.filaDivisor} />
-
-        <div style={styles.fila}>
-          <span style={styles.filaLabel}>Contraseña</span>
-          <span style={styles.filaValor}>••••••••</span>
-          <button
-            style={styles.btnEditar}
-            onClick={() => setModalAbierto('password')}
-            aria-label="Cambiar contraseña"
-            title="Cambiar contraseña"
-          >
-            <EditIcon />
-          </button>
-        </div>
-      </div>
-
-      {/* ── Modales ───────────────────────────────────────────────────────── */}
       <ModalCambiarPin
         open={modalAbierto === 'pin'}
         onClose={cerrarModal}
@@ -174,50 +271,28 @@ export default function TabSeguridad() {
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// MODAL — wrapper genérico
-// ═════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// MODAL — Cambiar PIN admin
+// ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Modal — overlay con backdrop semitransparente y card centrada.
- * Click en backdrop o ESC cierran. Click dentro de la card no cierra.
+ * ModalCambiarPin
+ * Form modal de 3 campos (PIN actual / nuevo / confirmar). Cada uno acepta
+ * solo 4 dígitos (filter + slice). Submit habilitado solo si los 3 están
+ * completos y nuevo === confirmar.
+ *
+ * @param {object} props
+ * @param {boolean} props.open
+ * @param {() => void} props.onClose
+ * @param {() => void} props.onSuccess
  */
-function Modal({ open, onClose, title, children }) {
-  // Cerrar con ESC (mejora la UX de teclado en desktop).
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  return (
-    <div style={modalStyles.backdrop} onClick={onClose}>
-      <div style={modalStyles.card} onClick={(e) => e.stopPropagation()}>
-        <div style={modalStyles.header}>
-          <h3 style={modalStyles.titulo}>{title}</h3>
-          <button style={modalStyles.btnCerrar} onClick={onClose} aria-label="Cerrar">×</button>
-        </div>
-        <div style={modalStyles.body}>{children}</div>
-      </div>
-    </div>
-  );
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// MODAL — Cambiar PIN admin
-// ═════════════════════════════════════════════════════════════════════════════
-
 function ModalCambiarPin({ open, onClose, onSuccess }) {
   const [pinActual,    setPinActual]    = useState('');
   const [pinNuevo,     setPinNuevo]     = useState('');
   const [pinConfirmar, setPinConfirmar] = useState('');
-  const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState(null);
+  const [guardando, setGuardando]       = useState(false);
+  const [error, setError]               = useState(null);
 
-  // Reset al abrir el modal — evita conservar borradores entre aperturas.
   useEffect(() => {
     if (open) {
       setPinActual(''); setPinNuevo(''); setPinConfirmar('');
@@ -226,14 +301,15 @@ function ModalCambiarPin({ open, onClose, onSuccess }) {
   }, [open]);
 
   const pinsCoinciden = pinNuevo === pinConfirmar;
-  const puedeGuardar  =
+  const confirmConflict = pinConfirmar.length === 4 && !pinsCoinciden;
+  const puedeGuardar =
     pinActual.length === 4 &&
     pinNuevo.length === 4 &&
     pinConfirmar.length === 4 &&
     pinsCoinciden;
 
-  const handlePinInput = (setter, valor) => {
-    setter(valor.replace(/\D/g, '').slice(0, 4));
+  const handleChange = (setter) => (v) => {
+    setter(v.replace(/\D/g, '').slice(0, 4));
     setError(null);
   };
 
@@ -247,7 +323,7 @@ function ModalCambiarPin({ open, onClose, onSuccess }) {
         body: JSON.stringify({ pin_actual: pinActual, pin_nuevo: pinNuevo }),
       });
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Error del servidor');
       }
       onSuccess();
@@ -260,87 +336,90 @@ function ModalCambiarPin({ open, onClose, onSuccess }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Cambiar PIN de administrador">
-      <div style={modalStyles.camposCol}>
-        <div style={modalStyles.campoGrupo}>
-          <label style={modalStyles.campoLabel}>PIN actual</label>
-          <input
-            type="password" inputMode="numeric" maxLength={4}
-            value={pinActual}
-            onChange={(e) => handlePinInput(setPinActual, e.target.value)}
-            placeholder="• • • •"
-            style={{ ...modalStyles.campoInput, letterSpacing: pinActual.length > 0 ? '0.5em' : '0' }}
-          />
-        </div>
-        <div style={modalStyles.campoGrupo}>
-          <label style={modalStyles.campoLabel}>Nuevo PIN</label>
-          <input
-            type="password" inputMode="numeric" maxLength={4}
-            value={pinNuevo}
-            onChange={(e) => handlePinInput(setPinNuevo, e.target.value)}
-            placeholder="• • • •"
-            style={{ ...modalStyles.campoInput, letterSpacing: pinNuevo.length > 0 ? '0.5em' : '0' }}
-          />
-        </div>
-        <div style={modalStyles.campoGrupo}>
-          <label style={modalStyles.campoLabel}>Confirmar nuevo PIN</label>
-          <input
-            type="password" inputMode="numeric" maxLength={4}
-            value={pinConfirmar}
-            onChange={(e) => handlePinInput(setPinConfirmar, e.target.value)}
-            placeholder="• • • •"
-            style={{
-              ...modalStyles.campoInput,
-              letterSpacing: pinConfirmar.length > 0 ? '0.5em' : '0',
-              borderColor: pinConfirmar.length === 4 && !pinsCoinciden ? '#c0392b' : '#e0e0e0',
-            }}
-          />
-          {pinConfirmar.length === 4 && !pinsCoinciden && (
-            <p style={modalStyles.campoError}>Los PINs no coinciden.</p>
-          )}
-        </div>
-      </div>
+    <Modal
+      open={open}
+      onClose={onClose}
+      loading={guardando}
+      title="Cambiar PIN de administrador"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={guardando}>
+            Cancelar
+          </Button>
+          <Button variant="primary" onClick={handleGuardar} disabled={!puedeGuardar || guardando}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <Field
+          label="PIN actual"
+          type="password"
+          inputMode="numeric"
+          value={pinActual}
+          onChange={handleChange(setPinActual)}
+          placeholder="4 dígitos"
+        />
+        <Field
+          label="Nuevo PIN"
+          type="password"
+          inputMode="numeric"
+          value={pinNuevo}
+          onChange={handleChange(setPinNuevo)}
+          placeholder="4 dígitos"
+        />
+        <Field
+          label="Confirmar nuevo PIN"
+          type="password"
+          inputMode="numeric"
+          value={pinConfirmar}
+          onChange={handleChange(setPinConfirmar)}
+          placeholder="4 dígitos"
+          invalid={confirmConflict}
+          error={confirmConflict ? 'Los PINs no coinciden.' : undefined}
+        />
 
-      {error && <p style={modalStyles.errorTexto}>{error}</p>}
-
-      <div style={modalStyles.acciones}>
-        <button style={modalStyles.btnCancelar} onClick={onClose} disabled={guardando}>
-          Cancelar
-        </button>
-        <button
-          style={{ ...modalStyles.btnGuardar, ...(!puedeGuardar || guardando ? modalStyles.btnDeshabilitado : {}) }}
-          onClick={handleGuardar}
-          disabled={!puedeGuardar || guardando}
-        >
-          {guardando ? 'Guardando...' : 'Guardar'}
-        </button>
+        {error && (
+          <Toast tone="danger" onDismiss={() => setError(null)} dismissible>
+            {error}
+          </Toast>
+        )}
       </div>
     </Modal>
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 // MODAL — Cambiar usuario operativo
-// ═════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * ModalCambiarUsuario
+ * Form modal de 1 campo. Submit habilitado si el usuario cambió y mide ≥3.
+ *
+ * @param {object} props
+ * @param {boolean} props.open
+ * @param {() => void} props.onClose
+ * @param {string} props.usuarioActual - Para precargar y detectar cambios.
+ * @param {(nuevo: string) => void} props.onSuccess
+ */
 function ModalCambiarUsuario({ open, onClose, usuarioActual, onSuccess }) {
   const [nuevoUsuario, setNuevoUsuario] = useState('');
-  const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState(null);
+  const [guardando, setGuardando]       = useState(false);
+  const [error, setError]               = useState(null);
 
-  // Precargar con el usuario actual cada vez que se abre el modal.
   useEffect(() => {
     if (open) {
       setNuevoUsuario(usuarioActual);
-      setError(null);
-      setGuardando(false);
+      setError(null); setGuardando(false);
     }
   }, [open, usuarioActual]);
 
   const usuarioLimpio = nuevoUsuario.trim();
-  const hayCambio = usuarioLimpio !== usuarioActual;
-  const esValido  = usuarioLimpio.length >= 3;
-  const puedeGuardar = hayCambio && esValido;
+  const hayCambio     = usuarioLimpio !== usuarioActual;
+  const esValido      = usuarioLimpio.length >= 3;
+  const puedeGuardar  = hayCambio && esValido;
 
   const handleGuardar = async () => {
     if (!puedeGuardar) return;
@@ -358,50 +437,61 @@ function ModalCambiarUsuario({ open, onClose, usuarioActual, onSuccess }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Cambiar usuario del modo operativo">
-      <div style={modalStyles.camposCol}>
-        <div style={modalStyles.campoGrupo}>
-          <label style={modalStyles.campoLabel}>Nuevo usuario</label>
-          <input
-            type="text"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            value={nuevoUsuario}
-            onChange={(e) => { setNuevoUsuario(e.target.value); setError(null); }}
-            placeholder="Mínimo 3 caracteres"
-            style={modalStyles.campoInput}
-          />
-        </div>
-      </div>
+    <Modal
+      open={open}
+      onClose={onClose}
+      loading={guardando}
+      title="Cambiar usuario del modo operativo"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={guardando}>
+            Cancelar
+          </Button>
+          <Button variant="primary" onClick={handleGuardar} disabled={!puedeGuardar || guardando}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <Field
+          label="Nuevo usuario"
+          value={nuevoUsuario}
+          onChange={(v) => { setNuevoUsuario(v); setError(null); }}
+          placeholder="Mínimo 3 caracteres"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+        />
 
-      {error && <p style={modalStyles.errorTexto}>{error}</p>}
-
-      <div style={modalStyles.acciones}>
-        <button style={modalStyles.btnCancelar} onClick={onClose} disabled={guardando}>
-          Cancelar
-        </button>
-        <button
-          style={{ ...modalStyles.btnGuardar, ...(!puedeGuardar || guardando ? modalStyles.btnDeshabilitado : {}) }}
-          onClick={handleGuardar}
-          disabled={!puedeGuardar || guardando}
-        >
-          {guardando ? 'Guardando...' : 'Guardar'}
-        </button>
+        {error && (
+          <Toast tone="danger" onDismiss={() => setError(null)} dismissible>
+            {error}
+          </Toast>
+        )}
       </div>
     </Modal>
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 // MODAL — Cambiar contraseña operativa
-// ═════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * ModalCambiarPassword
+ * Form modal de 2 campos (nueva / confirmar). Min 8 chars + ambas iguales.
+ *
+ * @param {object} props
+ * @param {boolean} props.open
+ * @param {() => void} props.onClose
+ * @param {() => void} props.onSuccess
+ */
 function ModalCambiarPassword({ open, onClose, onSuccess }) {
   const [password,  setPassword]  = useState('');
   const [confirmar, setConfirmar] = useState('');
   const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError]         = useState(null);
 
   useEffect(() => {
     if (open) {
@@ -410,8 +500,10 @@ function ModalCambiarPassword({ open, onClose, onSuccess }) {
     }
   }, [open]);
 
-  const esValida    = password.length >= 8;
-  const coincide    = password === confirmar;
+  const esValida     = password.length >= 8;
+  const coincide     = password === confirmar;
+  const lenError     = password.length > 0 && !esValida;
+  const matchError   = confirmar.length > 0 && !coincide;
   const puedeGuardar = esValida && coincide && confirmar.length > 0;
 
   const handleGuardar = async () => {
@@ -430,274 +522,50 @@ function ModalCambiarPassword({ open, onClose, onSuccess }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Cambiar contraseña del modo operativo">
-      <div style={modalStyles.camposCol}>
-        <div style={modalStyles.campoGrupo}>
-          <label style={modalStyles.campoLabel}>Nueva contraseña</label>
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => { setPassword(e.target.value); setError(null); }}
-            placeholder="Mínimo 8 caracteres"
-            style={modalStyles.campoInput}
-          />
-          {password.length > 0 && !esValida && (
-            <p style={modalStyles.campoError}>Mínimo 8 caracteres.</p>
-          )}
-        </div>
-        <div style={modalStyles.campoGrupo}>
-          <label style={modalStyles.campoLabel}>Confirmar nueva contraseña</label>
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={confirmar}
-            onChange={(e) => { setConfirmar(e.target.value); setError(null); }}
-            placeholder="Reescribila"
-            style={{
-              ...modalStyles.campoInput,
-              borderColor: confirmar.length > 0 && !coincide ? '#c0392b' : '#e0e0e0',
-            }}
-          />
-          {confirmar.length > 0 && !coincide && (
-            <p style={modalStyles.campoError}>Las contraseñas no coinciden.</p>
-          )}
-        </div>
-      </div>
+    <Modal
+      open={open}
+      onClose={onClose}
+      loading={guardando}
+      title="Cambiar contraseña del modo operativo"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={guardando}>
+            Cancelar
+          </Button>
+          <Button variant="primary" onClick={handleGuardar} disabled={!puedeGuardar || guardando}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <Field
+          label="Nueva contraseña"
+          type="password"
+          autoComplete="new-password"
+          value={password}
+          onChange={(v) => { setPassword(v); setError(null); }}
+          placeholder="Mínimo 8 caracteres"
+          invalid={lenError}
+          error={lenError ? 'Mínimo 8 caracteres.' : undefined}
+        />
+        <Field
+          label="Confirmar nueva contraseña"
+          type="password"
+          autoComplete="new-password"
+          value={confirmar}
+          onChange={(v) => { setConfirmar(v); setError(null); }}
+          placeholder="Reescribila"
+          invalid={matchError}
+          error={matchError ? 'Las contraseñas no coinciden.' : undefined}
+        />
 
-      {error && <p style={modalStyles.errorTexto}>{error}</p>}
-
-      <div style={modalStyles.acciones}>
-        <button style={modalStyles.btnCancelar} onClick={onClose} disabled={guardando}>
-          Cancelar
-        </button>
-        <button
-          style={{ ...modalStyles.btnGuardar, ...(!puedeGuardar || guardando ? modalStyles.btnDeshabilitado : {}) }}
-          onClick={handleGuardar}
-          disabled={!puedeGuardar || guardando}
-        >
-          {guardando ? 'Guardando...' : 'Guardar'}
-        </button>
+        {error && (
+          <Toast tone="danger" onDismiss={() => setError(null)} dismissible>
+            {error}
+          </Toast>
+        )}
       </div>
     </Modal>
   );
 }
-
-// ─── Estilos del tab ──────────────────────────────────────────────────────────
-const styles = {
-  contenedor: {
-    maxWidth: '580px',
-    margin: '0 auto',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  toastExito: {
-    backgroundColor: '#e8f5ee',
-    border: '1.5px solid #b6e0c8',
-    color: '#1a7a4a',
-    fontSize: '14px',
-    fontWeight: '600',
-    padding: '12px 16px',
-    borderRadius: '12px',
-    margin: 0,
-    textAlign: 'center',
-  },
-  card: {
-    backgroundColor: '#fafafa',
-    border: '1.5px solid #eeeeee',
-    borderRadius: '16px',
-    padding: '24px 28px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  // Separador entre las dos sub-secciones (PIN admin / Modo operativo)
-  // dentro de la misma card. Más visible que el divisor entre filas porque
-  // separa secciones conceptualmente distintas.
-  separadorSeccion: {
-    height: '1px',
-    backgroundColor: '#e8e8e8',
-    margin: '16px 0 8px',
-  },
-  cardTitulo: {
-    fontSize: '17px',
-    fontWeight: '700',
-    color: '#111111',
-    margin: 0,
-  },
-  cardHint: {
-    fontSize: '13px',
-    color: '#888888',
-    margin: '0 0 12px',
-    lineHeight: 1.5,
-  },
-  fila: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '14px 0',
-    gap: '16px',
-  },
-  filaDivisor: {
-    height: '1px',
-    backgroundColor: '#eeeeee',
-  },
-  filaLabel: {
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#555555',
-    minWidth: '120px',
-  },
-  filaValor: {
-    flex: 1,
-    fontSize: '15px',
-    color: '#111111',
-    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
-  },
-  cargando: {
-    color: '#aaaaaa',
-    fontStyle: 'italic',
-  },
-  sinValor: {
-    color: '#c0392b',
-    fontStyle: 'italic',
-  },
-  btnEditar: {
-    width: '34px',
-    height: '34px',
-    borderRadius: '8px',
-    border: '1.5px solid #e0e0e0',
-    backgroundColor: '#ffffff',
-    color: '#555555',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'background-color 0.15s, border-color 0.15s, color 0.15s',
-  },
-};
-
-// ─── Estilos de los modales ───────────────────────────────────────────────────
-const modalStyles = {
-  backdrop: {
-    position: 'fixed',
-    inset: 0,
-    backgroundColor: 'rgba(17, 17, 17, 0.45)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
-    padding: '20px',
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: '18px',
-    boxShadow: '0 12px 48px rgba(0, 0, 0, 0.25)',
-    width: '100%',
-    maxWidth: '440px',
-    display: 'flex',
-    flexDirection: 'column',
-    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '20px 24px 0',
-  },
-  titulo: {
-    fontSize: '17px',
-    fontWeight: '700',
-    color: '#111111',
-    margin: 0,
-  },
-  btnCerrar: {
-    border: 'none',
-    background: 'none',
-    fontSize: '26px',
-    lineHeight: 1,
-    color: '#888888',
-    cursor: 'pointer',
-    padding: 0,
-    width: '32px',
-    height: '32px',
-  },
-  body: {
-    padding: '20px 24px 24px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  camposCol: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '14px',
-  },
-  campoGrupo: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  campoLabel: {
-    fontSize: '13px',
-    fontWeight: '600',
-    color: '#555555',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  campoInput: {
-    padding: '11px 14px',
-    borderRadius: '10px',
-    border: '1.5px solid #e0e0e0',
-    fontSize: '16px',
-    color: '#111111',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-    outline: 'none',
-    backgroundColor: '#ffffff',
-    width: '100%',
-    boxSizing: 'border-box',
-  },
-  campoError: {
-    fontSize: '12px',
-    color: '#c0392b',
-    margin: 0,
-  },
-  errorTexto: {
-    color: '#c0392b',
-    fontSize: '13px',
-    margin: 0,
-    textAlign: 'center',
-  },
-  acciones: {
-    display: 'flex',
-    gap: '10px',
-    justifyContent: 'flex-end',
-    marginTop: '4px',
-  },
-  btnCancelar: {
-    padding: '11px 22px',
-    borderRadius: '10px',
-    border: '1.5px solid #e0e0e0',
-    backgroundColor: '#ffffff',
-    color: '#555555',
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  btnGuardar: {
-    padding: '11px 22px',
-    borderRadius: '10px',
-    border: 'none',
-    backgroundColor: '#1a7a4a',
-    color: '#ffffff',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  btnDeshabilitado: {
-    backgroundColor: '#cccccc',
-    cursor: 'not-allowed',
-  },
-};

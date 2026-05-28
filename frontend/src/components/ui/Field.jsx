@@ -21,6 +21,9 @@ import { theme } from '../../theme/tokens.js';
  * @param {string} [props.autoCapitalize] - Hint de capitalización (mobile keyboards)
  * @param {string} [props.autoCorrect] - 'on'|'off' (Safari)
  * @param {boolean} [props.spellCheck] - Habilita / deshabilita corrector ortográfico
+ * @param {string} [props.inputMode] - Hint de teclado virtual: 'numeric'|'decimal'|'tel'|'email'|etc.
+ *   Usar con type="text" para abrir teclados específicos (numpad en iPad) sin
+ *   los efectos colaterales de type="number" (acepta 'e', botones spin).
  */
 function Field({
   label,
@@ -37,6 +40,7 @@ function Field({
   autoCapitalize,
   autoCorrect,
   spellCheck,
+  inputMode,
 }) {
   const [focus, setFocus] = useState(false);
 
@@ -64,6 +68,7 @@ function Field({
         autoCapitalize={autoCapitalize}
         autoCorrect={autoCorrect}
         spellCheck={spellCheck}
+        inputMode={inputMode}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocus(true)}
         onBlur={() => { setFocus(false); if (onBlur) onBlur(); }}

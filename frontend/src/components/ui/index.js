@@ -28,3 +28,7 @@ export { default as BotonIconoFila }  from './BotonIconoFila.jsx';
 export { default as DetalleRecurso }  from './DetalleRecurso.jsx';
 export { default as BadgeVariacion }  from './BadgeVariacion.jsx';
 export { default as ChipFiltro }      from './ChipFiltro.jsx';
+export { default as DataTable }       from './DataTable.jsx';
+export { default as BadgeEstado }     from './BadgeEstado.jsx';
+export { default as ToggleEstado }    from './ToggleEstado.jsx';
+export { default as Toast }           from './Toast.jsx';

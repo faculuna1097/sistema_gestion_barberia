@@ -25,12 +25,11 @@
 //     Si no hay turnos, se usa 08:00–22:00 directo. El endpoint admin no
 //     expone el horario_atencion global del tenant (deuda backend anotada).
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Check,
   UserX,
   Trash2,
-  AlertTriangle,
   X,
   Calendar,
   Phone,
@@ -60,6 +59,7 @@ import {
   Modal,
   DetalleRecurso,
   AvatarIniciales,
+  Toast,
 } from '../../../components/ui';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -176,49 +176,6 @@ function esHoy(fechaStr) {
 // ═══════════════════════════════════════════════════════════════════════════
 // Sub-componentes
 // ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * BannerError
- * Banner sticky para errores de acción (reemplaza alert()).
- */
-function BannerError({ mensaje, onCerrar }) {
-  return (
-    <div
-      role="alert"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        padding: '10px 14px',
-        marginBottom: 12,
-        background: theme.dangerSoft,
-        border: `1px solid ${theme.danger}`,
-        borderRadius: theme.radius,
-        color: theme.danger,
-        fontFamily: theme.body,
-        fontSize: theme.sizeBody,
-      }}
-    >
-      <AlertTriangle size={16} strokeWidth={2} />
-      <span style={{ flex: 1 }}>{mensaje}</span>
-      <button
-        type="button"
-        onClick={onCerrar}
-        aria-label="Cerrar mensaje de error"
-        style={{
-          background: 'transparent',
-          border: 'none',
-          padding: 4,
-          cursor: 'pointer',
-          color: theme.danger,
-          display: 'inline-flex',
-        }}
-      >
-        <X size={14} />
-      </button>
-    </div>
-  );
-}
 
 /**
  * SegmentedVista
@@ -964,14 +921,10 @@ export default function SeccionTurnero() {
   const [errorAccion, setErrorAccion]     = useState(null);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState(null);
 
-  const errorAccionTimer = useRef(null);
-
-  // ── Mostrar error de acción con auto-dismiss 6s ─────────────────────────
-  const mostrarErrorAccion = (mensaje) => {
-    setErrorAccion(mensaje);
-    if (errorAccionTimer.current) clearTimeout(errorAccionTimer.current);
-    errorAccionTimer.current = setTimeout(() => setErrorAccion(null), 6000);
-  };
+  // El auto-dismiss del banner de error vive dentro del primitivo Toast
+  // (autoDismissMs=6000). El `key` con el texto del error fuerza remount
+  // cuando llega un mensaje nuevo, reiniciando el timer.
+  const mostrarErrorAccion = (mensaje) => setErrorAccion(mensaje);
 
   // ── Carga inicial de barberos ───────────────────────────────────────────
   useEffect(() => {
@@ -1072,7 +1025,13 @@ export default function SeccionTurnero() {
 
       {/* Banner de error de acción */}
       {errorAccion && (
-        <BannerError mensaje={errorAccion} onCerrar={() => setErrorAccion(null)} />
+        <Toast
+          key={errorAccion}
+          tone="danger"
+          autoDismissMs={6000}
+          dismissible
+          onDismiss={() => setErrorAccion(null)}
+        >{errorAccion}</Toast>
       )}
 
       {/* ── FILA CONTROLES ─────────────────────────────────────────────── */}

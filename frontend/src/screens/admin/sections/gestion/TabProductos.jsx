@@ -1,42 +1,105 @@
 // /frontend/src/screens/admin/sections/gestion/TabProductos.jsx
-// ABM de productos. Permite listar, crear y editar productos.
-// El stock_actual no se edita directamente — se usa "Agregar stock" para sumar
-// unidades (Opción B acordada: stock_actual = stock_actual + cantidad_ingresada).
-// No hay eliminación — se usa el campo activo (true/false) para desactivar.
+// ABM de productos. Listar / crear / editar. No hay eliminación física —
+// se desactiva via `activo: false`. El stock se actualiza con "Unidades a
+// agregar" (suma al stock_actual existente) — el campo stock_actual nunca
+// se edita directamente.
+//
+// Sistema de diseño: tokens + Geist + Lucide + onClick. Tabla densa con
+// DataTable (sort + paginación a partir de 7 filas). Click en fila abre
+// modal de edición. Alerta de stock bajo se muestra en la celda "Stock
+// actual" (color danger + AlertTriangle) — la fila no se tinta. Loading
+// via LoadingState (D6).
 
 import { useState, useEffect } from 'react';
-import { apiFetch } from '../../../../services/api';
+import { Plus, Package, AlertTriangle, RefreshCw } from 'lucide-react';
 
-// ─── Modal crear / editar producto ────────────────────────────────────────────
+import { apiFetch } from '../../../../services/api';
+import { fmtPesos } from '../../../../utils/formato';
+import {
+  Button,
+  Field,
+  Modal,
+  DataTable,
+  EmptyState,
+  LoadingState,
+  IconoAlerta,
+  BadgeEstado,
+  ToggleEstado,
+} from '../../../../components/ui';
+import { theme } from '../../../../theme/tokens.js';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 /**
- * ModalProducto — formulario para crear o editar un producto.
- * En modo edición también permite agregar stock y cambiar el estado activo.
- * @param {object|null} producto  - null = modo crear, objeto = modo editar
- * @param {function}    onGuardar - callback al guardar exitosamente
- * @param {function}    onCerrar  - callback al cancelar o cerrar
+ * tieneStockBajo
+ * Indica si un producto está por debajo de su umbral de alerta. Si
+ * `stock_minimo` es 0 (sin umbral definido), nunca alerta.
+ * @param {{stock_actual: number, stock_minimo: number}} producto
+ * @returns {boolean}
+ */
+function tieneStockBajo(producto) {
+  return producto.stock_minimo > 0 && producto.stock_actual <= producto.stock_minimo;
+}
+
+// ─── Sub-componentes locales ──────────────────────────────────────────────────
+
+/**
+ * CeldaStockActual
+ * Renderiza el stock actual de un producto. Si está bajo el umbral, muestra
+ * el número en danger + ícono AlertTriangle como señal accionable.
+ * Local — específico de la columna "Stock actual" de esta tabla.
+ *
+ * @param {object} props
+ * @param {{stock_actual: number, stock_minimo: number}} props.producto
+ */
+function CeldaStockActual({ producto }) {
+  const bajo = tieneStockBajo(producto);
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 6,
+      color: bajo ? theme.danger : theme.ink,
+      fontWeight: bajo ? theme.weightHeading : theme.weightRegular,
+      fontVariantNumeric: 'tabular-nums',
+    }}>
+      {bajo && <AlertTriangle size={14} strokeWidth={2} aria-label="Stock bajo" />}
+      {producto.stock_actual} uds.
+    </span>
+  );
+}
+
+// ─── Modal crear / editar ─────────────────────────────────────────────────────
+
+/**
+ * ModalProducto
+ * Formulario en modal para crear o editar un producto. En edición permite
+ * además sumar unidades al stock actual (request adicional a /agregar-stock
+ * tras el PUT del producto).
+ *
+ * @param {object} props
+ * @param {object|null} props.producto - null = modo crear; objeto = modo editar
+ * @param {(producto: object, esEdicion: boolean) => void} props.onGuardar
+ * @param {() => void} props.onCerrar
  */
 function ModalProducto({ producto, onGuardar, onCerrar }) {
   const esEdicion = producto !== null;
 
-  // ── Campos del formulario ─────────────────────────────────────────────────
-  const [nombre, setNombre]             = useState(producto?.nombre      ?? '');
-  const [precio, setPrecio]             = useState(producto?.precio      ?? '');
-  const [stockMinimo, setStockMinimo]   = useState(producto?.stock_minimo ?? 0);
-  const [activo, setActivo]             = useState(producto?.activo      ?? true);
-
-  // ── Estado para agregar stock ─────────────────────────────────────────────
-  const [cantidadAgregar, setCantidadAgregar] = useState('');
-
-  // ── Estado general ────────────────────────────────────────────────────────
-  const [guardando, setGuardando] = useState(false);
-  const [error, setError]         = useState(null);
+  const [nombre, setNombre]                   = useState(producto?.nombre        ?? '');
+  const [precio, setPrecio]                   = useState(producto?.precio        ?? '');
+  const [stockMinimo, setStockMinimo]         = useState(producto?.stock_minimo  ?? 0);
+  const [activo, setActivo]                   = useState(producto?.activo        ?? true);
+  const [cantidadStock, setCantidadStock] = useState('');
+  const [guardando, setGuardando]             = useState(false);
+  const [error, setError]                     = useState(null);
 
   const puedeGuardar = nombre.trim() !== '' && precio !== '' && Number(precio) >= 0;
 
   /**
-   * handleGuardar — envía POST (crear) o PUT (editar) al backend.
-   * Si hay cantidad a agregar (solo en edición), llama también a /agregar-stock
-   * en la misma operación. Así cancelar nunca deja cambios a medias en la BD.
+   * handleGuardar
+   * POST (crear) o PUT (editar). Si hay `cantidadStock` en edición, dispara
+   * también PUT /agregar-stock con la cantidad. La operación no es transaccional
+   * a nivel BD — ver deuda anotada en el plan.
    */
   const handleGuardar = async () => {
     if (!puedeGuardar) return;
@@ -53,29 +116,23 @@ function ModalProducto({ producto, onGuardar, onCerrar }) {
     const path   = esEdicion ? `/admin/productos/${producto.id}` : '/admin/productos';
 
     try {
-      const res = await apiFetch(path, {
-        method,
-        body: JSON.stringify(body),
-      });
-
+      const res = await apiFetch(path, { method, body: JSON.stringify(body) });
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Error del servidor');
       }
-
       const productoGuardado = await res.json();
 
-      // Si hay unidades a agregar, llamar a /agregar-stock junto con el guardado
-      if (esEdicion && cantidadAgregar && Number(cantidadAgregar) > 0) {
+      // Stock: en edición es "Unidades a agregar" (sumar al actual); en creación
+      // es "Stock inicial" (lo cargamos contra el mismo endpoint /agregar-stock,
+      // que también funciona para subir el stock desde 0). Un solo flujo.
+      if (cantidadStock && Number(cantidadStock) > 0) {
         const resStock = await apiFetch(
-          `/admin/productos/${producto.id}/agregar-stock`,
-          {
-            method: 'PUT',
-            body: JSON.stringify({ cantidad: Number(cantidadAgregar) }),
-          }
+          `/admin/productos/${productoGuardado.id}/agregar-stock`,
+          { method: 'PUT', body: JSON.stringify({ cantidad: Number(cantidadStock) }) }
         );
         if (!resStock.ok) {
-          const data = await resStock.json();
+          const data = await resStock.json().catch(() => ({}));
           throw new Error(data.error || 'Error al actualizar el stock');
         }
         const dataStock = await resStock.json();
@@ -92,184 +149,291 @@ function ModalProducto({ producto, onGuardar, onCerrar }) {
   };
 
   return (
-    <div style={styles.modalOverlay}>
-      <div style={styles.modalCard}>
+    <Modal
+      open
+      onClose={onCerrar}
+      loading={guardando}
+      title={esEdicion ? 'Editar producto' : 'Nuevo producto'}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCerrar} disabled={guardando}>
+            Cancelar
+          </Button>
+          <Button variant="primary" onClick={handleGuardar} disabled={!puedeGuardar || guardando}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <Field
+          label="Nombre"
+          value={nombre}
+          onChange={setNombre}
+          placeholder="Ej: Shampoo anticaspa"
+        />
+        <Field
+          label="Precio"
+          type="text"
+          inputMode="numeric"
+          value={precio}
+          onChange={(v) => setPrecio(v.replace(/\D/g, ''))}
+          placeholder="Ej: 5000"
+        />
+        {!esEdicion && (
+          <Field
+            label="Stock inicial"
+            type="text"
+            inputMode="numeric"
+            value={cantidadStock}
+            onChange={(v) => setCantidadStock(v.replace(/\D/g, ''))}
+            placeholder="0"
+            helper="Cantidad con la que ingresa el producto. El stock mínimo se ajusta más adelante."
+          />
+        )}
 
-        {/* Título */}
-        <p style={styles.modalTitulo}>
-          {esEdicion ? 'Editar producto' : 'Nuevo producto'}
-        </p>
-
-        <div style={styles.camposCol}>
-
-          {/* Nombre */}
-          <div style={styles.campoGrupo}>
-            <label style={styles.campoLabel}>Nombre</label>
-            <input
+        {esEdicion && (
+          <>
+            <Field
+              label="Stock mínimo"
               type="text"
-              value={nombre}
-              onChange={e => setNombre(e.target.value)}
-              placeholder="Ej: Shampoo anticaspa"
-              style={styles.campoInput}
-              autoFocus
+              inputMode="numeric"
+              value={stockMinimo}
+              onChange={(v) => setStockMinimo(v.replace(/\D/g, ''))}
+              placeholder="0"
+              helper="Umbral de alerta — el sistema avisará cuando el stock baje de este número."
             />
-          </div>
 
-          {/* Precio */}
-          <div style={styles.campoGrupo}>
-            <label style={styles.campoLabel}>Precio</label>
-            <div style={styles.precioRow}>
-              <span style={styles.precioSigno}>$</span>
-              <input
-                type="number"
-                min="0"
-                value={precio}
-                onChange={e => setPrecio(e.target.value)}
+            {/* Bloque de stock — mini-card neutra: stock actual (read-only)
+                + Field para sumar unidades. Visualmente separado del resto
+                de los datos del producto sin tinte semántico. */}
+            <div style={{
+              background: theme.surface,
+              border: `1px solid ${theme.hairline}`,
+              borderRadius: theme.radius,
+              padding: 14,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}>
+                <span style={{
+                  fontFamily: theme.mono,
+                  fontWeight: theme.weightMedium,
+                  fontSize: theme.sizeMicro,
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  color: theme.muted,
+                }}>Stock actual</span>
+                <span style={{
+                  fontFamily: theme.body,
+                  fontSize: theme.sizeHeading,
+                  fontWeight: theme.weightHeading,
+                  color: theme.ink,
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {producto.stock_actual} uds.
+                </span>
+              </div>
+
+              <Field
+                label="Unidades a agregar"
+                type="text"
+                inputMode="numeric"
+                value={cantidadStock}
+                onChange={(v) => setCantidadStock(v.replace(/\D/g, ''))}
                 placeholder="0"
-                style={{ ...styles.campoInput, flex: 1 }}
               />
             </div>
+
+            <ToggleEstado value={activo} onChange={setActivo} />
+          </>
+        )}
+
+        {error && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 12px',
+            background: theme.dangerSoft,
+            border: `1px solid ${theme.danger}33`,
+            borderRadius: theme.radius,
+            color: theme.danger,
+            fontFamily: theme.body,
+            fontSize: theme.sizeBody,
+          }}>
+            <AlertTriangle size={16} strokeWidth={1.75} />
+            <span>{error}</span>
           </div>
-
-          {/* Stock mínimo */}
-          <div style={styles.campoGrupo}>
-            <label style={styles.campoLabel}>Stock mínimo</label>
-            <p style={styles.campoHint}>
-              Umbral de alerta — el sistema avisará cuando el stock baje de este número.
-            </p>
-            <input
-              type="number"
-              min="0"
-              value={stockMinimo}
-              onChange={e => setStockMinimo(e.target.value)}
-              placeholder="0"
-              style={styles.campoInput}
-            />
-          </div>
-
-          {/* ── Solo en edición: stock actual + agregar stock + activo ── */}
-          {esEdicion && (
-            <>
-              {/* Stock actual (solo lectura) + campo para agregar unidades */}
-              <div style={styles.stockBox}>
-                <div style={styles.stockActualRow}>
-                  <span style={styles.campoLabel}>Stock actual</span>
-                  <span style={styles.stockActualValor}>
-                    {producto.stock_actual} uds.
-                  </span>
-                </div>
-                <div style={styles.campoGrupo}>
-                  <label style={styles.campoLabel}>Unidades a agregar</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={cantidadAgregar}
-                    onChange={e => setCantidadAgregar(e.target.value)}
-                    placeholder="0"
-                    style={styles.campoInput}
-                  />
-                </div>
-              </div>
-
-              {/* Activo / Inactivo */}
-              <div style={styles.activoRow}>
-                <span style={styles.campoLabel}>Estado</span>
-                <button
-                  style={{
-                    ...styles.toggleBtn,
-                    ...(activo ? styles.toggleActivo : styles.toggleInactivo),
-                  }}
-                  onPointerDown={() => setActivo(prev => !prev)}
-                >
-                  {activo ? '✓  Activo' : '✕  Inactivo'}
-                </button>
-              </div>
-            </>
-          )}
-
-        </div>
-
-        {/* Error */}
-        {error && <p style={styles.errorTextoModal}>{error}</p>}
-
-        {/* Botones */}
-        <div style={styles.modalBotones}>
-          <button
-            style={styles.btnCancelar}
-            onPointerDown={onCerrar}
-            disabled={guardando}
-          >
-            Cancelar
-          </button>
-          <button
-            style={{
-              ...styles.btnGuardar,
-              ...(!puedeGuardar || guardando ? styles.btnDeshabilitado : {}),
-            }}
-            onPointerDown={handleGuardar}
-            disabled={!puedeGuardar || guardando}
-          >
-            {guardando ? 'Guardando...' : 'Guardar'}
-          </button>
-        </div>
-
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
+
+/**
+ * TabProductos
+ * Tab de gestión de productos. Lista + crear + editar (sin eliminar físico).
+ *
+ * @returns {JSX.Element}
+ */
 export default function TabProductos() {
   const [productos, setProductos]               = useState([]);
   const [cargando, setCargando]                 = useState(true);
   const [error, setError]                       = useState(null);
+  const [intento, setIntento]                   = useState(0);
   const [modalAbierto, setModalAbierto]         = useState(false);
   const [productoEditando, setProductoEditando] = useState(null);
 
-  // ── Carga inicial ─────────────────────────────────────────────────────────
+  // ── Carga inicial / reintentos ────────────────────────────────────────────
   useEffect(() => {
-    const cargarProductos = async () => {
+    let cancelado = false;
+    const cargar = async () => {
+      setCargando(true);
+      setError(null);
       try {
         const res  = await apiFetch('/admin/productos');
         const data = await res.json();
-        setProductos(data);
+        if (!cancelado) setProductos(data);
       } catch (err) {
-        console.error('[tabProductos] Error en cargarProductos:', err.message);
-        setError('No se pudieron cargar los productos.');
+        console.error('[tabProductos] Error en carga:', err.message);
+        if (!cancelado) setError('No se pudieron cargar los productos.');
       } finally {
-        setCargando(false);
+        if (!cancelado) setCargando(false);
       }
     };
-    cargarProductos();
-  }, []);
+    cargar();
+    return () => { cancelado = true; };
+  }, [intento]);
 
   // ── Control del modal ─────────────────────────────────────────────────────
-  const abrirCrear   = ()         => { setProductoEditando(null);      setModalAbierto(true); };
-  const abrirEditar  = (producto) => { setProductoEditando(producto);  setModalAbierto(true); };
-  const cerrarModal  = ()         => { setModalAbierto(false); setProductoEditando(null); };
+  const abrirCrear  = ()         => { setProductoEditando(null);     setModalAbierto(true); };
+  const abrirEditar = (producto) => { setProductoEditando(producto); setModalAbierto(true); };
+  const cerrarModal = ()         => { setModalAbierto(false); setProductoEditando(null); };
 
-  // ── Callback al guardar ───────────────────────────────────────────────────
   /**
-   * handleGuardado — actualiza la lista local sin refetch al backend.
-   * @param {object}  productoGuardado - objeto devuelto por el backend
-   * @param {boolean} esEdicion        - true = edición, false = creación
+   * handleGuardado
+   * Actualiza la lista local sin refetch al backend tras crear / editar.
+   * @param {object}  productoGuardado
+   * @param {boolean} esEdicion
    */
   const handleGuardado = (productoGuardado, esEdicion) => {
     if (esEdicion) {
-      setProductos(prev => prev.map(p => p.id === productoGuardado.id ? productoGuardado : p));
+      setProductos((prev) => prev.map((p) => p.id === productoGuardado.id ? productoGuardado : p));
     } else {
-      setProductos(prev => [...prev, productoGuardado]);
+      setProductos((prev) => [...prev, productoGuardado]);
     }
     cerrarModal();
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  if (cargando) return <p style={styles.estadoTexto}>Cargando productos...</p>;
-  if (error)    return <p style={styles.errorTexto}>{error}</p>;
+  // ── Estados de carga / error ──────────────────────────────────────────────
+  if (cargando) return <LoadingState />;
+  if (error) {
+    return (
+      <EmptyState
+        glyph={<IconoAlerta />}
+        title="No se pudieron cargar los productos"
+        body={error}
+        action={
+          <Button variant="secondary" onClick={() => setIntento((n) => n + 1)} full={false}>
+            <RefreshCw size={16} strokeWidth={1.75} /> Reintentar
+          </Button>
+        }
+      />
+    );
+  }
 
+  // ── Columnas del DataTable ────────────────────────────────────────────────
+  const columnas = [
+    {
+      key: 'nombre',
+      label: 'Nombre',
+      sortable: true,
+      grow: true,
+      sortAccessor: (row) => String(row.nombre ?? '').toLowerCase(),
+    },
+    {
+      key: 'precio',
+      label: 'Precio',
+      sortable: true,
+      align: 'right',
+      render: (row) => fmtPesos(row.precio),
+    },
+    {
+      key: 'stock_actual',
+      label: 'Stock actual',
+      sortable: true,
+      align: 'right',
+      render: (row) => <CeldaStockActual producto={row} />,
+    },
+    {
+      key: 'stock_minimo',
+      label: 'Stock mínimo',
+      sortable: true,
+      align: 'right',
+      render: (row) => (
+        <span style={{ color: theme.muted, fontVariantNumeric: 'tabular-nums' }}>
+          {row.stock_minimo} uds.
+        </span>
+      ),
+    },
+    {
+      key: 'estado',
+      label: 'Estado',
+      sortable: true,
+      align: 'right',
+      sortAccessor: (row) => row.activo ? 0 : 1,
+      render: (row) => <BadgeEstado activo={row.activo} />,
+    },
+  ];
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div>
-      {/* Modal */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{
+          fontFamily: theme.body,
+          fontSize: theme.sizeBody,
+          color: theme.muted,
+        }}>
+          {productos.length} producto{productos.length !== 1 ? 's' : ''} registrado{productos.length !== 1 ? 's' : ''}
+        </span>
+        <Button variant="primary" onClick={abrirCrear} full={false}>
+          <Plus size={16} strokeWidth={2} /> Nuevo producto
+        </Button>
+      </div>
+
+      {productos.length === 0 ? (
+        <EmptyState
+          glyph={<Package size={28} strokeWidth={1.5} />}
+          title="Sin productos registrados"
+          body="Creá tu primer producto desde el botón de arriba."
+        />
+      ) : (
+        <div style={{
+          background: theme.surface,
+          border: `1px solid ${theme.hairline}`,
+          borderRadius: theme.radiusLg,
+          overflow: 'hidden',
+        }}>
+          <DataTable
+            columns={columnas}
+            rows={productos}
+            rowKey={(row) => row.id}
+            onRowClick={abrirEditar}
+            pageSize={6}
+          />
+        </div>
+      )}
+
       {modalAbierto && (
         <ModalProducto
           producto={productoEditando}
@@ -277,350 +441,6 @@ export default function TabProductos() {
           onCerrar={cerrarModal}
         />
       )}
-
-      {/* ── Fila superior: contador + botón nuevo ── */}
-      <div style={styles.filaAcciones}>
-        <p style={styles.subtitulo}>
-          {productos.length} producto{productos.length !== 1 ? 's' : ''} registrado{productos.length !== 1 ? 's' : ''}
-        </p>
-        <button style={styles.btnNuevo} onPointerDown={abrirCrear}>
-          + Nuevo producto
-        </button>
-      </div>
-
-      {/* ── Tabla ── */}
-      {productos.length === 0 ? (
-        <p style={styles.estadoTexto}>No hay productos registrados todavía.</p>
-      ) : (
-        <div style={styles.tablaWrapper}>
-          <table style={styles.tabla}>
-            <thead>
-              <tr>
-                <th style={styles.th}>Nombre</th>
-                <th style={styles.th}>Precio</th>
-                <th style={styles.th}>Stock actual</th>
-                <th style={styles.th}>Stock mínimo</th>
-                <th style={styles.th}>Estado</th>
-                <th style={styles.thAccion}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {productos.map((p, i) => (
-                <tr
-                  key={p.id}
-                  style={{
-                    backgroundColor:
-                      // Fila en rojo suave si el stock está por debajo del mínimo
-                      p.stock_actual <= p.stock_minimo && p.stock_minimo > 0
-                        ? '#fff8f8'
-                        : i % 2 === 0 ? '#ffffff' : '#fafafa',
-                  }}
-                >
-                  <td style={styles.td}>{p.nombre}</td>
-                  <td style={styles.td}>$ {Number(p.precio).toLocaleString('es-AR')}</td>
-                  <td style={styles.td}>
-                    <span style={{
-                      fontWeight: '600',
-                      color: p.stock_actual <= p.stock_minimo && p.stock_minimo > 0
-                        ? '#c0392b'
-                        : '#111111',
-                    }}>
-                      {p.stock_actual} uds.
-                    </span>
-                  </td>
-                  <td style={{ ...styles.td, color: '#888888' }}>
-                    {p.stock_minimo} uds.
-                  </td>
-                  <td style={styles.td}>
-                    <span style={{
-                      ...styles.badge,
-                      ...(p.activo ? styles.badgeActivo : styles.badgeInactivo),
-                    }}>
-                      {p.activo ? 'Activo' : 'Inactivo'}
-                    </span>
-                  </td>
-                  <td style={styles.tdAccion}>
-                    <button
-                      style={styles.btnEditar}
-                      onPointerDown={() => abrirEditar(p)}
-                    >
-                      ✎
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }
-
-// ─── Estilos ──────────────────────────────────────────────────────────────────
-const styles = {
-  filaAcciones: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '16px',
-  },
-  subtitulo: {
-    margin: 0,
-    fontSize: '14px',
-    color: '#888888',
-  },
-  btnNuevo: {
-    padding: '10px 20px',
-    borderRadius: '10px',
-    border: 'none',
-    backgroundColor: '#1a7a4a',
-    color: '#ffffff',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-
-  // Tabla
-  tablaWrapper: {
-    overflowX: 'auto',
-    borderRadius: '12px',
-    border: '1.5px solid #eeeeee',
-  },
-  tabla: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    fontSize: '14px',
-  },
-  th: {
-    padding: '13px 16px',
-    textAlign: 'left',
-    fontSize: '11px',
-    fontWeight: '600',
-    color: '#888888',
-    textTransform: 'uppercase',
-    letterSpacing: '0.07em',
-    borderBottom: '1.5px solid #eeeeee',
-    backgroundColor: '#fafafa',
-  },
-  thAccion: {
-    padding: '13px 16px',
-    width: '48px',
-    borderBottom: '1.5px solid #eeeeee',
-    backgroundColor: '#fafafa',
-  },
-  td: {
-    padding: '13px 16px',
-    color: '#333333',
-    borderBottom: '1px solid #f0f0f0',
-    fontSize: '14px',
-  },
-  tdAccion: {
-    padding: '8px 12px',
-    textAlign: 'center',
-    borderBottom: '1px solid #f0f0f0',
-  },
-  badge: {
-    display: 'inline-block',
-    padding: '3px 10px',
-    borderRadius: '20px',
-    fontSize: '12px',
-    fontWeight: '600',
-  },
-  badgeActivo: {
-    backgroundColor: '#e8f5e9',
-    color: '#2e7d32',
-  },
-  badgeInactivo: {
-    backgroundColor: '#f5f5f5',
-    color: '#999999',
-  },
-  btnEditar: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '8px',
-    border: '1.5px solid #e0e0e0',
-    backgroundColor: '#ffffff',
-    color: '#555555',
-    fontSize: '15px',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // Estados
-  estadoTexto: {
-    textAlign: 'center',
-    color: '#888888',
-    fontSize: '15px',
-    padding: '48px 0',
-    margin: 0,
-  },
-  errorTexto: {
-    textAlign: 'center',
-    color: '#c0392b',
-    fontSize: '15px',
-    padding: '48px 0',
-    margin: 0,
-  },
-
-  // Modal
-  modalOverlay: {
-    position: 'fixed',
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
-  },
-  modalCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: '20px',
-    padding: '32px',
-    width: '440px',
-    maxWidth: '90vw',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  modalTitulo: {
-    fontSize: '20px',
-    fontWeight: '700',
-    color: '#111111',
-    margin: '0 0 24px',
-    textAlign: 'center',
-  },
-
-  // Campos
-  camposCol: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-    marginBottom: '24px',
-  },
-  campoGrupo: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  campoLabel: {
-    fontSize: '13px',
-    fontWeight: '600',
-    color: '#555555',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  campoHint: {
-    fontSize: '12px',
-    color: '#aaaaaa',
-    margin: '0',
-  },
-  campoInput: {
-    padding: '11px 14px',
-    borderRadius: '10px',
-    border: '1.5px solid #e0e0e0',
-    fontSize: '15px',
-    color: '#111111',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-    outline: 'none',
-  },
-  precioRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  precioSigno: {
-    fontSize: '18px',
-    fontWeight: '300',
-    color: '#555555',
-  },
-
-  // Sección stock
-  stockBox: {
-    backgroundColor: '#f8fffe',
-    border: '1.5px solid #d4edda',
-    borderRadius: '12px',
-    padding: '16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  stockActualRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  stockActualValor: {
-    fontSize: '20px',
-    fontWeight: '700',
-    color: '#1a7a4a',
-  },
-
-  // Toggle activo/inactivo
-  activoRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  toggleBtn: {
-    padding: '8px 20px',
-    borderRadius: '20px',
-    border: 'none',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  toggleActivo: {
-    backgroundColor: '#e8f5e9',
-    color: '#2e7d32',
-  },
-  toggleInactivo: {
-    backgroundColor: '#f5f5f5',
-    color: '#999999',
-  },
-
-  // Error en modal
-  errorTextoModal: {
-    color: '#c0392b',
-    fontSize: '13px',
-    textAlign: 'center',
-    margin: '-8px 0 8px',
-  },
-
-  // Botones modal
-  modalBotones: {
-    display: 'flex',
-    gap: '12px',
-  },
-  btnCancelar: {
-    flex: 1,
-    padding: '13px 0',
-    borderRadius: '12px',
-    border: '1.5px solid #e0e0e0',
-    backgroundColor: '#ffffff',
-    color: '#444444',
-    fontSize: '15px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-  },
-  btnGuardar: {
-    flex: 1,
-    padding: '13px 0',
-    borderRadius: '12px',
-    border: 'none',
-    backgroundColor: '#1a7a4a',
-    color: '#ffffff',
-    fontSize: '15px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-  },
-  btnDeshabilitado: {
-    backgroundColor: '#cccccc',
-    cursor: 'not-allowed',
-  },
-};
