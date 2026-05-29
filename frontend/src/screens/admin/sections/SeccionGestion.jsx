@@ -1,12 +1,12 @@
 // /frontend/src/screens/admin/sections/SeccionGestion.jsx
 // Sección Gestión del panel admin.
 // Shell con 6 tabs: Barberos, Servicios, Productos, Turnero (config booking
-// online), Datos del negocio, Seguridad. Cada tab carga sus propios datos al
+// online), Negocio, Seguridad. Cada tab carga sus propios datos al
 // activarse — no hay precarga global.
 //
-// Estructura visual: ScreenHeader arriba + Tabs underline (D8) en fila propia
-// + contenido del tab activo. Sin padding/fondo propios — los hereda del
-// <main> del PanelAdmin (D7).
+// Estructura visual: Tabs underline (D8) arriba + contenido del tab activo.
+// Sin ScreenHeader (D15: el usuario decidió sacar el header de esta sección).
+// Sin padding/fondo propios en el <main> — los hereda del PanelAdmin (D7).
 
 import { useState } from 'react';
 import {
@@ -18,8 +18,7 @@ import {
   Shield,
 } from 'lucide-react';
 
-import ScreenHeader from '../../../components/ui/ScreenHeader.jsx';
-import Tabs         from '../../../components/ui/Tabs.jsx';
+import Tabs from '../../../components/ui/Tabs.jsx';
 
 import TabBarberos  from './gestion/TabBarberos.jsx';
 import TabServicios from './gestion/TabServicios.jsx';
@@ -34,7 +33,7 @@ const TABS_ITEMS = [
   { key: 'servicios', label: 'Servicios',         icon: ClipboardList },
   { key: 'productos', label: 'Productos',         icon: Package       },
   { key: 'turnero',   label: 'Turnero',           icon: Calendar      },
-  { key: 'negocio',   label: 'Datos del negocio', icon: Building2     },
+  { key: 'negocio',   label: 'Negocio',           icon: Building2     },
   { key: 'seguridad', label: 'Seguridad',         icon: Shield        },
 ];
 
@@ -50,11 +49,6 @@ export default function SeccionGestion() {
 
   return (
     <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <ScreenHeader
-        title="Gestión"
-        subtitle="Administración de barberos, servicios, productos y configuración"
-      />
-
       <Tabs
         items={TABS_ITEMS}
         value={tabActiva}

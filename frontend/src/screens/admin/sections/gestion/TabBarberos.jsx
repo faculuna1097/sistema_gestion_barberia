@@ -44,6 +44,7 @@ import {
   BotonIconoFila,
   AvatarIniciales,
   Toast,
+  InputTiempo,
 } from '../../../../components/ui';
 import { theme } from '../../../../theme/tokens.js';
 
@@ -98,49 +99,6 @@ function construirHorarioLocal(semana) {
     }
   });
   return mapa;
-}
-
-// ─── Input de tiempo / fecha-hora ─────────────────────────────────────────────
-/**
- * InputTiempo
- * Input nativo (type="time" o "datetime-local") estilado para igualar a Field
- * (border hairline, focus ring indigo). Field no cubre estos types nativos.
- *
- * @param {object} props
- * @param {string} props.type - 'time' | 'datetime-local'
- * @param {string} props.value
- * @param {(v: string) => void} props.onChange
- * @param {string} props.ariaLabel
- * @param {boolean} [props.invalid=false]
- * @param {boolean} [props.full=false] - Si ocupa el 100% del ancho del padre
- */
-function InputTiempo({ type, value, onChange, ariaLabel, invalid = false, full = false }) {
-  const [focus, setFocus] = useState(false);
-  const borderColor = invalid ? theme.danger : (focus ? theme.accent : theme.hairline);
-
-  return (
-    <input
-      type={type}
-      value={value}
-      aria-label={ariaLabel}
-      onChange={(e) => onChange(e.target.value)}
-      onFocus={() => setFocus(true)}
-      onBlur={() => setFocus(false)}
-      style={{
-        width: full ? '100%' : 'auto',
-        padding: '10px 12px',
-        background: theme.surface,
-        border: `1px solid ${borderColor}`,
-        borderRadius: theme.radius,
-        fontFamily: theme.body,
-        fontSize: theme.sizeBody,
-        color: theme.ink,
-        outline: 'none',
-        transition: `border-color ${theme.transitionFast}, box-shadow ${theme.transitionFast}`,
-        boxShadow: focus ? `0 0 0 3px ${theme.accent}26` : 'none',
-      }}
-    />
-  );
 }
 
 // ─── Tab Horario (dentro del modal de agenda) ─────────────────────────────────

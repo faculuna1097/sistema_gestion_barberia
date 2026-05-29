@@ -32,3 +32,4 @@ export { default as DataTable }       from './DataTable.jsx';
 export { default as BadgeEstado }     from './BadgeEstado.jsx';
 export { default as ToggleEstado }    from './ToggleEstado.jsx';
 export { default as Toast }           from './Toast.jsx';
+export { default as InputTiempo }     from './InputTiempo.jsx';

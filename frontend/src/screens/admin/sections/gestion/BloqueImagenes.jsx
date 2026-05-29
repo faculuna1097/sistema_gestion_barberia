@@ -3,13 +3,24 @@
 // ejemplo, logos). Se renderiza dentro de TabNegocio, debajo de los feriados.
 // Las imágenes se comprimen a WebP en el navegador antes de subirse, para no
 // gastar la cuota de Supabase Storage con archivos pesados.
+//
+// Sistema de diseño: tokens + Geist + Lucide + primitivos. El borrado usa
+// ConfirmDialog; los errores se muestran con Toast.
 
 import { useState, useEffect, useRef } from 'react';
 import imageCompression from 'browser-image-compression';
-import { getImagenesAdmin, subirImagen, eliminarImagen } from '../../../../services/api';
+import { ImagePlus, X } from 'lucide-react';
 
-// Definición de los tres grupos de imágenes: cuántos slots tiene cada uno
-// y el texto que los acompaña. El orden de cada slot va de 1 a `cantidad`.
+import { getImagenesAdmin, subirImagen, eliminarImagen } from '../../../../services/api';
+import {
+  ConfirmDialog,
+  Toast,
+  LoadingState,
+} from '../../../../components/ui';
+import { theme } from '../../../../theme/tokens.js';
+
+// Definición de los tres grupos de imágenes: cuántos slots tiene cada uno y el
+// texto que los acompaña. El orden de cada slot va de 1 a `cantidad`.
 const GRUPOS = [
   { tipo: 'local', titulo: 'Fotos del local', cantidad: 2,
     hint: 'Cómo se ve el local por dentro.' },
@@ -27,47 +38,58 @@ const OPCIONES_COMPRESION = {
   logo:  { maxWidthOrHeight: 512,  maxSizeMB: 0.1 },
 };
 
+// Lado de las miniaturas / tiles (px).
+const SLOT = 76;
+
+// Wrapper de contenido (sin chrome de card: el panel lo aporta TabNegocio).
+// Compartido entre los estados carga/error/contenido.
+const CONTENT_STYLE = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 16,
+};
+
 /**
- * Modal de confirmación de eliminación de una imagen.
- * @param {Function} props.onConfirmar - dispara el DELETE
- * @param {Function} props.onCancelar - cierra el modal sin hacer nada
- * @param {boolean} props.eliminando - true mientras corre el DELETE
+ * EncabezadoImagenes
+ * Título + hint de la card. Compartido entre los estados de carga / error /
+ * contenido para no duplicar la tipografía.
  * @returns {JSX.Element}
  */
-function ModalConfirmarEliminar({ onConfirmar, onCancelar, eliminando }) {
+function EncabezadoImagenes() {
   return (
-    <div style={styles.modalOverlay}>
-      <div style={styles.modalCard}>
-        <p style={styles.modalTitulo}>¿Eliminar esta imagen?</p>
-        <p style={styles.modalAdvertencia}>
-          La imagen se borra de forma permanente. Podés volver a subir otra en su lugar.
-        </p>
-        <div style={styles.modalBotones}>
-          <button style={styles.btnCancelar} onPointerDown={onCancelar} disabled={eliminando}>
-            Cancelar
-          </button>
-          <button
-            style={{ ...styles.btnConfirmarRojo, ...(eliminando ? styles.btnDeshabilitado : {}) }}
-            onPointerDown={onConfirmar}
-            disabled={eliminando}
-          >
-            {eliminando ? 'Eliminando...' : 'Sí, eliminar'}
-          </button>
-        </div>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{
+        fontFamily: theme.body,
+        fontWeight: theme.weightHeading,
+        fontSize: theme.sizeBody,
+        color: theme.ink,
+      }}>
+        Imágenes del negocio
+      </span>
+      <span style={{
+        fontFamily: theme.body,
+        fontSize: theme.sizeBody,
+        color: theme.muted,
+        lineHeight: 1.5,
+      }}>
+        Se muestran en la página de reservas de los clientes. Las imágenes se
+        optimizan automáticamente al subirlas.
+      </span>
     </div>
   );
 }
 
 /**
- * Bloque de imágenes del negocio. Muestra los slots por tipo, permite subir
- * (con compresión a WebP) y eliminar imágenes.
+ * BloqueImagenes
+ * Muestra los slots por tipo, permite subir (con compresión a WebP) y eliminar
+ * imágenes.
  * @returns {JSX.Element}
  */
 export default function BloqueImagenes() {
-  const [imagenes, setImagenes] = useState([]);
-  const [cargando, setCargando] = useState(true);
-  const [error, setError]       = useState(null);
+  const [imagenes, setImagenes]     = useState([]);
+  const [cargando, setCargando]     = useState(true);
+  const [errorCarga, setErrorCarga] = useState(null);
+  const [feedback, setFeedback]     = useState(null);  // { tone, texto } | null
 
   // Slot que está subiendo en este momento, identificado como 'tipo-orden'.
   // Solo uno a la vez: la subida es rápida y evita estados ambiguos.
@@ -82,32 +104,55 @@ export default function BloqueImagenes() {
   const inputRef = useRef(null);
   const slotPendiente = useRef(null);
 
+  const vivoRef = useRef(true);
   useEffect(() => {
+    vivoRef.current = true;
+    return () => { vivoRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    let cancelado = false;
     const cargarImagenes = async () => {
+      setCargando(true);
+      setErrorCarga(null);
       try {
         const data = await getImagenesAdmin();
-        setImagenes(data);
+        if (!cancelado) setImagenes(data);
       } catch (err) {
         console.error('[bloqueImagenes] Error en cargarImagenes:', err.message);
-        setError('No se pudieron cargar las imágenes.');
+        if (!cancelado) setErrorCarga('No se pudieron cargar las imágenes.');
       } finally {
-        setCargando(false);
+        if (!cancelado) setCargando(false);
       }
     };
     cargarImagenes();
+    return () => { cancelado = true; };
   }, []);
 
   /**
-   * Busca la imagen cargada en un slot concreto.
+   * imagenesDe — imágenes cargadas de un grupo, ordenadas por `orden`.
    * @param {string} tipo
-   * @param {number} orden
-   * @returns {Object|undefined} la imagen, o undefined si el slot está vacío
+   * @returns {Array} imágenes del grupo
    */
-  const imagenDe = (tipo, orden) =>
-    imagenes.find((img) => img.tipo === tipo && img.orden === orden);
+  const imagenesDe = (tipo) =>
+    imagenes.filter((img) => img.tipo === tipo).sort((a, b) => a.orden - b.orden);
 
   /**
-   * Abre el selector de archivos para un slot dado.
+   * ordenLibre — primera posición libre (1..max) de un grupo, para saber a qué
+   * `orden` subir cuando el usuario toca el tile "+".
+   * @param {string} tipo
+   * @param {number} max - cantidad de slots del grupo
+   * @returns {number|null} la posición libre, o null si el grupo está lleno
+   */
+  const ordenLibre = (tipo, max) => {
+    for (let o = 1; o <= max; o++) {
+      if (!imagenes.some((img) => img.tipo === tipo && img.orden === o)) return o;
+    }
+    return null;
+  };
+
+  /**
+   * abrirSelector — abre el selector de archivos para un slot dado.
    * @param {string} tipo
    * @param {number} orden
    */
@@ -118,7 +163,8 @@ export default function BloqueImagenes() {
   };
 
   /**
-   * Maneja la elección de un archivo: lo comprime a WebP y lo sube al slot.
+   * handleArchivo — maneja la elección de un archivo: lo comprime a WebP y lo
+   * sube al slot.
    * @param {Event} e - evento change del input de archivo
    */
   const handleArchivo = async (e) => {
@@ -129,7 +175,7 @@ export default function BloqueImagenes() {
 
     const { tipo, orden } = slot;
     setSubiendo(`${tipo}-${orden}`);
-    setError(null);
+    setFeedback(null);
     try {
       // Compresión + conversión a WebP en el navegador.
       const comprimida = await imageCompression(file, {
@@ -138,6 +184,7 @@ export default function BloqueImagenes() {
         useWebWorker: true,
       });
       const nueva = await subirImagen(tipo, orden, comprimida);
+      if (!vivoRef.current) return;
 
       // Reemplaza la imagen del slot si ya existía, o la agrega si era nuevo.
       setImagenes((prev) => [
@@ -146,50 +193,65 @@ export default function BloqueImagenes() {
       ]);
     } catch (err) {
       console.error('[bloqueImagenes] Error en handleArchivo:', err.message);
-      setError(err.message || 'No se pudo subir la imagen.');
+      if (vivoRef.current) setFeedback({ tone: 'danger', texto: err.message || 'No se pudo subir la imagen.' });
     } finally {
-      setSubiendo(null);
+      if (vivoRef.current) setSubiendo(null);
     }
   };
 
   /**
-   * Ejecuta el DELETE de la imagen en confirmación.
+   * ejecutarEliminar — ejecuta el DELETE de la imagen en confirmación.
    */
   const ejecutarEliminar = async () => {
     if (!imagenAEliminar) return;
     setEliminando(true);
-    setError(null);
     try {
       await eliminarImagen(imagenAEliminar.id);
+      if (!vivoRef.current) return;
       setImagenes((prev) => prev.filter((img) => img.id !== imagenAEliminar.id));
       setAEliminar(null);
     } catch (err) {
       console.error('[bloqueImagenes] Error en ejecutarEliminar:', err.message);
-      setError('No se pudo eliminar la imagen. Intentá de nuevo.');
-      setAEliminar(null);
+      if (vivoRef.current) {
+        setAEliminar(null);
+        setFeedback({ tone: 'danger', texto: 'No se pudo eliminar la imagen. Intentá de nuevo.' });
+      }
     } finally {
-      setEliminando(false);
+      if (vivoRef.current) setEliminando(false);
     }
   };
 
   if (cargando) {
     return (
-      <div style={styles.card}>
-        <p style={styles.cardTitulo}>Imágenes del negocio</p>
-        <p style={styles.estadoTexto}>Cargando imágenes...</p>
+      <div style={CONTENT_STYLE}>
+        <EncabezadoImagenes />
+        <LoadingState />
+      </div>
+    );
+  }
+
+  if (errorCarga) {
+    return (
+      <div style={CONTENT_STYLE}>
+        <EncabezadoImagenes />
+        <Toast tone="danger">{errorCarga}</Toast>
       </div>
     );
   }
 
   return (
-    <div style={styles.card}>
-      {imagenAEliminar && (
-        <ModalConfirmarEliminar
-          onConfirmar={ejecutarEliminar}
-          onCancelar={() => setAEliminar(null)}
-          eliminando={eliminando}
-        />
-      )}
+    <div style={CONTENT_STYLE}>
+      {/* Confirmación de eliminación */}
+      <ConfirmDialog
+        open={imagenAEliminar !== null}
+        title="¿Eliminar esta imagen?"
+        message="La imagen se borra de forma permanente. Podés volver a subir otra en su lugar."
+        confirmLabel="Sí, eliminar"
+        confirmVariant="danger"
+        loading={eliminando}
+        onConfirm={ejecutarEliminar}
+        onCancel={() => { if (!eliminando) setAEliminar(null); }}
+      />
 
       {/* Input de archivo oculto, compartido por todos los slots. */}
       <input
@@ -200,188 +262,161 @@ export default function BloqueImagenes() {
         style={{ display: 'none' }}
       />
 
-      <p style={styles.cardTitulo}>Imágenes del negocio</p>
-      <p style={styles.cardHint}>
-        Se muestran en la página de reservas de los clientes. Las imágenes se
-        optimizan automáticamente al subirlas.
-      </p>
+      <EncabezadoImagenes />
 
-      {error && <p style={styles.errorTextoInline}>{error}</p>}
+      {feedback && (
+        <Toast
+          tone={feedback.tone}
+          dismissible
+          onDismiss={() => setFeedback(null)}
+        >
+          {feedback.texto}
+        </Toast>
+      )}
 
-      {GRUPOS.map((grupo) => (
-        <div key={grupo.tipo} style={styles.grupo}>
-          <p style={styles.grupoTitulo}>{grupo.titulo}</p>
-          <p style={styles.grupoHint}>{grupo.hint}</p>
-          <div style={styles.slots}>
-            {Array.from({ length: grupo.cantidad }, (_, i) => i + 1).map((orden) => {
-              const imagen = imagenDe(grupo.tipo, orden);
-              const esteSubiendo = subiendo === `${grupo.tipo}-${orden}`;
-              return (
-                <div
-                  key={orden}
-                  style={styles.slot}
-                  onClick={() => abrirSelector(grupo.tipo, orden)}
-                  title={imagen ? 'Click para reemplazar' : 'Click para subir una imagen'}
-                >
-                  {esteSubiendo ? (
-                    <span style={styles.slotTexto}>Subiendo...</span>
-                  ) : imagen ? (
-                    <>
-                      <img src={imagen.url} alt="" style={styles.slotImg} />
-                      <button
-                        style={styles.btnBorrarSlot}
-                        onClick={(e) => { e.stopPropagation(); setError(null); setAEliminar(imagen); }}
-                        title="Eliminar imagen"
-                      >
-                        ×
-                      </button>
-                    </>
-                  ) : (
-                    <span style={styles.slotMas}>+</span>
-                  )}
+      {GRUPOS.map((grupo) => {
+        const imgs       = imagenesDe(grupo.tipo);
+        const libre      = ordenLibre(grupo.tipo, grupo.cantidad);
+        const ocupado    = !!subiendo;
+        // ¿Está subiendo a una posición que todavía no figura en la lista?
+        // (caso "agregar" vs "reemplazar"). Si es así, mostramos un tile extra.
+        const subiendoNueva = subiendo === `${grupo.tipo}-${libre}`;
+
+        return (
+          <div key={grupo.tipo} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{
+                fontFamily: theme.mono,
+                fontWeight: theme.weightMedium,
+                fontSize: theme.sizeMicro,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                color: theme.muted,
+              }}>
+                {grupo.titulo}
+              </span>
+              <span style={{
+                fontFamily: theme.body,
+                fontSize: theme.sizeBody,
+                color: theme.muted,
+              }}>
+                {grupo.hint}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
+              {/* Miniaturas cargadas. Click = reemplazar esa posición. */}
+              {imgs.map((imagen) => {
+                const esteSubiendo = subiendo === `${grupo.tipo}-${imagen.orden}`;
+                return (
+                  <div
+                    key={imagen.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Reemplazar imagen"
+                    onClick={() => abrirSelector(grupo.tipo, imagen.orden)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        abrirSelector(grupo.tipo, imagen.orden);
+                      }
+                    }}
+                    style={{
+                      position: 'relative',
+                      width: SLOT,
+                      height: SLOT,
+                      borderRadius: theme.radius,
+                      border: `1px solid ${theme.hairline}`,
+                      background: theme.surface,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: ocupado ? 'default' : 'pointer',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {esteSubiendo ? (
+                      <span style={{ fontFamily: theme.body, fontSize: theme.sizeMicro, color: theme.muted }}>
+                        Subiendo…
+                      </span>
+                    ) : (
+                      <>
+                        <img src={imagen.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <button
+                          type="button"
+                          aria-label="Eliminar imagen"
+                          onClick={(e) => { e.stopPropagation(); setFeedback(null); setAEliminar(imagen); }}
+                          style={{
+                            position: 'absolute',
+                            top: 4,
+                            right: 4,
+                            width: 22,
+                            height: 22,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: theme.radiusSm,
+                            border: 'none',
+                            background: 'rgba(9, 9, 11, 0.55)',
+                            color: '#FFFFFF',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <X size={13} strokeWidth={2.25} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Tile extra mientras sube una imagen nueva (posición aún no listada). */}
+              {subiendoNueva && (
+                <div style={{
+                  width: SLOT,
+                  height: SLOT,
+                  borderRadius: theme.radius,
+                  border: `1px solid ${theme.hairline}`,
+                  background: theme.surface,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <span style={{ fontFamily: theme.body, fontSize: theme.sizeMicro, color: theme.muted }}>
+                    Subiendo…
+                  </span>
                 </div>
-              );
-            })}
+              )}
+
+              {/* Tile "+" para agregar, solo si el grupo no llegó al tope. */}
+              {libre !== null && !subiendoNueva && (
+                <button
+                  type="button"
+                  aria-label={`Subir imagen — ${grupo.titulo}`}
+                  disabled={ocupado}
+                  onClick={() => abrirSelector(grupo.tipo, libre)}
+                  onMouseEnter={(e) => { if (!ocupado) e.currentTarget.style.borderColor = theme.accent; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = theme.hairline; }}
+                  style={{
+                    width: SLOT,
+                    height: SLOT,
+                    borderRadius: theme.radius,
+                    border: `1px dashed ${theme.hairline}`,
+                    background: theme.surfaceAlt,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: ocupado ? 'default' : 'pointer',
+                    transition: `border-color ${theme.transitionFast}`,
+                  }}
+                >
+                  <ImagePlus size={22} strokeWidth={1.5} color={theme.mutedSoft} />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
-
-const styles = {
-  card: {
-    backgroundColor: '#fafafa',
-    border: '1.5px solid #eeeeee',
-    borderRadius: '16px',
-    padding: '28px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  cardTitulo: {
-    fontSize: '17px',
-    fontWeight: '700',
-    color: '#111111',
-    margin: 0,
-  },
-  cardHint: {
-    fontSize: '13px',
-    color: '#aaaaaa',
-    margin: 0,
-  },
-  grupo: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  grupoTitulo: {
-    fontSize: '13px',
-    fontWeight: '600',
-    color: '#555555',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    margin: 0,
-  },
-  grupoHint: {
-    fontSize: '12px',
-    color: '#aaaaaa',
-    margin: 0,
-  },
-  slots: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '10px',
-    marginTop: '2px',
-  },
-  slot: {
-    position: 'relative',
-    width: '96px',
-    height: '96px',
-    borderRadius: '12px',
-    border: '1.5px solid #e0e0e0',
-    backgroundColor: '#ffffff',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    overflow: 'hidden',
-  },
-  slotImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
-  slotMas: {
-    fontSize: '32px',
-    color: '#cccccc',
-    fontWeight: '300',
-    lineHeight: '1',
-  },
-  slotTexto: {
-    fontSize: '12px',
-    color: '#888888',
-  },
-  btnBorrarSlot: {
-    position: 'absolute',
-    top: '4px',
-    right: '4px',
-    width: '24px',
-    height: '24px',
-    borderRadius: '7px',
-    border: 'none',
-    backgroundColor: 'rgba(192,57,43,0.92)',
-    color: '#ffffff',
-    fontSize: '16px',
-    lineHeight: '1',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-  },
-  estadoTexto: {
-    color: '#888888',
-    fontSize: '14px',
-    margin: 0,
-  },
-  errorTextoInline: {
-    color: '#c0392b',
-    fontSize: '13px',
-    margin: 0,
-  },
-  // --- Modal ---
-  modalOverlay: {
-    position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-  },
-  modalCard: {
-    backgroundColor: '#ffffff', borderRadius: '20px',
-    padding: '32px', width: '420px', maxWidth: '90vw',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-    display: 'flex', flexDirection: 'column', gap: '16px',
-  },
-  modalTitulo: {
-    fontSize: '20px', fontWeight: '700', color: '#111111',
-    margin: 0, textAlign: 'center',
-  },
-  modalAdvertencia: {
-    fontSize: '13px', color: '#c0392b', textAlign: 'center', margin: 0,
-  },
-  modalBotones: { display: 'flex', gap: '12px' },
-  btnCancelar: {
-    flex: 1, padding: '13px 0', borderRadius: '12px',
-    border: '1.5px solid #e0e0e0', backgroundColor: '#ffffff',
-    color: '#444444', fontSize: '15px', fontWeight: '500',
-    cursor: 'pointer', fontFamily: 'inherit',
-  },
-  btnConfirmarRojo: {
-    flex: 1, padding: '13px 0', borderRadius: '12px',
-    border: 'none', backgroundColor: '#c0392b',
-    color: '#ffffff', fontSize: '15px', fontWeight: '600',
-    cursor: 'pointer', fontFamily: 'inherit',
-  },
-  btnDeshabilitado: {
-    backgroundColor: '#cccccc',
-    cursor: 'not-allowed',
-  },
-};
