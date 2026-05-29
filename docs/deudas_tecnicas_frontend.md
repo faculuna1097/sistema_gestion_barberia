@@ -9,6 +9,10 @@ Acá vive el plan escalonado para resolverlas y el seguimiento de cada una.
 Cuando aparece una deuda nueva, se le da el siguiente número libre y se suma a la
 etapa que corresponda por **superficie compartida** (ver criterio de orden abajo).
 
+**Orden de trabajo de cada deuda**: primero se modifica/soluciona, después se
+**verifica** (visual y/o funcionalmente según corresponda), y **recién después de
+verificar** se cambia el estado a `✅` y se mueve al apéndice. Nunca al revés.
+
 Los números (#NN) son los **originales** del plan de rediseño — se conservan para no
 romper referencias cruzadas en commits, chats y otros docs.
 
@@ -42,9 +46,9 @@ Cleanup global) son la excepción: viven en otro contexto y van al final por dis
 
 | # | Deuda | Etapa | Archivos | Prioridad | Estado |
 |---|---|---|---|---|---|
-| 38 | `Modal` sin scroll interno | 1 | `ui/Modal.jsx` | Media | 🔲 |
-| 25 | `Modal` id estático en `aria-labelledby` | 1 | `ui/Modal.jsx` | Baja | 🔲 |
-| 24 | `ConfirmDialog` no reusa `Modal` | 1 | `ui/ConfirmDialog.jsx`, `ui/Modal.jsx` | Media | 🔲 |
+| 38 | `Modal` sin scroll interno | 1 | `ui/Modal.jsx` | Media | ✅ |
+| 25 | `Modal` id estático en `aria-labelledby` | 1 | `ui/Modal.jsx` | Baja | ✅ |
+| 24 | `ConfirmDialog` no reusa `Modal` | 1 | `ui/ConfirmDialog.jsx`, `ui/Modal.jsx` | Media | ✅ |
 | 17 | `EmptyState` no acepta `tone` | 2 | `ui/EmptyState.jsx` | Media | 🔲 |
 | 41 | Wrapper "label + `InputTiempo`" duplicado | 2 | `ui/InputTiempo.jsx`, `TabBarberos`, `BloqueFeriados` | Baja | 🔲 |
 | 40 | Editor de horario no acota al rango del local | 3 | `TabBarberos` | Media | 🔲 |
@@ -74,21 +78,11 @@ Cleanup global) son la excepción: viven en otro contexto y van al final por dis
 
 # Plan escalonado
 
-## Etapa 1 — Primitivo `Modal` + `ConfirmDialog`
-Todo vive en `components/ui/Modal.jsx` y `components/ui/ConfirmDialog.jsx`. Arreglar el
-primitivo `Modal` primero (#38, #25) lo deja sólido para que #24 (que `ConfirmDialog`
-lo reuse internamente) se apoye sobre una base buena. Impacto transversal: estos
-primitivos los usan casi todas las secciones.
-
-### #38 — `Modal` primitivo sin scroll interno · Media · 🔲
-La card del `Modal` (`components/ui/Modal.jsx`) no acota su altura ni hace scroll — si el contenido supera el viewport, se sale de pantalla (overlay con `padding:16` pero sin `maxHeight`/`overflow`). Esto disparó el pedido de "modal horizontal" del sub-panel Horario (7 días apilados desbordaban). Se mitigó allá con grilla horizontal + `maxWidth:900`, pero la deuda del primitivo sigue.
-**Fix**: `maxHeight: calc(100vh - 32px)` + `overflowY:auto` en la card (idealmente header/footer fijos y solo `children` scrollea — requiere reestructurar el layout interno del `Modal` en 3 zonas).
-
-### #25 — `Modal` usa id estático `om-modal-title` para `aria-labelledby` · Baja · 🔲
-Si dos modales del primitivo se abrieran simultáneamente, los ids colisionarían. Hoy nunca pasa (los flujos del admin son monomodal). Si en algún futuro se anidan modales o aparecen modales superpuestos, generar id único con `useId()`.
-
-### #24 — `ConfirmDialog` no usa internamente el primitivo `Modal` · Media · 🔲
-Tienen shells visuales casi idénticos (overlay + card + animaciones + ESC). El refactor de `ConfirmDialog` para reusar `Modal` quedó fuera de scope del chat de Gastos (`ConfirmDialog` viene heredado idéntico de turnero y refactorizarlo significa rotar también el turnero, o introducir divergencia). Plan: evaluar en Fase 6 (cleanup) — si quedan ambos, está OK (D9: APIs pueden divergir), pero hay duplicación visual que conviene unificar.
+## Etapa 1 — Primitivo `Modal` + `ConfirmDialog` · ✅ COMPLETA
+Todo vivía en `components/ui/Modal.jsx` y `components/ui/ConfirmDialog.jsx`. Se arregló el
+primitivo `Modal` primero (#38, #25) y luego #24 (`ConfirmDialog` reusa `Modal`
+internamente). Las tres resueltas — ver apéndice. Impacto transversal: estos primitivos
+los usan casi todas las secciones.
 
 ---
 
@@ -234,6 +228,9 @@ Historia. No borrar. Formato compacto: # — título — cómo/cuándo se cerró
 - **#29** — Bug latente `labelMes` no definida en `SeccionBalances` (caso vacío) — **✅** rediseño de Balances (reemplazado por `mesALabel`).
 - **#30** — Primitivo `Toast` pendiente — **✅** chat A de Gestión (construido `ui/Toast.jsx`, parte auto-dismiss; migrados `BannerError` de Turnero y `mensajeExito` de Seguridad).
 - **#37** — `InputTiempo` local en `TabBarberos` candidato a primitivo — **✅** chat de `TabNegocio` (promovido a `ui/InputTiempo.jsx`, genérico `time`/`datetime-local`/`date`).
+- **#38** — `Modal` primitivo sin scroll interno — **✅** 2026-05-29, chat deudas Etapa 1 (commit pendiente). Reestructurado en 3 zonas: header/footer fijos (`flexShrink:0`) y body scrolleable (`flex:1` + `minHeight:0` + `overflowY:auto`); card con `maxHeight:calc(100vh - 32px)` + `overflow:hidden`. Paddings repartidos para que los modales cortos queden pixel-equivalentes. Verificado visualmente en los 11 callers.
+- **#25** — `Modal` id estático `om-modal-title` en `aria-labelledby` — **✅** 2026-05-29, chat deudas Etapa 1 (commit pendiente). Reemplazado por `useId()` (id único y estable por instancia). Sin referencias colgadas al id viejo.
+- **#24** — `ConfirmDialog` no reusa `Modal` — **✅** 2026-05-29, chat deudas Etapa 1 (commit pendiente). `ConfirmDialog` reescrito como wrapper delgado sobre `Modal` (`message`→`subtitle`, `children`→body, botones→`footer`, `onCancel`→`onClose`). API pública intacta (6 callers sin tocar); hereda scroll interno (#38) y `useId` (#25). De paso, `Modal` ahora no renderiza el body cuando no hay `children` (evita padding muerto en confirms solo-mensaje). Verificado en los 6 callers.
 
 ---
 
