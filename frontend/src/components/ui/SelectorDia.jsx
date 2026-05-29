@@ -16,7 +16,7 @@ import {
   desplazarDia,
   getFechaHoy,
   fechaALabel,
-} from '../utils/fecha';
+} from '../../utils/fecha';
 
 /**
  * @param {object} props

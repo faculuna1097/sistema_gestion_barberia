@@ -49,7 +49,6 @@ import {
 } from '../../../services/api';
 import { getFechaHoy, formatHora, TZ } from '../../../utils/fecha';
 import { theme } from '../../../theme/tokens.js';
-import SelectorDia from '../../../components/SelectorDia';
 import {
   LoadingState,
   EmptyState,
@@ -60,6 +59,7 @@ import {
   DetalleRecurso,
   AvatarIniciales,
   Toast,
+  SelectorDia,
 } from '../../../components/ui';
 
 // ═══════════════════════════════════════════════════════════════════════════

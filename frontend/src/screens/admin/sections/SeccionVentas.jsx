@@ -13,9 +13,6 @@ import * as XLSX from 'xlsx';
 import { Pencil, Trash2, Package, RefreshCw } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
-import SelectorMes from '../../../components/SelectorMes';
-import BadgeFormaPago from '../../../components/BadgeFormaPago';
-import BotonExportarExcel from '../../../components/BotonExportarExcel';
 import { mesALabel, getMesActual } from '../../../utils/fecha';
 import { fmtPesos } from '../../../utils/formato';
 import {
@@ -30,6 +27,9 @@ import {
   BotonIconoFila,
   DetalleRecurso,
   IconoAlerta,
+  BadgeFormaPago,
+  BotonExportarExcel,
+  SelectorMes,
 } from '../../../components/ui';
 import { theme } from '../../../theme/tokens.js';
 

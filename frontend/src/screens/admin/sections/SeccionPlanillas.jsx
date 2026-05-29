@@ -29,10 +29,6 @@ import * as XLSX from 'xlsx';
 import { ChevronRight, ChevronDown, Scissors, RefreshCw } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
-import SelectorSemana from '../../../components/SelectorSemana';
-import BadgeFormaPago from '../../../components/BadgeFormaPago';
-import BotonExportarExcel from '../../../components/BotonExportarExcel';
-import TogglePill from '../../../components/TogglePill';
 import {
   getFechaHoy,
   formatFechaCorta,
@@ -48,6 +44,10 @@ import {
   Button,
   IconoAlerta,
   ChipFiltro,
+  BadgeFormaPago,
+  BotonExportarExcel,
+  TogglePill,
+  SelectorSemana,
 } from '../../../components/ui';
 import { theme } from '../../../theme/tokens.js';
 

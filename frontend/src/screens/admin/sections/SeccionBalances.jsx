@@ -26,10 +26,6 @@ import { fmtPesos } from '../../../utils/formato';
 import { getMesActual, mesALabel } from '../../../utils/fecha';
 import { theme } from '../../../theme/tokens.js';
 
-import SelectorMes from '../../../components/SelectorMes';
-import BotonExportarExcel from '../../../components/BotonExportarExcel';
-import TogglePill from '../../../components/TogglePill';
-
 import {
   ScreenHeader,
   Tabs,
@@ -39,6 +35,9 @@ import {
   Button,
   LoadingState,
   BadgeVariacion,
+  BotonExportarExcel,
+  TogglePill,
+  SelectorMes,
 } from '../../../components/ui';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

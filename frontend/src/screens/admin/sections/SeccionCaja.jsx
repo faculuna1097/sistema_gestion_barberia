@@ -14,10 +14,6 @@ import * as XLSX from 'xlsx';
 import { Banknote, Trash2, Inbox, Construction, RefreshCw } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
-import SelectorDia from '../../../components/SelectorDia';
-import BadgeFormaPago from '../../../components/BadgeFormaPago';
-import BotonExportarExcel from '../../../components/BotonExportarExcel';
-import TogglePill from '../../../components/TogglePill';
 import { getFechaHoy } from '../../../utils/fecha';
 import { fmtPesos, formatPago } from '../../../utils/formato';
 import {
@@ -30,6 +26,10 @@ import {
   BotonIconoFila,
   DetalleRecurso,
   IconoAlerta,
+  BadgeFormaPago,
+  BotonExportarExcel,
+  TogglePill,
+  SelectorDia,
 } from '../../../components/ui';
 import { theme } from '../../../theme/tokens.js';
 

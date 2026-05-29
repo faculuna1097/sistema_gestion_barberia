@@ -11,7 +11,7 @@
 // antes (bug que ocultaba datos malformados), se renderiza el valor crudo
 // con estilos neutros — el dueño ve que algo está raro.
 
-import { theme } from '../theme/tokens.js';
+import { theme } from '../../theme/tokens.js';
 
 const estiloBase = {
   display: 'inline-block',

@@ -2,8 +2,11 @@
 // Barrel export — permite importar todo desde un solo lugar:
 //   import { Button, Card, Field, ... } from '../components/ui';
 //
-// Solo los 13 primitivos universales del sistema de diseño (§6.1) + IconoAlerta
-// (helper SVG para glyph de error). Los wizard-only (Progress, MiniCalendario,
+// Empezó como los 13 primitivos universales del sistema de diseño (§6.1) +
+// IconoAlerta, pero hoy es la superficie de import de TODOS los componentes
+// compartidos del admin: tanto primitivos universales como componentes
+// admin-domain reusados entre secciones (DataTable, BadgeFormaPago,
+// BotonExportarExcel, etc.). Los wizard-only (Progress, MiniCalendario,
 // SlotChip) NO se copian acá — son exclusivos del turnero por §6.2.
 
 export { default as Button }          from './Button.jsx';
@@ -33,3 +36,9 @@ export { default as BadgeEstado }     from './BadgeEstado.jsx';
 export { default as ToggleEstado }    from './ToggleEstado.jsx';
 export { default as Toast }           from './Toast.jsx';
 export { default as InputTiempo }     from './InputTiempo.jsx';
+export { default as TogglePill }       from './TogglePill.jsx';
+export { default as BadgeFormaPago }   from './BadgeFormaPago.jsx';
+export { default as BotonExportarExcel } from './BotonExportarExcel.jsx';
+export { default as SelectorMes }      from './SelectorMes.jsx';
+export { default as SelectorDia }      from './SelectorDia.jsx';
+export { default as SelectorSemana }   from './SelectorSemana.jsx';

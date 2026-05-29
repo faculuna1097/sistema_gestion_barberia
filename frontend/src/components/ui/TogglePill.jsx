@@ -10,7 +10,7 @@
 // - Hover sólo en el inactivo (el activo no necesita feedback adicional).
 
 import { useState } from 'react';
-import { theme } from '../theme/tokens.js';
+import { theme } from '../../theme/tokens.js';
 
 /**
  * TogglePill
