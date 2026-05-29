@@ -225,13 +225,29 @@ A construir cuando aparezcan durante Fase 4 (regla §7.5 del sistema de diseño:
 - [x] **Adelantado en chat A de Gestión**: `DataTable`, `BadgeEstado`, `ToggleEstado`, `Toast` ya viven en `components/ui/` (4 primitivos nuevos). `Field` extendido con `inputMode`.
 
 ### Fase 6 — Cleanup final
-- [ ] Eliminar `frontend/src/utils/formatos.js` (plural) y `frontend/src/utils/fechas.js` (plural) — ya no debería quedar ningún import.
-- [ ] Resolver consolidaciones pendientes de §2.
-- [ ] Desinstalar Tailwind: quitar `@import "tailwindcss"` de `index.css`, sacar `tailwindcss`, `@tailwindcss/postcss`, `autoprefixer`, `postcss` de `package.json` (si no los usa otra cosa), `npm install` para limpiar.
+**Partida en dos etapas** porque Fase 4 (los 3 flujos de `MainScreen`) y Fase 5.5 (`MainScreen`)
+todavía no están migrados. La **Etapa A** junta lo que es seguro hacer ya (no depende de los
+flujos); la **Etapa B** lo que conviene diferir hasta que MainScreen + flujos estén migrados
+(borrar `fechas.js` plural está bloqueado por `FlujoCorte`; auditar WCAG/hover sobre superficies
+aún sin migrar sería trabajo repetido).
+
+Diagnóstico verificado al abrir la fase (2026-05-29): **cero clases utility de Tailwind** quedan
+en `frontend/src/` — los `className=` que hay son todos clases scoped propias (`om-*-fila`,
+`om-shake`, la dinámica de `DataTable`). MainScreen y los flujos ya usan inline styles. Por eso
+Tailwind es removible ya, sin depender de migrar los flujos. `formatos.js` plural tiene **0 imports**;
+`fechas.js` plural lo importan 4 archivos: `SelectorMes/Dia/Semana` (migrables ya) + `FlujoCorte` (bloquea).
+
+**Etapa A — ahora (sin dependencias):** ✅ (2026-05-29)
+- [x] Eliminar `frontend/src/utils/formatos.js` (plural) — 0 imports, confirmado. **Hecho.**
+- [x] Migrar los 3 `Selector*` (`SelectorMes/Dia/Semana`) de `utils/fechas` → `utils/fecha` (singular). Solo cambió el path; el `fecha.js` consolidado ya exportaba todo lo necesario. **Hecho.**
+- [x] Desinstalar Tailwind: quitado `@import "tailwindcss"` de `index.css`, borrados `tailwind.config.js` y `postcss.config.js`, sacadas `tailwindcss`/`@tailwindcss/postcss`/`autoprefixer`/`postcss` de `package.json`, `npm install` (removió 15 paquetes). **Build verificado OK** (CSS 1.62 kB sin el preflight de Tailwind). **Hecho.**
+- [x] Resolver vulnerabilidades de `npm audit` (`deudas_tecnicas_frontend.md` #9): `npm audit fix` resolvió las 5 con fix (`vite`, `postcss`, `picomatch`, `brace-expansion`, `flatted`); build reverificado OK. **Queda `xlsx`** (sin fix oficial) — **decisión pendiente**: migrar a `exceljs` o aceptar el riesgo.
+
+**Etapa B — tras migrar MainScreen + flujos (Fase 4 / 5.5):**
+- [ ] Eliminar `frontend/src/utils/fechas.js` (plural) — pendiente de migrar el import de `FlujoCorte` (`deudas_tecnicas_frontend.md` #8).
+- [ ] Resolver consolidaciones pendientes de §2 (colisiones de nombres `formatARS`/`fmtPesos`, `formatHora`/`fmtHora`, etc.).
 - [ ] Auditoría WCAG (`deudas_tecnicas_frontend.md` #6).
 - [ ] Revisitar hover de tablas densas: ¿`:hover` scoped reutilizable? Medir (`deudas_tecnicas_frontend.md` #4/#21).
-- [ ] Resolver vulnerabilidades de `npm audit` (`deudas_tecnicas_frontend.md` #9): `npm audit fix` para las 5 con fix disponible (`vite`, `postcss`, `picomatch`, `brace-expansion`, `flatted`). Decidir aparte qué hacer con `xlsx` (sin fix oficial — evaluar migrar a `exceljs`).
-- [ ] Eliminar los plurales `utils/formatos.js` / `utils/fechas.js` (`deudas_tecnicas_frontend.md` #8).
 
 ---
 
@@ -258,7 +274,7 @@ que unificar al final con un solo nombre / una sola implementación.
 Al final de Fase 4 no debería quedar ningún `className=` con utilities de Tailwind
 en `frontend/src/`. Si queda alguno, listarlo acá antes de desinstalar.
 
-- [ ] Grep `className="` en `frontend/src/` previo a Fase 6 para confirmar limpieza total.
+- [x] Grep `className=` en `frontend/src/` (2026-05-29): **limpio**. Los únicos 12 usos son clases scoped propias (`om-*-fila`, `om-shake`, la dinámica de `DataTable`), no utilities de Tailwind. MainScreen y los flujos ya usan inline styles. Tailwind desinstalado en Etapa A.
 
 ---
 

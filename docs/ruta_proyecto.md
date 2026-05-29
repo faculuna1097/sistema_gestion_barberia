@@ -217,8 +217,6 @@ sistema-gestion-barberia/
     ├── package.json                   # Dependencias y scripts del frontend
     ├── package-lock.json
     ├── vite.config.js                 # Configuración de Vite (build, dev server)
-    ├── tailwind.config.js             # Configuración de Tailwind CSS
-    ├── postcss.config.js              # PostCSS (requerido por Tailwind)
     ├── eslint.config.js               # Configuración de ESLint
     ├── index.html                     # Punto de entrada HTML
     ├── .gitignore
@@ -231,7 +229,7 @@ sistema-gestion-barberia/
         ├── main.jsx                   # Bootstrap de React (monta <App /> en el DOM)
         ├── App.jsx                    # Componente raíz — autenticación, precarga, routing
         ├── App.css                    # Estilos globales de App
-        ├── index.css                  # Estilos globales (Tailwind base + custom)
+        ├── index.css                  # Estilos globales (reset + fuentes Geist + keyframes)
         │
         ├── assets/
         │   └── react.svg              # Logo de React

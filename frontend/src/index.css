@@ -1,13 +1,6 @@
 /* /frontend/src/index.css
    Reset global + carga de fuentes + animaciones reutilizables.
-   No define estilos de componentes — eso vive en los .jsx de /components/ui/.
-
-   NOTA TRANSITORIA: mientras dure la migración a inline-styles + theme,
-   se mantiene `@import "tailwindcss"` al tope para no romper las pantallas
-   viejas que todavía usan utility classes. Se quita en Fase 6
-   (ver docs/plan_redisenio_frontend_gestion.md). */
-
-@import "tailwindcss";
+   No define estilos de componentes — eso vive en los .jsx de /components/ui/. */
 
 /* ── Geist + Geist Mono via Google Fonts ─────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');

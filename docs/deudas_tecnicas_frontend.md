@@ -67,8 +67,8 @@ Cleanup global) son la excepción: viven en otro contexto y van al final por dis
 | 14 | `LogoCirculo` duplicado en los dos logins | 8 (Fase 5.5) | `PantallaLoginAdmin`, `PantallaLoginOperativo` | Baja | 🔲 |
 | 5 | Re-auditar focus visible en primitivos | 8 (Fase 6) | `ui/*` | Baja | 🔲 |
 | 6 | Contraste WCAG no verificado | 8 (Fase 6) | global | Media | 🔲 |
-| 8 | Convivencia `formato.js`/`formatos.js` + `fecha.js`/`fechas.js` | 8 (Fase 6) | `utils/*` | Media | 🔲 |
-| 9 | Vulnerabilidades de `npm audit` | 8 (Fase 6) | `package.json` | Alta | 🔲 |
+| 8 | Convivencia `formato.js`/`formatos.js` + `fecha.js`/`fechas.js` | 8 (Fase 6) | `utils/*` | Media | 🚧 |
+| 9 | Vulnerabilidades de `npm audit` | 8 (Fase 6) | `package.json` | Alta | ✅ |
 | 27 | Semántica engañosa columna comisión (Planillas) | — | `SeccionPlanillas` | Baja | 💤 |
 | 28 | Acoplamiento sutil entre tabs (Planillas) | — | `SeccionPlanillas` | Baja | 💤 |
 | 42 | `BloqueFeriados` con overflow propio | — | `BloqueFeriados` | Baja | 💤 |
@@ -179,14 +179,18 @@ Deuda heredada del sistema de diseño #12 (focus visible global). Re-auditar pri
 ### #6 — Contraste WCAG no verificado · Media · 🔲
 Deuda heredada del sistema de diseño #9. Auditar contraste de toda la paleta/tipografía contra WCAG AA en Fase 6.
 
-### #8 — Convivencia de utils de formato/fecha · Media · 🔲
+### #8 — Convivencia de utils de formato/fecha · Media · 🚧
 Convivencia temporal de `utils/formato.js` (nuevo, singular) y `utils/formatos.js` (viejo, plural). Misma situación con `fecha.js` y `fechas.js`. **No es deuda permanente** — se cierra en Fase 6 (eliminar los plurales una vez migrados todos los imports), pero hay riesgo de imports cruzados si no se controla. Mientras dure: cuando se toque un archivo, migrar sus imports al singular nuevo. Ver §2.1 "Consolidaciones pendientes" del plan de rediseño para el detalle de colisiones de nombres a resolver.
 
-### #9 — Vulnerabilidades reportadas por `npm audit` · Alta · 🔲
+**Avance (2026-05-29, Fase 6 Etapa A)**: `utils/formatos.js` (plural) **eliminado** — tenía 0 imports. Los 3 `Selector*` (`SelectorMes/Dia/Semana`) migrados a `utils/fecha` (singular). Queda pendiente `utils/fechas.js` (plural): lo importa solo `FlujoCorte` (`getFechaHoy`, `formatHora`) — se elimina en la **Etapa B** cuando se migre ese flujo (Fase 5.5). Ojo en esa migración: `formatHora` (TZ fija) ≠ `fmtHora` del singular (TZ navegador) — ver §2.1 del plan.
+
+### #9 — Vulnerabilidades reportadas por `npm audit` · Alta · ✅ (2026-05-29)
 Detectadas al instalar `lucide-react` en Fase 1 — preexistentes en el árbol de dependencias.
 - **Con fix disponible** (resolver con `npm audit fix`): `vite` (3 advisories, alta), `postcss` (XSS, moderada), `picomatch` (ReDoS + injection, alta), `brace-expansion` (DoS, moderada), `flatted` (prototype pollution, alta).
 - **Sin fix oficial**: `xlsx` (prototype pollution + ReDoS, alta). SheetJS no publica fix en npm. Evaluar migrar a `exceljs` o aceptar el riesgo documentado.
 - Tratamiento: resolver al final de todo (Fase 6) para no mezclar scope con el rediseño visual.
+
+**Resuelta (2026-05-29, Fase 6 Etapa A)**: corrido `npm audit fix` (sin `--force`) tras desinstalar Tailwind — las **5 con fix quedaron resueltas** (`vite`, `postcss`, `picomatch`, `brace-expansion`, `flatted`). Build verificado OK después de los bumps. Sobre **`xlsx`** (high, sin fix oficial): **decisión del usuario = aceptar el riesgo documentado**. Las dos vulns (prototype pollution + ReDoS) se gatillan al *leer* hojas maliciosas; en este proyecto solo *generamos* exports (nunca parseamos archivos de terceros), así que el vector no existe en nuestro flujo. Reevaluar migración a `exceljs` solo si en algún momento se agrega importación de Excel.
 
 ---
 
@@ -228,9 +232,9 @@ Historia. No borrar. Formato compacto: # — título — cómo/cuándo se cerró
 - **#29** — Bug latente `labelMes` no definida en `SeccionBalances` (caso vacío) — **✅** rediseño de Balances (reemplazado por `mesALabel`).
 - **#30** — Primitivo `Toast` pendiente — **✅** chat A de Gestión (construido `ui/Toast.jsx`, parte auto-dismiss; migrados `BannerError` de Turnero y `mensajeExito` de Seguridad).
 - **#37** — `InputTiempo` local en `TabBarberos` candidato a primitivo — **✅** chat de `TabNegocio` (promovido a `ui/InputTiempo.jsx`, genérico `time`/`datetime-local`/`date`).
-- **#38** — `Modal` primitivo sin scroll interno — **✅** 2026-05-29, chat deudas Etapa 1 (commit pendiente). Reestructurado en 3 zonas: header/footer fijos (`flexShrink:0`) y body scrolleable (`flex:1` + `minHeight:0` + `overflowY:auto`); card con `maxHeight:calc(100vh - 32px)` + `overflow:hidden`. Paddings repartidos para que los modales cortos queden pixel-equivalentes. Verificado visualmente en los 11 callers.
-- **#25** — `Modal` id estático `om-modal-title` en `aria-labelledby` — **✅** 2026-05-29, chat deudas Etapa 1 (commit pendiente). Reemplazado por `useId()` (id único y estable por instancia). Sin referencias colgadas al id viejo.
-- **#24** — `ConfirmDialog` no reusa `Modal` — **✅** 2026-05-29, chat deudas Etapa 1 (commit pendiente). `ConfirmDialog` reescrito como wrapper delgado sobre `Modal` (`message`→`subtitle`, `children`→body, botones→`footer`, `onCancel`→`onClose`). API pública intacta (6 callers sin tocar); hereda scroll interno (#38) y `useId` (#25). De paso, `Modal` ahora no renderiza el body cuando no hay `children` (evita padding muerto en confirms solo-mensaje). Verificado en los 6 callers.
+- **#38** — `Modal` primitivo sin scroll interno — **✅** 2026-05-29, chat deudas Etapa 1 (commiteado). Reestructurado en 3 zonas: header/footer fijos (`flexShrink:0`) y body scrolleable (`flex:1` + `minHeight:0` + `overflowY:auto`); card con `maxHeight:calc(100vh - 32px)` + `overflow:hidden`. Paddings repartidos para que los modales cortos queden pixel-equivalentes. Verificado visualmente en los 11 callers.
+- **#25** — `Modal` id estático `om-modal-title` en `aria-labelledby` — **✅** 2026-05-29, chat deudas Etapa 1 (commiteado). Reemplazado por `useId()` (id único y estable por instancia). Sin referencias colgadas al id viejo.
+- **#24** — `ConfirmDialog` no reusa `Modal` — **✅** 2026-05-29, chat deudas Etapa 1 (commiteado). `ConfirmDialog` reescrito como wrapper delgado sobre `Modal` (`message`→`subtitle`, `children`→body, botones→`footer`, `onCancel`→`onClose`). API pública intacta (6 callers sin tocar); hereda scroll interno (#38) y `useId` (#25). De paso, `Modal` ahora no renderiza el body cuando no hay `children` (evita padding muerto en confirms solo-mensaje). Verificado en los 6 callers.
 
 ---
 

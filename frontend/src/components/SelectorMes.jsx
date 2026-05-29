@@ -15,7 +15,7 @@ import {
   desplazarMes,
   getMesActual,
   mesALabel,
-} from '../utils/fechas';
+} from '../utils/fecha';
 
 /**
  * @param {object} props

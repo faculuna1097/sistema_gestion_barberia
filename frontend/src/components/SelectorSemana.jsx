@@ -16,7 +16,7 @@ import {
   desplazarSemana,
   getSemanaActual,
   semanaALabel,
-} from '../utils/fechas';
+} from '../utils/fecha';
 
 /**
  * @param {object} props
