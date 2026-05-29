@@ -64,6 +64,7 @@ Excepción: podés leer los archivos `.md` de contexto general (los que están e
 | `/docs/ruta_proyecto.md` | Estructura de carpetas y archivos del proyecto. Consultá esto antes de asumir rutas. |
 | `/docs/SQL_Schema.md` | Schema completo de la DB (referencia, no ejecutar). |
 | `/docs/onboarding.md`| Alta de un cliente nuevo.
+| `/docs/deudas_tecnicas_frontend.md` | Registro vivo de deudas técnicas del frontend de gestión + plan escalonado de resolución. |
 
 
 ---
