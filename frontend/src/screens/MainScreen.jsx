@@ -29,17 +29,7 @@
 
 import { Scissors, Package, Receipt, CalendarDays, Lock, LogOut } from "lucide-react";
 import { theme } from "../theme/tokens.js";
-
-// ─── A/B de presentación del fondo ──────────────────────────────────────────
-// Constantes pensadas para iterar rápido el look del fondo sin tocar el resto.
-//   VELO    — 'oscuro' da más calidez/cine; 'claro' mantiene el aire Stripe/Clerk.
-//   BLUR_PX — intensidad del desenfoque de la foto del local.
-const VELO = "oscuro"; // 'oscuro' | 'claro'
-const BLUR_PX = 4;
-
-// Color del velo según la variante elegida.
-const VELO_BG =
-  VELO === "oscuro" ? "rgba(9, 9, 11, 0.45)" : "rgba(255, 255, 255, 0.62)";
+import FondoLocal from "../components/ui/FondoLocal.jsx";
 
 // URL de la app nativa de YouTube. Si la app no está instalada, hacemos
 // fallback a la versión web tras un pequeño timeout.
@@ -200,17 +190,7 @@ export default function MainScreen({
   bookingUrl,
 }) {
   return (
-    <div style={{
-      position: "relative",
-      width: "100vw",
-      height: "100vh",
-      overflow: "hidden",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontFamily: theme.body,
-      background: imagenLocal ? "transparent" : theme.surfaceAlt,
-    }}>
+    <FondoLocal imagenLocal={imagenLocal}>
       {/* Estilos scoped: hover/press de los botones. No se pueden expresar
           inline (pseudo-clases), igual que los keyframes — excepción del §4.1.
           Da press instantáneo en iPad sin usar onPointerDown. */}
@@ -232,30 +212,6 @@ export default function MainScreen({
         .om-logout:hover { color: rgba(255, 255, 255, 0.95); }
         .om-logout:active { transform: scale(.92); }
       `}</style>
-
-      {/* ── Capa 1: fondo ambiental (foto del local, con blur) ───────────── */}
-      {imagenLocal && (
-        <>
-          <div
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              inset: 0,
-              backgroundImage: `url("${imagenLocal}")`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              filter: `blur(${BLUR_PX}px)`,
-              // scale evita que el blur revele bordes transparentes.
-              transform: "scale(1.1)",
-            }}
-          />
-          {/* Velo plano sobre la foto para fijar contraste. No es glassmorphism. */}
-          <div
-            aria-hidden="true"
-            style={{ position: "absolute", inset: 0, background: VELO_BG }}
-          />
-        </>
-      )}
 
       {/* ── Capa 3: acciones (protagonistas) ─────────────────────────────── */}
       <div style={{
@@ -381,7 +337,7 @@ export default function MainScreen({
           <Lock size={24} strokeWidth={1.75} />
         </BotonEsquina>
       </div>
-    </div>
+    </FondoLocal>
   );
 }
 

@@ -36,6 +36,7 @@ export { default as BadgeEstado }     from './BadgeEstado.jsx';
 export { default as ToggleEstado }    from './ToggleEstado.jsx';
 export { default as Toast }           from './Toast.jsx';
 export { default as InputTiempo }     from './InputTiempo.jsx';
+export { default as FondoLocal }      from './FondoLocal.jsx';
 export { default as TogglePill }       from './TogglePill.jsx';
 export { default as BadgeFormaPago }   from './BadgeFormaPago.jsx';
 export { default as BotonExportarExcel } from './BotonExportarExcel.jsx';

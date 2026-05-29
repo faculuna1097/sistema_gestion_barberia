@@ -242,7 +242,7 @@ export default function App() {
 
   if (currentScreen === "nuevoCorte") {
     return <FlujoCorte onVolver={volverAlInicio}
-      barberos={datos.barberos} servicios={datos.servicios} />;
+      barberos={datos.barberos} servicios={datos.servicios} imagenLocal={imagenLocal} />;
   }
 
   if (currentScreen === "nuevaVenta") {
@@ -252,11 +252,12 @@ export default function App() {
         setCurrentScreen("main");
       }}
       productos={datos.productos}
+      imagenLocal={imagenLocal}
     />;
   }
 
   if (currentScreen === "nuevoGasto") {
-    return <FlujoGasto onVolver={volverAlInicio} categorias={datos.categorias} />;
+    return <FlujoGasto onVolver={volverAlInicio} categorias={datos.categorias} imagenLocal={imagenLocal} />;
   }
 
   if (currentScreen === "loginAdmin") {

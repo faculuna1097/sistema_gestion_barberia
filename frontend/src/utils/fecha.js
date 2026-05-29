@@ -1,10 +1,11 @@
 // /frontend/src/utils/fecha.js
 // Helpers de fecha/hora — versión consolidada del panel de gestión.
 //
-// Convención: este archivo es el sucesor de `utils/fechas.js` (plural, legacy).
-// Ambos conviven durante la migración de Fase 4 y el viejo se elimina en Fase 6.
-// Ver docs/plan_redisenio_frontend_gestion.md §2.1 para las colisiones con
-// las funciones equivalentes de frontend-turnero.
+// Convención: este archivo es el sucesor consolidado de `utils/fechas.js`
+// (plural, legacy) — ese archivo ya fue eliminado (Fase 6 Etapa B, 2026-05-29,
+// tras migrar el último importador, FlujoCorte). Ver
+// docs/plan_redisenio_frontend_gestion.md §2.1 para las colisiones aún
+// pendientes con las funciones equivalentes de frontend-turnero.
 //
 // Formatos canónicos del proyecto:
 //   - Mes:    'YYYY-MM'      (ej: '2026-03')
