@@ -297,6 +297,7 @@ export default function App() {
       }}
       onLogoutOperativo={cerrarSesionOperativo}
       imagenLogo={imagenLogo}
+      imagenLocal={imagenLocal}
       bookingUrl={bookingUrl}
     />
   );
