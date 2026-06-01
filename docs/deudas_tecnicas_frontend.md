@@ -49,7 +49,7 @@ Cleanup global) son la excepción: viven en otro contexto y van al final por dis
 | 38 | `Modal` sin scroll interno | 1 | `ui/Modal.jsx` | Media | ✅ |
 | 25 | `Modal` id estático en `aria-labelledby` | 1 | `ui/Modal.jsx` | Baja | ✅ |
 | 24 | `ConfirmDialog` no reusa `Modal` | 1 | `ui/ConfirmDialog.jsx`, `ui/Modal.jsx` | Media | ✅ |
-| 17 | `EmptyState` no acepta `tone` | 2 | `ui/EmptyState.jsx` | Media | 🔲 |
+| 17 | `EmptyState` no acepta `tone` | 2 | `ui/EmptyState.jsx` | Media | ✅ |
 | 41 | Wrapper "label + `InputTiempo`" duplicado | 2 | `ui/InputTiempo.jsx`, `TabBarberos`, `BloqueFeriados` | Baja | 🔲 |
 | 40 | Editor de horario no acota al rango del local | 3 | `TabBarberos` | Media | 🔲 |
 | 39 | `humanizarDiasEnMensaje` acoplado al wording backend | 3 | `TabBarberos` | Baja | 🔲 |
@@ -91,11 +91,15 @@ Cada uno es un primitivo autocontenido cuyo arreglo "se propaga" a todos sus cal
 #41 además toca `TabBarberos` y `BloqueFeriados`, así que conviene hacerlo justo antes
 de la Etapa 3 (que vuelve a `TabBarberos`).
 
-### #17 — `EmptyState` no acepta `tone` · Media · 🔲
-*(mejora opcional, no deuda contra otros fronts — D9)*: el wrapper del glyph fija `color: theme.muted`, por lo que cuando se usa con `IconoAlerta` (estado de error en `SeccionInicio`/`SeccionCaja`), el ícono se ve gris en lugar de rojo. **Plan**: agregar prop `tone` (`'muted' | 'success' | 'danger' | 'warning'`) al primitivo `EmptyState` del admin que pinte el color del wrapper del glyph. Atacar cuando una pantalla lo pida fuerte o como parte de un pase de QA de la fase.
+### #17 — `EmptyState` no acepta `tone` · Media · ✅ (2026-06-01)
+*(mejora opcional, no deuda contra otros fronts — D9)*: el wrapper del glyph fijaba `color: theme.muted`, por lo que cuando se usaba con `IconoAlerta` (estados de error) el ícono se veía gris en lugar de rojo.
+
+**Resuelta (2026-06-01, branch `fix/deudas-frontend`).** Se sumó prop `tone` (`'muted' | 'danger' | 'success' | 'warning'`, default `'muted'`) al primitivo `EmptyState`. El default deja el render **pixel-idéntico** al de antes (cero regresión en los empties normales). Las variantes semánticas tintan el wrapper del glyph con su `*Soft` (fondo) + color fuerte (el glyph hereda vía `currentColor`) y omiten el borde (tratamiento B, mismo lenguaje cromático que `Toast` y los badges de estado). Se propagó `tone="danger"` a los **13 callsites de error** (`EmptyState` + `IconoAlerta`): `SeccionInicio`, `Caja`, `Ventas`, `Gastos`, `Planillas`, `Balances` (×2), `Turnero`, `TabServicios`, `TabProductos`, `TabBarberos`, `TabTurnero`, `PantallaLoginAdmin` ("Acceso suspendido"). Build verificado OK.
 
 ### #41 — Wrapper "label + `InputTiempo`" duplicado — candidato a primitivo (`CampoTiempo`) · Baja · 🔲
 Existe como sub-componente local en `TabBarberos` (eyebrow mono + `InputTiempo` full, para el form de ausencias) y, tras el chat de `TabNegocio`, también inline en el modal de alta de `BloqueFeriados` (label "Fecha" + `InputTiempo type="date"`). 2 usos del mismo patrón. Si aparece un 3er uso (§7.1), promover un `CampoTiempo` a `components/ui/` — o, alternativa más limpia, sumar una prop `label` opcional al propio `InputTiempo` para que se autoetiquete como `Field`. Bajo riesgo; sin promover por ahora.
+
+**Decisión sobre el picker (2026-06-01)**: `InputTiempo` se queda con **inputs nativos** (`<input type="time|date|datetime-local">`). El picker lo aporta el SO/navegador y no es controlable por CSS; en el iPad objetivo (D5) eso es ya la rueda nativa de Apple, que es justo lo deseado. Se descartó construir un picker propio en JS (sumaría complejidad/dependencia y perdería la rueda táctil de iOS). La parte "promover `CampoTiempo`" queda abierta esperando el 3er uso.
 
 ---
 
@@ -241,6 +245,7 @@ Historia. No borrar. Formato compacto: # — título — cómo/cuándo se cerró
 - **#13** — `Field` divergente entre fronts — **✅** vía D9 (la divergencia de API no se considera deuda).
 - **#15** — Excepción "Skeleton no spinner" del admin — **✅** vía D6 (formalizada en el primitivo `LoadingState`).
 - **#16** — `BadgeVariacion` candidato a primitivo — **✅** chat de Balances (promovido a `ui/BadgeVariacion.jsx`).
+- **#17** — `EmptyState` no acepta `tone` — **✅** 2026-06-01, branch `fix/deudas-frontend`. Prop `tone` (`muted`/`danger`/`success`/`warning`, default neutro idéntico al anterior); tinte `*Soft` del wrapper del glyph (tratamiento B). Propagado `tone="danger"` a los 13 callsites de error.
 - **#20** — `DataTable` postergado — **✅** chat A de Gestión (construido `ui/DataTable.jsx`: sort + paginación + `onRowClick` + `col.grow`).
 - **#22** — Inconsistencia del botón eliminar entre Caja y Ventas/Gastos — **✅** chat de Gastos (promovido `BotonIconoFila`).
 - **#23** (parcial) — Sub-componentes locales a primitivos — **✅** chat de Gastos: `BotonIconoFila`, shell de modal (`Modal`), `SelectFormaPago` (`Select`), `DetalleVentaConfirm`/`DetalleMovimientoConfirm` (`DetalleRecurso`). *(Queda abierto solo `CampoFijo` — ver #23 en Etapa 6.)*

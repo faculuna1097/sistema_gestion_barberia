@@ -4,6 +4,18 @@
 
 import { theme } from '../../theme/tokens.js';
 
+// Tratamiento visual del wrapper del glyph según la semántica del estado.
+// 'muted' (default) = aspecto neutro de siempre (fondo surfaceAlt + borde hairline).
+// Las variantes semánticas tintan el fondo con su *Soft, pintan el glyph con el
+// color fuerte (IconoAlerta y los íconos Lucide usan currentColor) y omiten el
+// borde (el soft ya delimita). Mismo lenguaje cromático que Toast y los badges.
+const TONOS = {
+  muted:   { fondo: theme.surfaceAlt,  borde: theme.hairline, color: theme.muted },
+  danger:  { fondo: theme.dangerSoft,  borde: 'transparent',  color: theme.danger },
+  success: { fondo: theme.successSoft, borde: 'transparent',  color: theme.success },
+  warning: { fondo: theme.warningSoft, borde: 'transparent',  color: theme.warning },
+};
+
 /**
  * EmptyState
  * Mensaje centrado para listas vacías o estados sin contenido.
@@ -11,8 +23,11 @@ import { theme } from '../../theme/tokens.js';
  * @param {string} props.title - Título corto
  * @param {string} props.body - Texto descriptivo
  * @param {ReactNode} [props.action] - Botón o link de acción
+ * @param {'muted'|'danger'|'success'|'warning'} [props.tone='muted'] - Semántica del
+ *   estado; tinta el wrapper del glyph. Default 'muted' = render neutro de siempre.
  */
-function EmptyState({ glyph, title, body, action }) {
+function EmptyState({ glyph, title, body, action, tone = 'muted' }) {
+  const t = TONOS[tone] || TONOS.muted;
   return (
     <div style={{
       display: 'flex',
@@ -26,12 +41,12 @@ function EmptyState({ glyph, title, body, action }) {
         width: 64,
         height: 64,
         borderRadius: theme.radiusLg,
-        background: theme.surfaceAlt,
-        border: `1px solid ${theme.hairline}`,
+        background: t.fondo,
+        border: `1px solid ${t.borde}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color: theme.muted,
+        color: t.color,
         marginBottom: 8,
       }}>
         {glyph}

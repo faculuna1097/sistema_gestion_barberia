@@ -634,6 +634,7 @@ export default function SeccionVentas() {
         <LoadingState />
       ) : error ? (
         <EmptyState
+          tone="danger"
           glyph={<IconoAlerta />}
           title="No se pudo cargar"
           body={error}

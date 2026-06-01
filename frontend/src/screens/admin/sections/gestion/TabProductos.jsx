@@ -338,6 +338,7 @@ export default function TabProductos() {
   if (error) {
     return (
       <EmptyState
+        tone="danger"
         glyph={<IconoAlerta />}
         title="No se pudieron cargar los productos"
         body={error}

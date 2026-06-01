@@ -385,6 +385,7 @@ export default function SeccionInicio() {
       <div style={contenedor}>
         <ScreenHeader title="Inicio" subtitle="Resumen operativo del día" />
         <EmptyState
+          tone="danger"
           glyph={<IconoAlerta />}
           title="No se pudo cargar"
           body={error}

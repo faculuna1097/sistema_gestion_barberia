@@ -324,6 +324,7 @@ function TabMovimientos() {
 
   if (error) return (
     <EmptyState
+      tone="danger"
       glyph={<IconoAlerta />}
       title="No se pudo cargar"
       body={error}

@@ -971,6 +971,7 @@ export default function TabBarberos() {
   if (error) {
     return (
       <EmptyState
+        tone="danger"
         glyph={<IconoAlerta />}
         title="No se pudieron cargar los barberos"
         body={error}

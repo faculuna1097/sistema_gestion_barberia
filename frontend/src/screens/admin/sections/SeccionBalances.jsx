@@ -393,6 +393,7 @@ export default function SeccionBalances() {
 
           {errorMensual && !cargandoMensual && (
             <EmptyState
+              tone="danger"
               glyph={<IconoAlerta />}
               title="No se pudo cargar"
               body={errorMensual}
@@ -455,6 +456,7 @@ export default function SeccionBalances() {
 
           {errorHistorico && !cargandoHistorico && (
             <EmptyState
+              tone="danger"
               glyph={<IconoAlerta />}
               title="No se pudo cargar"
               body={errorHistorico}

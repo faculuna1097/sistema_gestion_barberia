@@ -1123,6 +1123,7 @@ export default function SeccionTurnero() {
 
       {!cargando && error && (
         <EmptyState
+          tone="danger"
           glyph={<IconoAlerta />}
           title="Algo salió mal"
           body={error}

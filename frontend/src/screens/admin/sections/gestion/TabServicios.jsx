@@ -194,6 +194,7 @@ export default function TabServicios() {
   if (error) {
     return (
       <EmptyState
+        tone="danger"
         glyph={<IconoAlerta />}
         title="No se pudieron cargar los servicios"
         body={error}

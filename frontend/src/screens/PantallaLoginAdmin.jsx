@@ -288,6 +288,7 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo })
     return (
       <ShellLoginAdmin onCancelar={onCancelar} labelCancelar="Volver">
         <EmptyState
+          tone="danger"
           glyph={<IconoAlerta size={32} />}
           title="Acceso suspendido"
           body="El acceso al panel está suspendido por falta de pago. Contactá al soporte para regularizar tu suscripción."

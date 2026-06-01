@@ -632,6 +632,7 @@ export default function SeccionGastos() {
         <LoadingState />
       ) : error ? (
         <EmptyState
+          tone="danger"
           glyph={<IconoAlerta />}
           title="No se pudo cargar"
           body={error}

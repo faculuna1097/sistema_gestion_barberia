@@ -144,6 +144,7 @@ export default function TabTurnero() {
   if (errorCarga) {
     return (
       <EmptyState
+        tone="danger"
         glyph={<IconoAlerta />}
         title="No se pudo cargar la configuración"
         body={errorCarga}
