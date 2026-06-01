@@ -54,7 +54,7 @@ Cleanup global) son la excepción: viven en otro contexto y van al final por dis
 | 40 | Editor de horario no acota al rango del local | 3 | `TabBarberos` | Media | ✅ |
 | 39 | `humanizarDiasEnMensaje` acoplado al wording backend | 3 | `TabBarberos` | Baja | ✅ |
 | 35 | Cambio de credenciales operativas sin re-auth | 4 | `TabSeguridad` | Alta | 🔲 |
-| 36 | Carga de usuario operativo no distingue error de vacío | 4 | `TabSeguridad` | Media | 🔲 |
+| 36 | Carga de usuario operativo no distingue error de vacío | 4 | `TabSeguridad` | Media | ✅ |
 | 33 | `Number()` sin validar NaN en precio/stock | 5 | `TabServicios`, `TabProductos` | Baja | 🔲 |
 | 18 | Tabla ad-hoc con `role=table` en `SeccionInicio` | 6 | `SeccionInicio` | Media | 🔲 |
 | 4 / 21 | Hover de fila: `useState` vs `:hover` scoped | 6 | Caja, Ventas, Gastos, Planillas, Balances, Turnero | Media | ✅ |
@@ -130,8 +130,10 @@ Ambas viven en `TabSeguridad`. #35 es la de mayor prioridad de todo el registro 
 ### #35 — Cambio de credenciales operativas sin re-autenticación · Alta · 🔲
 Cambiar usuario o contraseña del modo operativo no pide la contraseña actual (a diferencia del PIN admin, que sí pide el PIN actual). El flujo asume sesión admin ya autenticada (protegida por PIN admin), pero alguien con acceso físico al panel abierto podría cambiar credenciales operativas sin reto. Evaluar pedir contraseña actual / re-validar PIN admin antes de estos cambios. Deuda de seguridad, no visual.
 
-### #36 — Carga del usuario operativo sin reintento · Media · 🔲
+### #36 — Carga del usuario operativo sin reintento · Media · ✅ (2026-06-01)
 Si `getCredencialesOperativas()` falla, `usuarioOperativo` queda `null` y la fila muestra el pill "Sin configurar" — semánticamente erróneo (no es que no esté configurado, es que no se pudo cargar). Distinguir el estado de error del estado "vacío real" (ej. flag `errorCarga` que muestre un Toast/Reintentar en lugar del pill).
+
+**Resuelta (2026-06-01, branch `fix/deudas-frontend`).** Se sumó estado `errorCarga` y se extrajo la carga a `cargarUsuario` (`useCallback`), reutilizable como pre-carga y reintento. El catch ya no hace `setUsuarioOperativo(null)`: marca `errorCarga`, separando el error del vacío real. La fila "Usuario" ahora tiene **4 estados**: cargando (`—`) · error ("No se pudo cargar." + botón `Reintentar`) · usuario · sin configurar (pill, solo el vacío genuino). Se eligió **reintento inline** en el slot de valor (opción a) en vez de extender el primitivo `Toast` con una acción (opción b, descartada por inflar scope y tocar un primitivo compartido). De paso se cerró un bug secundario: el lápiz de editar quedaba habilitado en error y abría `ModalCambiarUsuario` con `usuarioActual=''` (trataba el usuario real como vacío) — ahora se deshabilita con `cargandoUsuario || errorCarga`. Se quitó el guard `cancelado` de unmount (innecesario en React 19). Build verificado OK; verificado funcionalmente por el usuario.
 
 ---
 
@@ -265,6 +267,7 @@ Historia. No borrar. Formato compacto: # — título — cómo/cuándo se cerró
 - **#20** — `DataTable` postergado — **✅** chat A de Gestión (construido `ui/DataTable.jsx`: sort + paginación + `onRowClick` + `col.grow`).
 - **#40** — Editor de horario no acota al rango del local — **✅** 2026-06-01, branch `fix/deudas-frontend`. Validador client-side `validarHorario` (vacío / `inicio≥fin` / fuera de rango del local / solapamiento) con `invalid` + mensaje inline + Guardar deshabilitado; `min`/`max` soft en el picker. Bug de comparación `HH:MM:SS` vs `HH:MM` corregido normalizando a `HH:MM` (`aHoraCorta`). Abrió la deuda backend #44.
 - **#39** — `humanizarDiasEnMensaje` acoplado al wording backend — **✅** 2026-06-01, branch `fix/deudas-frontend` (opción b). Solapamiento validado client-side dentro de `validarHorario`; eliminada `humanizarDiasEnMensaje`. El editor ya no depende del wording del backend.
+- **#36** — Carga de usuario operativo no distingue error de vacío — **✅** 2026-06-01, branch `fix/deudas-frontend` (opción a). Estado `errorCarga` + carga reutilizable `cargarUsuario`; la fila "Usuario" pasa a 4 estados (cargando / error con Reintentar inline / usuario / sin configurar). Cerró el bug secundario del lápiz habilitado en error (abría el modal con `usuarioActual=''`). Quitado el guard `cancelado` (innecesario en React 19).
 - **#22** — Inconsistencia del botón eliminar entre Caja y Ventas/Gastos — **✅** chat de Gastos (promovido `BotonIconoFila`).
 - **#23** (parcial) — Sub-componentes locales a primitivos — **✅** chat de Gastos: `BotonIconoFila`, shell de modal (`Modal`), `SelectFormaPago` (`Select`), `DetalleVentaConfirm`/`DetalleMovimientoConfirm` (`DetalleRecurso`). *(Queda abierto solo `CampoFijo` — ver #23 en Etapa 6.)*
 - **#26** — `ChipBarbero` candidato a primitivo — **✅** chat de Turnero (promovido a `ui/ChipFiltro.jsx` con prop `size`).

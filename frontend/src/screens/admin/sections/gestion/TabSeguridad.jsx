@@ -15,7 +15,7 @@
 // - El reintento de la carga del usuario operativo no está expuesto (si falla
 //   queda "Sin configurar" — semánticamente erróneo).
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Pencil } from 'lucide-react';
 
 import {
@@ -151,6 +151,41 @@ function PillSinConfigurar() {
   );
 }
 
+/**
+ * BotonReintentar
+ * Botón de texto inline (estilo link de acento) para reintentar una carga que
+ * falló. Sin padding ni borde — se renderiza junto al mensaje de error dentro
+ * del slot de valor de la fila.
+ *
+ * @param {object} props
+ * @param {() => void} props.onClick
+ * @param {boolean} [props.disabled=false]
+ */
+function BotonReintentar({ onClick, disabled = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        background: 'transparent',
+        border: 'none',
+        padding: 0,
+        color: theme.accent,
+        fontFamily: theme.body,
+        fontSize: theme.sizeBody,
+        fontWeight: theme.weightMedium,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.6 : 1,
+        textDecoration: 'underline',
+        textUnderlineOffset: 2,
+      }}
+    >
+      Reintentar
+    </button>
+  );
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 /**
@@ -162,25 +197,28 @@ function PillSinConfigurar() {
 export default function TabSeguridad() {
   const [usuarioOperativo, setUsuarioOperativo] = useState(null);
   const [cargandoUsuario, setCargandoUsuario]   = useState(true);
+  const [errorCarga, setErrorCarga]             = useState(false); // true si el fetch falló (distinto de "sin configurar")
   const [modalAbierto, setModalAbierto]         = useState(null); // 'pin'|'usuario'|'password'|null
   const [toast, setToast]                       = useState(null); // { tone, texto }
 
-  // ── Pre-carga del usuario operativo ───────────────────────────────────────
-  useEffect(() => {
-    let cancelado = false;
-    (async () => {
-      try {
-        const data = await getCredencialesOperativas();
-        if (!cancelado) setUsuarioOperativo(data.usuario);
-      } catch (err) {
-        console.error('[tabSeguridad] Error cargando usuario operativo:', err.message);
-        if (!cancelado) setUsuarioOperativo(null);
-      } finally {
-        if (!cancelado) setCargandoUsuario(false);
-      }
-    })();
-    return () => { cancelado = true; };
+  // ── Carga del usuario operativo (reutilizable: pre-carga + reintento) ──────
+  // Distingue "no se pudo cargar" (errorCarga) de "no hay usuario configurado"
+  // (usuarioOperativo === null sin error): semánticas distintas en la fila.
+  const cargarUsuario = useCallback(async () => {
+    setCargandoUsuario(true);
+    setErrorCarga(false);
+    try {
+      const data = await getCredencialesOperativas();
+      setUsuarioOperativo(data.usuario);
+    } catch (err) {
+      console.error('[tabSeguridad] Error cargando usuario operativo:', err.message);
+      setErrorCarga(true);
+    } finally {
+      setCargandoUsuario(false);
+    }
   }, []);
+
+  useEffect(() => { cargarUsuario(); }, [cargarUsuario]);
 
   const cerrarModal = () => setModalAbierto(null);
 
@@ -201,9 +239,20 @@ export default function TabSeguridad() {
   };
 
   // ── Render del valor de "Usuario" según estado ────────────────────────────
-  const valorUsuario = cargandoUsuario
-    ? <span style={{ color: theme.muted }}>—</span>
-    : (usuarioOperativo || <PillSinConfigurar />);
+  // 4 estados: cargando · error de carga · usuario · sin configurar (vacío real).
+  let valorUsuario;
+  if (cargandoUsuario) {
+    valorUsuario = <span style={{ color: theme.muted }}>—</span>;
+  } else if (errorCarga) {
+    valorUsuario = (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ color: theme.danger }}>No se pudo cargar.</span>
+        <BotonReintentar onClick={cargarUsuario} />
+      </span>
+    );
+  } else {
+    valorUsuario = usuarioOperativo || <PillSinConfigurar />;
+  }
 
   return (
     <div style={{
@@ -241,7 +290,7 @@ export default function TabSeguridad() {
           label="Usuario"
           valor={valorUsuario}
           onEditar={() => setModalAbierto('usuario')}
-          disabled={cargandoUsuario}
+          disabled={cargandoUsuario || errorCarga}
         />
         <FilaCredencial
           label="Contraseña"
