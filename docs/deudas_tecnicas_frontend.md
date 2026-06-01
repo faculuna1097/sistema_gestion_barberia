@@ -53,7 +53,7 @@ Cleanup global) son la excepción: viven en otro contexto y van al final por dis
 | 41 | Wrapper "label + `InputTiempo`" duplicado | 2 | `ui/InputTiempo.jsx`, `TabBarberos`, `BloqueFeriados` | Baja | 🔲 |
 | 40 | Editor de horario no acota al rango del local | 3 | `TabBarberos` | Media | ✅ |
 | 39 | `humanizarDiasEnMensaje` acoplado al wording backend | 3 | `TabBarberos` | Baja | ✅ |
-| 35 | Cambio de credenciales operativas sin re-auth | 4 | `TabSeguridad` | Alta | 🔲 |
+| 35 | Cambio de credenciales operativas sin re-auth | 4 | `TabSeguridad`, backend | Alta | ✅ |
 | 36 | Carga de usuario operativo no distingue error de vacío | 4 | `TabSeguridad` | Media | ✅ |
 | 33 | `Number()` sin validar NaN en precio/stock | 5 | `TabServicios`, `TabProductos` | Baja | 🔲 |
 | 18 | Tabla ad-hoc con `role=table` en `SeccionInicio` | 6 | `SeccionInicio` | Media | 🔲 |
@@ -124,11 +124,16 @@ El mensaje de solapamiento del backend se traducía client-side con un regex sob
 
 ---
 
-## Etapa 4 — `TabSeguridad`
-Ambas viven en `TabSeguridad`. #35 es la de mayor prioridad de todo el registro (seguridad).
+## Etapa 4 — `TabSeguridad` · ✅ COMPLETA
+Ambas vivían en `TabSeguridad` (#35 además tocó backend). #35 y #36 resueltas (2026-06-01)
+— ver apéndice. #35 era la de mayor prioridad de todo el registro (seguridad).
 
-### #35 — Cambio de credenciales operativas sin re-autenticación · Alta · 🔲
+### #35 — Cambio de credenciales operativas sin re-autenticación · Alta · ✅ (2026-06-01)
 Cambiar usuario o contraseña del modo operativo no pide la contraseña actual (a diferencia del PIN admin, que sí pide el PIN actual). El flujo asume sesión admin ya autenticada (protegida por PIN admin), pero alguien con acceso físico al panel abierto podría cambiar credenciales operativas sin reto. Evaluar pedir contraseña actual / re-validar PIN admin antes de estos cambios. Deuda de seguridad, no visual.
+
+**Resuelta (2026-06-01, branch `fix/deudas-frontend`).** Se exige re-autenticación con el **PIN de administrador** antes de cambiar usuario o contraseña operativos (en ambos cambios, decisión del usuario). Se eligió el PIN admin —y no la contraseña operativa actual— porque es la credencial que el dueño realmente tiene y que ya gobierna el acceso al panel; es simétrico con `cambiarPinAdmin` y uniforme para los dos cambios (el hash de la password operativa es one-way y el backend ni la conoce al renombrar el usuario).
+**Enforcement server-side (clave):** el control vive en el backend, no solo en la UI. `actualizarCredencialesOperativas` (`controllers/adminOperativo.js`) ahora recibe `pin_admin`, valida presencia (400), hace `SELECT pin_admin` del tenant (404) y `bcrypt.compare` → **401** si no coincide, **antes** de cualquier UPDATE (calco de `cambiarPinAdmin`). Un fix solo-frontend hubiera sido teatro (bypasseable llamando la API directo).
+**Frontend** (`TabSeguridad.jsx`): `ModalCambiarUsuario` y `ModalCambiarPassword` suman un campo "PIN de administrador" (4 dígitos, `type=password`, filtro `\D`) al final del form; "Guardar" exige el PIN completo; se manda `pin_admin` en el body y el 401 cae en el Toast danger existente. El servicio `actualizarCredencialesOperativas` no se tocó (ya propaga `data.error` y serializa `datos`). De paso se actualizó el comentario de cabecera de `adminOperativo.js` (la nota de UX "Dejar vacío para no modificar" no reflejaba el flujo real de modales dedicados). Verificado funcionalmente por el usuario (PIN correcto → cambia; PIN incorrecto → 401 sin tocar DB; sin PIN → Guardar deshabilitado).
 
 ### #36 — Carga del usuario operativo sin reintento · Media · ✅ (2026-06-01)
 Si `getCredencialesOperativas()` falla, `usuarioOperativo` queda `null` y la fila muestra el pill "Sin configurar" — semánticamente erróneo (no es que no esté configurado, es que no se pudo cargar). Distinguir el estado de error del estado "vacío real" (ej. flag `errorCarga` que muestre un Toast/Reintentar en lugar del pill).
@@ -268,6 +273,7 @@ Historia. No borrar. Formato compacto: # — título — cómo/cuándo se cerró
 - **#40** — Editor de horario no acota al rango del local — **✅** 2026-06-01, branch `fix/deudas-frontend`. Validador client-side `validarHorario` (vacío / `inicio≥fin` / fuera de rango del local / solapamiento) con `invalid` + mensaje inline + Guardar deshabilitado; `min`/`max` soft en el picker. Bug de comparación `HH:MM:SS` vs `HH:MM` corregido normalizando a `HH:MM` (`aHoraCorta`). Abrió la deuda backend #44.
 - **#39** — `humanizarDiasEnMensaje` acoplado al wording backend — **✅** 2026-06-01, branch `fix/deudas-frontend` (opción b). Solapamiento validado client-side dentro de `validarHorario`; eliminada `humanizarDiasEnMensaje`. El editor ya no depende del wording del backend.
 - **#36** — Carga de usuario operativo no distingue error de vacío — **✅** 2026-06-01, branch `fix/deudas-frontend` (opción a). Estado `errorCarga` + carga reutilizable `cargarUsuario`; la fila "Usuario" pasa a 4 estados (cargando / error con Reintentar inline / usuario / sin configurar). Cerró el bug secundario del lápiz habilitado en error (abría el modal con `usuarioActual=''`). Quitado el guard `cancelado` (innecesario en React 19).
+- **#35** — Cambio de credenciales operativas sin re-autenticación — **✅** 2026-06-01, branch `fix/deudas-frontend`. Re-auth con PIN admin (en usuario y password), **enforzado server-side**: `actualizarCredencialesOperativas` recibe `pin_admin`, `bcrypt.compare` contra `tenant.pin_admin` → 401 antes del UPDATE (calco de `cambiarPinAdmin`). Frontend: campo "PIN de administrador" en ambos modales, 401 al Toast danger. La deuda de mayor prioridad del registro.
 - **#22** — Inconsistencia del botón eliminar entre Caja y Ventas/Gastos — **✅** chat de Gastos (promovido `BotonIconoFila`).
 - **#23** (parcial) — Sub-componentes locales a primitivos — **✅** chat de Gastos: `BotonIconoFila`, shell de modal (`Modal`), `SelectFormaPago` (`Select`), `DetalleVentaConfirm`/`DetalleMovimientoConfirm` (`DetalleRecurso`). *(Queda abierto solo `CampoFijo` — ver #23 en Etapa 6.)*
 - **#26** — `ChipBarbero` candidato a primitivo — **✅** chat de Turnero (promovido a `ui/ChipFiltro.jsx` con prop `size`).

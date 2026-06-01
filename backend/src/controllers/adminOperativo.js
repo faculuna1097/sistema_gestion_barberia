@@ -4,13 +4,16 @@
 // el panel de gestión. Solo accesible con JWT de rol 'admin' (validado por
 // verificarToken + requiereRol('admin') en index.js).
 //
-// Diseño: ambos campos del body (usuario, password) son opcionales — el admin
-// puede cambiar solo uno o ambos. Si un campo viene vacío o ausente, no se
-// modifica en la DB.
+// Diseño: usuario y password del body son opcionales — el admin puede cambiar
+// solo uno o ambos. Si un campo viene vacío o ausente, no se modifica en la DB.
+// El frontend (TabSeguridad) expone cada cambio en su propio modal dedicado
+// (usuario por un lado, password por otro), así que en la práctica cada request
+// trae un solo campo; el endpoint igual soporta ambos a la vez.
 //
-// Nota de UX (a reflejar en el frontend): el campo password debe mostrarse
-// con placeholder/aviso "Dejar vacío para no modificar" para que el usuario
-// entienda que pisar una password requiere escribir la nueva.
+// Re-autenticación (deuda #35): además del JWT admin, el body debe traer
+// pin_admin, que se verifica con bcrypt contra tenant.pin_admin antes de tocar
+// la DB. Cambiar credenciales operativas es sensible y un panel abierto sin
+// vigilancia no debe permitirlo sin reto. Ver actualizarCredencialesOperativas.
 //
 // Cambio de password ⇒ invalidación inmediata de tokens operativos viejos:
 // se incrementa tenant.operativo_token_version en el mismo UPDATE.
@@ -52,11 +55,17 @@ export async function obtenerCredencialesOperativas(req, res) {
  * Actualiza usuario y/o password operativos del tenant del request.
  * String vacío en un campo significa "no modificar" (silencioso).
  *
- * @param {Request}  req - body: { usuario?, password? }; tenant_id y rol inyectados por middlewares.
- * @param {Response} res - 204 No Content | 400 | 500.
+ * Re-autenticación (deuda #35): aunque la ruta ya exige JWT de rol admin,
+ * cambiar credenciales operativas es una acción sensible — un panel admin
+ * abierto sin vigilancia permitiría a un tercero con acceso físico cambiarlas
+ * sin reto. Por eso se exige el PIN de administrador en el body y se verifica
+ * con bcrypt antes de tocar la DB (mismo patrón que cambiarPinAdmin).
+ *
+ * @param {Request}  req - body: { usuario?, password?, pin_admin }; tenant_id y rol inyectados por middlewares.
+ * @param {Response} res - 204 No Content | 400 | 401 | 404 | 500.
  */
 export async function actualizarCredencialesOperativas(req, res) {
-  const { usuario, password } = req.body;
+  const { usuario, password, pin_admin } = req.body;
   const tenant_id = req.tenant_id;
 
   // Falsy (undefined, null, '') significa "no modificar este campo".
@@ -65,6 +74,10 @@ export async function actualizarCredencialesOperativas(req, res) {
 
   if (!cambiarUsuario && !cambiarPassword) {
     return res.status(400).json({ error: 'Debe enviar usuario y/o password para modificar' });
+  }
+
+  if (!pin_admin) {
+    return res.status(400).json({ error: 'El PIN de administrador es requerido' });
   }
 
   if (cambiarUsuario && usuario.length < 3) {
@@ -76,6 +89,21 @@ export async function actualizarCredencialesOperativas(req, res) {
   }
 
   try {
+    // Re-autenticación: verificar el PIN admin contra el hash del tenant antes
+    // de cualquier modificación. Si no coincide, se rechaza sin tocar la DB.
+    const tenantResult = await query(
+      'SELECT pin_admin FROM tenant WHERE id = $1',
+      [tenant_id]
+    );
+    if (tenantResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Tenant no encontrado' });
+    }
+    const pinCorrecto = await bcrypt.compare(pin_admin, tenantResult.rows[0].pin_admin);
+    if (!pinCorrecto) {
+      console.log('[adminOperativo] actualizarCredencialesOperativas — PIN admin incorrecto | cambio rechazado | tenant:', tenant_id);
+      return res.status(401).json({ error: 'El PIN de administrador es incorrecto' });
+    }
+
     // UPDATE dinámico: solo las columnas que efectivamente vienen.
     // Se arman arrays paralelos de SET clauses y de valores, y se concatena.
     const setClauses = [];

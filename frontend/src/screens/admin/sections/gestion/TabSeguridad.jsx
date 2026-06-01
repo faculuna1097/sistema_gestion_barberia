@@ -455,12 +455,13 @@ function ModalCambiarPin({ open, onClose, onSuccess }) {
  */
 function ModalCambiarUsuario({ open, onClose, usuarioActual, onSuccess }) {
   const [nuevoUsuario, setNuevoUsuario] = useState('');
+  const [pinAdmin, setPinAdmin]         = useState(''); // re-autenticación (deuda #35)
   const [guardando, setGuardando]       = useState(false);
   const [error, setError]               = useState(null);
 
   useEffect(() => {
     if (open) {
-      setNuevoUsuario(usuarioActual);
+      setNuevoUsuario(usuarioActual); setPinAdmin('');
       setError(null); setGuardando(false);
     }
   }, [open, usuarioActual]);
@@ -468,14 +469,14 @@ function ModalCambiarUsuario({ open, onClose, usuarioActual, onSuccess }) {
   const usuarioLimpio = nuevoUsuario.trim();
   const hayCambio     = usuarioLimpio !== usuarioActual;
   const esValido      = usuarioLimpio.length >= 3;
-  const puedeGuardar  = hayCambio && esValido;
+  const puedeGuardar  = hayCambio && esValido && pinAdmin.length === 4;
 
   const handleGuardar = async () => {
     if (!puedeGuardar) return;
     setGuardando(true);
     setError(null);
     try {
-      await actualizarCredencialesOperativas({ usuario: usuarioLimpio });
+      await actualizarCredencialesOperativas({ usuario: usuarioLimpio, pin_admin: pinAdmin });
       onSuccess(usuarioLimpio);
     } catch (err) {
       console.error('[modalCambiarUsuario] Error:', err.message);
@@ -512,6 +513,15 @@ function ModalCambiarUsuario({ open, onClose, usuarioActual, onSuccess }) {
           autoCorrect="off"
           spellCheck={false}
         />
+        <Field
+          label="PIN de administrador"
+          type="password"
+          inputMode="numeric"
+          value={pinAdmin}
+          onChange={(v) => { setPinAdmin(v.replace(/\D/g, '').slice(0, 4)); setError(null); }}
+          placeholder="Confirmá con tu PIN"
+          autoComplete="off"
+        />
 
         {error && (
           <Toast tone="danger" onDismiss={() => setError(null)} dismissible>
@@ -539,12 +549,13 @@ function ModalCambiarUsuario({ open, onClose, usuarioActual, onSuccess }) {
 function ModalCambiarPassword({ open, onClose, onSuccess }) {
   const [password,  setPassword]  = useState('');
   const [confirmar, setConfirmar] = useState('');
+  const [pinAdmin,  setPinAdmin]  = useState(''); // re-autenticación (deuda #35)
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState(null);
 
   useEffect(() => {
     if (open) {
-      setPassword(''); setConfirmar('');
+      setPassword(''); setConfirmar(''); setPinAdmin('');
       setError(null); setGuardando(false);
     }
   }, [open]);
@@ -553,14 +564,14 @@ function ModalCambiarPassword({ open, onClose, onSuccess }) {
   const coincide     = password === confirmar;
   const lenError     = password.length > 0 && !esValida;
   const matchError   = confirmar.length > 0 && !coincide;
-  const puedeGuardar = esValida && coincide && confirmar.length > 0;
+  const puedeGuardar = esValida && coincide && confirmar.length > 0 && pinAdmin.length === 4;
 
   const handleGuardar = async () => {
     if (!puedeGuardar) return;
     setGuardando(true);
     setError(null);
     try {
-      await actualizarCredencialesOperativas({ password });
+      await actualizarCredencialesOperativas({ password, pin_admin: pinAdmin });
       onSuccess();
     } catch (err) {
       console.error('[modalCambiarPassword] Error:', err.message);
@@ -607,6 +618,15 @@ function ModalCambiarPassword({ open, onClose, onSuccess }) {
           placeholder="Reescribila"
           invalid={matchError}
           error={matchError ? 'Las contraseñas no coinciden.' : undefined}
+        />
+        <Field
+          label="PIN de administrador"
+          type="password"
+          inputMode="numeric"
+          value={pinAdmin}
+          onChange={(v) => { setPinAdmin(v.replace(/\D/g, '').slice(0, 4)); setError(null); }}
+          placeholder="Confirmá con tu PIN"
+          autoComplete="off"
         />
 
         {error && (
