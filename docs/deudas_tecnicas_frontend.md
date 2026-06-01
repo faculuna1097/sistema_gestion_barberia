@@ -66,7 +66,7 @@ Cleanup global) son la excepción: viven en otro contexto y van al final por dis
 | 11 | `onPointerDown` en `MainScreen` | 8 (Fase 5.5) | `MainScreen` | Media | 🔲 |
 | 14 | `LogoCirculo` duplicado en los dos logins | 8 (Fase 5.5) | `PantallaLoginAdmin`, `PantallaLoginOperativo` | Baja | 🔲 |
 | 5 | Re-auditar focus visible en primitivos | 8 (Fase 6) | `ui/*` | Baja | 🔲 |
-| 6 | Contraste WCAG no verificado | 8 (Fase 6) | global | Media | 🔲 |
+| 6 | Contraste WCAG no verificado | 8 (Fase 6) | `theme/tokens.js` | Media | ✅ |
 | 8 | Convivencia `formato.js`/`formatos.js` + `fecha.js`/`fechas.js` | 8 (Fase 6) | `utils/*` | Media | ✅ |
 | 9 | Vulnerabilidades de `npm audit` | 8 (Fase 6) | `package.json` | Alta | ✅ |
 | 27 | Semántica engañosa columna comisión (Planillas) | — | `SeccionPlanillas` | Baja | 💤 |
@@ -178,8 +178,20 @@ El helper que muestra el logo del tenant dentro de un círculo (con fallback a i
 ### #5 — Re-auditar focus visible en primitivos · Baja · 🔲
 Deuda heredada del sistema de diseño #12 (focus visible global). Re-auditar primitivos. (Nota: la Fase 2 dejó verificado que todos los interactivos quedan cubiertos por el `*:focus-visible` global — esto es un repaso de cierre.)
 
-### #6 — Contraste WCAG no verificado · Media · 🔲
-Deuda heredada del sistema de diseño #9. Auditar contraste de toda la paleta/tipografía contra WCAG AA en Fase 6.
+### #6 — Contraste WCAG no verificado · Media · ✅ (2026-05-29)
+Deuda heredada del sistema de diseño #9. Auditar contraste de toda la paleta/tipografía contra WCAG AA.
+
+**Auditada (2026-05-29, Fase 6 Etapa B).** Alcance acordado: contraste de color AA de la paleta de tokens (el grueso de la deuda); el foco por teclado queda cubierto por el `*:focus-visible` global (ya verificado en Fase 2 / deuda #5); ARIA pantalla-por-pantalla y reduced-motion quedan fuera de alcance. Umbrales: 4.5:1 texto normal, 3:1 texto grande / UI.
+
+**Resultado: la paleta (derivada de Stripe/Clerk) es esencialmente AA-compliant para texto.**
+- Texto principal holgado: `ink` sobre bg/surface/surfaceAlt 18–20:1; `inkSoft` ~14:1; `accentInk` (blanco) sobre `accent` 6.3:1.
+- Acento/estados sobre `surface` y su `*Soft`: `accent` 6.3/5.6, `danger` 6.5/5.3, `success` 5.0/4.57, `warning` 5.0/4.51 — todos ≥4.5 (success/warning sobre su soft pasan al filo).
+
+**Dos casos no-conformes, ambos aceptados como excepción consciente:**
+- **`muted` (#71717A) sobre `surfaceAlt` (#F4F4F5) = 4.40:1** (falla AA texto normal por 0.1). Solo ocurre con texto secundario (ej. columna "fecha" en Ventas/Gastos) cuando la fila está en **hover transitorio** (`om-fila-hover`); sobre `bg` (4.63) y `surface` (4.83) sí pasa. **Decisión del usuario: aceptar (opción b)** — la diferencia 4.40 vs 4.50 es imperceptible y el estado es transitorio. No se tocó el token (además `muted` es token global compartido con turnero, cuya fuente de verdad vive en `frontend-turnero`). Si algún día se ajusta, oscurecer `muted` a ~#67676F lo lleva a ≥4.5 sin cambio visible.
+- **`mutedSoft` (#A1A1AA) sobre `surface` = 2.56:1** — uso exclusivo placeholder / disabled. WCAG exime explícitamente los controles deshabilitados; placeholder es zona gris de la spec. **Decisión del usuario: dejar como está** (estándar de industria). 
+
+Deuda cerrada.
 
 ### #8 — Convivencia de utils de formato/fecha · Media · ✅ (2026-05-29)
 Convivencia temporal de `utils/formato.js` (nuevo, singular) y `utils/formatos.js` (viejo, plural). Misma situación con `fecha.js` y `fechas.js`. **No era deuda permanente** — se cerró en Fase 6 (eliminar los plurales una vez migrados todos los imports). Mientras duró: al tocar un archivo se migraban sus imports al singular nuevo.
