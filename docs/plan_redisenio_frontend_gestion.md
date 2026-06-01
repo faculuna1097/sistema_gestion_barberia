@@ -253,8 +253,8 @@ Tailwind es removible ya, sin depender de migrar los flujos. `formatos.js` plura
 **Etapa B — tras migrar MainScreen + flujos (Fase 4 / 5.5):**
 - [x] Eliminar `frontend/src/utils/fechas.js` (plural) — **Hecho (2026-05-29)**: `FlujoCorte` (último importador) migrado a `utils/fecha` (singular); archivo borrado. Cierra la parte "convivencia de archivos" de la deuda #8.
 - [x] Resolver consolidaciones pendientes de §2 — **Hecho (2026-05-29)**. Ver §2.1: dentro de `frontend` no había colisiones reales (`fmtHora`/`fmtFechaCorta` del turnero no existen acá; son otro repo → D9, no deuda). Única redundancia interna: `formatARS` (0 usos, opción `{prefijo}` muerta) colapsado en `fmtPesos` (canónico, implementación inline). Comentarios stale de `formato.js`/`fecha.js` limpiados.
+- [x] Revisitar hover de tablas densas (`deudas_tecnicas_frontend.md` #4/#21) — **Hecho (2026-05-29)**. "Medir" (#4): ninguna tabla usaba `useState`-por-fila, todas resuelven hover por CSS (cero re-renders) → sin problema de performance. "Reutilizable" (#21): las 6 copias scoped (`om-X-fila`, regla idéntica) colapsadas en una clase global `.om-fila-hover` en `index.css`; cada sección borró su `<style>` local. Cierra #4/#21.
 - [ ] Auditoría WCAG (`deudas_tecnicas_frontend.md` #6).
-- [ ] Revisitar hover de tablas densas: ¿`:hover` scoped reutilizable? Medir (`deudas_tecnicas_frontend.md` #4/#21).
 
 ---
 

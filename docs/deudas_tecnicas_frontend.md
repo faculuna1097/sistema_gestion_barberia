@@ -57,7 +57,7 @@ Cleanup global) son la excepción: viven en otro contexto y van al final por dis
 | 36 | Carga de usuario operativo no distingue error de vacío | 4 | `TabSeguridad` | Media | 🔲 |
 | 33 | `Number()` sin validar NaN en precio/stock | 5 | `TabServicios`, `TabProductos` | Baja | 🔲 |
 | 18 | Tabla ad-hoc con `role=table` en `SeccionInicio` | 6 | `SeccionInicio` | Media | 🔲 |
-| 4 / 21 | Hover de fila: `useState` vs `:hover` scoped | 6 | Caja, Ventas, Gastos, Planillas, Balances | Media | 🔲 |
+| 4 / 21 | Hover de fila: `useState` vs `:hover` scoped | 6 | Caja, Ventas, Gastos, Planillas, Balances, Turnero | Media | ✅ |
 | 23 | `CampoFijo` local candidato a primitivo (resto resuelto) | 6 | `SeccionVentas` | Baja | 🔲 |
 | 12 | `tenant.logo` legacy expuesto en `GET /negocio` | 7 (backend) | backend | Media | 🔲 |
 | 31 | `getNegocio()` no expone `horario_atencion` | 7 (backend) | backend, `SeccionTurnero` | Media | 🔲 |
@@ -135,9 +135,11 @@ hacerla cuando se pueda medir con datos reales (cierre de Fase 4).
 ### #18 — Tabla ad-hoc con `role="table"/"row"/"cell"` en `SeccionInicio` · Media · 🔲
 Parche de accesibilidad mientras `DataTable` no existía. Ahora el primitivo `DataTable` ya existe (cerró #20) — evaluar reemplazar la tabla ad-hoc de stock por el primitivo. (Caveat: la tabla de Inicio no tiene sort/filtros/paginación; valorar si `DataTable` aporta o si alcanza con limpiar los roles.)
 
-### #4 / #21 — Hover de fila: `useState` vs `:hover` scoped · Media · 🔲
-**#4** (heredada del sistema de diseño #8): inline-styles + `useState` para hover — este front es el que más riesgo tiene por las tablas densas (Caja, Planillas, Balances, Ventas, Gastos). Re-evaluar al terminar Fase 4 con datos reales: si se siente lento, refactor puntual a `:hover` scoped via `<style>`.
-**#21**: para las tablas densas se usó un `<style>` inline con clase única (`om-caja-fila:hover`, `om-ventas-fila:hover`, etc.) en vez del patrón `useState` por fila, porque éste último explota re-renders al pasar el mouse en tablas con N filas. Excepción consciente al patrón general (§4.2). Si la deuda #4 se ataca con `:hover` scoped vía `<style>` **reutilizable**, este caso se absorbe.
+### #4 / #21 — Hover de fila: `useState` vs `:hover` scoped · Media · ✅ (2026-05-29)
+**#4** (heredada del sistema de diseño #8): inline-styles + `useState` para hover — este front es el que más riesgo tiene por las tablas densas. **Parte "medir" cerrada**: ninguna tabla densa usó `useState`-por-fila; todas resolvieron el hover por CSS (`:hover`), que es cero re-renders. No había problema de performance que arreglar.
+**#21**: las 6 tablas de reporte (Caja, Ventas, Gastos, Planillas, Balances, Turnero) usaban cada una un `<style>` inline con clase scoped propia (`om-caja-fila`, `om-ventas-fila`, …) con **regla idéntica** (`background: surfaceAlt` al hover). El scope por sección no aportaba nada → duplicación pura.
+
+**Resuelta (2026-05-29, Fase 6 Etapa B)**: las 6 copias se reemplazaron por **una sola clase global `.om-fila-hover`** en `index.css` (`transition: background .12s ease-out` + `:hover { background: #F4F4F5 }` = `theme.surfaceAlt`; el hex se inlinea siguiendo la convención del resto de `index.css`, capa base global). Cada sección borró su `<style>` local y pasó sus `<tr>` a `className="om-fila-hover"`. Turnero, cuyas filas son clickeables, movió el `cursor: pointer` a `style` inline en el `<tr>` (antes vivía en su clase scoped). El primitivo `DataTable` mantiene su propio hover con `useId` por instancia (empaqueta también `focus-visible`) — no se tocó. Build verificado OK.
 
 ### #23 — `CampoFijo` local candidato a primitivo · Baja · 🔲
 *(El resto de #23 ya está resuelto — ver apéndice.)* `CampoFijo` (input no editable estético) sigue local en `SeccionVentas` (único uso). Promover a `components/ui/` si aparece en otra sección.

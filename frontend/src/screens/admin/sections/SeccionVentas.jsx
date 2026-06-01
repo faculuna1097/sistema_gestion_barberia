@@ -101,11 +101,6 @@ function TablaVentas({ ventas, totalGeneral, onEditar, onEliminar, accionesDesha
       borderRadius: theme.radius,
       overflow: 'hidden',
     }}>
-      <style>{`
-        .om-ventas-fila { transition: background ${theme.transitionFast}; }
-        .om-ventas-fila:hover { background: ${theme.surfaceAlt}; }
-      `}</style>
-
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr>
@@ -137,7 +132,7 @@ function TablaVentas({ ventas, totalGeneral, onEditar, onEliminar, accionesDesha
               verticalAlign: 'middle',
             };
             return (
-              <tr key={v.id} className="om-ventas-fila">
+              <tr key={v.id} className="om-fila-hover">
                 <td style={{ ...tdBase, color: theme.muted, whiteSpace: 'nowrap' }}>{v.fecha}</td>
                 <td style={{ ...tdBase, fontWeight: theme.weightMedium }}>{v.producto_nombre}</td>
                 <td style={{ ...tdBase, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{v.cantidad}</td>

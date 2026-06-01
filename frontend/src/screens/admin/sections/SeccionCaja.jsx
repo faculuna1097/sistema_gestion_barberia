@@ -107,11 +107,6 @@ function TablaMovimientos({ movimientos, onEliminar }) {
       borderRadius: theme.radius,
       overflow: 'hidden',
     }}>
-      <style>{`
-        .om-caja-fila { transition: background ${theme.transitionFast}; }
-        .om-caja-fila:hover { background: ${theme.surfaceAlt}; }
-      `}</style>
-
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr>
@@ -144,7 +139,7 @@ function TablaMovimientos({ movimientos, onEliminar }) {
               verticalAlign: 'middle',
             };
             return (
-              <tr key={m.id || i} className="om-caja-fila">
+              <tr key={m.id || i} className="om-fila-hover">
                 <td style={tdBase}>{m.hora}</td>
                 <td style={tdBase}><TipoMovimientoPill tipo={m.tipo} /></td>
                 <td style={{ ...tdBase, color: theme.muted }}>{m.barbero_nombre || '—'}</td>

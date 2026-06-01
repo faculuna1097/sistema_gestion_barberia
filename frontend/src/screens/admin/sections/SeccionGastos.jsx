@@ -93,10 +93,6 @@ function TablaGastos({ gastos, totalGeneral, onEditar, onEliminar, accionesDesha
       borderRadius: theme.radius,
       overflow: 'hidden',
     }}>
-      <style>{`
-        .om-gastos-fila { transition: background ${theme.transitionFast}; }
-        .om-gastos-fila:hover { background: ${theme.surfaceAlt}; }
-      `}</style>
 
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
@@ -129,7 +125,7 @@ function TablaGastos({ gastos, totalGeneral, onEditar, onEliminar, accionesDesha
               verticalAlign: 'middle',
             };
             return (
-              <tr key={g.id} className="om-gastos-fila">
+              <tr key={g.id} className="om-fila-hover">
                 <td style={{ ...tdBase, color: theme.muted, whiteSpace: 'nowrap' }}>{g.fecha}</td>
                 <td style={tdBase}><BadgeCategoria nombre={g.categoria_nombre} /></td>
                 <td style={{ ...tdBase, color: theme.inkSoft }}>{g.descripcion}</td>

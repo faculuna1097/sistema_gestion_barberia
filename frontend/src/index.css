@@ -86,6 +86,14 @@ a {
 }
 .om-shake { animation: om-shake 0.5s ease; }
 
+/* Hover de fila para las tablas densas de reporte (Caja, Ventas, Gastos,
+   Planillas, Balances, Turnero). Reemplaza el <style> scoped que cada sección
+   repetía idéntico (deuda #21). El color es theme.surfaceAlt; el hex se inlinea
+   acá siguiendo la convención del resto de este archivo (capa base global).
+   Las filas clickeables (ej. Turnero) suman cursor:pointer inline en el <tr>. */
+.om-fila-hover { transition: background .12s ease-out; }
+.om-fila-hover:hover { background: #F4F4F5; }
+
 /* Keyframe legacy (lo usa el spinner ad-hoc de App.jsx). Se elimina en Fase 3
    cuando ese spinner sea reemplazado por Skeleton. */
 @keyframes spin {

@@ -346,11 +346,6 @@ export default function SeccionBalances() {
 
   return (
     <div style={contenedor}>
-      {/* Hover scoped para filas de las tablas densas. Excepción consciente §4.2,
-          mismo patrón que Caja/Ventas/Gastos/Planillas (deuda #21). */}
-      <style>{`
-        .om-balances-fila:hover { background: ${theme.surfaceAlt}; }
-      `}</style>
 
       <ScreenHeader
         title="Balances"
@@ -619,7 +614,7 @@ function TablaPorBarbero({ datos, mostrarComisiones }) {
       </thead>
       <tbody>
         {datos.serviciosPorBarbero.map((b) => (
-          <tr key={b.barbero_id} className="om-balances-fila">
+          <tr key={b.barbero_id} className="om-fila-hover">
             <td style={tdStyle}>{b.nombre}</td>
             <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
               {b.cortes}
@@ -666,7 +661,7 @@ function TablaPorBarbero({ datos, mostrarComisiones }) {
 
         {/* Fila "Productos vendidos" — solo cuando hay productos. */}
         {datos.productos.total > 0 && (
-          <tr className="om-balances-fila">
+          <tr className="om-fila-hover">
             <td style={{ ...tdStyle, color: theme.muted }}>Productos vendidos</td>
             <td style={{ ...tdStyle, textAlign: 'right', color: theme.mutedSoft }}>—</td>
             <td style={{
@@ -749,7 +744,7 @@ function TablaPorCategoria({ categorias, totalEgresos }) {
       </thead>
       <tbody>
         {categorias.map((g) => (
-          <tr key={g.categoria} className="om-balances-fila">
+          <tr key={g.categoria} className="om-fila-hover">
             <td style={tdStyle}>{g.categoria}</td>
             <td style={{
               ...tdStyle,
@@ -814,7 +809,7 @@ function TablaHistorico({ filas, mostrarComisiones }) {
             return (
               <tr
                 key={fila.mes}
-                className="om-balances-fila"
+                className="om-fila-hover"
                 style={esActual ? { background: theme.accentSoft } : undefined}
               >
                 <td style={{

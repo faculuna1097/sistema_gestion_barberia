@@ -262,9 +262,6 @@ export default function SeccionPlanillas() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Hover scoped para filas de cuerpo de tabla (excepción consciente §4.2, deuda #21). */}
-      <style>{`.om-planillas-fila:hover { background: ${theme.surfaceAlt}; }`}</style>
-
       <ScreenHeader title="Planillas" subtitle="Cortes y comisiones por barbero, semana a semana" />
 
       <Tabs items={TABS_PRINCIPALES} value={tabActiva} onChange={setTabActiva} />
@@ -449,7 +446,7 @@ function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisi
             </thead>
             <tbody>
               {cortesDelDia.map((c) => (
-                <tr key={c.corte_id} className="om-planillas-fila">
+                <tr key={c.corte_id} className="om-fila-hover">
                   <TdCelda>{c.hora}</TdCelda>
                   <TdCelda>{c.servicio_nombre}</TdCelda>
                   <TdCelda alinear="right">{fmtPesos(c.monto_servicios)}</TdCelda>
@@ -533,7 +530,7 @@ function TablaResumen({ resumenData, mostrarComisiones }) {
         </thead>
         <tbody>
           {barberos.map((b) => (
-            <tr key={b.barbero_id} className="om-planillas-fila">
+            <tr key={b.barbero_id} className="om-fila-hover">
               <TdCelda bold>{b.barbero_nombre}</TdCelda>
               <TdCelda alinear="right">{b.cantidad_cortes}</TdCelda>
               <TdCelda alinear="right">{fmtPesos(b.monto_servicios)}</TdCelda>

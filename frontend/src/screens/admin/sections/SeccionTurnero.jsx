@@ -604,10 +604,6 @@ function ListaVista({ turnos, mostrarBarbero, onTurnoClick }) {
         overflow: 'hidden',
       }}
     >
-      <style>{`
-        .om-turnero-fila { transition: background ${theme.transitionFast}; cursor: pointer; }
-        .om-turnero-fila:hover { background: ${theme.surfaceAlt}; }
-      `}</style>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr>
@@ -623,8 +619,9 @@ function ListaVista({ turnos, mostrarBarbero, onTurnoClick }) {
           {turnos.map((t) => (
             <tr
               key={t.id}
-              className="om-turnero-fila"
+              className="om-fila-hover"
               onClick={() => onTurnoClick(t)}
+              style={{ cursor: 'pointer' }}
             >
               <Td mono>{formatHora(t.inicio)}</Td>
               <Td muted>{formatDuracion(duracionMinutos(t))}</Td>
