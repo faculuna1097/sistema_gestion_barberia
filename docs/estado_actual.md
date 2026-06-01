@@ -8,7 +8,7 @@ Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convencio
 
 ## Stack
 
-- **Frontend:** React + Vite, inline styles, DM Sans, color primario `#1a7a4a`.
+- **Frontend:** React + Vite, inline styles + módulo `theme` (design tokens), fuente Geist, acento indigo. Los tres fronts (gestión, turnero, barbero) migrados al sistema de diseño "Luz" (ver `docs/sistema_de_disenio.md`). El verde `#1a7a4a` + DM Sans del scaffold original quedaron deprecados con el rediseño.
 - **Backend:** Node.js + Express, ES Modules (`import/export`).
 - **DB:** PostgreSQL via Supabase Session Pooler.
 - **Auth:** bcrypt + JWT. Token admin en memoria (`useState` en `App.jsx`). Token operativo en `localStorage` con clave `token_operativo` (sobrevive al reload del iPad). Token barbero en `localStorage` desde `frontend-barbero`.

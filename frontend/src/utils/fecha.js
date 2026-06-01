@@ -2,10 +2,10 @@
 // Helpers de fecha/hora — versión consolidada del panel de gestión.
 //
 // Convención: este archivo es el sucesor consolidado de `utils/fechas.js`
-// (plural, legacy) — ese archivo ya fue eliminado (Fase 6 Etapa B, 2026-05-29,
-// tras migrar el último importador, FlujoCorte). Ver
-// docs/plan_redisenio_frontend_gestion.md §2.1 para las colisiones aún
-// pendientes con las funciones equivalentes de frontend-turnero.
+// (plural, legacy), ya eliminado (Fase 6 Etapa B, 2026-05-29). Las funciones
+// equivalentes de frontend-turnero (`fmtHora`, `fmtFechaCorta`) divergen a
+// propósito (TZ del navegador / weekday narrow): son otro repo y per D9 del
+// plan de rediseño la consistencia entre fronts es estética, no de API.
 //
 // Formatos canónicos del proyecto:
 //   - Mes:    'YYYY-MM'      (ej: '2026-03')
@@ -43,8 +43,9 @@ export const getSemanaActual = () => {
 /**
  * formatHora
  * Extrae la hora 'HH:MM' de un timestamp ISO, en timezone Argentina.
- * NOTA: esta versión usa TZ fija — es la canónica del proyecto. El equivalente
- * de frontend-turnero (`fmtHora`) usa TZ del navegador; se unifica en Fase 6.
+ * NOTA: esta versión usa TZ fija (Argentina) — canónica del panel de gestión.
+ * El equivalente de frontend-turnero (`fmtHora`) usa TZ del navegador; divergen
+ * a propósito (otro repo, D9).
  * @param {string} iso - Timestamp ISO (ej: '2026-05-14T10:30:00-03:00')
  * @returns {string} 'HH:MM' (24h)
  */
@@ -134,7 +135,7 @@ export const fechaALabel = (fechaStr) => {
  * Convierte un día 'YYYY-MM-DD' a un label corto con día de la semana entero.
  * Usado en el detalle semanal de Planillas.
  * NOTA: el equivalente de frontend-turnero (`fmtFechaCorta`) usa weekday narrow
- * ("lun" en vez de "Lunes"). Se renombra en Fase 6 para que convivan sin chocar.
+ * ("lun" en vez de "Lunes"). Divergen a propósito (otro repo, D9).
  * @example formatFechaCorta('2026-03-15') → 'Domingo 15/03'
  */
 export const formatFechaCorta = (fechaStr) => {

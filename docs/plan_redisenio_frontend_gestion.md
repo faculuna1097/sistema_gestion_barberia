@@ -252,7 +252,7 @@ Tailwind es removible ya, sin depender de migrar los flujos. `formatos.js` plura
 
 **Etapa B — tras migrar MainScreen + flujos (Fase 4 / 5.5):**
 - [x] Eliminar `frontend/src/utils/fechas.js` (plural) — **Hecho (2026-05-29)**: `FlujoCorte` (último importador) migrado a `utils/fecha` (singular); archivo borrado. Cierra la parte "convivencia de archivos" de la deuda #8.
-- [ ] Resolver consolidaciones pendientes de §2 (colisiones de nombres `formatARS`/`fmtPesos`, `formatHora`/`fmtHora`, etc.).
+- [x] Resolver consolidaciones pendientes de §2 — **Hecho (2026-05-29)**. Ver §2.1: dentro de `frontend` no había colisiones reales (`fmtHora`/`fmtFechaCorta` del turnero no existen acá; son otro repo → D9, no deuda). Única redundancia interna: `formatARS` (0 usos, opción `{prefijo}` muerta) colapsado en `fmtPesos` (canónico, implementación inline). Comentarios stale de `formato.js`/`fecha.js` limpiados.
 - [ ] Auditoría WCAG (`deudas_tecnicas_frontend.md` #6).
 - [ ] Revisitar hover de tablas densas: ¿`:hover` scoped reutilizable? Medir (`deudas_tecnicas_frontend.md` #4/#21).
 
@@ -265,11 +265,17 @@ que unificar al final con un solo nombre / una sola implementación.
 
 ### 2.1 Utils de formato / fecha — colisiones a resolver
 
-| Función admin actual | Función turnero | Decisión propuesta | Estado |
+> **Cerrado (2026-05-29).** La tabla se escribió asumiendo una fusión de utils con
+> `frontend-turnero`, pero son repos distintos: las "funciones turnero" (`fmtHora`,
+> `fmtFechaCorta`) **no existen dentro de `frontend`** → no había colisiones reales.
+> Per D9 la divergencia de API entre fronts es intencional (no deuda). La única
+> redundancia interna (`formatARS` vs `fmtPesos`) se resolvió colapsando en `fmtPesos`.
+
+| Función admin actual | Función turnero | Decisión tomada | Estado |
 |---|---|---|---|
-| `formatARS(valor, {prefijo})` (`utils/formatos.js`) | `fmtPesos(n)` (`utils/formato.js`) | Mantener `formatARS` como canónica (es más completa). Exponer `fmtPesos` como alias delgado. Al final, decidir un único nombre y migrar imports. | Pendiente |
-| `formatHora(iso)` con TZ fija `America/Argentina/Buenos_Aires` | `fmtHora(iso)` con TZ del navegador | El de admin es más correcto. Adoptar la versión con TZ fija como canónica. Turnero migra después. | Pendiente |
-| `formatFechaCorta(fechaStr)` → "Domingo 15/03" | `fmtFechaCorta(fechaStr)` → "lun 19/05" | Son distintas (largo vs short narrow). Renombrar la del admin a `fmtFechaCortaLarga` o similar para que convivan sin chocar. | Pendiente |
+| `fmtPesos(n)` (`utils/formato.js`) | `fmtPesos(n)` | Único nombre `fmtPesos` con implementación inline. `formatARS` (alias con opción `{prefijo}` muerta, 0 usos) eliminado. | ✅ Resuelto |
+| `formatHora(iso)` con TZ fija `America/Argentina/Buenos_Aires` | `fmtHora(iso)` con TZ del navegador | `fmtHora` no existe en `frontend`. Divergencia cross-front intencional (D9). | ✅ N/A (D9) |
+| `formatFechaCorta(fechaStr)` → "Domingo 15/03" | `fmtFechaCorta(fechaStr)` → "lun 19/05" | `fmtFechaCorta` no existe en `frontend`. Divergencia cross-front intencional (D9). | ✅ N/A (D9) |
 | `formatPago(forma)` | (no existe en turnero) | Mantener en admin. | OK |
 | `getFechaHoy`, `getMesActual`, `getSemanaActual` | (no existen en turnero) | Mantener en admin. | OK |
 | `desplazarMes`, `desplazarSemana`, `desplazarDia` | (no existen en turnero) | Mantener en admin. | OK |
