@@ -57,6 +57,17 @@ export const formatHora = (iso) =>
     hour12: false,
   });
 
+/**
+ * aHoraCorta
+ * Recorta una hora 'HH:MM:SS' (como la devuelve la DB) a 'HH:MM', el formato que
+ * usan los <input type="time"> y las comparaciones de rango horario. Tolera
+ * valores ya en 'HH:MM', null o undefined (devuelve el valor tal cual).
+ * @param {string|null|undefined} hora
+ * @returns {string|null|undefined} 'HH:MM', o el valor original si no es string
+ */
+export const aHoraCorta = (hora) =>
+  typeof hora === 'string' ? hora.slice(0, 5) : hora;
+
 // ─── Desplazamiento (anterior/siguiente) ──────────────────────────────────────
 
 /**

@@ -51,8 +51,8 @@ Cleanup global) son la excepción: viven en otro contexto y van al final por dis
 | 24 | `ConfirmDialog` no reusa `Modal` | 1 | `ui/ConfirmDialog.jsx`, `ui/Modal.jsx` | Media | ✅ |
 | 17 | `EmptyState` no acepta `tone` | 2 | `ui/EmptyState.jsx` | Media | ✅ |
 | 41 | Wrapper "label + `InputTiempo`" duplicado | 2 | `ui/InputTiempo.jsx`, `TabBarberos`, `BloqueFeriados` | Baja | 🔲 |
-| 40 | Editor de horario no acota al rango del local | 3 | `TabBarberos` | Media | 🔲 |
-| 39 | `humanizarDiasEnMensaje` acoplado al wording backend | 3 | `TabBarberos` | Baja | 🔲 |
+| 40 | Editor de horario no acota al rango del local | 3 | `TabBarberos` | Media | ✅ |
+| 39 | `humanizarDiasEnMensaje` acoplado al wording backend | 3 | `TabBarberos` | Baja | ✅ |
 | 35 | Cambio de credenciales operativas sin re-auth | 4 | `TabSeguridad` | Alta | 🔲 |
 | 36 | Carga de usuario operativo no distingue error de vacío | 4 | `TabSeguridad` | Media | 🔲 |
 | 33 | `Number()` sin validar NaN en precio/stock | 5 | `TabServicios`, `TabProductos` | Baja | 🔲 |
@@ -63,6 +63,7 @@ Cleanup global) son la excepción: viven en otro contexto y van al final por dis
 | 31 | `getNegocio()` no expone `horario_atencion` | 7 (backend) | backend, `SeccionTurnero` | Media | 🔲 |
 | 32 | `/admin/turnos` no devuelve `forma_pago` | 7 (backend) | backend, `SeccionTurnero` | Media | 🔲 |
 | 34 | `agregar-stock` no transaccional con PUT producto | 7 (backend) | backend, `TabProductos` | Media | 🔲 |
+| 44 | Endpoints de horarios devuelven `HH:MM:SS` (el front recorta) | 7 (backend) | backend, `TabBarberos` | Baja | 🔲 |
 | 11 | `onPointerDown` en `MainScreen` | 8 (Fase 5.5) | `MainScreen` | Media | 🔲 |
 | 14 | `LogoCirculo` duplicado en los dos logins | 8 (Fase 5.5) | `PantallaLoginAdmin`, `PantallaLoginOperativo` | Baja | 🔲 |
 | 5 | Re-auditar focus visible en primitivos | 8 (Fase 6) | `ui/*` | Baja | 🔲 |
@@ -73,6 +74,7 @@ Cleanup global) son la excepción: viven en otro contexto y van al final por dis
 | 28 | Acoplamiento sutil entre tabs (Planillas) | — | `SeccionPlanillas` | Baja | 💤 |
 | 42 | `BloqueFeriados` con overflow propio | — | `BloqueFeriados` | Baja | 💤 |
 | 43 | Nombre/URL del negocio sin self-service | — | `TabNegocio` | Baja | 💤 |
+| 45 | Bloque en día que el local cerró después no se valida | — | `TabBarberos` | Baja | 💤 |
 
 ---
 
@@ -103,14 +105,22 @@ Existe como sub-componente local en `TabBarberos` (eyebrow mono + `InputTiempo` 
 
 ---
 
-## Etapa 3 — `TabBarberos`
-Ambas viven en `TabBarberos`. Aprovechar que la Etapa 2 ya dejó abierto el archivo (#41).
+## Etapa 3 — `TabBarberos` · ✅ COMPLETA
+Ambas viven en `TabBarberos`. #40 y #39 resueltas (2026-06-01) — ver apéndice. De paso
+se abrió la deuda backend #44 (API devuelve `HH:MM:SS`) y el caso aceptado #45 (bloque
+en día que el local cerró después).
 
-### #40 — Sin verdad-cliente del rango horario del local en el editor de horarios del barbero · Media · 🔲
-Se bloquea el **día** cerrado del local (card atenuada, sin "Agregar bloque"), pero en un día abierto el editor deja cargar **cualquier** rango horario (ej. 08:00–22:00 aunque el local atienda 10:00–19:00). El backend lo rechaza (y el mensaje se humaniza, ver #39), pero la UI no lo previene. **Mejora**: acotar el `InputTiempo` al rango del local de ese día (min/max) o avisar inline antes de guardar. Requiere tener el rango del local cargado (ya lo tenemos: `horarioLocal[dia] = {inicio, fin}`).
+### #40 — Sin verdad-cliente del rango horario del local en el editor de horarios del barbero · Media · ✅ (2026-06-01)
+Se bloquea el **día** cerrado del local (card atenuada, sin "Agregar bloque"), pero en un día abierto el editor deja cargar **cualquier** rango horario (ej. 08:00–22:00 aunque el local atienda 10:00–19:00). El backend lo rechazaba, pero la UI no lo prevenía.
 
-### #39 — `humanizarDiasEnMensaje` acoplado al wording del backend · Baja · 🔲
-El mensaje de solapamiento del backend se traduce client-side con un regex sobre `"día N"` → nombre del día. Si el backend cambia el wording (idioma, formato), el regex deja de matchear y el mensaje se muestra crudo (no rompe, solo degrada). Alternativa robusta: validar el solapamiento en el cliente **antes** del PUT y construir el mensaje localmente (duplica la lógica de validación que ya vive en el backend). Bajo riesgo — se aceptó la fragilidad a cambio de no duplicar reglas.
+**Resuelta (2026-06-01, branch `fix/deudas-frontend`).** Se agregó un validador client-side `validarHorario(bloques, horarioLocal)` que corre antes del PUT y devuelve un mapa `{ [index]: {inicioInvalido, finInvalido, mensaje} }`. Detecta por bloque: (1) inicio/fin vacío, (2) `inicio ≥ fin`, (3) bloque fuera del rango de atención del local ese día, (4) solapamiento con otro bloque del mismo día (esto último cierra #39). Cada `InputTiempo` ofensor queda con `invalid` (borde rojo) + mensaje micro inline debajo de la fila; "Guardar horarios" se deshabilita si hay cualquier error. Además se pasan `min`/`max` (rango del local) al `InputTiempo` para acotar el picker nativo donde el navegador lo respete — **soft**, el guard real es la validación. Degradación: si `horarioLocal` es `null` (no se pudo leer la atención) no se valida rango, igual que no se bloquean días.
+**Bug encontrado y corregido en verificación**: los bloques existentes vienen de la DB en `HH:MM:SS` y el rango del local en `HH:MM`; comparar `'22:00:00' > '22:00'` da `true` (prefijo más largo) → marcaba un bloque idéntico al horario del local como fuera de rango. Se normaliza todo a `HH:MM` al entrar al estado (`normalizarBloques`, vía el helper centralizado `aHoraCorta` en `utils/fecha.js`). Quedó anotada la deuda de backend **#44** (la API debería devolver `HH:MM`).
+*(De paso, en este mismo chat se bajó el botón "Guardar horarios" del cuerpo del panel al footer del modal, junto a "Cerrar", visible solo en el tab Horario — mejora de UI, no parte de la deuda.)* Build verificado OK; verificado funcionalmente por el usuario.
+
+### #39 — `humanizarDiasEnMensaje` acoplado al wording del backend · Baja · ✅ (2026-06-01)
+El mensaje de solapamiento del backend se traducía client-side con un regex sobre `"día N"` → nombre del día. Si el backend cambiaba el wording, el regex dejaba de matchear y el mensaje se mostraba crudo.
+
+**Resuelta (2026-06-01, branch `fix/deudas-frontend`) — opción (b).** Como #40 ya metió validación client-side, el solapamiento se valida también en el cliente (dentro de `validarHorario`: por día se ordenan los bloques por inicio y se comparan adyacentes) y el mensaje se construye localmente. Eso volvió innecesaria la traducción del wording del backend: se **eliminó `humanizarDiasEnMensaje`** y el catch de `guardar` ahora muestra `err.message` crudo (caso que en la práctica ya no se gatilla porque el solapamiento se previene antes del PUT). El editor dejó de depender del wording del backend para cualquier error de horario. Se rompió a propósito la decisión previa del registro ("aceptar la fragilidad") porque ya estábamos validando client-side y la duplicación de la regla de solapamiento es mínima.
 
 ---
 
@@ -166,6 +176,9 @@ Para turnos `completado`, el dueño querría ver en qué se pagó (efectivo / MP
 
 ### #34 — `/admin/productos/:id/agregar-stock` no es transaccional con el PUT del producto · Media · 🔲
 El guardado hace PUT producto y luego PUT agregar-stock como dos requests. Si falla el segundo, el primero ya quedó persistido (queda el producto guardado pero sin el stock sumado). Es backend — evaluar endpoint único que reciba producto + delta de stock, o transacción. Anotado para chat backend.
+
+### #44 — Endpoints de horarios devuelven `HH:MM:SS` (el front recorta a `HH:MM`) · Baja · 🔲
+`GET/PUT /admin/horarios/:barberoId` y `GET/PUT /admin/horario-atencion` devuelven las horas en `HH:MM:SS` (TIME crudo de la DB). El `<input type="time">` y las comparaciones de rango trabajan en `HH:MM`, así que el front recorta con `aHoraCorta` (`utils/fecha.js`) en `construirHorarioLocal` y `normalizarBloques`. Detectada al resolver #40 (comparar `'22:00:00' > '22:00'` daba `true`). **Mejora backend**: devolver las horas ya en `HH:MM` para que el front no tenga que adaptar. Riesgo: es cambio de contrato de API — verificar que no rompa otros consumidores (agenda admin, turnero público). Mientras tanto el front es defensivo igual. Anotado para chat backend.
 
 ---
 
@@ -228,6 +241,9 @@ El `thead` no tiene columna "Comisión"; el slot de "Pago" del `tfoot` muestra e
 ### #42 — `BloqueFeriados` con `overflow` propio · 💤
 `max-height:260` + `overflowY:auto` en la lista: divergencia **consciente** de la convención "las secciones no tienen overflow propio". Justificada porque la lista de feriados es de largo variable y vive dentro del bloque sin scroll de `TabNegocio` (D16). Si en el futuro se decide que el panel de Gestión scrollee normalmente, revisar si este scroll interno sigue teniendo sentido.
 
+### #45 — Bloque del barbero en un día que el local cerró después no se valida (`TabBarberos`) · 💤
+Si el local cambia su horario de atención y **cierra** un día donde un barbero ya tenía un bloque cargado, ese bloque se sigue mostrando editable (sin "Agregar bloque", porque el día figura cerrado), pero `validarHorario` no lo marca como inválido: no hay rango del local contra el cual validarlo (`horarioLocal[dia]` es `undefined`). Decisión consciente al resolver #40 (2026-06-01): dejarlo fuera de alcance por ser un caso de borde poco frecuente, para no ensuciar el scope. Si se quiere endurecer, marcar como inválido todo bloque que caiga en un día cerrado del local (con `horarioLocal != null`).
+
 ### #43 — Nombre del negocio + URL de reservas sin self-service (`TabNegocio`) · 💤
 El chat de `TabNegocio` removió el formulario de esos dos campos (decisión del usuario: se editan directo en la DB porque cambian muy poco). El endpoint `GET/PUT /admin/negocio` sigue existiendo y `App.jsx`/`PanelAdmin` siguen leyendo el nombre/logo. **Nota de producto**: si en algún momento el producto se vende a terceros (dueños que quieran renombrar su negocio o cambiar la plataforma de turnos sin tocar la DB), reponer un formulario mínimo. Hoy no es necesario.
 
@@ -247,6 +263,8 @@ Historia. No borrar. Formato compacto: # — título — cómo/cuándo se cerró
 - **#16** — `BadgeVariacion` candidato a primitivo — **✅** chat de Balances (promovido a `ui/BadgeVariacion.jsx`).
 - **#17** — `EmptyState` no acepta `tone` — **✅** 2026-06-01, branch `fix/deudas-frontend`. Prop `tone` (`muted`/`danger`/`success`/`warning`, default neutro idéntico al anterior); tinte `*Soft` del wrapper del glyph (tratamiento B). Propagado `tone="danger"` a los 13 callsites de error.
 - **#20** — `DataTable` postergado — **✅** chat A de Gestión (construido `ui/DataTable.jsx`: sort + paginación + `onRowClick` + `col.grow`).
+- **#40** — Editor de horario no acota al rango del local — **✅** 2026-06-01, branch `fix/deudas-frontend`. Validador client-side `validarHorario` (vacío / `inicio≥fin` / fuera de rango del local / solapamiento) con `invalid` + mensaje inline + Guardar deshabilitado; `min`/`max` soft en el picker. Bug de comparación `HH:MM:SS` vs `HH:MM` corregido normalizando a `HH:MM` (`aHoraCorta`). Abrió la deuda backend #44.
+- **#39** — `humanizarDiasEnMensaje` acoplado al wording backend — **✅** 2026-06-01, branch `fix/deudas-frontend` (opción b). Solapamiento validado client-side dentro de `validarHorario`; eliminada `humanizarDiasEnMensaje`. El editor ya no depende del wording del backend.
 - **#22** — Inconsistencia del botón eliminar entre Caja y Ventas/Gastos — **✅** chat de Gastos (promovido `BotonIconoFila`).
 - **#23** (parcial) — Sub-componentes locales a primitivos — **✅** chat de Gastos: `BotonIconoFila`, shell de modal (`Modal`), `SelectFormaPago` (`Select`), `DetalleVentaConfirm`/`DetalleMovimientoConfirm` (`DetalleRecurso`). *(Queda abierto solo `CampoFijo` — ver #23 en Etapa 6.)*
 - **#26** — `ChipBarbero` candidato a primitivo — **✅** chat de Turnero (promovido a `ui/ChipFiltro.jsx` con prop `size`).

@@ -29,7 +29,7 @@ import {
   crearAdminSuspension,
   eliminarAdminSuspension,
 } from '../../../../services/api';
-import { TZ, DIAS } from '../../../../utils/fecha';
+import { TZ, DIAS, aHoraCorta } from '../../../../utils/fecha';
 import {
   Button,
   Field,
@@ -66,18 +66,66 @@ function fmtFechaHora(iso) {
 }
 
 /**
- * humanizarDiasEnMensaje
- * Reemplaza las referencias "día N" (0-6) en un mensaje de error del backend
- * por el nombre del día (DIAS[N]). El backend reporta el solapamiento de
- * horarios como "Solapamiento en día 5: ..."; esto lo vuelve "...en Viernes:".
- * @param {string} mensaje
- * @returns {string}
+ * validarHorario
+ * Valida los bloques de horario en el cliente ANTES del PUT, para prevenir los
+ * errores que el backend rechazaría y mostrarlos inline sin depender de su
+ * wording (cierra #40 y #39). Detecta, por bloque: (1) inicio/fin vacío,
+ * (2) inicio ≥ fin, (3) bloque fuera del rango de atención del local ese día,
+ * (4) solapamiento con otro bloque del mismo día. Los horarios 'HH:MM' comparan
+ * lexicográficamente bien (formato zero-padded), así que se comparan con < / >.
+ *
+ * @param {Array} bloques - [{ dia_semana, hora_inicio, hora_fin }]
+ * @param {Object|null} horarioLocal - { [dia]: { inicio, fin } } días abiertos; null si no se pudo leer (no se valida rango)
+ * @returns {Object} mapa { [index]: { inicioInvalido, finInvalido, mensaje } } solo con los bloques con error
  */
-function humanizarDiasEnMensaje(mensaje) {
-  return String(mensaje).replace(/d[ií]a\s+(\d)/gi, (coincidencia, n) => {
-    const nombre = DIAS[Number(n)];
-    return nombre ?? coincidencia;
+function validarHorario(bloques, horarioLocal) {
+  const errores = {};
+
+  // Validaciones por bloque individual (orden de prioridad: vacío → inicio≥fin → fuera de rango).
+  bloques.forEach((b, i) => {
+    const { hora_inicio: ini, hora_fin: fin, dia_semana: dia } = b;
+    if (!ini || !fin) {
+      errores[i] = { inicioInvalido: !ini, finInvalido: !fin, mensaje: 'Completá inicio y fin.' };
+      return;
+    }
+    if (ini >= fin) {
+      errores[i] = { inicioInvalido: true, finInvalido: true, mensaje: 'El inicio debe ser anterior al fin.' };
+      return;
+    }
+    const rl = horarioLocal?.[dia];
+    if (rl) {
+      const iniFuera = ini < rl.inicio;
+      const finFuera = fin > rl.fin;
+      if (iniFuera || finFuera) {
+        errores[i] = {
+          inicioInvalido: iniFuera,
+          finInvalido: finFuera,
+          mensaje: `Debe estar dentro del horario del local (${rl.inicio}–${rl.fin}).`,
+        };
+      }
+    }
   });
+
+  // Solapamiento por día: solo entre bloques que pasaron la validación individual.
+  // Se ordenan por inicio y se comparan adyacentes (si el fin de uno cae después
+  // del inicio del siguiente, se solapan). Marca ambos bloques involucrados.
+  const porDia = {};
+  bloques.forEach((b, i) => {
+    if (errores[i] || !b.hora_inicio || !b.hora_fin) return;
+    (porDia[b.dia_semana] ??= []).push({ i, ini: b.hora_inicio, fin: b.hora_fin });
+  });
+  Object.values(porDia).forEach((lista) => {
+    lista.sort((a, b) => a.ini.localeCompare(b.ini));
+    for (let k = 0; k < lista.length - 1; k++) {
+      if (lista[k].fin > lista[k + 1].ini) {
+        const mensaje = 'Se solapa con otro bloque del mismo día.';
+        errores[lista[k].i]     = { inicioInvalido: true, finInvalido: true, mensaje };
+        errores[lista[k + 1].i] = { inicioInvalido: true, finInvalido: true, mensaje };
+      }
+    }
+  });
+
+  return errores;
 }
 
 /**
@@ -95,10 +143,28 @@ function construirHorarioLocal(semana) {
   if (!Array.isArray(semana)) return mapa;
   semana.forEach((d) => {
     if (d.abierto && d.hora_inicio && d.hora_fin) {
-      mapa[d.dia_semana] = { inicio: d.hora_inicio.slice(0, 5), fin: d.hora_fin.slice(0, 5) };
+      mapa[d.dia_semana] = { inicio: aHoraCorta(d.hora_inicio), fin: aHoraCorta(d.hora_fin) };
     }
   });
   return mapa;
+}
+
+/**
+ * normalizarBloques
+ * Recorta los segundos (HH:MM:SS → HH:MM) de las horas de los bloques que vienen
+ * de la DB. El input type="time" y el rango del local trabajan en HH:MM; sin esto,
+ * comparar '22:00:00' > '22:00' da true (prefijo más largo) y un bloque idéntico
+ * al horario del local se marcaría como fuera de rango.
+ * @param {Array} bloques
+ * @returns {Array}
+ */
+function normalizarBloques(bloques) {
+  if (!Array.isArray(bloques)) return [];
+  return bloques.map((b) => ({
+    ...b,
+    hora_inicio: aHoraCorta(b.hora_inicio),
+    hora_fin: aHoraCorta(b.hora_fin),
+  }));
 }
 
 // ─── Tab Horario (dentro del modal de agenda) ─────────────────────────────────
@@ -113,12 +179,14 @@ function construirHorarioLocal(semana) {
  * @param {object} props.barbero - { id, nombre }
  * @param {Array|null} props.bloquesIniciales - bloques cacheados, o null si falló la carga
  * @param {Object|null} props.horarioLocal - { [dia]: { inicio, fin } } días abiertos del local; null si no se pudo leer (no se bloquea ningún día)
+ * @param {(estado: {guardando: boolean, hayErrores: boolean, cargando: boolean}) => void} props.onEstado - reporta al padre el estado del botón de guardar (vive en el footer del modal)
+ * @param {{current: (() => void)|null}} props.guardarRef - ref donde el panel publica su acción de guardar para que el footer la dispare
  * @param {(bloques: Array) => void} props.onGuardado
  */
-function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onGuardado }) {
+function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, guardarRef, onGuardado }) {
   const tieneCache = Array.isArray(bloquesIniciales);
 
-  const [bloques, setBloques]     = useState(tieneCache ? bloquesIniciales : []);
+  const [bloques, setBloques]     = useState(tieneCache ? normalizarBloques(bloquesIniciales) : []);
   const [cargando, setCargando]   = useState(!tieneCache);
   const [guardando, setGuardando] = useState(false);
   const [feedback, setFeedback]   = useState(null); // { tone, texto } | null
@@ -135,7 +203,7 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onGuardado }
     (async () => {
       try {
         const data = await getAdminHorarios(barbero.id);
-        if (vivoRef.current) setBloques(data);
+        if (vivoRef.current) setBloques(normalizarBloques(data));
       } catch (err) {
         console.error('[tabBarberos/Horario] Error cargando:', err.message);
         if (vivoRef.current) setFeedback({ tone: 'danger', texto: 'No se pudieron cargar los horarios.' });
@@ -190,18 +258,31 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onGuardado }
       const payload = bloques.map(({ dia_semana, hora_inicio, hora_fin }) => ({
         dia_semana, hora_inicio, hora_fin,
       }));
-      const resultado = await putAdminHorarios(barbero.id, payload);
+      const resultado = normalizarBloques(await putAdminHorarios(barbero.id, payload));
       if (!vivoRef.current) return;
       setBloques(resultado);
       onGuardado(resultado);
       setFeedback({ tone: 'success', texto: 'Horarios guardados correctamente.' });
     } catch (err) {
       console.error('[tabBarberos/Horario] Error guardando:', err.message);
-      if (vivoRef.current) setFeedback({ tone: 'danger', texto: `Error: ${humanizarDiasEnMensaje(err.message)}` });
+      if (vivoRef.current) setFeedback({ tone: 'danger', texto: `Error: ${err.message}` });
     } finally {
       if (vivoRef.current) setGuardando(false);
     }
   };
+
+  // Validación client-side: marca inputs inválidos, mensajes inline y bloquea
+  // el guardado. N de bloques es chico → recalcular en cada render es barato.
+  // Se calcula antes del early return de carga porque el footer del modal lo lee.
+  const errores = validarHorario(bloques, horarioLocal);
+  const hayErrores = Object.keys(errores).length > 0;
+
+  // El botón "Guardar" vive en el footer del modal (ModalAgenda): le publicamos
+  // la acción en un ref (siempre fresca, sin deps) y el estado por callback.
+  useEffect(() => { if (guardarRef) guardarRef.current = guardar; });
+  useEffect(() => {
+    onEstado?.({ guardando, hayErrores, cargando });
+  }, [guardando, hayErrores, cargando, onEstado]);
 
   if (cargando) return <LoadingState />;
 
@@ -236,6 +317,9 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onGuardado }
         // día no figura entre los abiertos. Si es null (no se pudo leer), no
         // bloqueamos nada.
         const cerrado = horarioLocal != null && !horarioLocal[dia];
+        // Rango de atención del local ese día (si abre y lo conocemos): acota
+        // el picker nativo vía min/max (soft) y se usa al validar (guard real).
+        const rangoLocal = horarioLocal?.[dia];
 
         return (
           <div
@@ -279,35 +363,51 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onGuardado }
               ) : null}
             </div>
 
-            {bloquesDelDia.map((bloque) => (
-              <div key={bloque._index} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <InputTiempo
-                    type="time"
-                    value={bloque.hora_inicio}
-                    onChange={(v) => actualizarBloque(bloque._index, 'hora_inicio', v)}
-                    ariaLabel={`Hora de inicio (${DIAS[dia]})`}
-                    full
+            {bloquesDelDia.map((bloque) => {
+              const err = errores[bloque._index];
+              return (
+              <div key={bloque._index} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <InputTiempo
+                      type="time"
+                      value={bloque.hora_inicio}
+                      onChange={(v) => actualizarBloque(bloque._index, 'hora_inicio', v)}
+                      ariaLabel={`Hora de inicio (${DIAS[dia]})`}
+                      invalid={!!err?.inicioInvalido}
+                      min={rangoLocal?.inicio}
+                      max={rangoLocal?.fin}
+                      full
+                    />
+                  </div>
+                  <span style={{ fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.muted }}>a</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <InputTiempo
+                      type="time"
+                      value={bloque.hora_fin}
+                      onChange={(v) => actualizarBloque(bloque._index, 'hora_fin', v)}
+                      ariaLabel={`Hora de fin (${DIAS[dia]})`}
+                      invalid={!!err?.finInvalido}
+                      min={rangoLocal?.inicio}
+                      max={rangoLocal?.fin}
+                      full
+                    />
+                  </div>
+                  <BotonIconoFila
+                    tono="danger"
+                    ariaLabel="Eliminar bloque"
+                    icono={<Trash2 size={14} strokeWidth={1.75} />}
+                    onClick={() => eliminarBloque(bloque._index)}
                   />
                 </div>
-                <span style={{ fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.muted }}>a</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <InputTiempo
-                    type="time"
-                    value={bloque.hora_fin}
-                    onChange={(v) => actualizarBloque(bloque._index, 'hora_fin', v)}
-                    ariaLabel={`Hora de fin (${DIAS[dia]})`}
-                    full
-                  />
-                </div>
-                <BotonIconoFila
-                  tono="danger"
-                  ariaLabel="Eliminar bloque"
-                  icono={<Trash2 size={14} strokeWidth={1.75} />}
-                  onClick={() => eliminarBloque(bloque._index)}
-                />
+                {err?.mensaje && (
+                  <span style={{ fontFamily: theme.body, fontSize: 12, color: theme.danger }}>
+                    {err.mensaje}
+                  </span>
+                )}
               </div>
-            ))}
+              );
+            })}
 
             {!cerrado && (
             <button
@@ -338,12 +438,6 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onGuardado }
           </div>
         );
       })}
-      </div>
-
-      <div style={{ marginTop: 4, display: 'flex', justifyContent: 'flex-end' }}>
-        <Button variant="primary" onClick={guardar} disabled={guardando} full={false}>
-          {guardando ? 'Guardando…' : 'Guardar horarios'}
-        </Button>
       </div>
     </div>
   );
@@ -697,6 +791,12 @@ function CampoTiempo({ label, type, value, onChange, invalid = false }) {
 function ModalAgenda({ barbero, bloquesIniciales, horarioLocal, onClose, onHorarioGuardado }) {
   const [tab, setTab] = useState('horario');
 
+  // El botón "Guardar horarios" del tab Horario se renderiza en el footer del
+  // modal (junto a "Cerrar"). Su acción y estado viven en SubPanelHorario, que
+  // los publica vía guardarRef (acción) y setEstadoHorario (estado reactivo).
+  const guardarHorarioRef = useRef(null);
+  const [estadoHorario, setEstadoHorario] = useState({ guardando: false, hayErrores: false, cargando: true });
+
   return (
     <Modal
       open
@@ -705,8 +805,18 @@ function ModalAgenda({ barbero, bloquesIniciales, horarioLocal, onClose, onHorar
       title="Horario y ausencias"
       subtitle={barbero.nombre}
       footer={
-        <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, width: '100%' }}>
           <Button variant="ghost" onClick={onClose} full={false}>Cerrar</Button>
+          {tab === 'horario' && (
+            <Button
+              variant="primary"
+              onClick={() => guardarHorarioRef.current?.()}
+              disabled={estadoHorario.guardando || estadoHorario.hayErrores || estadoHorario.cargando}
+              full={false}
+            >
+              {estadoHorario.guardando ? 'Guardando…' : 'Guardar horarios'}
+            </Button>
+          )}
         </div>
       }
     >
@@ -725,6 +835,8 @@ function ModalAgenda({ barbero, bloquesIniciales, horarioLocal, onClose, onHorar
             barbero={barbero}
             bloquesIniciales={bloquesIniciales}
             horarioLocal={horarioLocal}
+            onEstado={setEstadoHorario}
+            guardarRef={guardarHorarioRef}
             onGuardado={(bloques) => onHorarioGuardado(barbero.id, bloques)}
           />
         </div>
