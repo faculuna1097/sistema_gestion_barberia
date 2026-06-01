@@ -55,7 +55,7 @@ Cleanup global) son la excepción: viven en otro contexto y van al final por dis
 | 39 | `humanizarDiasEnMensaje` acoplado al wording backend | 3 | `TabBarberos` | Baja | ✅ |
 | 35 | Cambio de credenciales operativas sin re-auth | 4 | `TabSeguridad`, backend | Alta | ✅ |
 | 36 | Carga de usuario operativo no distingue error de vacío | 4 | `TabSeguridad` | Media | ✅ |
-| 33 | `Number()` sin validar NaN en precio/stock | 5 | `TabServicios`, `TabProductos` | Baja | 🔲 |
+| 33 | `Number()` sin validar NaN en precio/stock | 5 | `TabServicios`, `TabProductos` | Baja | ✅ |
 | 18 | Tabla ad-hoc con `role=table` en `SeccionInicio` | 6 | `SeccionInicio` | Media | 🔲 |
 | 4 / 21 | Hover de fila: `useState` vs `:hover` scoped | 6 | Caja, Ventas, Gastos, Planillas, Balances, Turnero | Media | ✅ |
 | 23 | `CampoFijo` local candidato a primitivo (resto resuelto) | 6 | `SeccionVentas` | Baja | 🔲 |
@@ -142,10 +142,18 @@ Si `getCredencialesOperativas()` falla, `usuarioOperativo` queda `null` y la fil
 
 ---
 
-## Etapa 5 — Inputs numéricos CRUD (`TabServicios` / `TabProductos`)
+## Etapa 5 — Inputs numéricos CRUD (`TabServicios` / `TabProductos`) · ✅ COMPLETA
+Única deuda de la etapa (#33). Cerrada (2026-06-01) **sin tocar código**: se verificó que
+el guard explícito de `NaN` es redundante en todos los caminos reales — ver apéndice.
 
-### #33 — `Number()` sin validar NaN en inputs de precio/stock · Baja · 🔲
+### #33 — `Number()` sin validar NaN en inputs de precio/stock · Baja · ✅ (2026-06-01)
 El guardado castea con `Number(valor)`. Hoy mitigado por el filtro `\D` (los inputs solo aceptan dígitos), pero si el backend recibiera el body por otra vía no habría guard. Bajo riesgo. Revisitar si se agrega validación de formularios formal.
+
+**Resuelta (2026-06-01, branch `fix/deudas-frontend`) — cerrada por redundancia, sin cambio de código.** Tras revisar `TabServicios` y `TabProductos` se confirmó que el `NaN` ya está neutralizado por **dos** mecanismos existentes, así que un guard explícito no agrega robustez real:
+1. **Filtro `\D` de entrada** (`onChange={(v) => set...(v.replace(/\D/g, ''))}`): el estado nunca contiene no-dígitos; solo dígitos o `''`.
+2. **Las comparaciones ya descartan `NaN`**: toda comparación con `NaN` retorna `false`, así que `precio !== '' && Number(precio) >= 0` (el `puedeGuardar` de ambos modales) nunca deja pasar un precio que castearía a `NaN` → el botón "Guardar" queda deshabilitado y `handleGuardar` corta en su `if (!puedeGuardar) return`. Igual `cantidadStock`, protegida por `if (cantidadStock && Number(cantidadStock) > 0)`. Y `stock_minimo`: su único camino "vacío" es `''`, y `Number('')` es `0`, no `NaN` (el `?? 0` es algo engañoso —cubre `null`/`undefined`, no el `''` real— pero el comportamiento termina siendo correcto).
+
+El **único** riesgo residual que nombraba la deuda —"si el backend recibiera el body por otra vía"— **un guard frontend no lo cubre por definición**: una llamada directa a la API bypassa cualquier validación JS. Ese hueco es validación de tipos **server-side** y pertenece a la **Etapa 7 (backend)**, no acá. Agregar un `Number.isNaN(...)` en el front sería *defensive theater*: ruido que aparenta cubrir un caso que no cubre. Se descartó también la opción (b) (guard explícito por legibilidad) por el mismo motivo. *(Mejora cosmética independiente anotada y no atacada: el `?? 0` engañoso de `stock_minimo`.)*
 
 ---
 
@@ -273,6 +281,7 @@ Historia. No borrar. Formato compacto: # — título — cómo/cuándo se cerró
 - **#40** — Editor de horario no acota al rango del local — **✅** 2026-06-01, branch `fix/deudas-frontend`. Validador client-side `validarHorario` (vacío / `inicio≥fin` / fuera de rango del local / solapamiento) con `invalid` + mensaje inline + Guardar deshabilitado; `min`/`max` soft en el picker. Bug de comparación `HH:MM:SS` vs `HH:MM` corregido normalizando a `HH:MM` (`aHoraCorta`). Abrió la deuda backend #44.
 - **#39** — `humanizarDiasEnMensaje` acoplado al wording backend — **✅** 2026-06-01, branch `fix/deudas-frontend` (opción b). Solapamiento validado client-side dentro de `validarHorario`; eliminada `humanizarDiasEnMensaje`. El editor ya no depende del wording del backend.
 - **#36** — Carga de usuario operativo no distingue error de vacío — **✅** 2026-06-01, branch `fix/deudas-frontend` (opción a). Estado `errorCarga` + carga reutilizable `cargarUsuario`; la fila "Usuario" pasa a 4 estados (cargando / error con Reintentar inline / usuario / sin configurar). Cerró el bug secundario del lápiz habilitado en error (abría el modal con `usuarioActual=''`). Quitado el guard `cancelado` (innecesario en React 19).
+- **#33** — `Number()` sin validar NaN en precio/stock — **✅** 2026-06-01, branch `fix/deudas-frontend`. **Cerrada por redundancia, sin cambio de código.** El NaN ya está neutralizado por el filtro `\D` (entrada solo-dígitos) + las comparaciones existentes (`Number(x) >= 0` / `> 0` retornan `false` ante NaN → `puedeGuardar` lo bloquea). El único hueco real (body llegando "por otra vía" / API directa) es validación server-side → Etapa 7 (backend); un guard frontend no lo cubriría. Cierra la Etapa 5.
 - **#35** — Cambio de credenciales operativas sin re-autenticación — **✅** 2026-06-01, branch `fix/deudas-frontend`. Re-auth con PIN admin (en usuario y password), **enforzado server-side**: `actualizarCredencialesOperativas` recibe `pin_admin`, `bcrypt.compare` contra `tenant.pin_admin` → 401 antes del UPDATE (calco de `cambiarPinAdmin`). Frontend: campo "PIN de administrador" en ambos modales, 401 al Toast danger. La deuda de mayor prioridad del registro.
 - **#22** — Inconsistencia del botón eliminar entre Caja y Ventas/Gastos — **✅** chat de Gastos (promovido `BotonIconoFila`).
 - **#23** (parcial) — Sub-componentes locales a primitivos — **✅** chat de Gastos: `BotonIconoFila`, shell de modal (`Modal`), `SelectFormaPago` (`Select`), `DetalleVentaConfirm`/`DetalleMovimientoConfirm` (`DetalleRecurso`). *(Queda abierto solo `CampoFijo` — ver #23 en Etapa 6.)*
