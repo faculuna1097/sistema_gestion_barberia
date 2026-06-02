@@ -17,45 +17,9 @@
 //                  Si no hay, el fondo cae a surfaceAlt liso.
 
 import { useState } from "react";
-import { Lock } from "lucide-react";
 import { theme } from "../theme/tokens.js";
-import { Field, Button } from "../components/ui";
+import { Field, Button, LogoCirculo } from "../components/ui";
 import { loginOperativo } from "../services/api";
-
-/**
- * LogoCirculo
- * Logo del tenant dentro de un círculo con borde + sombra. Si no hay logo,
- * muestra el icono Lock como fallback. El logo usa object-fit: contain para
- * no deformarse dentro del círculo.
- */
-function LogoCirculo({ imagenLogo, size = 96 }) {
-  return (
-    <div style={{
-      width: size,
-      height: size,
-      borderRadius: 999,
-      background: theme.surface,
-      border: `1px solid ${theme.hairline}`,
-      boxShadow: theme.shadowSm,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      overflow: 'hidden',
-      color: theme.accent,
-      flexShrink: 0,
-    }}>
-      {imagenLogo ? (
-        <img
-          src={imagenLogo}
-          alt="Logo del negocio"
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-        />
-      ) : (
-        <Lock size={Math.round(size * 0.35)} strokeWidth={1.75} />
-      )}
-    </div>
-  );
-}
 
 /**
  * PantallaLoginOperativo

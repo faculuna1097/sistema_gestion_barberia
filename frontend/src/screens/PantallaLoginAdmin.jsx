@@ -14,9 +14,9 @@
 //                  Si no hay, cae a un círculo con el icono Lock.
 
 import { useState, useEffect, useCallback } from "react";
-import { Lock, Delete, ArrowLeft } from "lucide-react";
+import { Delete, ArrowLeft } from "lucide-react";
 import { theme } from "../theme/tokens.js";
-import { EmptyState, IconoAlerta, Card } from "../components/ui";
+import { EmptyState, IconoAlerta, Card, LogoCirculo } from "../components/ui";
 import { loginAdmin } from "../services/api";
 
 /**
@@ -95,41 +95,6 @@ function ShellLoginAdmin({ children, onCancelar, labelCancelar = 'Cancelar', max
         {onCancelar && <BotonCancelarEsquina label={labelCancelar} onClick={onCancelar} />}
         {children}
       </div>
-    </div>
-  );
-}
-
-/**
- * LogoCirculo
- * Logo del tenant dentro de un círculo (igual patrón que LoginOperativo).
- * Si no hay logo, muestra el icono Lock con color de estado dinámico.
- */
-function LogoCirculo({ imagenLogo, lockColor, size = 96 }) {
-  return (
-    <div style={{
-      width: size,
-      height: size,
-      borderRadius: 999,
-      background: theme.surface,
-      border: `1px solid ${theme.hairline}`,
-      boxShadow: theme.shadowSm,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      overflow: 'hidden',
-      color: lockColor,
-      transition: `color ${theme.transitionMedium}`,
-      flexShrink: 0,
-    }}>
-      {imagenLogo ? (
-        <img
-          src={imagenLogo}
-          alt="Logo del negocio"
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-        />
-      ) : (
-        <Lock size={Math.round(size * 0.35)} strokeWidth={1.75} />
-      )}
     </div>
   );
 }
@@ -309,7 +274,7 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo })
 
   return (
     <ShellLoginAdmin onCancelar={onCancelar} labelCancelar="Cancelar">
-      <LogoCirculo imagenLogo={imagenLogo} lockColor={iconoColor} />
+      <LogoCirculo imagenLogo={imagenLogo} fallbackColor={iconoColor} />
 
       <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>
         <h1 style={{

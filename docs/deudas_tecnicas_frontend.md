@@ -64,9 +64,9 @@ Cleanup global) son la excepción: viven en otro contexto y van al final por dis
 | 32 | `/admin/turnos` no devuelve `forma_pago` | 7 (backend) | backend, `SeccionTurnero` | Media | 🔲 |
 | 34 | `agregar-stock` no transaccional con PUT producto | 7 (backend) | backend, `TabProductos` | Media | 🔲 |
 | 44 | Endpoints de horarios devuelven `HH:MM:SS` (el front recorta) | 7 (backend) | backend, `TabBarberos` | Baja | 🔲 |
-| 11 | `onPointerDown` en `MainScreen` | 8 (Fase 5.5) | `MainScreen` | Media | 🔲 |
-| 14 | `LogoCirculo` duplicado en los dos logins | 8 (Fase 5.5) | `PantallaLoginAdmin`, `PantallaLoginOperativo` | Baja | 🔲 |
-| 5 | Re-auditar focus visible en primitivos | 8 (Fase 6) | `ui/*` | Baja | 🔲 |
+| 11 | `onPointerDown` en `MainScreen` | 8 (Fase 5.5) | `MainScreen` | Media | ✅ |
+| 14 | `LogoCirculo` duplicado en los dos logins | 8 (Fase 5.5) | `PantallaLoginAdmin`, `PantallaLoginOperativo` | Baja | ✅ |
+| 5 | Re-auditar focus visible en primitivos | 8 (Fase 6) | `ui/*` | Baja | ✅ |
 | 6 | Contraste WCAG no verificado | 8 (Fase 6) | `theme/tokens.js` | Media | ✅ |
 | 8 | Convivencia `formato.js`/`formatos.js` + `fecha.js`/`fechas.js` | 8 (Fase 6) | `utils/*` | Media | ✅ |
 | 9 | Vulnerabilidades de `npm audit` | 8 (Fase 6) | `package.json` | Alta | ✅ |
@@ -204,18 +204,27 @@ El guardado hace PUT producto y luego PUT agregar-stock como dos requests. Si fa
 
 ---
 
-## Etapa 8 — Cleanup global / Fase 6
+## Etapa 8 — Cleanup global / Fase 6 · ✅ COMPLETA
 Transversales por diseño. Van al final, alineadas con la Fase 6 del plan de rediseño.
-Las dos primeras (#11, #14) caen naturalmente en el rediseño de `MainScreen` (Fase 5.5).
+Las dos primeras (#11, #14) caían naturalmente en el rediseño de `MainScreen` (Fase 5.5).
+Las tres deudas abiertas (#11, #14, #5) cerradas (2026-06-01); #6, #8, #9 ya estaban
+cerradas. Con esto el plan de deudas de frontend queda completo salvo la Etapa 7
+(backend, chat dedicado) y los casos 💤 aceptados.
 
-### #11 — `onPointerDown` en `MainScreen` · Media · 🔲
-Prohibido por sistema de diseño §4.3 (rompe accesibilidad por teclado, no se puede cancelar deslizando). Reemplazar por `onClick`. **Resuelto ya en PanelAdmin (Fase 3) y en los dos logins (Fase 4)**; queda **solo `MainScreen`** para Fase 5.5.
+### #11 — `onPointerDown` en `MainScreen` · Media · ✅ (2026-06-01)
+Prohibido por sistema de diseño §4.3 (rompe accesibilidad por teclado, no se puede cancelar deslizando). Reemplazar por `onClick`. **Resuelto ya en PanelAdmin (Fase 3) y en los dos logins (Fase 4)**; quedaba **solo `MainScreen`** para Fase 5.5.
 
-### #14 — `LogoCirculo` duplicado · Baja · 🔲
-El helper que muestra el logo del tenant dentro de un círculo (con fallback a icono `Lock`) está implementado dos veces: `PantallaLoginAdmin.jsx` y `PantallaLoginOperativo.jsx`. Dos usos = momento de promover a `components/ui/` per §7.1, pero hay matiz: la versión admin acepta `lockColor` para reflejar el estado del PIN. **Plan**: promover a primitivo cuando MainScreen necesite el mismo patrón en Fase 5.5 (tercer caso). Mientras tanto, mantenerlas sincronizadas si se modifica alguna. Implementación actual: `object-fit: cover` (caveat: logos no-cuadrados pueden recortarse — iterar si aparece en producción).
+**Resuelta (2026-06-01, branch `fix/deudas-frontend`) — ya estaba hecha en código.** El rediseño de `MainScreen` (Fase 5.5) ya había migrado todo a `onClick`: `BotonAccion`, `BotonEsquina` y el botón de logout disparan en `onClick`, y el feedback de press se resuelve por CSS scoped (`.om-action:active`, `.om-corner:active`, `.om-logout:active`) — press instantáneo en iPad sin `onPointerDown`. Barrido del front: no queda **ningún** `onPointerDown`; las únicas menciones que sobreviven son comentarios que documentan justamente "sin onPointerDown" (`MainScreen`, `wizard.jsx`, `FlujoVenta`). Solo faltaba actualizar este registro.
 
-### #5 — Re-auditar focus visible en primitivos · Baja · 🔲
+### #14 — `LogoCirculo` duplicado · Baja · ✅ (2026-06-01)
+El helper que muestra el logo del tenant dentro de un círculo (con fallback a icono `Lock`) estaba implementado dos veces: `PantallaLoginAdmin.jsx` y `PantallaLoginOperativo.jsx`. Dos usos = momento de promover a `components/ui/` per §7.1, con el matiz de que la versión admin acepta `lockColor` para reflejar el estado del PIN.
+
+**Resuelta (2026-06-01, branch `fix/deudas-frontend`) — promovido para los dos logins; MainScreen queda inline.** Se creó el primitivo `components/ui/LogoCirculo.jsx` (`{ imagenLogo, size=96, fallbackColor=accent }`): chrome del círculo (`surface` + borde `hairline` + `shadowSm` + `overflow:hidden`), `img` con `object-fit:cover`, fallback `Lock` (`size*0.35`) si no hay logo. El `lockColor` admin se generalizó a `fallbackColor` (default `accent`); admin le pasa su color dinámico (accent→danger al fallar el PIN) y conserva la `transition: color` (que el primitivo incluye siempre, inocua en operativo). Ambos logins borraron su copia local y su import de `Lock`. **Decisión consciente (tu elección):** el círculo decorativo de `MainScreen` **no** se pliega en el primitivo — es de otra naturaleza (sin fallback `Lock`, no es afordancia de acceso, renderiza solo con logo) → se dejó inline para no forzar reutilización; queda anotado en el JSDoc del primitivo por qué MainScreen no lo usa. El comentario stale "object-fit: contain" de la copia operativa (el código real usaba `cover`) no se arrastró. Build verificado OK; verificación visual de los dos logins pendiente del usuario.
+
+### #5 — Re-auditar focus visible en primitivos · Baja · ✅ (2026-06-01)
 Deuda heredada del sistema de diseño #12 (focus visible global). Re-auditar primitivos. (Nota: la Fase 2 dejó verificado que todos los interactivos quedan cubiertos por el `*:focus-visible` global — esto es un repaso de cierre.)
+
+**Resuelta (2026-06-01, branch `fix/deudas-frontend`) — repaso de cierre, sin cambio de código.** El riesgo concreto a cazar era un `outline:none` **inline** (gana en especificidad sobre el `*:focus-visible` global de `index.css:47` y dejaría el elemento sin ring incluso con teclado). Barrido de `ui/*`: aparece en **3 primitivos, los 3 con reemplazo propio** → `InputTiempo` y `Select` (boxShadow ring `3px accent` + border accent vía `onFocus/onBlur`), `DataTable` (clase scoped `:focus-visible { outline 2px accent }` en sus filas). El resto de los primitivos (`Button`, `Field`, `Card`, `Tabs`, …) no tocan `outline` → heredan el ring global `*:focus-visible` (2px indigo). Cobertura completa, ningún interactivo pelado. Matiz cosmético no-defecto anotado: `InputTiempo`/`Select` muestran ring en cualquier focus (mouse incluido), no solo `:focus-visible` — divergencia intencional de input estilo Field, sin impacto de accesibilidad. **Cierra la Etapa 8.**
 
 ### #6 — Contraste WCAG no verificado · Media · ✅ (2026-05-29)
 Deuda heredada del sistema de diseño #9. Auditar contraste de toda la paleta/tipografía contra WCAG AA.
@@ -289,6 +298,9 @@ Historia. No borrar. Formato compacto: # — título — cómo/cuándo se cerró
 - **#39** — `humanizarDiasEnMensaje` acoplado al wording backend — **✅** 2026-06-01, branch `fix/deudas-frontend` (opción b). Solapamiento validado client-side dentro de `validarHorario`; eliminada `humanizarDiasEnMensaje`. El editor ya no depende del wording del backend.
 - **#36** — Carga de usuario operativo no distingue error de vacío — **✅** 2026-06-01, branch `fix/deudas-frontend` (opción a). Estado `errorCarga` + carga reutilizable `cargarUsuario`; la fila "Usuario" pasa a 4 estados (cargando / error con Reintentar inline / usuario / sin configurar). Cerró el bug secundario del lápiz habilitado en error (abría el modal con `usuarioActual=''`). Quitado el guard `cancelado` (innecesario en React 19).
 - **#18** — Tabla ad-hoc con `role=table` en `SeccionInicio` — **✅** 2026-06-01, branch `fix/deudas-frontend` (commiteado). Reemplazada por `<table>` semántico real (cero ARIA). Se descartó `DataTable` (altitud equivocada: primitivo full-width sortable vs card-resumen compacta). De paso: `<thead>` sticky + scroll interno, `SeccionInicio` a flex-column 100% (panel no scrollea, excepción consciente acotada a dashboards — no se formalizó como regla), sin `ScreenHeader`, títulos eyebrow izquierdos vía helper local `CardEyebrow` (dedup del header de stock), fecha + pill "Hoy" en la card del día (`fechaADiaMes` nuevo en `utils/fecha.js`).
+- **#5** — Re-auditar focus visible en primitivos — **✅** 2026-06-01, branch `fix/deudas-frontend`. Repaso de cierre, sin código. Único patrón riesgoso (`outline:none` inline) en 3 primitivos (`InputTiempo`, `Select`, `DataTable`), los 3 con ring de reemplazo; el resto hereda el `*:focus-visible` global. Cobertura completa. Cierra la Etapa 8.
+- **#11** — `onPointerDown` en `MainScreen` — **✅** 2026-06-01, branch `fix/deudas-frontend`. Ya estaba hecho en código (el rediseño de Fase 5.5 había migrado `MainScreen` a `onClick` + press por CSS `:active`). No queda ningún `onPointerDown` en el front (solo comentarios que lo documentan). Solo se actualizó el registro.
+- **#14** — `LogoCirculo` duplicado en los dos logins — **✅** 2026-06-01, branch `fix/deudas-frontend`. Promovido a `ui/LogoCirculo.jsx` (`{imagenLogo, size=96, fallbackColor=accent}`, fallback `Lock`); ambos logins borraron su copia local. `lockColor` admin → `fallbackColor`. Decisión: el círculo decorativo de `MainScreen` queda inline (otra naturaleza, sin fallback) — no se fuerza la reutilización.
 - **#33** — `Number()` sin validar NaN en precio/stock — **✅** 2026-06-01, branch `fix/deudas-frontend` (commiteado). **Cerrada por redundancia, sin cambio de código.** El NaN ya está neutralizado por el filtro `\D` (entrada solo-dígitos) + las comparaciones existentes (`Number(x) >= 0` / `> 0` retornan `false` ante NaN → `puedeGuardar` lo bloquea). El único hueco real (body llegando "por otra vía" / API directa) es validación server-side → Etapa 7 (backend); un guard frontend no lo cubriría. Cierra la Etapa 5.
 - **#35** — Cambio de credenciales operativas sin re-autenticación — **✅** 2026-06-01, branch `fix/deudas-frontend`. Re-auth con PIN admin (en usuario y password), **enforzado server-side**: `actualizarCredencialesOperativas` recibe `pin_admin`, `bcrypt.compare` contra `tenant.pin_admin` → 401 antes del UPDATE (calco de `cambiarPinAdmin`). Frontend: campo "PIN de administrador" en ambos modales, 401 al Toast danger. La deuda de mayor prioridad del registro.
 - **#22** — Inconsistencia del botón eliminar entre Caja y Ventas/Gastos — **✅** chat de Gastos (promovido `BotonIconoFila`).
