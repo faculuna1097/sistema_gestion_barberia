@@ -74,7 +74,6 @@ function CampoFijo({ label, children, numeric }) {
 /**
  * TablaVentas
  * Tabla densa con detalle por venta + footer "Total del mes" en theme.accent.
- * Hover de fila vía :hover scoped con <style> inline (excepción §4.2, deuda #21).
  *
  * @param {object} props
  * @param {Array} props.ventas
