@@ -58,6 +58,7 @@ import {
   IconoAlerta,
   Button,
   Field,
+  Select,
   ChipFiltro,
   Modal,
   DetalleRecurso,
@@ -846,33 +847,56 @@ const totalValorStyle = {
  * Modal único de detalle + acciones para un turno.
  * Tiene tres "modos" internos:
  *   - 'detalle': listado + acciones (según estado del turno).
- *   - 'completando': form para registrar el corte (forma de pago + precio +
- *     propina) y completar el turno. Reemplaza al viejo "marcar completado"
- *     directo, que cambiaba el estado sin dejar registro financiero.
+ *   - 'completando': form para registrar el corte (servicio + forma de pago +
+ *     precio + propina) y completar el turno. El servicio es editable (default
+ *     = el del turno) y el precio lo sigue. Reemplaza al viejo "marcar
+ *     completado" directo, que cambiaba el estado sin dejar registro financiero.
  *   - 'confirmando': vista de confirmación para cancelar (sin anidar modales).
- * @param {number|string|undefined} precioDerivado - precio del servicio del
- *   turno tomado del catálogo (servicios). undefined si el servicio no está en
- *   el catálogo activo → el form pide el precio a mano.
+ * @param {Array} servicios - catálogo de servicios del tenant ({ id, nombre,
+ *   precio, activo }). Fuente del selector de servicio y del precio. Si está
+ *   vacío (no cargó), el form degrada a precio editable a mano.
  */
-function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCancelar, accionando, precioDerivado }) {
+function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCancelar, accionando, servicios }) {
   const [modo, setModo] = useState('detalle');
 
   // Estado del form de "completar" (local al modal, como el modo confirmando).
   const [formaPago, setFormaPago]       = useState(null);
   const [propina, setPropina]           = useState('');
   const [precioManual, setPrecioManual] = useState('');
+  // Servicio elegido para el corte. Default = el del turno; editable en el form.
+  const [servicioId, setServicioId]     = useState(turno.servicio_id);
 
-  // Precio: si el servicio está en el catálogo se usa su precio (read-only);
-  // si no (servicio desactivado / borrado), se pide a mano.
-  const precioNoDerivable = precioDerivado == null;
-  const precio       = precioNoDerivable ? Number(precioManual) : Number(precioDerivado);
+  // El catálogo (servicios) es la fuente del precio. Si no cargó (raro), se
+  // degrada a precio editable a mano (precioNoDerivable).
+  const catalogoOk = servicios.length > 0;
+  const serviciosActivos = servicios.filter((s) => s.activo);
+  // Garantizamos que el servicio actual del turno esté en las opciones aunque
+  // haya sido desactivado, para que el default se muestre y se pueda dejar igual.
+  const servicioDelTurno = servicios.find((s) => s.id === turno.servicio_id);
+  const opcionesServicio = (servicioDelTurno && !servicioDelTurno.activo)
+    ? [servicioDelTurno, ...serviciosActivos]
+    : serviciosActivos;
+  const servicioSel = servicios.find((s) => s.id === servicioId);
+  const servicioCambiado = servicioId !== turno.servicio_id;
+
+  // Precio: del servicio seleccionado (read-only) o, sin catálogo, a mano.
+  const precioNoDerivable = !catalogoOk;
+  const precio       = precioNoDerivable ? Number(precioManual) : Number(servicioSel?.precio);
   const propinaNum   = propina === '' ? 0 : Number(propina);
   const precioValido = Number.isFinite(precio) && precio >= 0 && (!precioNoDerivable || precioManual !== '');
   const puedeCompletar = formaPago !== null && precioValido;
   const totalPreview = (Number.isFinite(precio) ? precio : 0) + propinaNum;
 
   const confirmarCompletar = () => {
-    onCompletar(turno.id, { forma_pago: formaPago, precio, propina: propinaNum });
+    onCompletar(turno.id, {
+      forma_pago: formaPago,
+      precio,
+      propina: propinaNum,
+      // Solo mandamos servicio_id si cambió: si no, el backend usa su path
+      // retrocompat (deriva del turno), que además completa bien un turno cuyo
+      // servicio fue desactivado después (mandarlo explícito daría 400).
+      ...(servicioCambiado ? { servicio_id: servicioId } : {}),
+    });
   };
 
   const titulo = {
@@ -988,12 +1012,42 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
       ) : modo === 'completando' ? (
         // ── Modo completar: registra el corte (forma de pago + monto) ─────
         <>
-          <DetalleRecurso
-            filas={[
-              { label: 'Cliente',  valor: turno.cliente_nombre },
-              { label: 'Servicio', valor: turno.servicio_nombre },
-            ]}
-          />
+          <DetalleRecurso filas={[{ label: 'Cliente', valor: turno.cliente_nombre }]} />
+
+          {/* Servicio — editable. Default = el del turno; el precio lo sigue.
+              Sin catálogo (raro) no se muestra el selector y el servicio queda
+              el del turno (el backend lo deriva). */}
+          {catalogoOk && (
+            <div style={{ marginTop: 16 }}>
+              <Select
+                label="Servicio"
+                value={servicioId}
+                onChange={setServicioId}
+                options={opcionesServicio.map((s) => ({ value: s.id, label: s.nombre }))}
+              />
+            </div>
+          )}
+
+          {/* Precio — sigue al servicio elegido (read-only); editable solo si el
+              catálogo no cargó. */}
+          <div style={{ marginTop: 16 }}>
+            {precioNoDerivable ? (
+              <Field
+                label="Precio"
+                type="text"
+                inputMode="numeric"
+                value={precioManual}
+                onChange={(v) => setPrecioManual(v.replace(/\D/g, ''))}
+                placeholder="0"
+                helper="No se pudo tomar el precio del servicio. Ingresalo a mano."
+              />
+            ) : (
+              <>
+                <span style={labelEyebrow}>Precio</span>
+                <div style={precioReadonlyBox}>{fmtPesos(precio)}</div>
+              </>
+            )}
+          </div>
 
           {/* Forma de pago — dos botones tintados como BadgeFormaPago */}
           <div style={{ marginTop: 16 }}>
@@ -1014,26 +1068,6 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
                 tonoFg={theme.accent}
               />
             </div>
-          </div>
-
-          {/* Precio — read-only del catálogo, o editable si no se pudo derivar */}
-          <div style={{ marginTop: 16 }}>
-            {precioNoDerivable ? (
-              <Field
-                label="Precio"
-                type="text"
-                inputMode="numeric"
-                value={precioManual}
-                onChange={(v) => setPrecioManual(v.replace(/\D/g, ''))}
-                placeholder="0"
-                helper="No se pudo tomar el precio del servicio. Ingresalo a mano."
-              />
-            ) : (
-              <>
-                <span style={labelEyebrow}>Precio</span>
-                <div style={precioReadonlyBox}>{fmtPesos(precioDerivado)}</div>
-              </>
-            )}
           </div>
 
           {/* Propina — opcional, visible siempre */}
@@ -1225,14 +1259,26 @@ export default function SeccionTurnero() {
     setAccionando(turnoId);
     try {
       const res = await completarAdminTurno(turnoId, datos);
-      // Update optimista: reflejamos estado + forma_pago + monto_total para que
-      // la agenda/lista (y un eventual reabrir del detalle) lo muestren sin refetch.
+      // Update optimista para reflejar el turno completado sin refetch. Si se
+      // cambió el servicio, actualizamos id + nombre (del catálogo) también, así
+      // la agenda/lista muestran el servicio nuevo. res.servicio_id es el final
+      // que dejó el backend.
       setTurnos((prev) =>
-        prev.map((t) =>
-          t.id === turnoId
-            ? { ...t, estado: 'completado', forma_pago: datos.forma_pago, monto_total: res.monto_total }
-            : t,
-        ),
+        prev.map((t) => {
+          if (t.id !== turnoId) return t;
+          const cambioServicio = datos.servicio_id != null;
+          const servicioNombre = cambioServicio
+            ? (servicios.find((s) => s.id === datos.servicio_id)?.nombre ?? t.servicio_nombre)
+            : t.servicio_nombre;
+          return {
+            ...t,
+            estado: 'completado',
+            forma_pago: datos.forma_pago,
+            monto_total: res.monto_total,
+            servicio_id: res.servicio_id ?? t.servicio_id,
+            servicio_nombre: servicioNombre,
+          };
+        }),
       );
       setTurnoSeleccionado(null);
     } catch (err) {
@@ -1437,13 +1483,14 @@ export default function SeccionTurnero() {
       {/* ── MODAL DE DETALLE ───────────────────────────────────────────── */}
       {turnoSeleccionado && (
         <ModalDetalleTurno
+          key={turnoSeleccionado.id}
           turno={turnoSeleccionado}
           onCerrar={() => setTurnoSeleccionado(null)}
           onCambiarEstado={cambiarEstado}
           onCompletar={completarTurno}
           onCancelar={cancelarTurno}
           accionando={accionando === turnoSeleccionado.id}
-          precioDerivado={servicios.find((s) => s.id === turnoSeleccionado.servicio_id)?.precio}
+          servicios={servicios}
         />
       )}
     </div>

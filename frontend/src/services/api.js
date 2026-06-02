@@ -447,8 +447,10 @@ export const patchAdminTurnoEstado = async (turnoId, estado) => {
  * El backend deriva barbero/servicio del propio turno (autoritativo); el front
  * solo aporta forma_pago, precio y propina.
  * @param {string} turnoId
- * @param {Object} datos - { forma_pago: 'efectivo'|'mercado_pago', precio: number>=0, propina?: number>=0 }
- * @returns {Promise<Object>} { id, estado: 'completado', corte_id, monto_total }
+ * @param {Object} datos - { forma_pago: 'efectivo'|'mercado_pago', precio: number>=0, propina?: number>=0, servicio_id?: string }
+ *   servicio_id es opcional: si se manda, el corte se registra con ese servicio y
+ *   el turno se sincroniza a él; si se omite, el backend deriva el servicio del turno.
+ * @returns {Promise<Object>} { id, estado: 'completado', servicio_id, corte_id, monto_total }
  */
 export const completarAdminTurno = async (turnoId, datos) => {
   const res = await apiFetch(`/admin/turnos/${turnoId}/completar`, {
