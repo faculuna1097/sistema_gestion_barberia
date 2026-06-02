@@ -142,6 +142,16 @@ export const fechaALabel = (fechaStr) => {
 };
 
 /**
+ * fechaADiaMes
+ * Convierte un día 'YYYY-MM-DD' a "DÍA de MES" (sin año ni día de la semana).
+ * @example fechaADiaMes('2026-06-01') → '1 de Junio'
+ */
+export const fechaADiaMes = (fechaStr) => {
+  const [, mes, dia] = fechaStr.split('-').map(Number);
+  return `${dia} de ${MESES[mes - 1]}`;
+};
+
+/**
  * formatFechaCorta
  * Convierte un día 'YYYY-MM-DD' a un label corto con día de la semana entero.
  * Usado en el detalle semanal de Planillas.

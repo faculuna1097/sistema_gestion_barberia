@@ -10,14 +10,16 @@ import {
   Package,
   CheckCircle2,
   RefreshCw,
+  Sun,
+  CalendarRange,
 } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
 import { fmtPesos } from '../../../utils/formato';
+import { getFechaHoy, fechaADiaMes } from '../../../utils/fecha';
 import { theme } from '../../../theme/tokens.js';
 import {
   Card,
-  ScreenHeader,
   EmptyState,
   IconoAlerta,
   Button,
@@ -48,6 +50,39 @@ function Eyebrow({ children }) {
       gap: 8,
     }}>
       {children}
+    </div>
+  );
+}
+
+/**
+ * CardEyebrow
+ * Título de card alineado a la izquierda (ícono + label mono-micro-uppercase),
+ * con slot opcional a la derecha. Centraliza el patrón de header que comparten
+ * las 3 cards de Inicio (día, mes, stock) — antes el de stock estaba inline.
+ * @param {ReactNode} props.icon - Ícono Lucide (size 14).
+ * @param {ReactNode} props.children - Texto del título.
+ * @param {ReactNode} [props.right] - Contenido opcional a la derecha (ej. el badge de stock).
+ */
+function CardEyebrow({ icon, children, right }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: right ? 'space-between' : 'flex-start',
+      marginBottom: 14,
+      flexShrink: 0,
+      fontFamily: theme.mono,
+      fontWeight: theme.weightMedium,
+      fontSize: theme.sizeMicro,
+      letterSpacing: '0.06em',
+      textTransform: 'uppercase',
+      color: theme.muted,
+    }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        {icon}
+        {children}
+      </span>
+      {right}
     </div>
   );
 }
@@ -116,9 +151,31 @@ function CardDia({ data }) {
   return (
     <Card
       padding={16}
-      style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}
+      style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}
     >
-      <Eyebrow>Hoy</Eyebrow>
+      <CardEyebrow icon={<Sun size={14} strokeWidth={1.75} />}>
+        Estadísticas del día
+      </CardEyebrow>
+
+      {/* Centro: fecha de hoy + pill "Hoy" (mismo indigo sólido que el badge
+          de SelectorDia/Caja). Va dentro del Eyebrow centrado para rimar con
+          el "{mes} — del 1 al N" de la card del mes. */}
+      <Eyebrow>
+        {fechaADiaMes(getFechaHoy())}
+        <span style={{
+          fontFamily: theme.mono,
+          fontSize: theme.sizeMicro,
+          fontWeight: theme.weightMedium,
+          padding: '2px 8px',
+          borderRadius: 20,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          color: theme.accentInk,
+          background: theme.accent,
+        }}>
+          Hoy
+        </span>
+      </Eyebrow>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <Metrica
@@ -156,8 +213,12 @@ function CardMes({ data }) {
   return (
     <Card
       padding={16}
-      style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}
+      style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}
     >
+      <CardEyebrow icon={<CalendarRange size={14} strokeWidth={1.75} />}>
+        Estadísticas del mes
+      </CardEyebrow>
+
       <Eyebrow>{mes_actual} — del 1 al {dia_corte}</Eyebrow>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 14 }}>
@@ -212,25 +273,12 @@ function CardStock({ productos }) {
   const hayAlertas = productos.length > 0;
 
   return (
-    <Card padding={16}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 14,
-        fontFamily: theme.mono,
-        fontWeight: theme.weightMedium,
-        fontSize: theme.sizeMicro,
-        letterSpacing: '0.06em',
-        textTransform: 'uppercase',
-        color: theme.muted,
-      }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <Package size={14} strokeWidth={1.75} />
-          Alertas de stock
-        </span>
-
-        {hayAlertas && (
+    // flex:1 + minHeight:0 → la card toma el alto sobrante del panel y deja
+    // que su lista interna scrollee, sin empujar el alto total (ver SeccionInicio).
+    <Card padding={16} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <CardEyebrow
+        icon={<Package size={14} strokeWidth={1.75} />}
+        right={hayAlertas && (
           <span style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -249,63 +297,92 @@ function CardStock({ productos }) {
             {productos.length}
           </span>
         )}
-      </div>
+      >
+        Alertas de stock
+      </CardEyebrow>
 
       {hayAlertas ? (
-        <div role="table" style={{ display: 'flex', flexDirection: 'column' }}>
-          {/* Encabezado */}
-          <div role="row" style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 100px 100px',
-            padding: '0 0 8px 0',
-            borderBottom: `1px solid ${theme.hairline}`,
-            fontFamily: theme.mono,
-            fontSize: theme.sizeMicro,
-            fontWeight: theme.weightMedium,
-            color: theme.muted,
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-          }}>
-            <span role="columnheader">Producto</span>
-            <span role="columnheader" style={{ textAlign: 'right' }}>Actual</span>
-            <span role="columnheader" style={{ textAlign: 'right' }}>Mínimo</span>
-          </div>
-
-          {/* Filas */}
-          {productos.map((p) => (
-            <div
-              key={p.id}
-              role="row"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 100px 100px',
-                alignItems: 'center',
-                padding: '10px 0',
-                borderBottom: `1px solid ${theme.hairlineSoft}`,
-                fontFamily: theme.body,
-                fontSize: theme.sizeBody,
-              }}
-            >
-              <span role="cell" style={{ color: theme.ink, fontWeight: theme.weightMedium }}>
-                {p.nombre}
-              </span>
-              <span role="cell" style={{
-                textAlign: 'right',
-                color: theme.danger,
-                fontWeight: theme.weightHeading,
-                fontVariantNumeric: 'tabular-nums',
-              }}>
-                {p.stock_actual}
-              </span>
-              <span role="cell" style={{
-                textAlign: 'right',
-                color: theme.muted,
-                fontVariantNumeric: 'tabular-nums',
-              }}>
-                {p.stock_minimo}
-              </span>
-            </div>
-          ))}
+        // Scroll interno: la lista toma el alto sobrante de la card (flex:1 +
+        // minHeight:0) y scrollea por dentro, así el panel no scrollea (mismo
+        // patrón aceptado que BloqueFeriados — divergencia consciente de
+        // "secciones sin overflow propio", #42 del registro de deudas).
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              {/* Header sticky: queda fijo al scrollear. background surface
+                  (= fondo de la Card) para que las filas pasen limpio por
+                  debajo. La línea inferior va por box-shadow inset y no por
+                  border-bottom: el borde de un <th> sticky con border-collapse
+                  se pierde al scrollear. */}
+              <tr>
+                {[
+                  { label: 'Producto', align: 'left',  width: undefined },
+                  { label: 'Actual',   align: 'right', width: 100 },
+                  { label: 'Mínimo',   align: 'right', width: 100 },
+                ].map((col) => (
+                  <th
+                    key={col.label}
+                    style={{
+                      position: 'sticky',
+                      top: 0,
+                      background: theme.surface,
+                      textAlign: col.align,
+                      width: col.width,
+                      padding: '0 0 8px 0',
+                      boxShadow: `inset 0 -1px 0 ${theme.hairline}`,
+                      fontFamily: theme.mono,
+                      fontSize: theme.sizeMicro,
+                      fontWeight: theme.weightMedium,
+                      color: theme.muted,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    {col.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {productos.map((p) => (
+                <tr key={p.id}>
+                  <td style={{
+                    padding: '10px 0',
+                    borderBottom: `1px solid ${theme.hairlineSoft}`,
+                    fontFamily: theme.body,
+                    fontSize: theme.sizeBody,
+                    color: theme.ink,
+                    fontWeight: theme.weightMedium,
+                  }}>
+                    {p.nombre}
+                  </td>
+                  <td style={{
+                    padding: '10px 0',
+                    borderBottom: `1px solid ${theme.hairlineSoft}`,
+                    fontFamily: theme.body,
+                    fontSize: theme.sizeBody,
+                    textAlign: 'right',
+                    color: theme.danger,
+                    fontWeight: theme.weightHeading,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {p.stock_actual}
+                  </td>
+                  <td style={{
+                    padding: '10px 0',
+                    borderBottom: `1px solid ${theme.hairlineSoft}`,
+                    fontFamily: theme.body,
+                    fontSize: theme.sizeBody,
+                    textAlign: 'right',
+                    color: theme.muted,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {p.stock_minimo}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : (
         <EmptyState
@@ -365,16 +442,24 @@ export default function SeccionInicio() {
   }, [intento]);
 
   // ── Estilos del contenedor de la sección ────────────────────────────────────
+  // Inicio es superficie tipo dashboard: fit-to-screen. El contenedor toma el
+  // alto del <main> (height:100% + box-border) y es flex column, para que la
+  // card de stock absorba el sobrante y scrollee por dentro en vez de hacer
+  // scrollear el panel entero. (Excepción consciente a "el main es el que
+  // scrollea" — aplica solo a superficies overview, no a los reportes.)
   const contenedor = {
+    height: '100%',
+    boxSizing: 'border-box',
     padding: 24,
     fontFamily: theme.body,
     color: theme.ink,
+    display: 'flex',
+    flexDirection: 'column',
   };
 
   if (cargando) {
     return (
       <div style={contenedor}>
-        <ScreenHeader title="Inicio" subtitle="Resumen operativo del día" />
         <LoadingState />
       </div>
     );
@@ -383,7 +468,6 @@ export default function SeccionInicio() {
   if (error) {
     return (
       <div style={contenedor}>
-        <ScreenHeader title="Inicio" subtitle="Resumen operativo del día" />
         <EmptyState
           tone="danger"
           glyph={<IconoAlerta />}
@@ -406,11 +490,11 @@ export default function SeccionInicio() {
 
   return (
     <div style={contenedor}>
-      <ScreenHeader title="Inicio" subtitle="Resumen operativo del día" />
-
-      {/* Cards apiladas. CardDia + CardMes comparten altura (gridAutoRows:1fr). */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ display: 'grid', gridAutoRows: '1fr', gap: 16 }}>
+      {/* Columna flex que llena el contenedor: las 2 cards KPI quedan a su alto
+          natural (flexShrink:0) y la card de stock toma el sobrante (flex:1). */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* CardDia + CardMes comparten altura (gridAutoRows:1fr). */}
+        <div style={{ display: 'grid', gridAutoRows: '1fr', gap: 16, flexShrink: 0 }}>
           <CardDia data={resumen} />
           <CardMes data={comparativo} />
         </div>
