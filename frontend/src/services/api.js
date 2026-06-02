@@ -391,6 +391,20 @@ export const getBarberosAdmin = async () => {
 };
 
 /**
+ * getServiciosAdmin
+ * Obtiene los servicios del tenant usando el token admin. SeccionTurnero lo
+ * consume para derivar el precio de un turno al completarlo (mapea
+ * servicio_id → precio, ya que /admin/turnos no trae el precio).
+ * El equivalente operativo es getServicios() (apiFetchOperativo, más arriba).
+ * @returns {Promise<Array>} Array de { id, nombre, precio, activo }
+ */
+export const getServiciosAdmin = async () => {
+  const res = await apiFetch('/admin/servicios');
+  if (!res.ok) throw new Error('Error al obtener servicios');
+  return res.json();
+};
+
+/**
  * getAdminTurnos
  * Obtiene los turnos de un día. Sin barbero_id devuelve todos los barberos.
  * @param {string} fecha - 'YYYY-MM-DD'
@@ -420,6 +434,30 @@ export const patchAdminTurnoEstado = async (turnoId, estado) => {
   if (!res.ok) {
     const data = await res.json();
     throw new Error(data.error || 'Error al cambiar estado del turno');
+  }
+  return res.json();
+};
+
+/**
+ * completarAdminTurno
+ * Completa un turno reservado desde el backoffice REGISTRANDO el corte
+ * (forma de pago + monto). Reemplaza a patchAdminTurnoEstado(id, 'completado')
+ * para este caso: aquel solo cambiaba el estado y NO dejaba registro financiero
+ * (el turno quedaba completado sin corte → sin forma_pago ni impacto en Caja).
+ * El backend deriva barbero/servicio del propio turno (autoritativo); el front
+ * solo aporta forma_pago, precio y propina.
+ * @param {string} turnoId
+ * @param {Object} datos - { forma_pago: 'efectivo'|'mercado_pago', precio: number>=0, propina?: number>=0 }
+ * @returns {Promise<Object>} { id, estado: 'completado', corte_id, monto_total }
+ */
+export const completarAdminTurno = async (turnoId, datos) => {
+  const res = await apiFetch(`/admin/turnos/${turnoId}/completar`, {
+    method: 'POST',
+    body: JSON.stringify(datos),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Error al completar el turno');
   }
   return res.json();
 };

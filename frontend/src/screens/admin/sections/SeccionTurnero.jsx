@@ -43,21 +43,26 @@ import {
 
 import {
   getBarberosAdmin,
+  getServiciosAdmin,
   getAdminTurnos,
   patchAdminTurnoEstado,
+  completarAdminTurno,
   cancelarAdminTurno,
 } from '../../../services/api';
 import { getFechaHoy, formatHora, TZ } from '../../../utils/fecha';
+import { fmtPesos } from '../../../utils/formato';
 import { theme } from '../../../theme/tokens.js';
 import {
   LoadingState,
   EmptyState,
   IconoAlerta,
   Button,
+  Field,
   ChipFiltro,
   Modal,
   DetalleRecurso,
   AvatarIniciales,
+  BadgeFormaPago,
   Toast,
   SelectorDia,
 } from '../../../components/ui';
@@ -747,14 +752,134 @@ function FilaDetalleConCopia({ label, valor, Icon }) {
 }
 
 /**
+ * BotonFormaPago
+ * Botón toggle de forma de pago para el modo "completar". Text-only, tintado
+ * con el color de BadgeFormaPago correspondiente cuando está activo (efectivo →
+ * success, Mercado Pago → accent); surface neutro cuando no. Touch target 44px.
+ * @param {string} label
+ * @param {boolean} activo
+ * @param {Function} onClick
+ * @param {string} tonoBg - fondo cuando está activo (el *Soft del color)
+ * @param {string} tonoFg - color de texto/borde cuando está activo
+ */
+function BotonFormaPago({ label, activo, onClick, tonoBg, tonoFg }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={activo}
+      style={{
+        flex: 1,
+        minHeight: 44,
+        padding: '10px 12px',
+        background: activo ? tonoBg : theme.surface,
+        border: `1px solid ${activo ? tonoFg : theme.hairline}`,
+        borderRadius: theme.radius,
+        color: activo ? tonoFg : theme.inkSoft,
+        fontFamily: theme.body,
+        fontSize: theme.sizeBody,
+        fontWeight: activo ? theme.weightHeading : theme.weightMedium,
+        cursor: 'pointer',
+        transition: `background ${theme.transitionFast}, border-color ${theme.transitionFast}, color ${theme.transitionFast}`,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+// Estilos del modo "completar" del ModalDetalleTurno.
+// labelEyebrow replica la label del primitivo Field (mono micro uppercase,
+// color muted) para que "Forma de pago" / "Precio" se vean uniformes con la
+// label del Field de propina.
+const labelEyebrow = {
+  display: 'block',
+  fontFamily: theme.mono,
+  fontWeight: theme.weightMedium,
+  fontSize: theme.sizeMicro,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+  color: theme.muted,
+};
+
+const precioReadonlyBox = {
+  marginTop: 8,
+  padding: '12px 14px',
+  background: theme.surfaceAlt,
+  border: `1px solid ${theme.hairline}`,
+  borderRadius: theme.radius,
+  fontFamily: theme.body,
+  fontSize: 15,
+  fontWeight: theme.weightMedium,
+  color: theme.ink,
+  fontVariantNumeric: 'tabular-nums',
+};
+
+const totalRowStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginTop: 16,
+  paddingTop: 12,
+  borderTop: `1px solid ${theme.hairline}`,
+};
+
+const totalLabelStyle = {
+  fontFamily: theme.mono,
+  fontSize: theme.sizeMicro,
+  fontWeight: theme.weightHeading,
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  color: theme.inkSoft,
+};
+
+const totalValorStyle = {
+  fontFamily: theme.body,
+  fontSize: 18,
+  fontWeight: theme.weightHeading,
+  color: theme.ink,
+  fontVariantNumeric: 'tabular-nums',
+};
+
+/**
  * ModalDetalleTurno
  * Modal único de detalle + acciones para un turno.
- * Tiene dos "modos" internos:
+ * Tiene tres "modos" internos:
  *   - 'detalle': listado + acciones (según estado del turno).
+ *   - 'completando': form para registrar el corte (forma de pago + precio +
+ *     propina) y completar el turno. Reemplaza al viejo "marcar completado"
+ *     directo, que cambiaba el estado sin dejar registro financiero.
  *   - 'confirmando': vista de confirmación para cancelar (sin anidar modales).
+ * @param {number|string|undefined} precioDerivado - precio del servicio del
+ *   turno tomado del catálogo (servicios). undefined si el servicio no está en
+ *   el catálogo activo → el form pide el precio a mano.
  */
-function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCancelar, accionando }) {
+function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCancelar, accionando, precioDerivado }) {
   const [modo, setModo] = useState('detalle');
+
+  // Estado del form de "completar" (local al modal, como el modo confirmando).
+  const [formaPago, setFormaPago]       = useState(null);
+  const [propina, setPropina]           = useState('');
+  const [precioManual, setPrecioManual] = useState('');
+
+  // Precio: si el servicio está en el catálogo se usa su precio (read-only);
+  // si no (servicio desactivado / borrado), se pide a mano.
+  const precioNoDerivable = precioDerivado == null;
+  const precio       = precioNoDerivable ? Number(precioManual) : Number(precioDerivado);
+  const propinaNum   = propina === '' ? 0 : Number(propina);
+  const precioValido = Number.isFinite(precio) && precio >= 0 && (!precioNoDerivable || precioManual !== '');
+  const puedeCompletar = formaPago !== null && precioValido;
+  const totalPreview = (Number.isFinite(precio) ? precio : 0) + propinaNum;
+
+  const confirmarCompletar = () => {
+    onCompletar(turno.id, { forma_pago: formaPago, precio, propina: propinaNum });
+  };
+
+  const titulo = {
+    detalle: 'Detalle del turno',
+    completando: 'Completar turno',
+    confirmando: 'Cancelar este turno',
+  }[modo];
 
   const esReservado = turno.estado === 'reservado';
   // Si el turno ya comenzó (hora de inicio <= ahora) ocultamos "Cancelar
@@ -769,12 +894,20 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCancelar, accio
     { label: 'Servicio',  valor: turno.servicio_nombre },
     { label: 'Barbero',   valor: turno.barbero_nombre },
     { label: 'Cliente',   valor: turno.cliente_nombre },
+    // Solo para turnos completados con corte vinculado (forma_pago/monto_total
+    // son null para reservado/cancelado/no_asistio o completado sin corte).
+    ...(turno.estado === 'completado' && turno.forma_pago
+      ? [{ label: 'Pago', valor: <BadgeFormaPago forma={turno.forma_pago} /> }]
+      : []),
+    ...(turno.estado === 'completado' && turno.monto_total != null
+      ? [{ label: 'Total', valor: fmtPesos(turno.monto_total) }]
+      : []),
   ];
 
   return (
     <Modal
       open
-      title={modo === 'detalle' ? 'Detalle del turno' : 'Cancelar este turno'}
+      title={titulo}
       onClose={onCerrar}
       loading={accionando}
       maxWidth={460}
@@ -817,12 +950,12 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCancelar, accio
                 <Button
                   variant="primary"
                   full={false}
-                  onClick={() => onCambiarEstado(turno.id, 'completado')}
+                  onClick={() => setModo('completando')}
                   disabled={accionando}
                   style={{ flex: 1 }}
                 >
                   <Check size={14} strokeWidth={2.5} />
-                  Marcar completado
+                  Completar
                 </Button>
                 <Button
                   variant="secondary"
@@ -851,6 +984,96 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCancelar, accio
               )}
             </>
           )}
+        </>
+      ) : modo === 'completando' ? (
+        // ── Modo completar: registra el corte (forma de pago + monto) ─────
+        <>
+          <DetalleRecurso
+            filas={[
+              { label: 'Cliente',  valor: turno.cliente_nombre },
+              { label: 'Servicio', valor: turno.servicio_nombre },
+            ]}
+          />
+
+          {/* Forma de pago — dos botones tintados como BadgeFormaPago */}
+          <div style={{ marginTop: 16 }}>
+            <span style={labelEyebrow}>Forma de pago</span>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <BotonFormaPago
+                label="Efectivo"
+                activo={formaPago === 'efectivo'}
+                onClick={() => setFormaPago('efectivo')}
+                tonoBg={theme.successSoft}
+                tonoFg={theme.success}
+              />
+              <BotonFormaPago
+                label="Mercado Pago"
+                activo={formaPago === 'mercado_pago'}
+                onClick={() => setFormaPago('mercado_pago')}
+                tonoBg={theme.accentSoft}
+                tonoFg={theme.accent}
+              />
+            </div>
+          </div>
+
+          {/* Precio — read-only del catálogo, o editable si no se pudo derivar */}
+          <div style={{ marginTop: 16 }}>
+            {precioNoDerivable ? (
+              <Field
+                label="Precio"
+                type="text"
+                inputMode="numeric"
+                value={precioManual}
+                onChange={(v) => setPrecioManual(v.replace(/\D/g, ''))}
+                placeholder="0"
+                helper="No se pudo tomar el precio del servicio. Ingresalo a mano."
+              />
+            ) : (
+              <>
+                <span style={labelEyebrow}>Precio</span>
+                <div style={precioReadonlyBox}>{fmtPesos(precioDerivado)}</div>
+              </>
+            )}
+          </div>
+
+          {/* Propina — opcional, visible siempre */}
+          <div style={{ marginTop: 16 }}>
+            <Field
+              label="Propina (opcional)"
+              type="text"
+              inputMode="numeric"
+              value={propina}
+              onChange={(v) => setPropina(v.replace(/\D/g, ''))}
+              placeholder="0"
+            />
+          </div>
+
+          {/* Total que se va a registrar */}
+          <div style={totalRowStyle}>
+            <span style={totalLabelStyle}>Total</span>
+            <span style={totalValorStyle}>{fmtPesos(totalPreview)}</span>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+            <Button
+              variant="secondary"
+              full={false}
+              onClick={() => setModo('detalle')}
+              disabled={accionando}
+              style={{ flex: 1 }}
+            >
+              Volver
+            </Button>
+            <Button
+              variant="primary"
+              full={false}
+              onClick={confirmarCompletar}
+              disabled={accionando || !puedeCompletar}
+              style={{ flex: 1 }}
+            >
+              {accionando ? 'Completando…' : 'Completar turno'}
+            </Button>
+          </div>
         </>
       ) : (
         // ── Modo confirmación de cancelación ─────────────────────────────
@@ -908,6 +1131,7 @@ export default function SeccionTurnero() {
   const [fecha, setFecha]                 = useState(getFechaHoy);
   const [vista, setVista]                 = useState('agenda'); // 'agenda' | 'lista'
   const [barberos, setBarberos]           = useState([]);
+  const [servicios, setServicios]         = useState([]); // catálogo, solo para derivar precio al completar
   const [barberoActivo, setBarberoActivo] = useState(null); // null = Todos
   const [estadoActivo, setEstadoActivo]   = useState(null); // null = Todos
   const [turnos, setTurnos]               = useState([]);
@@ -931,6 +1155,23 @@ export default function SeccionTurnero() {
         setBarberos(data);
       } catch (err) {
         console.error('[seccionTurnero] Error en cargarBarberos:', err.message);
+      }
+    };
+    cargar();
+  }, []);
+
+  // ── Carga del catálogo de servicios ─────────────────────────────────────
+  // Solo se usa para derivar el precio del servicio al completar un turno (el
+  // turno de /admin/turnos no trae precio). Carga independiente de barberos a
+  // propósito: si esta falla, la agenda sigue andando y el modal de completar
+  // degrada a precio editable (precioDerivado = undefined).
+  useEffect(() => {
+    const cargar = async () => {
+      try {
+        const data = await getServiciosAdmin();
+        setServicios(data);
+      } catch (err) {
+        console.error('[seccionTurnero] Error en cargarServicios:', err.message);
       }
     };
     cargar();
@@ -972,6 +1213,31 @@ export default function SeccionTurnero() {
     } catch (err) {
       console.error('[seccionTurnero] Error en cambiarEstado:', err.message);
       mostrarErrorAccion(`No se pudo cambiar el estado: ${err.message}`);
+    } finally {
+      setAccionando(null);
+    }
+  };
+
+  // Completar un turno reservado = registrar el corte (forma de pago + monto) y
+  // marcarlo completado, en una sola llamada. Distinto de cambiarEstado: aquel
+  // solo cambiaba el estado y no dejaba registro financiero (sin corte).
+  const completarTurno = async (turnoId, datos) => {
+    setAccionando(turnoId);
+    try {
+      const res = await completarAdminTurno(turnoId, datos);
+      // Update optimista: reflejamos estado + forma_pago + monto_total para que
+      // la agenda/lista (y un eventual reabrir del detalle) lo muestren sin refetch.
+      setTurnos((prev) =>
+        prev.map((t) =>
+          t.id === turnoId
+            ? { ...t, estado: 'completado', forma_pago: datos.forma_pago, monto_total: res.monto_total }
+            : t,
+        ),
+      );
+      setTurnoSeleccionado(null);
+    } catch (err) {
+      console.error('[seccionTurnero] Error en completarTurno:', err.message);
+      mostrarErrorAccion(`No se pudo completar el turno: ${err.message}`);
     } finally {
       setAccionando(null);
     }
@@ -1174,8 +1440,10 @@ export default function SeccionTurnero() {
           turno={turnoSeleccionado}
           onCerrar={() => setTurnoSeleccionado(null)}
           onCambiarEstado={cambiarEstado}
+          onCompletar={completarTurno}
           onCancelar={cancelarTurno}
           accionando={accionando === turnoSeleccionado.id}
+          precioDerivado={servicios.find((s) => s.id === turnoSeleccionado.servicio_id)?.precio}
         />
       )}
     </div>

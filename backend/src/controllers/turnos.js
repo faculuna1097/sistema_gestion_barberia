@@ -187,12 +187,14 @@ export const patchEstado = async (req, res) => {
  * Completa un turno registrando su corte (forma_pago + precio + propina). A
  * diferencia de patchEstado (que solo cambia el estado a 'completado'), esta vía
  * deja el registro financiero del turno — es el equivalente backoffice del flujo
- * operativo del iPad. Si rol=barbero, solo puede completar turnos propios.
- * @param {Object} req.body - { forma_pago, precio, propina? }
- * @returns {JSON} 201 { id, estado: 'completado', corte_id, monto_total }
+ * operativo del iPad. Acepta servicio_id opcional para cambiar el servicio al
+ * completar (default: el del turno); si se cambia, el corte Y el turno quedan con
+ * ese servicio. Si rol=barbero, solo puede completar turnos propios.
+ * @param {Object} req.body - { forma_pago, precio, propina?, servicio_id? }
+ * @returns {JSON} 201 { id, estado: 'completado', servicio_id, corte_id, monto_total }
  */
 export const completarTurno = async (req, res) => {
-  const { forma_pago, precio, propina } = req.body;
+  const { forma_pago, precio, propina, servicio_id } = req.body;
 
   // ── Validaciones de input ──────────────────────────────────────────────────
   const formasValidas = ['efectivo', 'mercado_pago'];
@@ -217,12 +219,16 @@ export const completarTurno = async (req, res) => {
       formaPago: forma_pago,
       precio,
       propina,
+      servicioId: servicio_id,
     });
     console.log('[turnos] completarTurno completado | turno_id:', resultado.id, '| corte_id:', resultado.corte_id);
     res.status(201).json(resultado);
   } catch (err) {
     if (err.code === 'NO_ENCONTRADO') {
       return res.status(404).json({ error: err.message });
+    }
+    if (err.code === 'SERVICIO_INVALIDO') {
+      return res.status(400).json({ error: err.message });
     }
     if (err.code === 'ESTADO_INVALIDO' || err.code === 'TURNO_YA_VINCULADO') {
       return res.status(409).json({ error: err.message });

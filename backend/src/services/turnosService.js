@@ -322,10 +322,11 @@ export const cambiarEstado = async (turnoId, nuevoEstado, tenantId, barberoId) =
  * Completa un turno registrando su corte. A diferencia de cambiarEstado (que
  * solo cambia el estado), esta vía deja el registro financiero del turno — es
  * el equivalente backoffice del flujo operativo del iPad: completar = registrar
- * el corte. Valida (scoped) que el turno exista y siga 'reservado', deriva
- * barbero_id y servicio_id DEL TURNO (autoritativo, no del cliente) y delega en
- * registrarCorte (cortesService), que inserta el corte y marca el turno
- * 'completado' en una sola operación.
+ * el corte. Valida (scoped) que el turno exista y siga 'reservado'. El servicio
+ * del corte es por defecto el del turno; opcionalmente se acepta un override
+ * (servicioId) que se valida contra el catálogo (tenant + activo). Delega en
+ * registrarCorte (cortesService), que inserta el corte, marca el turno
+ * 'completado' y sincroniza turno.servicio_id, todo en una sola operación.
  * @param {Object} datos
  * @param {string} datos.turnoId
  * @param {string} datos.tenantId
@@ -333,10 +334,11 @@ export const cambiarEstado = async (turnoId, nuevoEstado, tenantId, barberoId) =
  * @param {string} datos.formaPago - 'efectivo' | 'mercado_pago'
  * @param {number} datos.precio    - monto cobrado por el servicio
  * @param {number} [datos.propina] - propina (default 0)
- * @returns {Promise<{ id: string, estado: 'completado', corte_id: string, monto_total: number }>}
- * @throws {{ code: 'NO_ENCONTRADO' | 'ESTADO_INVALIDO' | 'TURNO_YA_VINCULADO' }}
+ * @param {string} [datos.servicioId] - override del servicio (default: el del turno)
+ * @returns {Promise<{ id, estado: 'completado', servicio_id, corte_id, monto_total }>}
+ * @throws {{ code: 'NO_ENCONTRADO' | 'ESTADO_INVALIDO' | 'SERVICIO_INVALIDO' | 'TURNO_YA_VINCULADO' }}
  */
-export const completarTurnoConCorte = async ({ turnoId, tenantId, barberoId, formaPago, precio, propina }) => {
+export const completarTurnoConCorte = async ({ turnoId, tenantId, barberoId, formaPago, precio, propina, servicioId }) => {
   // Lookup con scoping: el barbero solo puede completar los suyos
   const params = [turnoId, tenantId];
   let where = 't.id = $1 AND t.tenant_id = $2';
@@ -362,20 +364,50 @@ export const completarTurnoConCorte = async ({ turnoId, tenantId, barberoId, for
     throw err;
   }
 
-  // Insertador central compartido con el flujo del iPad. barbero_id y servicio_id
-  // salen del turno (autoritativos). Puede lanzar TURNO_YA_VINCULADO si entre el
-  // lookup y el insert el iPad registró el corte (carrera) → el controller lo mapea a 409.
+  // Servicio del corte: por defecto el del turno (autoritativo). Si el backoffice
+  // manda un override (cambió el servicio al completar), se valida que pertenezca al
+  // tenant y esté activo (mismo criterio que calcularDuracionServicio). Sin override
+  // no hay validación nueva → comportamiento idéntico al anterior (retrocompat).
+  let servicioFinal = turno.servicio_id;
+  if (servicioId !== undefined && servicioId !== null && servicioId !== '') {
+    let servRes;
+    try {
+      servRes = await query(
+        `SELECT 1 FROM servicio WHERE id = $1 AND tenant_id = $2 AND activo = true`,
+        [servicioId, tenantId]
+      );
+    } catch (err) {
+      if (err.code === '22P02') { // UUID con formato inválido
+        const e = new Error('El servicio_id tiene un formato inválido');
+        e.code = 'SERVICIO_INVALIDO';
+        throw e;
+      }
+      throw err;
+    }
+    if (servRes.rows.length === 0) {
+      const e = new Error('Servicio no encontrado o inactivo');
+      e.code = 'SERVICIO_INVALIDO';
+      throw e;
+    }
+    servicioFinal = servicioId;
+  }
+
+  // Insertador central compartido con el flujo del iPad. barbero_id sale del turno
+  // (autoritativo); servicioFinal es el override validado o el del turno. registrarCorte
+  // marca el turno 'completado' y sincroniza turno.servicio_id. Puede lanzar
+  // TURNO_YA_VINCULADO si entre el lookup y el insert el iPad registró el corte
+  // (carrera) → el controller lo mapea a 409.
   const { corte_id, monto_total } = await registrarCorte({
     tenantId,
     barberoId: turno.barbero_id,
-    servicioId: turno.servicio_id,
+    servicioId: servicioFinal,
     precio,
     formaPago,
     propina,
     turnoId,
   });
 
-  return { id: turnoId, estado: 'completado', corte_id, monto_total };
+  return { id: turnoId, estado: 'completado', servicio_id: servicioFinal, corte_id, monto_total };
 };
 
 /**

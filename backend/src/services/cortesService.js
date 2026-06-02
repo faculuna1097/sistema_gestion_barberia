@@ -13,7 +13,8 @@ import { query } from '../config/db.js';
 
 /**
  * registrarCorte
- * Inserta un corte y, si viene turnoId, marca ese turno como 'completado'.
+ * Inserta un corte y, si viene turnoId, marca ese turno como 'completado' y
+ * sincroniza turno.servicio_id con el servicio del corte (consistencia corte↔turno).
  * Insertador central de cortes (ver cabecera del archivo). El UNIQUE parcial en
  * corte.turno_id previene doble vinculación por doble click o por carrera entre
  * el iPad y el backoffice. Traduce los códigos de error de Postgres a errores
@@ -48,12 +49,15 @@ export const registrarCorte = async ({
     );
     corteId = corteResult.rows[0].id;
 
-    // 2. Si hay turno vinculado, marcarlo como completado (solo si seguía reservado)
+    // 2. Si hay turno vinculado, marcarlo como completado (solo si seguía reservado).
+    //    Sincroniza también turno.servicio_id con el servicio del corte: el iPad y el
+    //    backoffice permiten cambiar el servicio al completar, y así el turno queda
+    //    consistente con lo que realmente se hizo. Una sola UPDATE = atómica (§6).
     if (turnoId) {
       const updateResult = await query(
-        `UPDATE turno SET estado = 'completado'
+        `UPDATE turno SET estado = 'completado', servicio_id = $3
          WHERE id = $1 AND tenant_id = $2 AND estado = 'reservado'`,
-        [turnoId, tenantId]
+        [turnoId, tenantId, servicioId]
       );
 
       if (updateResult.rowCount === 0) {
