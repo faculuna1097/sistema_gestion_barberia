@@ -5,6 +5,22 @@
 import { query } from '../config/db.js';
 
 /**
+ * Normaliza una fila de barbero_horario para la respuesta de la API: recorta
+ * hora_inicio/hora_fin de 'HH:MM:SS' (TIME crudo de la DB) a 'HH:MM', el formato
+ * canónico que consumen los <input type="time"> y las comparaciones de rango del
+ * frontend. Normalización en el borde de lectura del backend (convenciones §4):
+ * la API expone 'HH:MM', no el TIME crudo de pg.
+ * @param {{ id, dia_semana, hora_inicio, hora_fin }} fila - fila cruda de la DB
+ * @returns {{ id, dia_semana, hora_inicio, hora_fin }} fila con horas en 'HH:MM'
+ */
+const normalizarBloque = (fila) => ({
+  id: fila.id,
+  dia_semana: fila.dia_semana,
+  hora_inicio: fila.hora_inicio.slice(0, 5),
+  hora_fin: fila.hora_fin.slice(0, 5),
+});
+
+/**
  * Obtiene los bloques horarios de un barbero.
  * @param {string} barberoId
  * @param {string} tenantId
@@ -18,7 +34,7 @@ export const obtenerHorarios = async (barberoId, tenantId) => {
      ORDER BY dia_semana ASC, hora_inicio ASC`,
     [barberoId, tenantId]
   );
-  return result.rows;
+  return result.rows.map(normalizarBloque);
 };
 
 /**
@@ -76,7 +92,7 @@ export const reemplazarHorarios = async (barberoId, tenantId, bloques) => {
        RETURNING id, dia_semana, hora_inicio, hora_fin`,
       [tenantId, barberoId, b.dia_semana, b.hora_inicio, b.hora_fin]
     );
-    insertados.push(result.rows[0]);
+    insertados.push(normalizarBloque(result.rows[0]));
   }
 
   return insertados;

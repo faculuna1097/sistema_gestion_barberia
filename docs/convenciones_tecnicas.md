@@ -107,6 +107,32 @@ Para comparar como string, convertir siempre con:
 new Date(fecha).toISOString().slice(0, 10)
 ```
 
+### Normalización canónica vs presentación
+Son dos capas distintas; no mezclarlas:
+
+- **Normalización (canónica)** — sacar las rarezas de la DB y dejar **una sola
+  forma interna**, determinista y sin locale. Va en el **borde de lectura del
+  backend**, apenas sale la query: el backend es el dueño de la base y el único
+  que debería conocer que un `TIME` llega `'HH:MM:SS'` o que un `DATE` llega como
+  objeto `Date`. La API expone el valor ya canónico (`'HH:MM'`, `'YYYY-MM-DD'`),
+  nunca el crudo de pg → ningún cliente (gestión, barbero, turnero, scripts)
+  reimplementa el recorte.
+- **Presentación** — convertir lo canónico a algo para un humano (`"9 de junio,
+  14:30hs"`). Depende de locale/contexto → va en el **borde de render del
+  frontend**, lo más tarde posible. Nunca guardar un string de presentación
+  dentro de un objeto de dominio (perdés la capacidad de comparar/reordenar/recalcular).
+
+Regla práctica: **normalizá temprano (al leer en el backend), presentá tarde (al
+renderizar en el front).** El front puede mantener una red defensiva idempotente
+en su propio borde (ej. `aHoraCorta` en `utils/fecha.js`), pero el contrato de la
+API es canónico.
+
+**Excepción para instantes (`timestamptz`):** la "normalización" no es un recorte
+de string sino mantener el **objeto rico** (`DateTime` de luxon en `TZ`) el mayor
+tiempo posible, y serializar a string sólo en el borde. No stringificar un instante
+apenas sale de la base: la lógica intermedia lo necesita como objeto para la
+aritmética de fechas (sumar minutos, comparar rangos).
+
 ---
 
 ## 5. Multi-tenancy
