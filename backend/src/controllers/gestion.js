@@ -332,15 +332,16 @@ export const editarProducto = async (req, res) => {
 
 /**
  * getNegocio
- * Devuelve los datos del tenant (nombre_negocio, logo).
+ * Devuelve los datos del tenant (nombre_negocio, booking_url).
  * Ruta pública — req.tenant_id viene del tenantMiddleware (desde .env).
+ * El logo NO viaja acá: se sirve por GET /negocio/imagenes (tenant_imagen tipo='logo').
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
- * @returns {JSON} { nombre_negocio, logo }
+ * @returns {JSON} { nombre_negocio, booking_url }
  */
 export const getNegocio = async (req, res) => {
   try {
     const result = await query(
-      `SELECT nombre_negocio, logo, booking_url FROM tenant WHERE id = $1`,
+      `SELECT nombre_negocio, booking_url FROM tenant WHERE id = $1`,
       [req.tenant_id]
     );
     if (result.rows.length === 0) {

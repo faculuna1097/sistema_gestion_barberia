@@ -94,8 +94,8 @@ app.get('/api/health', (req, res) => {
 //
 // Criterio de qué queda público:
 //   1. Logins (no puede haber token antes de loguearse).
-//   2. Datos del negocio (logo, nombre) para la pantalla de login del modo
-//      gestión y del barbero.
+//   2. Datos del negocio (nombre) y sus imágenes (logo, foto del local) para
+//      la pantalla de login del modo gestión y del barbero.
 //   3. Turnero del cliente: público por diseño (cliente anónimo reservando).
 //      Este namespace es el ÚNICO que sirve listados públicos del tenant
 //      (barberos, servicios, disponibilidad). La app del barbero consume
@@ -105,8 +105,8 @@ app.use('/api/auth/operativo', authOperativoRoutes);
 app.use('/api/auth/barbero',   authBarberoRoutes);
 app.use('/api/auth/admin',     authAdminRoutes);
 app.use('/api/turnero',    turneroRoutes);
-// GET /api/negocio — datos públicos del negocio (nombre, logo).
-// Lo consume App.jsx antes del login para mostrar el logo del tenant.
+// GET /api/negocio — datos públicos del negocio (nombre, booking_url).
+// Lo consume App.jsx antes del login para el nombre; el logo viene de /negocio/imagenes.
 app.get('/api/negocio',    getNegocio);
 // GET /api/negocio/imagenes — imágenes públicas del tenant (local, cortes, logo).
 // Mismo handler que la versión admin (solo lee, usa req.tenant_id); acá sin

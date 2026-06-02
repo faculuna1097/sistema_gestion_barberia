@@ -11,7 +11,7 @@ const router = Router();
 // GET /api/admin/negocio — obtener datos del negocio
 router.get('/',           getNegocio);
 
-// PUT /api/admin/negocio — editar nombre/logo del negocio
+// PUT /api/admin/negocio — editar nombre y booking_url del negocio
 router.put('/',           editarNegocio);
 
 // PUT /api/admin/negocio/pin-admin — cambiar PIN del admin

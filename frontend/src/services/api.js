@@ -297,10 +297,10 @@ export const registrarGasto = async (datos) => {
 /**
  * getNegocio
  * Obtiene los datos del negocio (nombre, booking_url) del tenant.
- * @returns {Promise<Object>} { nombre_negocio, booking_url, logo (legacy) }
+ * @returns {Promise<Object>} { nombre_negocio, booking_url }
  *
- * Nota: el campo `logo` queda como legacy y se va a eliminar cuando se mergee
- * feature/turnero a main. El logo del producto se lee ahora desde getImagenesNegocio().
+ * El logo no viaja en esta respuesta: se lee desde getImagenesNegocio()
+ * (tenant_imagen tipo='logo').
  */
 export const getNegocio = async () => {
   const response = await fetch(`${BASE_URL}/negocio`, { headers: publicHeaders });
