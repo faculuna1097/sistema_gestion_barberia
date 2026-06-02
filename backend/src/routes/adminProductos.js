@@ -5,7 +5,7 @@
 
 import { Router } from 'express';
 import {
-  getProductos, crearProducto, editarProducto, agregarStock,
+  getProductos, crearProducto, editarProducto,
 } from '../controllers/gestion.js';
 
 const router = Router();
@@ -13,6 +13,5 @@ const router = Router();
 router.get('/',                    getProductos);
 router.post('/',                   crearProducto);
 router.put('/:id',                 editarProducto);
-router.put('/:id/agregar-stock',   agregarStock);
 
 export default router;

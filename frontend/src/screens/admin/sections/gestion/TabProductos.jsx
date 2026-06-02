@@ -73,9 +73,10 @@ function CeldaStockActual({ producto }) {
 
 /**
  * ModalProducto
- * Formulario en modal para crear o editar un producto. En edición permite
- * además sumar unidades al stock actual (request adicional a /agregar-stock
- * tras el PUT del producto).
+ * Formulario en modal para crear o editar un producto. El stock (inicial en
+ * creación, "unidades a agregar" en edición) viaja en el mismo request como
+ * `agregar_stock`, así datos y stock se persisten atómicamente en una sola
+ * sentencia del backend (deuda #34 resuelta — antes eran dos requests).
  *
  * @param {object} props
  * @param {object|null} props.producto - null = modo crear; objeto = modo editar
@@ -97,20 +98,24 @@ function ModalProducto({ producto, onGuardar, onCerrar }) {
 
   /**
    * handleGuardar
-   * POST (crear) o PUT (editar). Si hay `cantidadStock` en edición, dispara
-   * también PUT /agregar-stock con la cantidad. La operación no es transaccional
-   * a nivel BD — ver deuda anotada en el plan.
+   * POST (crear) o PUT (editar) en un único request. El stock (inicial en
+   * creación, "unidades a agregar" en edición) viaja como `agregar_stock`:
+   * el backend lo suma al stock_actual dentro de la misma sentencia, así que
+   * datos y stock se guardan atómicamente. El response ya trae stock_actual.
    */
   const handleGuardar = async () => {
     if (!puedeGuardar) return;
     setGuardando(true);
     setError(null);
 
+    // `agregar_stock`: stock inicial (crear) o unidades a sumar (editar). 0 = sin cambio.
+    const delta = cantidadStock && Number(cantidadStock) > 0 ? Number(cantidadStock) : 0;
     const body   = {
       nombre: nombre.trim(),
       precio: Number(precio),
       stock_minimo: Number(stockMinimo ?? 0),
       activo,
+      agregar_stock: delta,
     };
     const method = esEdicion ? 'PUT' : 'POST';
     const path   = esEdicion ? `/admin/productos/${producto.id}` : '/admin/productos';
@@ -122,22 +127,6 @@ function ModalProducto({ producto, onGuardar, onCerrar }) {
         throw new Error(data.error || 'Error del servidor');
       }
       const productoGuardado = await res.json();
-
-      // Stock: en edición es "Unidades a agregar" (sumar al actual); en creación
-      // es "Stock inicial" (lo cargamos contra el mismo endpoint /agregar-stock,
-      // que también funciona para subir el stock desde 0). Un solo flujo.
-      if (cantidadStock && Number(cantidadStock) > 0) {
-        const resStock = await apiFetch(
-          `/admin/productos/${productoGuardado.id}/agregar-stock`,
-          { method: 'PUT', body: JSON.stringify({ cantidad: Number(cantidadStock) }) }
-        );
-        if (!resStock.ok) {
-          const data = await resStock.json().catch(() => ({}));
-          throw new Error(data.error || 'Error al actualizar el stock');
-        }
-        const dataStock = await resStock.json();
-        productoGuardado.stock_actual = dataStock.stock_actual;
-      }
 
       onGuardar(productoGuardado, esEdicion);
     } catch (err) {

@@ -241,26 +241,35 @@ export const getProductos = async (req, res) => {
 
 /**
  * crearProducto
- * Crea un nuevo producto. stock_actual arranca en 0.
+ * Crea un nuevo producto. stock_actual arranca en `agregar_stock` (stock inicial,
+ * default 0). Stock inicial y datos del producto se persisten en una sola sentencia
+ * INSERT (atómica por definición — ver convención §6: sin BEGIN/COMMIT).
  * @param {string} req.tenant_id          - Inyectado por verificarToken
  * @param {string} req.body.nombre        - Nombre del producto
  * @param {number} req.body.precio        - Precio del producto
  * @param {number} req.body.stock_minimo  - Stock mínimo para alertas (default: 0)
+ * @param {number} req.body.agregar_stock - Stock inicial con el que ingresa (default 0, >= 0)
  * @returns {JSON} Producto creado
  */
 export const crearProducto = async (req, res) => {
-  const { nombre, precio, stock_minimo } = req.body;
+  const { nombre, precio, stock_minimo, agregar_stock } = req.body;
 
   if (!nombre || precio === undefined) {
     return res.status(400).json({ error: 'nombre y precio son requeridos' });
   }
 
+  // agregar_stock es el stock inicial (opcional). Si viene, debe ser un número >= 0.
+  const delta = Number(agregar_stock ?? 0);
+  if (!Number.isFinite(delta) || delta < 0) {
+    return res.status(400).json({ error: 'agregar_stock debe ser un número mayor o igual a 0' });
+  }
+
   try {
     const result = await query(
       `INSERT INTO producto (tenant_id, nombre, precio, stock_actual, stock_minimo, activo)
-       VALUES ($1, $2, $3, 0, $4, true)
+       VALUES ($1, $2, $3, $4, $5, true)
        RETURNING id, nombre, precio, stock_actual, stock_minimo, activo`,
-      [req.tenant_id, nombre.trim(), Number(precio), Number(stock_minimo ?? 0)]
+      [req.tenant_id, nombre.trim(), Number(precio), delta, Number(stock_minimo ?? 0)]
     );
     console.log('[gestion] crearProducto completado | producto_id:', result.rows[0].id);
     res.status(201).json(result.rows[0]);
@@ -272,30 +281,41 @@ export const crearProducto = async (req, res) => {
 
 /**
  * editarProducto
- * Edita nombre, precio, stock_minimo y/o activo. NO modifica stock_actual.
+ * Edita nombre, precio, stock_minimo y/o activo, y opcionalmente suma unidades
+ * al stock con `agregar_stock` (delta aditivo). Datos y delta de stock se aplican
+ * en una sola sentencia UPDATE (atómica por definición — convención §6: sin
+ * BEGIN/COMMIT). stock_actual nunca se setea directo, solo se incrementa.
  * @param {string}  req.params.id          - UUID del producto
  * @param {string}  req.tenant_id          - Inyectado por verificarToken
  * @param {string}  req.body.nombre        - Nombre del producto
  * @param {number}  req.body.precio        - Precio del producto
  * @param {number}  req.body.stock_minimo  - Stock mínimo para alertas
  * @param {boolean} req.body.activo        - Estado activo/inactivo
+ * @param {number}  req.body.agregar_stock - Unidades a sumar al stock actual (default 0, >= 0)
  * @returns {JSON} Producto actualizado
  */
 export const editarProducto = async (req, res) => {
   const { id } = req.params;
-  const { nombre, precio, stock_minimo, activo } = req.body;
+  const { nombre, precio, stock_minimo, activo, agregar_stock } = req.body;
 
   if (!nombre || precio === undefined || activo === undefined) {
     return res.status(400).json({ error: 'nombre, precio y activo son requeridos' });
   }
 
+  // agregar_stock es opcional (delta a sumar al stock actual). Si viene, debe ser >= 0.
+  const delta = Number(agregar_stock ?? 0);
+  if (!Number.isFinite(delta) || delta < 0) {
+    return res.status(400).json({ error: 'agregar_stock debe ser un número mayor o igual a 0' });
+  }
+
   try {
     const result = await query(
       `UPDATE producto
-       SET nombre = $1, precio = $2, stock_minimo = $3, activo = $4
-       WHERE id = $5 AND tenant_id = $6
+       SET nombre = $1, precio = $2, stock_minimo = $3, activo = $4,
+           stock_actual = stock_actual + $5
+       WHERE id = $6 AND tenant_id = $7
        RETURNING id, nombre, precio, stock_actual, stock_minimo, activo`,
-      [nombre.trim(), Number(precio), Number(stock_minimo ?? 0), activo, id, req.tenant_id]
+      [nombre.trim(), Number(precio), Number(stock_minimo ?? 0), activo, delta, id, req.tenant_id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
@@ -305,41 +325,6 @@ export const editarProducto = async (req, res) => {
   } catch (err) {
     console.error('[gestion] Error en editarProducto:', err);
     res.status(500).json({ error: 'Error al editar producto' });
-  }
-};
-
-/**
- * agregarStock
- * Suma unidades al stock_actual de un producto (operación aditiva, nunca directa).
- * @param {string} req.params.id      - UUID del producto
- * @param {string} req.tenant_id      - Inyectado por verificarToken
- * @param {number} req.body.cantidad  - Unidades a agregar (debe ser > 0)
- * @returns {JSON} { id, nombre, stock_actual }
- */
-export const agregarStock = async (req, res) => {
-  const { id } = req.params;
-  const { cantidad } = req.body;
-
-  if (!cantidad || Number(cantidad) <= 0) {
-    return res.status(400).json({ error: 'cantidad debe ser un número mayor a 0' });
-  }
-
-  try {
-    const result = await query(
-      `UPDATE producto
-       SET stock_actual = stock_actual + $1
-       WHERE id = $2 AND tenant_id = $3
-       RETURNING id, nombre, stock_actual`,
-      [Number(cantidad), id, req.tenant_id]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Producto no encontrado' });
-    }
-    console.log('[gestion] agregarStock completado | nombre:', result.rows[0].nombre, '| stock:', result.rows[0].stock_actual);
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error('[gestion] Error en agregarStock:', err);
-    res.status(500).json({ error: 'Error al agregar stock' });
   }
 };
 
