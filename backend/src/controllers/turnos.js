@@ -7,8 +7,8 @@ import { DateTime } from 'luxon';
 import {
   listarTurnos, calcularDuracionServicio, upsertCliente, insertarTurno,
   enriquecerTurno, armarLinkGestion, sincronizarCalendarCreacion,
-  notificarConfirmacion, cambiarEstado, cancelarTurnoPorId,
-  inicioPosteriorAhora,
+  notificarConfirmacion, cambiarEstado, completarTurnoConCorte,
+  cancelarTurnoPorId, inicioPosteriorAhora,
 } from '../services/turnosService.js';
 import { validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { existeFeriado } from '../services/feriadosService.js';
@@ -179,6 +179,56 @@ export const patchEstado = async (req, res) => {
     }
     console.error('[turnos] Error en patchEstado:', err);
     res.status(500).json({ error: 'Error al cambiar estado del turno' });
+  }
+};
+
+/**
+ * POST /api/admin/turnos/:id/completar
+ * Completa un turno registrando su corte (forma_pago + precio + propina). A
+ * diferencia de patchEstado (que solo cambia el estado a 'completado'), esta vía
+ * deja el registro financiero del turno — es el equivalente backoffice del flujo
+ * operativo del iPad. Si rol=barbero, solo puede completar turnos propios.
+ * @param {Object} req.body - { forma_pago, precio, propina? }
+ * @returns {JSON} 201 { id, estado: 'completado', corte_id, monto_total }
+ */
+export const completarTurno = async (req, res) => {
+  const { forma_pago, precio, propina } = req.body;
+
+  // ── Validaciones de input ──────────────────────────────────────────────────
+  const formasValidas = ['efectivo', 'mercado_pago'];
+  if (!forma_pago || !formasValidas.includes(forma_pago)) {
+    return res.status(400).json({ error: "forma_pago es requerida y debe ser 'efectivo' o 'mercado_pago'" });
+  }
+  if (precio === undefined || Number.isNaN(Number(precio)) || Number(precio) < 0) {
+    return res.status(400).json({ error: 'precio es requerido y debe ser un número >= 0' });
+  }
+  if (propina !== undefined && (Number.isNaN(Number(propina)) || Number(propina) < 0)) {
+    return res.status(400).json({ error: 'propina debe ser un número >= 0' });
+  }
+
+  // Scoping: barbero solo completa los suyos
+  const barberoId = req.rol === 'barbero' ? req.barbero_id : null;
+
+  try {
+    const resultado = await completarTurnoConCorte({
+      turnoId: req.params.id,
+      tenantId: req.tenant_id,
+      barberoId,
+      formaPago: forma_pago,
+      precio,
+      propina,
+    });
+    console.log('[turnos] completarTurno completado | turno_id:', resultado.id, '| corte_id:', resultado.corte_id);
+    res.status(201).json(resultado);
+  } catch (err) {
+    if (err.code === 'NO_ENCONTRADO') {
+      return res.status(404).json({ error: err.message });
+    }
+    if (err.code === 'ESTADO_INVALIDO' || err.code === 'TURNO_YA_VINCULADO') {
+      return res.status(409).json({ error: err.message });
+    }
+    console.error('[turnos] Error en completarTurno:', err);
+    res.status(500).json({ error: 'Error al completar el turno' });
   }
 };
 

@@ -10,6 +10,7 @@ import { query } from '../config/db.js';
 import { crearEvento, cancelarEvento } from './googleCalendar.js';
 import { enviarConfirmacion, enviarCancelacion } from './mailer.js';
 import { TZ, ANTELACION_MINIMA_MINUTOS } from '../utils/constantes.js';
+import { registrarCorte } from './cortesService.js';
 
 // ─── Helpers compartidos ─────────────────────────────────────────────────────
 
@@ -221,16 +222,22 @@ export const listarTurnos = async ({ tenantId, fecha, desde, hasta, barberoId })
     paramIndex += 2;
   }
 
+  // LEFT JOIN corte: un turno completado tiene un corte vinculado (corte.turno_id),
+  // del que salen la forma de pago y el monto cobrado (deuda #32). El UNIQUE parcial
+  // en corte.turno_id garantiza ≤1 corte por turno → no multiplica filas. Turnos no
+  // completados (o completados sin corte) devuelven forma_pago/monto_total = null.
   const result = await query(
     `SELECT t.id, t.inicio, t.fin, t.estado, t.origen_creacion,
             b.id AS barbero_id, b.nombre AS barbero_nombre,
             s.id AS servicio_id, s.nombre AS servicio_nombre,
             c.id AS cliente_id, c.nombre AS cliente_nombre,
-            c.email AS cliente_email, c.telefono AS cliente_telefono
+            c.email AS cliente_email, c.telefono AS cliente_telefono,
+            co.forma_pago, co.monto_total
      FROM turno t
      JOIN barbero  b ON b.id = t.barbero_id
      JOIN servicio s ON s.id = t.servicio_id
      JOIN cliente  c ON c.id = t.cliente_id
+     LEFT JOIN corte co ON co.turno_id = t.id
      WHERE ${where}
      ORDER BY t.inicio ASC`,
     params
@@ -309,6 +316,66 @@ export const cambiarEstado = async (turnoId, nuevoEstado, tenantId, barberoId) =
   );
 
   return { id: turnoId, estado: nuevoEstado };
+};
+
+/**
+ * Completa un turno registrando su corte. A diferencia de cambiarEstado (que
+ * solo cambia el estado), esta vía deja el registro financiero del turno — es
+ * el equivalente backoffice del flujo operativo del iPad: completar = registrar
+ * el corte. Valida (scoped) que el turno exista y siga 'reservado', deriva
+ * barbero_id y servicio_id DEL TURNO (autoritativo, no del cliente) y delega en
+ * registrarCorte (cortesService), que inserta el corte y marca el turno
+ * 'completado' en una sola operación.
+ * @param {Object} datos
+ * @param {string} datos.turnoId
+ * @param {string} datos.tenantId
+ * @param {string|null} datos.barberoId - si es barbero, solo completa los suyos
+ * @param {string} datos.formaPago - 'efectivo' | 'mercado_pago'
+ * @param {number} datos.precio    - monto cobrado por el servicio
+ * @param {number} [datos.propina] - propina (default 0)
+ * @returns {Promise<{ id: string, estado: 'completado', corte_id: string, monto_total: number }>}
+ * @throws {{ code: 'NO_ENCONTRADO' | 'ESTADO_INVALIDO' | 'TURNO_YA_VINCULADO' }}
+ */
+export const completarTurnoConCorte = async ({ turnoId, tenantId, barberoId, formaPago, precio, propina }) => {
+  // Lookup con scoping: el barbero solo puede completar los suyos
+  const params = [turnoId, tenantId];
+  let where = 't.id = $1 AND t.tenant_id = $2';
+  if (barberoId) {
+    where += ' AND t.barbero_id = $3';
+    params.push(barberoId);
+  }
+
+  const lookupRes = await query(
+    `SELECT t.id, t.estado, t.barbero_id, t.servicio_id FROM turno t WHERE ${where}`,
+    params
+  );
+  if (lookupRes.rows.length === 0) {
+    const err = new Error('Turno no encontrado');
+    err.code = 'NO_ENCONTRADO';
+    throw err;
+  }
+
+  const turno = lookupRes.rows[0];
+  if (turno.estado !== 'reservado') {
+    const err = new Error(`El turno está en estado "${turno.estado}" y no se puede completar`);
+    err.code = 'ESTADO_INVALIDO';
+    throw err;
+  }
+
+  // Insertador central compartido con el flujo del iPad. barbero_id y servicio_id
+  // salen del turno (autoritativos). Puede lanzar TURNO_YA_VINCULADO si entre el
+  // lookup y el insert el iPad registró el corte (carrera) → el controller lo mapea a 409.
+  const { corte_id, monto_total } = await registrarCorte({
+    tenantId,
+    barberoId: turno.barbero_id,
+    servicioId: turno.servicio_id,
+    precio,
+    formaPago,
+    propina,
+    turnoId,
+  });
+
+  return { id: turnoId, estado: 'completado', corte_id, monto_total };
 };
 
 /**

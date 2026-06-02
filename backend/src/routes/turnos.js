@@ -3,7 +3,7 @@
 // Acepta roles admin y barbero — el scoping se resuelve en cada handler.
 
 import { Router } from 'express';
-import { getTurnos, crearTurnoAdmin, patchEstado, deleteTurno } from '../controllers/turnos.js';
+import { getTurnos, crearTurnoAdmin, patchEstado, completarTurno, deleteTurno } from '../controllers/turnos.js';
 
 const router = Router();
 
@@ -13,8 +13,11 @@ router.get('/', getTurnos);
 // POST   /api/admin/turnos   — reserva manual
 router.post('/', crearTurnoAdmin);
 
-// PATCH  /api/admin/turnos/:id/estado  — completado | no_asistio
+// PATCH  /api/admin/turnos/:id/estado  — completado | no_asistio (solo cambia estado)
 router.patch('/:id/estado', patchEstado);
+
+// POST   /api/admin/turnos/:id/completar  — completa + registra el corte (forma_pago, precio, propina)
+router.post('/:id/completar', completarTurno);
 
 // DELETE /api/admin/turnos/:id  — cancela
 router.delete('/:id', deleteTurno);
