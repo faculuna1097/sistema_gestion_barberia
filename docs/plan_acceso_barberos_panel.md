@@ -4,8 +4,9 @@
 > Creado: 2026-06-03. Entrega: **un único branch `feature/acceso-barberos-panel`
 > hijo de `feature/turnero`, con un commit por fase** (ver §6 y §10).
 >
-> **Estado (2026-06-03):** Fases 1 y 2 ✅ hechas. Próximo chat: **Fase 3** (backend
-> del login unificado). Detalle en §6 y §10.
+> **Estado (2026-06-03):** Fases 1, 2 y 3 ✅ hechas (Fase 3 = backend del login
+> unificado). Próximo chat: **Fase 4** (frontend: login + estado de rol). Detalle
+> en §6 y §10.
 
 ---
 
@@ -268,6 +269,29 @@ Operativo, **fuera de código** (coordinar con el dueño):
 **Criterio de aceptación Fase 3 (Bruno/scripts):** PIN admin → `{rol:'admin'}`;
 PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
 
+> **Estado: ✅ Hecha (2026-06-03)** — backend completo, en `feature/acceso-barberos-panel`.
+> - `utils/suscripcion.js` → `evaluarSuscripcion(suscripcionVigenteHasta)` → `{ bloqueado, aviso_pago }`,
+>   función pura (sin logs ni `res`). `authAdmin.loginAdmin` refactorizado para consumirla (se le
+>   quitaron los imports de `DateTime`/`TZ`). Comportamiento idéntico (mismo 402 y `aviso_pago`).
+> - `controllers/authPanel.js#loginPanel` + `routes/authPanel.js`, montado en `POST /api/auth/panel/login`
+>   (solo `tenantMiddleware`). Admin-first (1 `bcrypt.compare` contra `pin_admin`, con `evaluarSuscripcion`
+>   → 402 si bloqueado); si no, loop sobre barberos activos; 1 match → rol barbero, 0 → 401, >1 → `warn`
+>   + 401 genérico. Path barbero sin chequeo de suscripción (D2).
+> - `requiereRol` auditado: `/admin/turnos` y `/admin/planilla` **ya** aceptaban barbero (van sin
+>   `requiereRol`, el scoping lo hace el controller). `/admin/horario-atencion` se abrió a barbero **por
+>   método**: el control de rol pasó de `index.js` al router (`GET` → `requiereRol('admin','barbero')`,
+>   `PUT` → `requiereRol('admin')`), así el barbero lee la jornada del local pero no la modifica.
+> - Deuda de logs plegada: `console.log`→`console.warn` en los logins fallidos de `authAdmin.js`
+>   (tenant no encontrado, PIN incorrecto, suscripción vencida) y `authBarbero.js` (barbero no
+>   encontrado, PIN incorrecto).
+> - Validado con Bruno (7 tests): login admin / barbero / PIN inexistente / sin PIN; GET horario con
+>   token barbero (200), PUT con token barbero (403).
+> - **Cleanup pendiente (Fase 4):** `/api/auth/admin/login` sigue vivo; su único caller (el `loginAdmin`
+>   del frontend de gestión) migra a `/panel/login` en la Fase 4 y ahí se elimina el endpoint viejo.
+> - **Deuda nueva detectada** (registrada en `estado_actual.md`): `/admin/turnos` y `/admin/planilla`
+>   aceptan token operativo (no tienen `requiereRol`); pre-existente, hardening posible a
+>   `requiereRol('admin','barbero')`.
+
 ### Fase 4 — Frontend: login + estado de rol
 
 1. `services/api.js`: nueva `loginPanel(pin)` → `POST /auth/panel/login`,
@@ -318,14 +342,20 @@ PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
   - `getServiciosAdmin()` (`/admin/servicios`, rol admin): solo se usa para
     completar → **saltear** en modo barbero (no se necesita sin acciones).
   - `getAdminHorarioAtencion()` (`/admin/horario-atencion`): define el rango de la
-    agenda. Dos opciones: (a) permitir rol barbero en esa ruta (lectura inocua de
-    la jornada del local) para que el rango sea correcto; (b) aceptar el fallback
-    08:00–22:00 si la ruta rechaza al barbero. **Recomendado (a)** — ampliar el
-    `requiereRol` de `/admin/horario-atencion` a incluir `'barbero'`.
+    agenda. El backend ya permite rol barbero en el `GET` de esa ruta (resuelto en
+    la Fase 3, lectura inocua de la jornada del local), así que el rango sale
+    correcto sin necesidad de fallback.
 
-> Nota: auditar en esta fase los `requiereRol` de las rutas que toca el turnero
-> del barbero. Lo único imprescindible es `/admin/turnos`. Lo demás se puede
-> saltear u opcionalmente permitir.
+> **Backend — hardening de rutas (resuelve la deuda registrada en `estado_actual.md`):**
+> en esta fase, endurecer `/api/admin/turnos` y `/api/admin/planilla` a
+> `requiereRol('admin','barbero')`. Hoy van sin `requiereRol`, así que aceptan
+> cualquier token válido —incluido el operativo del iPad—, y un operativo podría
+> leer la planilla/turnos de cualquier barbero pasando su `barbero_id` por query.
+> Verificar antes que ningún flujo del iPad las llame con token operativo (el flujo
+> operativo usa `/api/turnos` y `/api/cortes`, no `/api/admin/*`, así que en
+> principio es seguro). `/admin/horario-atencion` ya quedó resuelto en la Fase 3
+> (GET admin+barbero, PUT admin-only); para el turnero del barbero la única ruta
+> imprescindible sigue siendo `/admin/turnos`.
 
 ---
 
@@ -362,12 +392,13 @@ PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
 
 **Backend**
 - [x] `utils/pin.js` (nuevo) — `pinColisiona`. ✅ Fase 1.
-- [ ] `utils/suscripcion.js` (nuevo) — `evaluarSuscripcion` (refactor de authAdmin).
+- [x] `utils/suscripcion.js` (nuevo) — `evaluarSuscripcion` (refactor de authAdmin). ✅ Fase 3.
 - [x] `controllers/gestion.js` — unicidad en `crearBarbero`, `editarBarbero`, `cambiarPinAdmin`. ✅ Fase 1.
-- [ ] `controllers/authAdmin.js` — usar `evaluarSuscripcion` (refactor).
-- [ ] `controllers/authPanel.js` (nuevo) — `loginPanel`.
-- [ ] `routes/authPanel.js` (nuevo) + registro en `index.js`.
-- [ ] Revisar `requiereRol` de `/admin/turnos`, `/admin/planilla`, `/admin/horario-atencion` (incluir `'barbero'`).
+- [x] `controllers/authAdmin.js` — usar `evaluarSuscripcion` (refactor). ✅ Fase 3.
+- [x] `controllers/authPanel.js` (nuevo) — `loginPanel`. ✅ Fase 3.
+- [x] `routes/authPanel.js` (nuevo) + registro en `index.js`. ✅ Fase 3.
+- [x] Revisar `requiereRol` de `/admin/turnos`, `/admin/planilla`, `/admin/horario-atencion` (incluir `'barbero'`). ✅ Fase 3.
+- [ ] `index.js` — endurecer `/admin/turnos` y `/admin/planilla` a `requiereRol('admin','barbero')` (excluir operativo; deuda en `estado_actual.md`). → Fase 6.
 
 **Frontend (`/frontend`)**
 - [ ] `services/api.js` — `loginPanel`.
@@ -395,11 +426,15 @@ a la app del barbero con selector + PIN, compatible con PINs únicos).
   - **Fase 1 ✅ hecha** (commit en `feature/acceso-barberos-panel`): `utils/pin.js` +
     409 en `gestion.js`. Deudas menores plegadas (rango de comisión, log a `warn`).
   - **Fase 2 ✅ resuelta** por el dueño (PINs únicos reasignados por tenant).
-  - **Próximo: Fase 3** — backend del login unificado (`utils/suscripcion.js`,
-    `controllers/authPanel.js`, `routes/authPanel.js`, refactor de `authAdmin.js`,
-    revisar `requiereRol` de `/admin/turnos`, `/admin/planilla`, `/admin/horario-atencion`).
-    Al tocar auth, **plegar la deuda de log** `console.log`→`console.warn` en
-    `authAdmin.js:51` y `authBarbero.js:50`.
-- Nada pendiente de decisión: el plan está cerrado y listo para ejecutar la Fase 3.
+  - **Fase 3 ✅ hecha** — backend del login unificado: `utils/suscripcion.js`
+    (`evaluarSuscripcion`), `controllers/authPanel.js` + `routes/authPanel.js`
+    (`POST /api/auth/panel/login`), refactor de `authAdmin.js` para reusar el helper,
+    y `/admin/horario-atencion` abierto a barbero por método (GET sí, PUT admin-only).
+    `/admin/turnos` y `/admin/planilla` ya aceptaban barbero. Deuda de log plegada en
+    `authAdmin.js` y `authBarbero.js`. Validado con Bruno.
+  - **Próximo: Fase 4** — frontend: `loginPanel` en `api.js`, `PantallaLoginAdmin`
+    usando el endpoint nuevo (copy neutral), `App.jsx` con estado `rolPanel` +
+    `barberoSesion`. Ahí se elimina `/api/auth/admin/login` (cleanup).
+- Nada pendiente de decisión: el plan está cerrado y listo para ejecutar la Fase 4.
 
 *— Fin del documento —*

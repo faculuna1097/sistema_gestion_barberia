@@ -22,6 +22,7 @@ import cajaRouter       from './routes/caja.js';
 import balancesRouter   from './routes/balances.js';
 import inicioRoutes     from './routes/inicio.js';
 import authAdminRoutes  from './routes/authAdmin.js';
+import authPanelRoutes  from './routes/authPanel.js';
 import authBarberoRoutes from './routes/authBarbero.js';
 import authOperativoRoutes from './routes/authOperativo.js';
 import turneroRoutes    from './routes/turnero.js';
@@ -104,6 +105,8 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth/operativo', authOperativoRoutes);
 app.use('/api/auth/barbero',   authBarberoRoutes);
 app.use('/api/auth/admin',     authAdminRoutes);
+// Login unificado del panel (resuelve rol admin/barbero según el PIN).
+app.use('/api/auth/panel',     authPanelRoutes);
 app.use('/api/turnero',    turneroRoutes);
 // GET /api/negocio — datos públicos del negocio (nombre, booking_url).
 // Lo consume App.jsx antes del login para el nombre; el logo viene de /negocio/imagenes.
@@ -164,7 +167,7 @@ app.use('/api/admin/productos',    verificarToken, requiereRol('admin'), adminPr
 app.use('/api/admin/negocio',      verificarToken, requiereRol('admin'), adminNegocioRoutes);
 app.use('/api/admin/turnero/config', verificarToken, requiereRol('admin'), adminTurneroConfigRoutes);
 app.use('/api/admin/operativo',      verificarToken, requiereRol('admin'), adminOperativoRoutes);
-app.use('/api/admin/horario-atencion', verificarToken, requiereRol('admin'), adminHorarioAtencionRoutes);
+app.use('/api/admin/horario-atencion', verificarToken, adminHorarioAtencionRoutes);
 app.use('/api/admin/feriados',         verificarToken, requiereRol('admin'), adminFeriadosRoutes);
 app.use('/api/admin/imagenes',         verificarToken, requiereRol('admin'), adminImagenesRoutes);
 

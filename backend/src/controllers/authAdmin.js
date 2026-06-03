@@ -7,9 +7,8 @@
 
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
-import { TZ } from '../utils/constantes.js';
+import { evaluarSuscripcion } from '../utils/suscripcion.js';
 
 /**
  * loginAdmin
@@ -40,7 +39,7 @@ export async function loginAdmin(req, res) {
     // habría rechazado antes, pero el chequeo defensivo no cuesta nada.
     // Mensaje genérico para no filtrar el estado del tenant.
     if (resultado.rows.length === 0) {
-      console.log('[authAdmin] loginAdmin — tenant no encontrado o inactivo | tenant:', tenant_id);
+      console.warn('[authAdmin] loginAdmin — tenant no encontrado o inactivo | tenant:', tenant_id);
       return res.status(401).json({ error: 'PIN incorrecto' });
     }
 
@@ -48,29 +47,18 @@ export async function loginAdmin(req, res) {
     const pinCorrecto = await bcrypt.compare(pin, pinHasheado);
 
     if (!pinCorrecto) {
-      console.log('[authAdmin] loginAdmin — PIN incorrecto | tenant:', tenant_id);
+      console.warn('[authAdmin] loginAdmin — PIN incorrecto | tenant:', tenant_id);
       return res.status(401).json({ error: 'PIN incorrecto' });
     }
 
-    // ── Fechas en timezone argentino (luxon) ──────────────────────────────
-    const ahoraArg = DateTime.now().setZone(TZ);
-    const diaDelMes = ahoraArg.day;
-    const primerDiaMesStr = ahoraArg.startOf('month').toISODate();
+    // Estado de la suscripción del tenant (días 5–10 → aviso, día 11+ → bloqueo),
+    // evaluado en TZ Argentina. Ver utils/suscripcion.js.
+    const { bloqueado, aviso_pago } = evaluarSuscripcion(suscripcion_vigente_hasta);
 
-    const vigenteHastaStr = suscripcion_vigente_hasta
-      ? new Date(suscripcion_vigente_hasta).toISOString().slice(0, 10)
-      : null;
-
-    const suscripcionNoRenovada = vigenteHastaStr === null || vigenteHastaStr < primerDiaMesStr;
-
-    // ── Bloqueo: día 11+ sin renovar ──────────────────────────────────────
-    if (diaDelMes > 10 && suscripcionNoRenovada) {
-      console.log('[authAdmin] loginAdmin — suscripción vencida | tenant:', tenant_id);
+    if (bloqueado) {
+      console.warn('[authAdmin] loginAdmin — suscripción vencida | tenant:', tenant_id);
       return res.status(402).json({ error: 'suscripcion_vencida' });
     }
-
-    // ── Aviso: días 5–10 sin renovar ──────────────────────────────────────
-    const aviso_pago = diaDelMes >= 5 && diaDelMes <= 10 && suscripcionNoRenovada;
 
     const token = jwt.sign(
       { tenant_id, rol: 'admin' },
