@@ -27,8 +27,10 @@
 //   imagenLocal       — URL de la foto del local (fondo). Fallback: surfaceAlt.
 //   bookingUrl        — URL de reservas (si existe, muestra el botón Reservar).
 
+import { useState, useEffect } from "react";
 import { Scissors, Package, Receipt, CalendarDays, Lock, LogOut } from "lucide-react";
 import { theme } from "../theme/tokens.js";
+import { formatHora, getFechaHoy, DIAS, MESES } from "../utils/fecha.js";
 import FondoLocal from "../components/ui/FondoLocal.jsx";
 
 // URL de la app nativa de YouTube. Si la app no está instalada, hacemos
@@ -74,6 +76,110 @@ const abrirYouTube = () => {
   document.addEventListener("visibilitychange", cancelarFallback);
   window.location.href = YOUTUBE_APP_URL;
 };
+
+/**
+ * fechaLockScreen
+ * Arma la fecha estilo pantalla de bloqueo: "martes, 3 de junio" — día de la
+ * semana + día + mes, en minúsculas y sin año. Deriva de la fecha local de
+ * Argentina (getFechaHoy → 'YYYY-MM-DD' en la TZ del proyecto), no de la TZ del
+ * dispositivo. Formato propio de esta pantalla: se mantiene local (no se sube a
+ * utils/fecha.js) porque hoy lo usa una sola superficie (§7.1 del sistema).
+ *
+ * @param {string} fechaHoy — Día en formato 'YYYY-MM-DD' (de getFechaHoy()).
+ * @returns {string} ej. "martes, 3 de junio"
+ */
+function fechaLockScreen(fechaHoy) {
+  const [anio, mes, dia] = fechaHoy.split("-").map(Number);
+  const fecha = new Date(anio, mes - 1, dia);
+  return `${DIAS[fecha.getDay()].toLowerCase()}, ${dia} de ${MESES[mes - 1].toLowerCase()}`;
+}
+
+/**
+ * Reloj
+ * Reloj ambiental estilo pantalla de bloqueo de iOS: fecha chica arriba + hora
+ * HH:MM grande abajo, centrado. Pensado para la banda superior de MainScreen.
+ *
+ * Se actualiza al cambiar el minuto (no por segundo): el lock screen no muestra
+ * segundos y así evitamos repintar cada segundo una pantalla que vive prendida
+ * todo el día. El primer tick se alinea al borde del próximo minuto; al cruzar
+ * la medianoche, la fecha se actualiza sola (se recalcula en cada tick).
+ *
+ * El color se adapta al fondo: blanco sobre la foto del local (velo oscuro) o
+ * `theme.ink` sobre el fallback claro de FondoLocal (cuando no hay foto).
+ *
+ * Rompe a propósito la escala de tipografía capada (hora a 88px): es coherente
+ * con que esta pantalla ya es una SUPERFICIE ESPECIAL (ver cabecera del archivo).
+ *
+ * @param {Object}  props
+ * @param {boolean} props.sobreFoto — true si hay foto del local de fondo.
+ * @returns {JSX.Element}
+ */
+function Reloj({ sobreFoto }) {
+  // Instante actual. Se recalcula en cada tick de minuto.
+  const [ahora, setAhora] = useState(() => new Date());
+
+  useEffect(() => {
+    let intervalId;
+    // Alinear el primer tick al borde del próximo minuto; luego cada 60s.
+    const msAlProximoMinuto = 60000 - (Date.now() % 60000);
+    const timeoutId = setTimeout(() => {
+      setAhora(new Date());
+      intervalId = setInterval(() => setAhora(new Date()), 60000);
+    }, msAlProximoMinuto);
+    return () => {
+      clearTimeout(timeoutId);
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, []);
+
+  const hora = formatHora(ahora.toISOString());
+  const fecha = fechaLockScreen(getFechaHoy());
+
+  const colorHora = sobreFoto ? "#FFFFFF" : theme.ink;
+  const colorFecha = sobreFoto ? "rgba(255, 255, 255, 0.82)" : theme.muted;
+
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        top: 36,
+        left: "50%",
+        transform: "translateX(-50%)",
+        zIndex: 2,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 6,
+        textAlign: "center",
+        pointerEvents: "none",
+        userSelect: "none",
+      }}
+    >
+      <span style={{
+        fontFamily: theme.body,
+        fontSize: 20,
+        fontWeight: theme.weightMedium,
+        letterSpacing: "0.01em",
+        color: colorFecha,
+        lineHeight: 1,
+      }}>
+        {fecha}
+      </span>
+      <span style={{
+        fontFamily: theme.body,
+        fontSize: 88,
+        fontWeight: theme.weightHeading,
+        letterSpacing: "-0.02em",
+        color: colorHora,
+        lineHeight: 1,
+        fontVariantNumeric: "tabular-nums",
+      }}>
+        {hora}
+      </span>
+    </div>
+  );
+}
 
 /**
  * BotonAccion
@@ -251,6 +357,11 @@ export default function MainScreen({
         />
       </div>
 
+      {/* ── Banda superior: reloj ambiental estilo lock-screen ───────────────
+          Overlay centrado arriba (fecha + hora grande). No interactivo: es
+          chrome ambiental, como el logo. El color se adapta a si hay foto. */}
+      <Reloj sobreFoto={Boolean(imagenLocal)} />
+
       {/* ── Esquina superior izquierda: Logout operativo (discreto) ──────────
           Flecha pelada (sin círculo) — semitransparente sobre el velo oscuro
           para que esté presente pero no llame la atención durante el día. */}
@@ -280,8 +391,9 @@ export default function MainScreen({
       )}
 
       {/* ── Esquina superior derecha: logo del negocio (círculo) ──────────────
-          Marca presente sin competir con los botones. Un poco más grande que
-          las pills de esquina (56 → 72). Decorativo: no es interactivo. */}
+          Marca presente sin competir con los botones. Tamaño 132 (ajustado a
+          mano hasta lograr presencia sin robar protagonismo a las acciones).
+          Decorativo: no es interactivo. */}
       {imagenLogo && (
         <div
           style={{
