@@ -10,7 +10,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, ClipboardList, AlertTriangle, RefreshCw } from 'lucide-react';
 
-import { apiFetch } from '../../../../services/api';
+import { apiFetch, getServiciosAdmin } from '../../../../services/api';
 import { fmtPesos } from '../../../../utils/formato';
 import {
   Button,
@@ -155,8 +155,7 @@ export default function TabServicios() {
       setCargando(true);
       setError(null);
       try {
-        const res  = await apiFetch('/admin/servicios');
-        const data = await res.json();
+        const data = await getServiciosAdmin();
         if (!cancelado) setServicios(data);
       } catch (err) {
         console.error('[tabServicios] Error en carga:', err.message);
