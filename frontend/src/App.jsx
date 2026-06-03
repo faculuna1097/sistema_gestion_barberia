@@ -107,6 +107,13 @@ export default function App() {
   // para evitar un segundo fetch de getNegocio en el sidebar (deuda #10).
   const [nombreNegocio, setNombreNegocio] = useState('');
   const [avisosPago, setAvisosPago] = useState(false);
+  // rolPanel: rol con el que se entró al panel ('admin' | 'barbero'); lo resuelve
+  // el backend en el login unificado por PIN. Default 'admin' (panel completo).
+  // Se setea en el onAcceso del login y se limpia al cerrar sesión.
+  const [rolPanel, setRolPanel] = useState('admin');
+  // barberoSesion: { id, nombre } del barbero logueado, o null si entró el admin.
+  // PanelAdmin lo usa (Fase 5) para la vista reducida y para mostrar su identidad.
+  const [barberoSesion, setBarberoSesion] = useState(null);
   const [datos, setDatos] = useState({
     barberos: [],
     servicios: [],
@@ -201,6 +208,8 @@ export default function App() {
   const cerrarSesionAdmin = () => {
     setToken(null);
     clearAuthToken();
+    setRolPanel('admin');
+    setBarberoSesion(null);
     precargarDatos();
     setCurrentScreen("main");
   };
@@ -264,10 +273,13 @@ export default function App() {
     return (
       <PantallaLoginAdmin
         imagenLogo={imagenLogo}
-        onAcceso={(tokenRecibido, aviso_pago) => {
+        onAcceso={(tokenRecibido, info) => {
           setToken(tokenRecibido);
           setAuthToken(tokenRecibido);
-          setAvisosPago(aviso_pago || false);
+          setRolPanel(info.rol);
+          setBarberoSesion(info.barbero ?? null);
+          // aviso_pago solo aplica al admin (D2: al barbero no se lo bloquea ni avisa).
+          setAvisosPago(info.rol === 'admin' && !!info.aviso_pago);
           setCurrentScreen("admin");
         }}
         onCancelar={volverAlInicio}
@@ -276,7 +288,7 @@ export default function App() {
   }
 
   if (currentScreen === "admin") {
-    return <PanelAdmin onCerrarSesion={cerrarSesionAdmin} avisosPago={avisosPago} nombreNegocio={nombreNegocio} />;
+    return <PanelAdmin rol={rolPanel} barberoSesion={barberoSesion} onCerrarSesion={cerrarSesionAdmin} avisosPago={avisosPago} nombreNegocio={nombreNegocio} />;
   }
 
   return (

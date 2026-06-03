@@ -4,9 +4,9 @@
 > Creado: 2026-06-03. Entrega: **un único branch `feature/acceso-barberos-panel`
 > hijo de `feature/turnero`, con un commit por fase** (ver §6 y §10).
 >
-> **Estado (2026-06-03):** Fases 1, 2 y 3 ✅ hechas (Fase 3 = backend del login
-> unificado). Próximo chat: **Fase 4** (frontend: login + estado de rol). Detalle
-> en §6 y §10.
+> **Estado (2026-06-03):** Fases 1–4 ✅ hechas (Fase 3 = backend del login unificado;
+> Fase 4 = frontend del login + estado de rol, con el cleanup del endpoint viejo).
+> Próximo chat: **Fase 5** (PanelAdmin con menú condicional). Detalle en §6 y §10.
 
 ---
 
@@ -310,6 +310,25 @@ PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
    - `cerrarSesionAdmin`: limpiar también `rolPanel` y `barberoSesion`.
    - Render: `<PanelAdmin rol={rolPanel} barberoSesion={barberoSesion} ... />`.
 
+> **Estado: ✅ Hecha (2026-06-03)** — frontend del login unificado, en `feature/acceso-barberos-panel`.
+> - `services/api.js` → `loginPanel(pin)` (`POST /auth/panel/login`): calco de `loginAdmin`, mismo
+>   manejo de 402 (`err.bloqueado = true`); devuelve `{ token, rol, aviso_pago, barbero }`.
+> - `screens/PantallaLoginAdmin.jsx`: `validarPin` usa `loginPanel` y en éxito llama
+>   `onAcceso(token, { rol, aviso_pago, barbero })`. Copy neutral (D4): `<h1>` "Panel de administrador"
+>   → "Acceso al panel". Comentarios de cabecera/props actualizados al login unificado.
+> - `App.jsx`: estado `rolPanel` ('admin'|'barbero', default 'admin') + `barberoSesion` ({id,nombre}|null).
+>   El `onAcceso` del bloque `loginAdmin` setea ambos y `setAvisosPago(rol==='admin' && aviso_pago)` (D2:
+>   el barbero nunca arrastra `aviso_pago`); `cerrarSesionAdmin` los limpia. Render
+>   `<PanelAdmin rol={rolPanel} barberoSesion={barberoSesion} ... />` (PanelAdmin los ignora hasta la Fase 5).
+> - **Cleanup hecho:** eliminado el `/api/auth/admin/login` muerto — `loginAdmin` del frontend,
+>   `routes/authAdmin.js` + `controllers/authAdmin.js`, y su import/registro en `index.js`.
+>   `evaluarSuscripcion` (`utils/suscripcion.js`) sigue vivo, lo usa `authPanel`. Docs de referencia
+>   actualizadas (`estado_actual.md`, `ruta_proyecto.md`). Queda huérfana la request de Bruno de ese
+>   endpoint (la borra el dueño).
+> - **Deuda nueva #48** (en `deudas_tecnicas_frontend.md`): el archivo/símbolos siguen nombrados "Admin"
+>   (`PantallaLoginAdmin`, `currentScreen === "loginAdmin"`, `cerrarSesionAdmin`) aunque ahora sirven a
+>   ambos roles; rename neutro diferido a un cleanup aparte.
+
 ### Fase 5 — Frontend: PanelAdmin con menú condicional
 
 `screens/admin/PanelAdmin.jsx`:
@@ -394,16 +413,17 @@ PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
 - [x] `utils/pin.js` (nuevo) — `pinColisiona`. ✅ Fase 1.
 - [x] `utils/suscripcion.js` (nuevo) — `evaluarSuscripcion` (refactor de authAdmin). ✅ Fase 3.
 - [x] `controllers/gestion.js` — unicidad en `crearBarbero`, `editarBarbero`, `cambiarPinAdmin`. ✅ Fase 1.
-- [x] `controllers/authAdmin.js` — usar `evaluarSuscripcion` (refactor). ✅ Fase 3.
+- [x] `controllers/authAdmin.js` — usar `evaluarSuscripcion` (refactor). ✅ Fase 3 → **eliminado en Fase 4** (cleanup del endpoint viejo).
 - [x] `controllers/authPanel.js` (nuevo) — `loginPanel`. ✅ Fase 3.
 - [x] `routes/authPanel.js` (nuevo) + registro en `index.js`. ✅ Fase 3.
+- [x] Cleanup: eliminar `/api/auth/admin/login` — `routes/authAdmin.js` + `controllers/authAdmin.js` + import/registro en `index.js`. ✅ Fase 4.
 - [x] Revisar `requiereRol` de `/admin/turnos`, `/admin/planilla`, `/admin/horario-atencion` (incluir `'barbero'`). ✅ Fase 3.
 - [ ] `index.js` — endurecer `/admin/turnos` y `/admin/planilla` a `requiereRol('admin','barbero')` (excluir operativo; deuda en `estado_actual.md`). → Fase 6.
 
 **Frontend (`/frontend`)**
-- [ ] `services/api.js` — `loginPanel`.
-- [ ] `screens/PantallaLoginAdmin.jsx` — usar `loginPanel`, copy neutral, pasar rol/barbero al `onAcceso`.
-- [ ] `App.jsx` — estado `rolPanel` + `barberoSesion`, wiring del login y cierre de sesión.
+- [x] `services/api.js` — `loginPanel` (+ eliminado `loginAdmin`, cleanup). ✅ Fase 4.
+- [x] `screens/PantallaLoginAdmin.jsx` — usar `loginPanel`, copy neutral, pasar rol/barbero al `onAcceso`. ✅ Fase 4.
+- [x] `App.jsx` — estado `rolPanel` + `barberoSesion`, wiring del login y cierre de sesión. ✅ Fase 4.
 - [ ] `screens/admin/PanelAdmin.jsx` — menú condicional + props a secciones.
 - [ ] `screens/admin/sections/SeccionPlanillas.jsx` — `modoBarbero` (ocultar chips).
 - [ ] `screens/admin/sections/SeccionTurnero.jsx` — `modoBarbero` (barbero único, sin acciones, fetches condicionales).
@@ -432,9 +452,13 @@ a la app del barbero con selector + PIN, compatible con PINs únicos).
     y `/admin/horario-atencion` abierto a barbero por método (GET sí, PUT admin-only).
     `/admin/turnos` y `/admin/planilla` ya aceptaban barbero. Deuda de log plegada en
     `authAdmin.js` y `authBarbero.js`. Validado con Bruno.
-  - **Próximo: Fase 4** — frontend: `loginPanel` en `api.js`, `PantallaLoginAdmin`
-    usando el endpoint nuevo (copy neutral), `App.jsx` con estado `rolPanel` +
-    `barberoSesion`. Ahí se elimina `/api/auth/admin/login` (cleanup).
-- Nada pendiente de decisión: el plan está cerrado y listo para ejecutar la Fase 4.
+  - **Fase 4 ✅ hecha** — frontend del login unificado: `loginPanel` en `api.js`,
+    `PantallaLoginAdmin` usando el endpoint nuevo (copy neutral "Acceso al panel"),
+    `App.jsx` con estado `rolPanel` + `barberoSesion`. Cleanup hecho: eliminado
+    `/api/auth/admin/login` (frontend `loginAdmin` + `routes`/`controllers/authAdmin.js`
+    + registro en `index.js`); docs de referencia actualizadas. Deuda #48 abierta (naming).
+  - **Próximo: Fase 5** — `PanelAdmin` con menú condicional por rol (secciones reducidas
+    para barbero: Planilla + Turnero, aterrizaje en Turnero D3, identidad en sidebar D5).
+- Nada pendiente de decisión: el plan está cerrado y listo para ejecutar la Fase 5.
 
 *— Fin del documento —*
