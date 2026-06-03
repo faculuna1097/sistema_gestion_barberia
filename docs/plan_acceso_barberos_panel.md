@@ -4,9 +4,10 @@
 > Creado: 2026-06-03. Entrega: **un único branch `feature/acceso-barberos-panel`
 > hijo de `feature/turnero`, con un commit por fase** (ver §6 y §10).
 >
-> **Estado (2026-06-03):** Fases 1–4 ✅ hechas (Fase 3 = backend del login unificado;
-> Fase 4 = frontend del login + estado de rol, con el cleanup del endpoint viejo).
-> Próximo chat: **Fase 5** (PanelAdmin con menú condicional). Detalle en §6 y §10.
+> **Estado (2026-06-03):** Fases 1–5 ✅ hechas (Fase 3 = backend del login unificado;
+> Fase 4 = frontend del login + estado de rol; Fase 5 = PanelAdmin con menú condicional
+> por rol). Próximo chat: **Fase 6** (secciones en modo barbero: Planilla + Turnero
+> rol-aware, + hardening de rutas). Detalle en §6 y §10.
 
 ---
 
@@ -341,6 +342,25 @@ PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
    Las secciones que no los usan los ignoran.
 5. (D5) Mostrar `barberoSesion.nombre` en el header del sidebar cuando rol barbero.
 
+> **Estado: ✅ Hecha (2026-06-03)** — frontend del menú condicional, en `feature/acceso-barberos-panel`.
+> - `screens/admin/PanelAdmin.jsx` recibe `rol` (default `'admin'`) y `barberoSesion`. Derivado
+>   `esBarbero = rol === 'barbero'`; constante de módulo `SECCIONES_BARBERO = ['planillas','turnero']`
+>   y `seccionesVisibles = esBarbero ? SECCIONES.filter(...) : SECCIONES` (sin mutar `SECCIONES`).
+>   La nav y el lookup de `SeccionActual` usan `seccionesVisibles`.
+> - `seccionActiva` inicial: `'turnero'` si barbero (D3), `'inicio'` si admin. `rol` es fijo por
+>   montaje (el componente se remonta en cada login/cierre de sesión), así sirve de valor inicial.
+> - (D5, **Opción B** elegida) Componente local `IdentidadBarbero` (avatar `AvatarIniciales` + nombre +
+>   micro-label "BARBERO") en el footer del sidebar, debajo del divisor y sobre "Cerrar sesión", solo en
+>   modo barbero. Colapsado → solo el avatar centrado con `title`. `nombreNegocio` sigue arriba para ambos
+>   roles (convención dashboard: negocio arriba, identidad de quien entró abajo).
+> - `<SeccionActual modoBarbero={esBarbero} barberoSesion={barberoSesion} />`: las props se propagan a la
+>   sección activa; hoy solo las consumirán Planilla/Turnero en la Fase 6 (el resto las ignora, inocuo).
+> - Verificado: **admin** → 8 secciones, aterriza en Inicio, sin bloque de identidad, sin regresiones.
+>   **barbero** → solo Planilla + Turnero, aterriza en Turnero, identidad visible. **Planilla carga su
+>   data** (scoping por token, ya hecho). **Turnero NO carga**: `getBarberosAdmin()` (`/barberos`) y
+>   `getServiciosAdmin()` (`/admin/servicios`) son admin/operativo-only → **403** con token barbero. Es
+>   exactamente lo que resuelve la Fase 6 (no llamarlos en `modoBarbero`); esperado, no es regresión.
+
 ### Fase 6 — Frontend: secciones en modo barbero
 
 **`SeccionPlanillas.jsx`** (recibe `modoBarbero`):
@@ -424,7 +444,7 @@ PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
 - [x] `services/api.js` — `loginPanel` (+ eliminado `loginAdmin`, cleanup). ✅ Fase 4.
 - [x] `screens/PantallaLoginAdmin.jsx` — usar `loginPanel`, copy neutral, pasar rol/barbero al `onAcceso`. ✅ Fase 4.
 - [x] `App.jsx` — estado `rolPanel` + `barberoSesion`, wiring del login y cierre de sesión. ✅ Fase 4.
-- [ ] `screens/admin/PanelAdmin.jsx` — menú condicional + props a secciones.
+- [x] `screens/admin/PanelAdmin.jsx` — menú condicional + props a secciones. ✅ Fase 5.
 - [ ] `screens/admin/sections/SeccionPlanillas.jsx` — `modoBarbero` (ocultar chips).
 - [ ] `screens/admin/sections/SeccionTurnero.jsx` — `modoBarbero` (barbero único, sin acciones, fetches condicionales).
 
@@ -457,8 +477,14 @@ a la app del barbero con selector + PIN, compatible con PINs únicos).
     `App.jsx` con estado `rolPanel` + `barberoSesion`. Cleanup hecho: eliminado
     `/api/auth/admin/login` (frontend `loginAdmin` + `routes`/`controllers/authAdmin.js`
     + registro en `index.js`); docs de referencia actualizadas. Deuda #48 abierta (naming).
-  - **Próximo: Fase 5** — `PanelAdmin` con menú condicional por rol (secciones reducidas
-    para barbero: Planilla + Turnero, aterrizaje en Turnero D3, identidad en sidebar D5).
-- Nada pendiente de decisión: el plan está cerrado y listo para ejecutar la Fase 5.
+  - **Fase 5 ✅ hecha** — `PanelAdmin` con menú condicional por rol: `seccionesVisibles`
+    derivada de `SECCIONES` (barbero → Planilla + Turnero), aterrizaje en Turnero (D3),
+    `IdentidadBarbero` en el footer del sidebar (D5, Opción B), y `modoBarbero`/`barberoSesion`
+    propagadas a la sección activa. Planilla del barbero ya carga su data; el Turnero queda
+    no-funcional (403 en `/barberos` y `/admin/servicios`, admin-only) hasta la Fase 6.
+  - **Próximo: Fase 6** — secciones en modo barbero: `SeccionTurnero` rol-aware (barbero único,
+    sin acciones D1, fetches condicionales para evitar los 403) y `SeccionPlanillas` (ocultar
+    chips de barbero), + hardening de `/admin/turnos` y `/admin/planilla` a `requiereRol('admin','barbero')`.
+- Nada pendiente de decisión: el plan está cerrado y listo para ejecutar la Fase 6.
 
 *— Fin del documento —*

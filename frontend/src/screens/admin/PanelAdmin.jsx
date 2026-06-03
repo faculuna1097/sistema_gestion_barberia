@@ -8,6 +8,12 @@
 //   avisosPago      — si true, muestra el banner de aviso de pago al tope.
 //   nombreNegocio   — viene desde App.jsx (no hace fetch propio para evitar
 //                     duplicar getNegocio).
+//   rol             — 'admin' | 'barbero'. Lo resuelve el login unificado por PIN.
+//                     Admin ve las 8 secciones; barbero ve la vista reducida
+//                     (solo su Planilla y su Turnero). Default 'admin'.
+//   barberoSesion   — { id, nombre } del barbero logueado, o null si es admin.
+//                     Se usa para su identidad en el sidebar (D5) y se propaga a
+//                     las secciones (lo consumen recién en la Fase 6).
 
 import { useState } from "react";
 import {
@@ -16,6 +22,7 @@ import {
   AlertTriangle, X,
 } from "lucide-react";
 import { theme } from "../../theme/tokens.js";
+import { AvatarIniciales } from "../../components/ui";
 
 import SeccionInicio     from "./sections/SeccionInicio";
 import SeccionCaja       from "./sections/SeccionCaja";
@@ -37,6 +44,11 @@ const SECCIONES = [
   { id: "turnero",   Icon: Calendar,      label: "Turnero",   componente: SeccionTurnero   },
   { id: "gestion",   Icon: Settings,      label: "Gestión",   componente: SeccionGestion   },
 ];
+
+// Ids de las secciones visibles en modo barbero (vista reducida): solo su
+// Planilla y su Turnero. Se filtra sobre SECCIONES en vez de redefinir la lista,
+// así el orden y la config de cada ítem quedan en un único lugar (SECCIONES).
+const SECCIONES_BARBERO = ['planillas', 'turnero'];
 
 /**
  * BannerAviso
@@ -228,16 +240,88 @@ function BotonToggleSidebar({ colapsado, onToggle, nombreNegocio }) {
 }
 
 /**
+ * IdentidadBarbero
+ * Bloque de identidad del barbero logueado, anclado en el footer del sidebar
+ * (junto a "Cerrar sesión"). Sigue la convención de dashboards: el negocio
+ * arriba, la identidad de quien entró abajo. Solo se renderiza en modo barbero (D5).
+ * Expandido: avatar + nombre + rol; colapsado: solo el avatar centrado (con title).
+ * @param {string} props.nombre - Nombre del barbero (para iniciales y tono del avatar).
+ * @param {boolean} props.colapsado - Si el sidebar está colapsado (muestra solo el avatar).
+ */
+function IdentidadBarbero({ nombre, colapsado }) {
+  if (colapsado) {
+    return (
+      <div
+        title={nombre}
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          padding: '8px 0',
+        }}
+      >
+        <AvatarIniciales nombre={nombre} size={32} />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      padding: '8px 16px 8px 20px',
+      margin: '0 8px',
+    }}>
+      <AvatarIniciales nombre={nombre} size={32} />
+      {/* minWidth:0 permite que el ellipsis del nombre funcione dentro del flex */}
+      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{
+          fontFamily: theme.body,
+          fontSize: theme.sizeBody,
+          fontWeight: theme.weightMedium,
+          color: theme.ink,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}>
+          {nombre}
+        </span>
+        <span style={{
+          fontFamily: theme.mono,
+          fontSize: theme.sizeMicro,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          color: theme.muted,
+        }}>
+          Barbero
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/**
  * PanelAdmin
  * Shell del panel de administración. Sidebar claro + área de contenido.
  */
-export default function PanelAdmin({ onCerrarSesion, avisosPago, nombreNegocio }) {
-  const [seccionActiva, setSeccionActiva] = useState("inicio");
+export default function PanelAdmin({ onCerrarSesion, avisosPago, nombreNegocio, rol = 'admin', barberoSesion }) {
+  const esBarbero = rol === 'barbero';
+
+  // Secciones visibles según rol: el barbero ve la vista reducida (su Planilla y
+  // su Turnero); el admin ve las 8. Se deriva de SECCIONES sin mutarla.
+  const seccionesVisibles = esBarbero
+    ? SECCIONES.filter((s) => SECCIONES_BARBERO.includes(s.id))
+    : SECCIONES;
+
+  // Aterrizaje: el barbero cae en Turnero (D3, lo más accionable al llegar); el
+  // admin en Inicio. rol es fijo durante la vida del componente (se remonta en
+  // cada login/cierre de sesión), así que sirve como valor inicial del estado.
+  const [seccionActiva, setSeccionActiva] = useState(esBarbero ? "turnero" : "inicio");
   const [mostrarAviso, setMostrarAviso]   = useState(avisosPago);
   const [colapsado, setColapsado]         = useState(false);
   const [hoverLogout, setHoverLogout]     = useState(false);
 
-  const SeccionActual = SECCIONES.find((s) => s.id === seccionActiva)?.componente;
+  const SeccionActual = seccionesVisibles.find((s) => s.id === seccionActiva)?.componente;
 
   return (
     <div style={{
@@ -281,7 +365,7 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago, nombreNegocio }
           flexDirection: 'column',
           gap: 2,
         }}>
-          {SECCIONES.map((s) => (
+          {seccionesVisibles.map((s) => (
             <NavItem
               key={s.id}
               Icon={s.Icon}
@@ -300,6 +384,11 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago, nombreNegocio }
           background: theme.hairline,
           margin: '12px',
         }} />
+
+        {/* Identidad de quien entró (D5): solo en modo barbero, sobre el logout. */}
+        {esBarbero && barberoSesion && (
+          <IdentidadBarbero nombre={barberoSesion.nombre} colapsado={colapsado} />
+        )}
 
         {/* Footer: cerrar sesión */}
         <div style={{ padding: '0 0 12px' }}>
@@ -352,7 +441,7 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago, nombreNegocio }
           overflow: 'auto',
           background: theme.surfaceAlt,
         }}>
-          {SeccionActual && <SeccionActual />}
+          {SeccionActual && <SeccionActual modoBarbero={esBarbero} barberoSesion={barberoSesion} />}
         </main>
       </div>
     </div>
