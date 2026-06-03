@@ -517,6 +517,26 @@ export const putAdminHorarios = async (barberoId, bloques) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ADMIN — Horario de atención del local (jornada del negocio, global al tenant)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * getAdminHorarioAtencion
+ * Obtiene el horario de atención semanal del local (la jornada del negocio,
+ * común a todos los barberos). Devuelve los 7 días; los cerrados vienen con
+ * abierto=false y horas null. Las horas llegan en 'HH:MM' (el backend ya recorta).
+ * Lo consumen SeccionTurnero (rango base de la agenda + días cerrados),
+ * TabBarberos (defaults de bloque + bloqueo de días cerrados) y
+ * BloqueHorarioAtencion (CRUD del horario).
+ * @returns {Promise<Array>} [{ dia_semana, abierto, hora_inicio, hora_fin }]
+ */
+export const getAdminHorarioAtencion = async () => {
+  const res = await apiFetch('/admin/horario-atencion');
+  if (!res.ok) throw new Error('Error al obtener el horario de atención');
+  return res.json();
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ADMIN — Suspensiones (gestión de suspensiones por barbero)
 // ─────────────────────────────────────────────────────────────────────────────
 

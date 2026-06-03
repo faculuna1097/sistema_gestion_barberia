@@ -25,6 +25,7 @@ import {
   apiFetch,
   getAdminHorarios,
   putAdminHorarios,
+  getAdminHorarioAtencion,
   getAdminSuspensiones,
   crearAdminSuspension,
   eliminarAdminSuspension,
@@ -1019,9 +1020,7 @@ export default function TabBarberos() {
         // puntual no rompe la tabla; la atención cae a {} si falla (default fijo).
         const [resultados, atencion] = await Promise.all([
           Promise.allSettled(data.map((b) => getAdminHorarios(b.id))),
-          apiFetch('/admin/horario-atencion')
-            .then((r) => (r.ok ? r.json() : null))
-            .catch(() => null),
+          getAdminHorarioAtencion().catch(() => null),
         ]);
         if (cancelado) return;
         const mapa = {};

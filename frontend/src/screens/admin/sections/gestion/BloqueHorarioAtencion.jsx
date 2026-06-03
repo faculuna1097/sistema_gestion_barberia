@@ -10,7 +10,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { RefreshCw } from 'lucide-react';
 
-import { apiFetch } from '../../../../services/api';
+import { apiFetch, getAdminHorarioAtencion } from '../../../../services/api';
 import {
   Button,
   ConfirmDialog,
@@ -170,9 +170,7 @@ export default function BloqueHorarioAtencion() {
       setCargando(true);
       setErrorCarga(null);
       try {
-        const res  = await apiFetch('/admin/horario-atencion');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const data = await getAdminHorarioAtencion();
         if (cancelado) return;
         const norm = normalizarSemana(data);
         setDias(norm);

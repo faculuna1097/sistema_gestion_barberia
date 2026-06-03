@@ -20,10 +20,14 @@
 //   - Errores de acción (cambiar estado / cancelar) se muestran como banner
 //     inline con auto-dismiss. NO se usa alert() ni Toast (Toast queda como
 //     deuda — construir cuando aparezca el segundo caso).
-//   - El rango horario de la agenda se deriva del min/max de los turnos del
-//     día (con padding 1h por extremo) y se clampa al menos a 08:00–22:00.
-//     Si no hay turnos, se usa 08:00–22:00 directo. El endpoint admin no
-//     expone el horario_atencion global del tenant (deuda backend anotada).
+//   - El rango horario de la agenda parte de la jornada de atención real del
+//     local ese día (GET /admin/horario-atencion) y se EXPANDE para incluir
+//     cualquier turno que caiga fuera de ella (padding 1h por extremo). Si el
+//     horario no se pudo leer o el día está cerrado, cae al fallback 08:00–22:00.
+//   - Días que el local tiene cerrados: si no hay turnos, se muestra un
+//     EmptyState "Local cerrado" en vez de una grilla vacía engañosa; si hay
+//     turnos (caso borde: reservados antes de cerrar ese día), se muestra la
+//     grilla igual con una nota.
 
 import { useState, useEffect } from 'react';
 import {
@@ -32,6 +36,7 @@ import {
   Trash2,
   X,
   Calendar,
+  CalendarOff,
   Phone,
   Mail,
   Copy,
@@ -45,11 +50,12 @@ import {
   getBarberosAdmin,
   getServiciosAdmin,
   getAdminTurnos,
+  getAdminHorarioAtencion,
   patchAdminTurnoEstado,
   completarAdminTurno,
   cancelarAdminTurno,
 } from '../../../services/api';
-import { getFechaHoy, formatHora, TZ } from '../../../utils/fecha';
+import { getFechaHoy, formatHora, aHoraCorta, TZ } from '../../../utils/fecha';
 import { fmtPesos } from '../../../utils/formato';
 import { theme } from '../../../theme/tokens.js';
 import {
@@ -126,24 +132,67 @@ function minutosAhoraEnTZ() {
 }
 
 /**
+ * horaAMinutos
+ * Convierte una hora 'HH:MM' a minutos desde 00:00.
+ * @param {string} hhmm - 'HH:MM'
+ * @returns {number}
+ */
+function horaAMinutos(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/**
+ * jornadaDelDia
+ * Dado el horario de atención semanal del local (array de 7 días) y una fecha
+ * 'YYYY-MM-DD', devuelve el estado de atención de ESE día:
+ *   - { abierto: true, inicio, fin }  → abierto (rango del local en minutos)
+ *   - { abierto: false }              → cerrado (conocido)
+ *   - null                            → desconocido (no se pudo leer el horario)
+ * El dia_semana sigue la convención de Date.getDay() (0=domingo .. 6=sábado), la
+ * misma del backend. La fecha se parsea por componentes (Date local) para evitar
+ * el corrimiento de TZ que daría parsear el 'YYYY-MM-DD' como UTC.
+ * @param {Array|null} horarioAtencion
+ * @param {string} fechaStr - 'YYYY-MM-DD'
+ * @returns {{ abierto: boolean, inicio?: number, fin?: number }|null}
+ */
+function jornadaDelDia(horarioAtencion, fechaStr) {
+  if (!Array.isArray(horarioAtencion)) return null;
+  const [anio, mes, dia] = fechaStr.split('-').map(Number);
+  const diaSemana = new Date(anio, mes - 1, dia).getDay();
+  const entrada = horarioAtencion.find((d) => d.dia_semana === diaSemana);
+  if (!entrada) return null;
+  if (!entrada.abierto || !entrada.hora_inicio || !entrada.hora_fin) return { abierto: false };
+  return {
+    abierto: true,
+    inicio: horaAMinutos(aHoraCorta(entrada.hora_inicio)),
+    fin:    horaAMinutos(aHoraCorta(entrada.hora_fin)),
+  };
+}
+
+/**
  * calcularRangoAgenda
- * Deriva [inicio, fin] en minutos a partir de los turnos del día.
- * Padding de 1h por extremo. Clamp externo a 08:00–22:00 (la agenda
- * solo se expande, nunca se contrae por debajo del default).
+ * Deriva [inicio, fin] en minutos para la grilla de agenda.
+ * Base = jornada de atención del local ese día (si se conoce y está abierto); si
+ * no, el fallback 08:00–22:00. Sobre esa base se EXPANDE (nunca se contrae) para
+ * incluir cualquier turno que caiga fuera de la jornada, con 1h de padding por
+ * extremo (caso borde: turno en una franja que el local ya no abre).
  * @param {Array} turnos
+ * @param {{ inicio: number, fin: number }|null} jornada - rango del local ese día en minutos, o null (cerrado/desconocido → fallback)
  * @returns {{ inicio: number, fin: number }}
  */
-function calcularRangoAgenda(turnos) {
-  if (!turnos || turnos.length === 0) {
-    return { inicio: FALLBACK_INICIO, fin: FALLBACK_FIN };
+function calcularRangoAgenda(turnos, jornada) {
+  // Base: jornada del local redondeada a la hora, o el fallback fijo.
+  let inicio = jornada ? Math.floor(jornada.inicio / 60) * 60 : FALLBACK_INICIO;
+  let fin    = jornada ? Math.ceil(jornada.fin / 60) * 60     : FALLBACK_FIN;
+
+  // Expandir para no esconder turnos fuera de la jornada (padding 1h por extremo).
+  if (turnos && turnos.length > 0) {
+    const todos = turnos.flatMap((t) => [minutosDelDia(t.inicio), minutosDelDia(t.fin)]);
+    inicio = Math.min(inicio, Math.max(0,       Math.floor((Math.min(...todos) - 60) / 60) * 60));
+    fin    = Math.max(fin,    Math.min(24 * 60, Math.ceil((Math.max(...todos) + 60) / 60) * 60));
   }
-  const todos = turnos.flatMap(t => [minutosDelDia(t.inicio), minutosDelDia(t.fin)]);
-  const min = Math.min(...todos) - 60;
-  const max = Math.max(...todos) + 60;
-  return {
-    inicio: Math.min(FALLBACK_INICIO, Math.max(0, Math.floor(min / 60) * 60)),
-    fin:    Math.max(FALLBACK_FIN,    Math.min(24 * 60, Math.ceil(max / 60) * 60)),
-  };
+  return { inicio, fin };
 }
 
 /**
@@ -1166,6 +1215,7 @@ export default function SeccionTurnero() {
   const [vista, setVista]                 = useState('agenda'); // 'agenda' | 'lista'
   const [barberos, setBarberos]           = useState([]);
   const [servicios, setServicios]         = useState([]); // catálogo, solo para derivar precio al completar
+  const [horarioAtencion, setHorarioAtencion] = useState(null); // 7 días {dia_semana,abierto,hora_inicio,hora_fin}; null = aún no cargó / falló
   const [barberoActivo, setBarberoActivo] = useState(null); // null = Todos
   const [estadoActivo, setEstadoActivo]   = useState(null); // null = Todos
   const [turnos, setTurnos]               = useState([]);
@@ -1206,6 +1256,23 @@ export default function SeccionTurnero() {
         setServicios(data);
       } catch (err) {
         console.error('[seccionTurnero] Error en cargarServicios:', err.message);
+      }
+    };
+    cargar();
+  }, []);
+
+  // ── Carga del horario de atención del local ──────────────────────────────
+  // Define el rango base de la agenda (la jornada real del día) y permite marcar
+  // los días que el local tiene cerrados. Carga independiente: si falla, la
+  // agenda degrada al fallback 08:00–22:00 (jornadaDelDia devuelve null) y no se
+  // marca ningún día como cerrado.
+  useEffect(() => {
+    const cargar = async () => {
+      try {
+        const data = await getAdminHorarioAtencion();
+        setHorarioAtencion(data);
+      } catch (err) {
+        console.error('[seccionTurnero] Error en cargarHorarioAtencion:', err.message);
       }
     };
     cargar();
@@ -1324,9 +1391,20 @@ export default function SeccionTurnero() {
     ? barberos.filter((b) => b.id === barberoActivo)
     : barberos;
 
-  // Rango horario de la agenda — derivado del dataset completo del día
-  // (no de los filtrados), así no "pega saltos" cuando cambia el chip de estado.
-  const rangoAgenda = calcularRangoAgenda(turnos);
+  // Estado de atención del local para el día elegido (abierto / cerrado /
+  // desconocido). De ahí salen: el rango base de la agenda y el flag de "cerrado".
+  const estadoJornada = jornadaDelDia(horarioAtencion, fecha);
+  const jornadaAbierta = estadoJornada?.abierto
+    ? { inicio: estadoJornada.inicio, fin: estadoJornada.fin }
+    : null;
+  // Cerrado solo si lo SABEMOS (horario leído y día marcado cerrado). Si el
+  // horario no cargó, estadoJornada es null → no afirmamos que esté cerrado.
+  const localCerrado = estadoJornada?.abierto === false;
+
+  // Rango horario de la agenda — base = jornada del local; se expande con el
+  // dataset completo del día (no los filtrados), así no "pega saltos" cuando
+  // cambia el chip de estado.
+  const rangoAgenda = calcularRangoAgenda(turnos, jornadaAbierta);
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
@@ -1448,11 +1526,11 @@ export default function SeccionTurnero() {
         />
       )}
 
-      {/* La agenda / lista siempre se renderiza si hay barberos cargados,
-          aunque no haya turnos visibles. El calendario "vacío" sigue siendo
-          la representación correcta del día (huecos visibles, columnas
-          presentes). EmptyState se reserva para el caso edge de no tener
-          ningún barbero cargado en el tenant. */}
+      {/* La agenda / lista se renderiza si hay barberos cargados, aunque no
+          haya turnos visibles —EXCEPTO los días que el local tiene cerrados y
+          sin ningún turno, donde una grilla vacía sería engañosa (ver el
+          EmptyState "Local cerrado" más abajo). El EmptyState "Sin barberos" se
+          reserva para el caso de no tener ningún barbero cargado en el tenant. */}
       {!cargando && !error && barberosVisibles.length === 0 && (
         <EmptyState
           glyph={<Calendar size={28} strokeWidth={1.5} />}
@@ -1461,7 +1539,27 @@ export default function SeccionTurnero() {
         />
       )}
 
-      {!cargando && !error && barberosVisibles.length > 0 && vista === 'agenda' && (
+      {/* Día que el local tiene cerrado y sin turnos: EmptyState en vez de la
+          grilla vacía 08–22, que sugeriría falsamente "abierto sin reservas". */}
+      {!cargando && !error && barberosVisibles.length > 0 && localCerrado && turnos.length === 0 && (
+        <EmptyState
+          glyph={<CalendarOff size={28} strokeWidth={1.5} />}
+          title="Local cerrado"
+          body="El local no atiende este día."
+        />
+      )}
+
+      {/* Día cerrado PERO con turnos (reservados antes de cerrar ese día): se
+          muestra la grilla igual, con una nota que explica la rareza. */}
+      {!cargando && !error && barberosVisibles.length > 0 && localCerrado && turnos.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <Toast tone="warning">
+            El local figura cerrado este día, pero tiene turnos cargados.
+          </Toast>
+        </div>
+      )}
+
+      {!cargando && !error && barberosVisibles.length > 0 && !(localCerrado && turnos.length === 0) && vista === 'agenda' && (
         <AgendaVista
           turnos={turnosVisibles}
           barberosVisibles={barberosVisibles}
@@ -1472,7 +1570,7 @@ export default function SeccionTurnero() {
         />
       )}
 
-      {!cargando && !error && barberosVisibles.length > 0 && vista === 'lista' && (
+      {!cargando && !error && barberosVisibles.length > 0 && !(localCerrado && turnos.length === 0) && vista === 'lista' && (
         <ListaVista
           turnos={turnosVisibles}
           mostrarBarbero={barberoActivo === null}
