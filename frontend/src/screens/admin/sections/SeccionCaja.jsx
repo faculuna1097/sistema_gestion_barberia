@@ -11,7 +11,7 @@
 
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { Banknote, Trash2, Inbox, Construction, RefreshCw } from 'lucide-react';
+import { Banknote, Trash2, Inbox, Construction, RefreshCw, Info } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
 import { getFechaHoy } from '../../../utils/fecha';
@@ -320,6 +320,12 @@ function TabMovimientos() {
     XLSX.writeFile(wb, `movimientos-${fecha}.xlsx`);
   };
 
+  // Al eliminar un corte vinculado a un turno, el backend revierte ese turno a
+  // 'reservado' (ver controllers/caja.js → eliminarMovimiento). Avisamos en el
+  // cartel con una nota, solo cuando corresponde (corte con turno_id no nulo).
+  const turnoVuelveAReservado =
+    movimientoAEliminar?.tipo === 'corte' && !!movimientoAEliminar?.turno_id;
+
   if (cargando) return <LoadingState />;
 
   if (error) return (
@@ -349,6 +355,23 @@ function TabMovimientos() {
         onCancel={() => setMovimientoAEliminar(null)}
       >
         {movimientoAEliminar && <DetalleRecurso filas={filasDetalleMovimiento(movimientoAEliminar)} />}
+        {turnoVuelveAReservado && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 8,
+            marginTop: 12,
+            fontFamily: theme.body,
+            fontSize: theme.sizeBody,
+            color: theme.muted,
+          }}>
+            <Info size={14} strokeWidth={1.75} style={{ flexShrink: 0, marginTop: 2 }} />
+            <span>
+              El turno asociado volverá a estado{' '}
+              <strong style={{ color: theme.ink }}>Reservado</strong>.
+            </span>
+          </div>
+        )}
       </ConfirmDialog>
 
       <div style={{ display: 'flex', gap: 12 }}>
