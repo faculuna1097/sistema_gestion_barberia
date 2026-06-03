@@ -1,8 +1,11 @@
 # Plan — Acceso de barberos al panel (vista reducida por PIN)
 
 > Documento de plan para ejecutar en un chat nuevo. Autocontenido.
-> Creado: 2026-06-03. Entrega: **merge incremental por fases** (ver §6 y §10),
-> con un branch por fase hijo de `feature/turnero`.
+> Creado: 2026-06-03. Entrega: **un único branch `feature/acceso-barberos-panel`
+> hijo de `feature/turnero`, con un commit por fase** (ver §6 y §10).
+>
+> **Estado (2026-06-03):** Fases 1 y 2 ✅ hechas. Próximo chat: **Fase 3** (backend
+> del login unificado). Detalle en §6 y §10.
 
 ---
 
@@ -172,13 +175,13 @@ por el contenido del JWT, no el front.
 
 ## 6. Plan por fases
 
-> **Estrategia de entrega (decidida): merge incremental por fases**, no un único
-> branch gigante. Cada bloque se mergea y deploya antes de empezar el siguiente:
-> 1. **Fase 1 (unicidad)** → branch propio → merge → deploy. No cambia ninguna
->    UX existente, solo agrega un 409 ante colisión de PIN.
-> 2. **Fase 2 (datos)** → con la validación ya en producción, sanear PINs únicos
->    por tenant (Kingsai, Demo) con calma.
-> 3. **Fases 3–6 (login unificado + frontend)** → branch propio → merge → deploy.
+> **Estrategia de entrega (decidida): un único branch `feature/acceso-barberos-panel`
+> hijo de `feature/turnero`, con un commit por fase** (no un branch/merge por fase).
+> 1. **Fase 1 (unicidad)** → commit. No cambia ninguna UX existente, solo agrega un
+>    409 ante colisión de PIN.
+> 2. **Fase 2 (datos)** → con la validación ya aplicada, sanear PINs únicos por
+>    tenant (Kingsai, Demo) con calma.
+> 3. **Fases 3–6 (login unificado + frontend)** → commits sucesivos en el mismo branch.
 >
 > Así el saneamiento de datos queda separado de la feature nueva, y cuando llega
 > el login unificado los datos ya están sanos.
@@ -209,6 +212,23 @@ vs barbero y barbero vs admin).
 **Criterio de aceptación Fase 1:** intentar crear/editar un barbero con un PIN ya
 usado, o cambiar el PIN admin a uno de un barbero, devuelve 409 con mensaje claro.
 
+> **Estado: ✅ Hecha (2026-06-03)** — commiteado en `feature/acceso-barberos-panel`.
+> - `utils/pin.js` → `pinColisiona(pinPlano, { tenantId, excluirBarberoId })`: compara
+>   contra `pin_admin` y todos los barberos del tenant (activos e inactivos) con
+>   `bcrypt.compare`. Query con guard `$2::uuid IS NULL OR id <> $2` para excluir al
+>   propio barbero al editar sin duplicar la query.
+> - `gestion.js`: 409 en `crearBarbero`, `editarBarbero` (con `excluirBarberoId`) y
+>   `cambiarPinAdmin`. Mensaje único: "Ese PIN ya está en uso por otro barbero o por el admin".
+> - Frontend: **sin cambios** — `ModalDatosBarbero` y `ModalCambiarPin` ya propagan
+>   `data.error` del 409 a su error inline (verificado en lectura, no tocado).
+> - Deudas menores plegadas: validación de rango 0–100 de `comision_valor` en crear/editar;
+>   log de PIN admin incorrecto en `cambiarPinAdmin` → `console.warn` (convención §1.4).
+> - Efecto secundario aceptado: reingresar el PIN admin actual en `cambiarPinAdmin` ahora
+>   devuelve 409 (rechaza el no-op), con el mismo mensaje genérico.
+> - **Deuda diferida a Fase 3:** el mismo fix de log (`console.log`→`console.warn` en el
+>   PIN incorrecto) queda pendiente en `authAdmin.js:51` y `authBarbero.js:50`; se aplica
+>   al tocar auth en la Fase 3 (ahí ya se está en zona de login).
+
 ### Fase 2 — Datos: garantizar PINs únicos en tenants productivos
 
 Operativo, **fuera de código** (coordinar con el dueño):
@@ -220,6 +240,9 @@ Operativo, **fuera de código** (coordinar con el dueño):
 > **Bloqueante:** no activar el login unificado (Fase 3 en uso real) hasta tener
 > esto hecho por tenant, o un barbero con PIN colisionando con el admin entraría
 > como admin.
+
+> **Estado: ✅ Resuelta (2026-06-03)** — el dueño reasignó PINs únicos por tenant tras
+> aplicar la validación de la Fase 1. Desbloquea la activación real del login unificado.
 
 ### Fase 3 — Backend: endpoint de login unificado
 
@@ -338,9 +361,9 @@ PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
 ## 9. Archivos afectados (checklist)
 
 **Backend**
-- [ ] `utils/pin.js` (nuevo) — `pinColisiona`.
+- [x] `utils/pin.js` (nuevo) — `pinColisiona`. ✅ Fase 1.
 - [ ] `utils/suscripcion.js` (nuevo) — `evaluarSuscripcion` (refactor de authAdmin).
-- [ ] `controllers/gestion.js` — unicidad en `crearBarbero`, `editarBarbero`, `cambiarPinAdmin`.
+- [x] `controllers/gestion.js` — unicidad en `crearBarbero`, `editarBarbero`, `cambiarPinAdmin`. ✅ Fase 1.
 - [ ] `controllers/authAdmin.js` — usar `evaluarSuscripcion` (refactor).
 - [ ] `controllers/authPanel.js` (nuevo) — `loginPanel`.
 - [ ] `routes/authPanel.js` (nuevo) + registro en `index.js`.
@@ -355,7 +378,7 @@ PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
 - [ ] `screens/admin/sections/SeccionTurnero.jsx` — `modoBarbero` (barbero único, sin acciones, fetches condicionales).
 
 **Datos (operativo)**
-- [ ] Reasignar PINs únicos por tenant (Fase 2).
+- [x] Reasignar PINs únicos por tenant (Fase 2). ✅ Hecho por el dueño (2026-06-03).
 
 **No se toca:** `frontend-barbero`, `controllers/authBarbero.js` (sigue sirviendo
 a la app del barbero con selector + PIN, compatible con PINs únicos).
@@ -365,9 +388,18 @@ a la app del barbero con selector + PIN, compatible con PINs únicos).
 ## 10. Para confirmar al iniciar el chat de ejecución
 
 - D1–D5 de §5: **confirmadas** (2026-06-03). D1 = turnero read-only.
-- Orden de ejecución: **decidido — merge incremental por fases** (ver §6):
-  primero Fase 1 (unicidad) → merge/deploy, luego Fase 2 (sanear PINs), y recién
-  después Fases 3–6 (login unificado + frontend) en su propio branch.
-- Nada pendiente de decisión: el plan está cerrado y listo para ejecutar.
+- Orden de ejecución: **un único branch `feature/acceso-barberos-panel`, commit por
+  fase** (ver §6): Fase 1 (unicidad) → Fase 2 (sanear PINs) → Fases 3–6 (login
+  unificado + frontend).
+- **Avance al 2026-06-03:**
+  - **Fase 1 ✅ hecha** (commit en `feature/acceso-barberos-panel`): `utils/pin.js` +
+    409 en `gestion.js`. Deudas menores plegadas (rango de comisión, log a `warn`).
+  - **Fase 2 ✅ resuelta** por el dueño (PINs únicos reasignados por tenant).
+  - **Próximo: Fase 3** — backend del login unificado (`utils/suscripcion.js`,
+    `controllers/authPanel.js`, `routes/authPanel.js`, refactor de `authAdmin.js`,
+    revisar `requiereRol` de `/admin/turnos`, `/admin/planilla`, `/admin/horario-atencion`).
+    Al tocar auth, **plegar la deuda de log** `console.log`→`console.warn` en
+    `authAdmin.js:51` y `authBarbero.js:50`.
+- Nada pendiente de decisión: el plan está cerrado y listo para ejecutar la Fase 3.
 
 *— Fin del documento —*
