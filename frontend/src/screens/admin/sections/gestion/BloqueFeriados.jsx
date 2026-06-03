@@ -323,27 +323,15 @@ export default function BloqueFeriados() {
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span style={{
-              fontFamily: theme.mono,
-              fontWeight: theme.weightMedium,
-              fontSize: theme.sizeMicro,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
-              color: theme.muted,
-            }}>
-              Fecha
-            </span>
-            <InputTiempo
-              type="date"
-              value={nuevaFecha}
-              min={hoyISO()}
-              onChange={(v) => { setNuevaFecha(v); setErrorModal(null); }}
-              ariaLabel="Fecha del feriado"
-              disabled={guardando}
-              full
-            />
-          </label>
+          <InputTiempo
+            label="Fecha"
+            type="date"
+            value={nuevaFecha}
+            min={hoyISO()}
+            onChange={(v) => { setNuevaFecha(v); setErrorModal(null); }}
+            disabled={guardando}
+            full
+          />
 
           <Field
             label="Descripción (opcional)"

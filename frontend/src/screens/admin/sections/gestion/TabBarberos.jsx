@@ -595,20 +595,26 @@ function SubPanelAusencias({ barbero }) {
         </span>
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <CampoTiempo
-            label="Desde"
-            type="datetime-local"
-            value={formDesde}
-            onChange={setFormDesde}
-            invalid={rangoInvalido}
-          />
-          <CampoTiempo
-            label="Hasta"
-            type="datetime-local"
-            value={formHasta}
-            onChange={setFormHasta}
-            invalid={rangoInvalido}
-          />
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <InputTiempo
+              label="Desde"
+              type="datetime-local"
+              value={formDesde}
+              onChange={setFormDesde}
+              invalid={rangoInvalido}
+              full
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <InputTiempo
+              label="Hasta"
+              type="datetime-local"
+              value={formHasta}
+              onChange={setFormHasta}
+              invalid={rangoInvalido}
+              full
+            />
+          </div>
         </div>
 
         {rangoInvalido && (
@@ -745,33 +751,6 @@ function SubPanelAusencias({ barbero }) {
         </div>
       )}
     </div>
-  );
-}
-
-/**
- * CampoTiempo
- * Wrapper label (eyebrow) + InputTiempo full-width, para el form de ausencias.
- *
- * @param {object} props
- * @param {string} props.label
- * @param {string} props.type - 'datetime-local' | 'time'
- * @param {string} props.value
- * @param {(v: string) => void} props.onChange
- * @param {boolean} [props.invalid=false]
- */
-function CampoTiempo({ label, type, value, onChange, invalid = false }) {
-  return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 180 }}>
-      <span style={{
-        fontFamily: theme.mono,
-        fontWeight: theme.weightMedium,
-        fontSize: theme.sizeMicro,
-        letterSpacing: '0.04em',
-        textTransform: 'uppercase',
-        color: theme.muted,
-      }}>{label}</span>
-      <InputTiempo type={type} value={value} onChange={onChange} ariaLabel={label} invalid={invalid} full />
-    </label>
   );
 }
 
