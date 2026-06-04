@@ -21,7 +21,7 @@ import categoriaRoutes  from './routes/categorias.js';
 import cajaRouter       from './routes/caja.js';
 import balancesRouter   from './routes/balances.js';
 import inicioRoutes     from './routes/inicio.js';
-import authAdminRoutes  from './routes/authAdmin.js';
+import authPanelRoutes  from './routes/authPanel.js';
 import authBarberoRoutes from './routes/authBarbero.js';
 import authOperativoRoutes from './routes/authOperativo.js';
 import turneroRoutes    from './routes/turnero.js';
@@ -103,7 +103,8 @@ app.get('/api/health', (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 app.use('/api/auth/operativo', authOperativoRoutes);
 app.use('/api/auth/barbero',   authBarberoRoutes);
-app.use('/api/auth/admin',     authAdminRoutes);
+// Login unificado del panel (resuelve rol admin/barbero según el PIN).
+app.use('/api/auth/panel',     authPanelRoutes);
 app.use('/api/turnero',    turneroRoutes);
 // GET /api/negocio — datos públicos del negocio (nombre, booking_url).
 // Lo consume App.jsx antes del login para el nombre; el logo viene de /negocio/imagenes.
@@ -153,18 +154,20 @@ app.use('/api/balances',  verificarToken, balancesRouter);
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS DEL BACKOFFICE — /api/admin/* (admin + barbero autenticados)
 // ─────────────────────────────────────────────────────────────────────────────
-app.use('/api/admin/turnos',    verificarToken, turnosAdminRoutes);
+// turnos: admin + barbero (excluye operativo, que opera por /api/turnos, no /api/admin/*).
+app.use('/api/admin/turnos',    verificarToken, requiereRol('admin', 'barbero'), turnosAdminRoutes);
 app.use('/api/admin/horarios',      verificarToken, horariosAdminRoutes);
 app.use('/api/admin/suspensiones',  verificarToken, suspensionesAdminRoutes);
 app.use('/api/admin/clientes',      verificarToken, clientesAdminRoutes);
-app.use('/api/admin/planilla',      verificarToken, planillaAdminRoutes);
+// planilla: admin + barbero (excluye operativo; el scoping por barbero lo hace el controller).
+app.use('/api/admin/planilla',      verificarToken, requiereRol('admin', 'barbero'), planillaAdminRoutes);
 app.use('/api/admin/barberos',     verificarToken, requiereRol('admin'), adminBarberosRoutes);
 app.use('/api/admin/servicios',    verificarToken, requiereRol('admin'), adminServiciosRoutes);
 app.use('/api/admin/productos',    verificarToken, requiereRol('admin'), adminProductosRoutes);
 app.use('/api/admin/negocio',      verificarToken, requiereRol('admin'), adminNegocioRoutes);
 app.use('/api/admin/turnero/config', verificarToken, requiereRol('admin'), adminTurneroConfigRoutes);
 app.use('/api/admin/operativo',      verificarToken, requiereRol('admin'), adminOperativoRoutes);
-app.use('/api/admin/horario-atencion', verificarToken, requiereRol('admin'), adminHorarioAtencionRoutes);
+app.use('/api/admin/horario-atencion', verificarToken, adminHorarioAtencionRoutes);
 app.use('/api/admin/feriados',         verificarToken, requiereRol('admin'), adminFeriadosRoutes);
 app.use('/api/admin/imagenes',         verificarToken, requiereRol('admin'), adminImagenesRoutes);
 

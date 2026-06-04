@@ -1,8 +1,13 @@
 # Plan — Acceso de barberos al panel (vista reducida por PIN)
 
 > Documento de plan para ejecutar en un chat nuevo. Autocontenido.
-> Creado: 2026-06-03. Entrega: **merge incremental por fases** (ver §6 y §10),
-> con un branch por fase hijo de `feature/turnero`.
+> Creado: 2026-06-03. Entrega: **un único branch `feature/acceso-barberos-panel`
+> hijo de `feature/turnero`, con un commit por fase** (ver §6 y §10).
+>
+> **Estado (2026-06-03):** Fases 1–5 ✅ hechas (Fase 3 = backend del login unificado;
+> Fase 4 = frontend del login + estado de rol; Fase 5 = PanelAdmin con menú condicional
+> por rol). Próximo chat: **Fase 6** (secciones en modo barbero: Planilla + Turnero
+> rol-aware, + hardening de rutas). Detalle en §6 y §10.
 
 ---
 
@@ -172,13 +177,13 @@ por el contenido del JWT, no el front.
 
 ## 6. Plan por fases
 
-> **Estrategia de entrega (decidida): merge incremental por fases**, no un único
-> branch gigante. Cada bloque se mergea y deploya antes de empezar el siguiente:
-> 1. **Fase 1 (unicidad)** → branch propio → merge → deploy. No cambia ninguna
->    UX existente, solo agrega un 409 ante colisión de PIN.
-> 2. **Fase 2 (datos)** → con la validación ya en producción, sanear PINs únicos
->    por tenant (Kingsai, Demo) con calma.
-> 3. **Fases 3–6 (login unificado + frontend)** → branch propio → merge → deploy.
+> **Estrategia de entrega (decidida): un único branch `feature/acceso-barberos-panel`
+> hijo de `feature/turnero`, con un commit por fase** (no un branch/merge por fase).
+> 1. **Fase 1 (unicidad)** → commit. No cambia ninguna UX existente, solo agrega un
+>    409 ante colisión de PIN.
+> 2. **Fase 2 (datos)** → con la validación ya aplicada, sanear PINs únicos por
+>    tenant (Kingsai, Demo) con calma.
+> 3. **Fases 3–6 (login unificado + frontend)** → commits sucesivos en el mismo branch.
 >
 > Así el saneamiento de datos queda separado de la feature nueva, y cuando llega
 > el login unificado los datos ya están sanos.
@@ -209,6 +214,23 @@ vs barbero y barbero vs admin).
 **Criterio de aceptación Fase 1:** intentar crear/editar un barbero con un PIN ya
 usado, o cambiar el PIN admin a uno de un barbero, devuelve 409 con mensaje claro.
 
+> **Estado: ✅ Hecha (2026-06-03)** — commiteado en `feature/acceso-barberos-panel`.
+> - `utils/pin.js` → `pinColisiona(pinPlano, { tenantId, excluirBarberoId })`: compara
+>   contra `pin_admin` y todos los barberos del tenant (activos e inactivos) con
+>   `bcrypt.compare`. Query con guard `$2::uuid IS NULL OR id <> $2` para excluir al
+>   propio barbero al editar sin duplicar la query.
+> - `gestion.js`: 409 en `crearBarbero`, `editarBarbero` (con `excluirBarberoId`) y
+>   `cambiarPinAdmin`. Mensaje único: "Ese PIN ya está en uso por otro barbero o por el admin".
+> - Frontend: **sin cambios** — `ModalDatosBarbero` y `ModalCambiarPin` ya propagan
+>   `data.error` del 409 a su error inline (verificado en lectura, no tocado).
+> - Deudas menores plegadas: validación de rango 0–100 de `comision_valor` en crear/editar;
+>   log de PIN admin incorrecto en `cambiarPinAdmin` → `console.warn` (convención §1.4).
+> - Efecto secundario aceptado: reingresar el PIN admin actual en `cambiarPinAdmin` ahora
+>   devuelve 409 (rechaza el no-op), con el mismo mensaje genérico.
+> - **Deuda diferida a Fase 3:** el mismo fix de log (`console.log`→`console.warn` en el
+>   PIN incorrecto) queda pendiente en `authAdmin.js:51` y `authBarbero.js:50`; se aplica
+>   al tocar auth en la Fase 3 (ahí ya se está en zona de login).
+
 ### Fase 2 — Datos: garantizar PINs únicos en tenants productivos
 
 Operativo, **fuera de código** (coordinar con el dueño):
@@ -220,6 +242,9 @@ Operativo, **fuera de código** (coordinar con el dueño):
 > **Bloqueante:** no activar el login unificado (Fase 3 en uso real) hasta tener
 > esto hecho por tenant, o un barbero con PIN colisionando con el admin entraría
 > como admin.
+
+> **Estado: ✅ Resuelta (2026-06-03)** — el dueño reasignó PINs únicos por tenant tras
+> aplicar la validación de la Fase 1. Desbloquea la activación real del login unificado.
 
 ### Fase 3 — Backend: endpoint de login unificado
 
@@ -245,6 +270,29 @@ Operativo, **fuera de código** (coordinar con el dueño):
 **Criterio de aceptación Fase 3 (Bruno/scripts):** PIN admin → `{rol:'admin'}`;
 PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
 
+> **Estado: ✅ Hecha (2026-06-03)** — backend completo, en `feature/acceso-barberos-panel`.
+> - `utils/suscripcion.js` → `evaluarSuscripcion(suscripcionVigenteHasta)` → `{ bloqueado, aviso_pago }`,
+>   función pura (sin logs ni `res`). `authAdmin.loginAdmin` refactorizado para consumirla (se le
+>   quitaron los imports de `DateTime`/`TZ`). Comportamiento idéntico (mismo 402 y `aviso_pago`).
+> - `controllers/authPanel.js#loginPanel` + `routes/authPanel.js`, montado en `POST /api/auth/panel/login`
+>   (solo `tenantMiddleware`). Admin-first (1 `bcrypt.compare` contra `pin_admin`, con `evaluarSuscripcion`
+>   → 402 si bloqueado); si no, loop sobre barberos activos; 1 match → rol barbero, 0 → 401, >1 → `warn`
+>   + 401 genérico. Path barbero sin chequeo de suscripción (D2).
+> - `requiereRol` auditado: `/admin/turnos` y `/admin/planilla` **ya** aceptaban barbero (van sin
+>   `requiereRol`, el scoping lo hace el controller). `/admin/horario-atencion` se abrió a barbero **por
+>   método**: el control de rol pasó de `index.js` al router (`GET` → `requiereRol('admin','barbero')`,
+>   `PUT` → `requiereRol('admin')`), así el barbero lee la jornada del local pero no la modifica.
+> - Deuda de logs plegada: `console.log`→`console.warn` en los logins fallidos de `authAdmin.js`
+>   (tenant no encontrado, PIN incorrecto, suscripción vencida) y `authBarbero.js` (barbero no
+>   encontrado, PIN incorrecto).
+> - Validado con Bruno (7 tests): login admin / barbero / PIN inexistente / sin PIN; GET horario con
+>   token barbero (200), PUT con token barbero (403).
+> - **Cleanup pendiente (Fase 4):** `/api/auth/admin/login` sigue vivo; su único caller (el `loginAdmin`
+>   del frontend de gestión) migra a `/panel/login` en la Fase 4 y ahí se elimina el endpoint viejo.
+> - **Deuda nueva detectada** (registrada en `estado_actual.md`): `/admin/turnos` y `/admin/planilla`
+>   aceptan token operativo (no tienen `requiereRol`); pre-existente, hardening posible a
+>   `requiereRol('admin','barbero')`.
+
 ### Fase 4 — Frontend: login + estado de rol
 
 1. `services/api.js`: nueva `loginPanel(pin)` → `POST /auth/panel/login`,
@@ -263,6 +311,25 @@ PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
    - `cerrarSesionAdmin`: limpiar también `rolPanel` y `barberoSesion`.
    - Render: `<PanelAdmin rol={rolPanel} barberoSesion={barberoSesion} ... />`.
 
+> **Estado: ✅ Hecha (2026-06-03)** — frontend del login unificado, en `feature/acceso-barberos-panel`.
+> - `services/api.js` → `loginPanel(pin)` (`POST /auth/panel/login`): calco de `loginAdmin`, mismo
+>   manejo de 402 (`err.bloqueado = true`); devuelve `{ token, rol, aviso_pago, barbero }`.
+> - `screens/PantallaLoginAdmin.jsx`: `validarPin` usa `loginPanel` y en éxito llama
+>   `onAcceso(token, { rol, aviso_pago, barbero })`. Copy neutral (D4): `<h1>` "Panel de administrador"
+>   → "Acceso al panel". Comentarios de cabecera/props actualizados al login unificado.
+> - `App.jsx`: estado `rolPanel` ('admin'|'barbero', default 'admin') + `barberoSesion` ({id,nombre}|null).
+>   El `onAcceso` del bloque `loginAdmin` setea ambos y `setAvisosPago(rol==='admin' && aviso_pago)` (D2:
+>   el barbero nunca arrastra `aviso_pago`); `cerrarSesionAdmin` los limpia. Render
+>   `<PanelAdmin rol={rolPanel} barberoSesion={barberoSesion} ... />` (PanelAdmin los ignora hasta la Fase 5).
+> - **Cleanup hecho:** eliminado el `/api/auth/admin/login` muerto — `loginAdmin` del frontend,
+>   `routes/authAdmin.js` + `controllers/authAdmin.js`, y su import/registro en `index.js`.
+>   `evaluarSuscripcion` (`utils/suscripcion.js`) sigue vivo, lo usa `authPanel`. Docs de referencia
+>   actualizadas (`estado_actual.md`, `ruta_proyecto.md`). Queda huérfana la request de Bruno de ese
+>   endpoint (la borra el dueño).
+> - **Deuda nueva #48** (en `deudas_tecnicas_frontend.md`): el archivo/símbolos siguen nombrados "Admin"
+>   (`PantallaLoginAdmin`, `currentScreen === "loginAdmin"`, `cerrarSesionAdmin`) aunque ahora sirven a
+>   ambos roles; rename neutro diferido a un cleanup aparte.
+
 ### Fase 5 — Frontend: PanelAdmin con menú condicional
 
 `screens/admin/PanelAdmin.jsx`:
@@ -274,6 +341,25 @@ PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
    props comunes: `<SeccionActual modoBarbero={rol === 'barbero'} barberoSesion={barberoSesion} />`.
    Las secciones que no los usan los ignoran.
 5. (D5) Mostrar `barberoSesion.nombre` en el header del sidebar cuando rol barbero.
+
+> **Estado: ✅ Hecha (2026-06-03)** — frontend del menú condicional, en `feature/acceso-barberos-panel`.
+> - `screens/admin/PanelAdmin.jsx` recibe `rol` (default `'admin'`) y `barberoSesion`. Derivado
+>   `esBarbero = rol === 'barbero'`; constante de módulo `SECCIONES_BARBERO = ['planillas','turnero']`
+>   y `seccionesVisibles = esBarbero ? SECCIONES.filter(...) : SECCIONES` (sin mutar `SECCIONES`).
+>   La nav y el lookup de `SeccionActual` usan `seccionesVisibles`.
+> - `seccionActiva` inicial: `'turnero'` si barbero (D3), `'inicio'` si admin. `rol` es fijo por
+>   montaje (el componente se remonta en cada login/cierre de sesión), así sirve de valor inicial.
+> - (D5, **Opción B** elegida) Componente local `IdentidadBarbero` (avatar `AvatarIniciales` + nombre +
+>   micro-label "BARBERO") en el footer del sidebar, debajo del divisor y sobre "Cerrar sesión", solo en
+>   modo barbero. Colapsado → solo el avatar centrado con `title`. `nombreNegocio` sigue arriba para ambos
+>   roles (convención dashboard: negocio arriba, identidad de quien entró abajo).
+> - `<SeccionActual modoBarbero={esBarbero} barberoSesion={barberoSesion} />`: las props se propagan a la
+>   sección activa; hoy solo las consumirán Planilla/Turnero en la Fase 6 (el resto las ignora, inocuo).
+> - Verificado: **admin** → 8 secciones, aterriza en Inicio, sin bloque de identidad, sin regresiones.
+>   **barbero** → solo Planilla + Turnero, aterriza en Turnero, identidad visible. **Planilla carga su
+>   data** (scoping por token, ya hecho). **Turnero NO carga**: `getBarberosAdmin()` (`/barberos`) y
+>   `getServiciosAdmin()` (`/admin/servicios`) son admin/operativo-only → **403** con token barbero. Es
+>   exactamente lo que resuelve la Fase 6 (no llamarlos en `modoBarbero`); esperado, no es regresión.
 
 ### Fase 6 — Frontend: secciones en modo barbero
 
@@ -295,14 +381,40 @@ PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
   - `getServiciosAdmin()` (`/admin/servicios`, rol admin): solo se usa para
     completar → **saltear** en modo barbero (no se necesita sin acciones).
   - `getAdminHorarioAtencion()` (`/admin/horario-atencion`): define el rango de la
-    agenda. Dos opciones: (a) permitir rol barbero en esa ruta (lectura inocua de
-    la jornada del local) para que el rango sea correcto; (b) aceptar el fallback
-    08:00–22:00 si la ruta rechaza al barbero. **Recomendado (a)** — ampliar el
-    `requiereRol` de `/admin/horario-atencion` a incluir `'barbero'`.
+    agenda. El backend ya permite rol barbero en el `GET` de esa ruta (resuelto en
+    la Fase 3, lectura inocua de la jornada del local), así que el rango sale
+    correcto sin necesidad de fallback.
 
-> Nota: auditar en esta fase los `requiereRol` de las rutas que toca el turnero
-> del barbero. Lo único imprescindible es `/admin/turnos`. Lo demás se puede
-> saltear u opcionalmente permitir.
+> **Backend — hardening de rutas (resuelve la deuda registrada en `estado_actual.md`):**
+> en esta fase, endurecer `/api/admin/turnos` y `/api/admin/planilla` a
+> `requiereRol('admin','barbero')`. Hoy van sin `requiereRol`, así que aceptan
+> cualquier token válido —incluido el operativo del iPad—, y un operativo podría
+> leer la planilla/turnos de cualquier barbero pasando su `barbero_id` por query.
+> Verificar antes que ningún flujo del iPad las llame con token operativo (el flujo
+> operativo usa `/api/turnos` y `/api/cortes`, no `/api/admin/*`, así que en
+> principio es seguro). `/admin/horario-atencion` ya quedó resuelto en la Fase 3
+> (GET admin+barbero, PUT admin-only); para el turnero del barbero la única ruta
+> imprescindible sigue siendo `/admin/turnos`.
+
+> **Estado: ✅ Hecha (2026-06-04)** — secciones en modo barbero + hardening backend, en
+> `feature/acceso-barberos-panel`.
+> - **Backend** (`index.js`): `/api/admin/turnos` y `/api/admin/planilla` pasaron a
+>   `requiereRol('admin','barbero')` (excluyen operativo). Verificado que ningún flujo
+>   operativo del iPad las llama (usa `/api/turnos` y `/api/cortes`); el panel de gestión
+>   las consume con token admin (`apiFetch`) y `frontend-barbero` con token barbero, ambos
+>   cubiertos por el nuevo `requiereRol`. Deuda de `estado_actual.md` marcada resuelta.
+> - **`SeccionPlanillas.jsx`** (consume `modoBarbero`): oculta la fila de `ChipFiltro` de
+>   barberos en modo barbero (un solo barbero, ya autoseleccionado). Resto intacto (comisiones,
+>   semana, export = SU planilla).
+> - **`SeccionTurnero.jsx`** (consume `modoBarbero` + `barberoSesion`): `barberos` lazy-init
+>   `[barberoSesion]` + se saltea `getBarberosAdmin()`; se saltea `getServiciosAdmin()`;
+>   `getAdminTurnos(fecha, barberoSesion.id)`; se ocultan las pills de barbero y la columna
+>   "Barbero" de la Lista; modal read-only (prop `readonly` → sin completar/no asistió/cancelar,
+>   D1). El filtro de estado se mantiene. ESLint limpio (exit 0). Efectos con `modoBarbero`/
+>   `barberoSesion` en sus dep arrays (estables por montaje, no re-disparan).
+> - **Deuda nueva** (en `estado_actual.md`): `/admin/horarios|suspensiones|clientes` van sin
+>   `requiereRol` y `frontend-barbero` ya los reusa con token barbero → auditar scoping por
+>   `req.barbero_id` (escalada horizontal) y posible unificación/duplicación. Fuera de alcance.
 
 ---
 
@@ -338,24 +450,26 @@ PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
 ## 9. Archivos afectados (checklist)
 
 **Backend**
-- [ ] `utils/pin.js` (nuevo) — `pinColisiona`.
-- [ ] `utils/suscripcion.js` (nuevo) — `evaluarSuscripcion` (refactor de authAdmin).
-- [ ] `controllers/gestion.js` — unicidad en `crearBarbero`, `editarBarbero`, `cambiarPinAdmin`.
-- [ ] `controllers/authAdmin.js` — usar `evaluarSuscripcion` (refactor).
-- [ ] `controllers/authPanel.js` (nuevo) — `loginPanel`.
-- [ ] `routes/authPanel.js` (nuevo) + registro en `index.js`.
-- [ ] Revisar `requiereRol` de `/admin/turnos`, `/admin/planilla`, `/admin/horario-atencion` (incluir `'barbero'`).
+- [x] `utils/pin.js` (nuevo) — `pinColisiona`. ✅ Fase 1.
+- [x] `utils/suscripcion.js` (nuevo) — `evaluarSuscripcion` (refactor de authAdmin). ✅ Fase 3.
+- [x] `controllers/gestion.js` — unicidad en `crearBarbero`, `editarBarbero`, `cambiarPinAdmin`. ✅ Fase 1.
+- [x] `controllers/authAdmin.js` — usar `evaluarSuscripcion` (refactor). ✅ Fase 3 → **eliminado en Fase 4** (cleanup del endpoint viejo).
+- [x] `controllers/authPanel.js` (nuevo) — `loginPanel`. ✅ Fase 3.
+- [x] `routes/authPanel.js` (nuevo) + registro en `index.js`. ✅ Fase 3.
+- [x] Cleanup: eliminar `/api/auth/admin/login` — `routes/authAdmin.js` + `controllers/authAdmin.js` + import/registro en `index.js`. ✅ Fase 4.
+- [x] Revisar `requiereRol` de `/admin/turnos`, `/admin/planilla`, `/admin/horario-atencion` (incluir `'barbero'`). ✅ Fase 3.
+- [x] `index.js` — endurecer `/admin/turnos` y `/admin/planilla` a `requiereRol('admin','barbero')` (excluir operativo; deuda en `estado_actual.md`). ✅ Fase 6.
 
 **Frontend (`/frontend`)**
-- [ ] `services/api.js` — `loginPanel`.
-- [ ] `screens/PantallaLoginAdmin.jsx` — usar `loginPanel`, copy neutral, pasar rol/barbero al `onAcceso`.
-- [ ] `App.jsx` — estado `rolPanel` + `barberoSesion`, wiring del login y cierre de sesión.
-- [ ] `screens/admin/PanelAdmin.jsx` — menú condicional + props a secciones.
-- [ ] `screens/admin/sections/SeccionPlanillas.jsx` — `modoBarbero` (ocultar chips).
-- [ ] `screens/admin/sections/SeccionTurnero.jsx` — `modoBarbero` (barbero único, sin acciones, fetches condicionales).
+- [x] `services/api.js` — `loginPanel` (+ eliminado `loginAdmin`, cleanup). ✅ Fase 4.
+- [x] `screens/PantallaLoginAdmin.jsx` — usar `loginPanel`, copy neutral, pasar rol/barbero al `onAcceso`. ✅ Fase 4.
+- [x] `App.jsx` — estado `rolPanel` + `barberoSesion`, wiring del login y cierre de sesión. ✅ Fase 4.
+- [x] `screens/admin/PanelAdmin.jsx` — menú condicional + props a secciones. ✅ Fase 5.
+- [x] `screens/admin/sections/SeccionPlanillas.jsx` — `modoBarbero` (ocultar chips). ✅ Fase 6.
+- [x] `screens/admin/sections/SeccionTurnero.jsx` — `modoBarbero` (barbero único, sin acciones, fetches condicionales). ✅ Fase 6.
 
 **Datos (operativo)**
-- [ ] Reasignar PINs únicos por tenant (Fase 2).
+- [x] Reasignar PINs únicos por tenant (Fase 2). ✅ Hecho por el dueño (2026-06-03).
 
 **No se toca:** `frontend-barbero`, `controllers/authBarbero.js` (sigue sirviendo
 a la app del barbero con selector + PIN, compatible con PINs únicos).
@@ -365,9 +479,36 @@ a la app del barbero con selector + PIN, compatible con PINs únicos).
 ## 10. Para confirmar al iniciar el chat de ejecución
 
 - D1–D5 de §5: **confirmadas** (2026-06-03). D1 = turnero read-only.
-- Orden de ejecución: **decidido — merge incremental por fases** (ver §6):
-  primero Fase 1 (unicidad) → merge/deploy, luego Fase 2 (sanear PINs), y recién
-  después Fases 3–6 (login unificado + frontend) en su propio branch.
-- Nada pendiente de decisión: el plan está cerrado y listo para ejecutar.
+- Orden de ejecución: **un único branch `feature/acceso-barberos-panel`, commit por
+  fase** (ver §6): Fase 1 (unicidad) → Fase 2 (sanear PINs) → Fases 3–6 (login
+  unificado + frontend).
+- **Avance al 2026-06-03:**
+  - **Fase 1 ✅ hecha** (commit en `feature/acceso-barberos-panel`): `utils/pin.js` +
+    409 en `gestion.js`. Deudas menores plegadas (rango de comisión, log a `warn`).
+  - **Fase 2 ✅ resuelta** por el dueño (PINs únicos reasignados por tenant).
+  - **Fase 3 ✅ hecha** — backend del login unificado: `utils/suscripcion.js`
+    (`evaluarSuscripcion`), `controllers/authPanel.js` + `routes/authPanel.js`
+    (`POST /api/auth/panel/login`), refactor de `authAdmin.js` para reusar el helper,
+    y `/admin/horario-atencion` abierto a barbero por método (GET sí, PUT admin-only).
+    `/admin/turnos` y `/admin/planilla` ya aceptaban barbero. Deuda de log plegada en
+    `authAdmin.js` y `authBarbero.js`. Validado con Bruno.
+  - **Fase 4 ✅ hecha** — frontend del login unificado: `loginPanel` en `api.js`,
+    `PantallaLoginAdmin` usando el endpoint nuevo (copy neutral "Acceso al panel"),
+    `App.jsx` con estado `rolPanel` + `barberoSesion`. Cleanup hecho: eliminado
+    `/api/auth/admin/login` (frontend `loginAdmin` + `routes`/`controllers/authAdmin.js`
+    + registro en `index.js`); docs de referencia actualizadas. Deuda #48 abierta (naming).
+  - **Fase 5 ✅ hecha** — `PanelAdmin` con menú condicional por rol: `seccionesVisibles`
+    derivada de `SECCIONES` (barbero → Planilla + Turnero), aterrizaje en Turnero (D3),
+    `IdentidadBarbero` en el footer del sidebar (D5, Opción B), y `modoBarbero`/`barberoSesion`
+    propagadas a la sección activa. Planilla del barbero ya carga su data; el Turnero queda
+    no-funcional (403 en `/barberos` y `/admin/servicios`, admin-only) hasta la Fase 6.
+  - **Fase 6 ✅ hecha** — secciones en modo barbero: `SeccionTurnero` rol-aware (barbero único
+    desde `barberoSesion`, sin `getBarberosAdmin`/`getServiciosAdmin`, modal read-only D1, pills
+    y columna "Barbero" ocultas) y `SeccionPlanillas` (ocultar chips de barbero), + hardening de
+    `/admin/turnos` y `/admin/planilla` a `requiereRol('admin','barbero')`. ESLint limpio. Deuda
+    nueva registrada (`/admin/horarios|suspensiones|clientes` sin `requiereRol`, reusadas por
+    `frontend-barbero` → auditar scoping/unificación).
+- **Plan completo**: las 6 fases ✅ hechas. Pendiente: verificación end-to-end del usuario (§7) y
+  merge del branch `feature/acceso-barberos-panel`.
 
 *— Fin del documento —*

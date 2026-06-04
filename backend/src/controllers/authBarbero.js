@@ -39,7 +39,7 @@ export async function loginBarbero(req, res) {
 
     // Mensaje genérico para no filtrar si el barbero_id existe o no.
     if (resultado.rows.length === 0) {
-      console.log('[authBarbero] loginBarbero — barbero no encontrado o inactivo | barbero_id:', barbero_id);
+      console.warn('[authBarbero] loginBarbero — barbero no encontrado o inactivo | barbero_id:', barbero_id);
       return res.status(401).json({ error: 'Usuario o PIN incorrecto' });
     }
 
@@ -47,7 +47,7 @@ export async function loginBarbero(req, res) {
     const pinCorrecto = await bcrypt.compare(pin, pinHasheado);
 
     if (!pinCorrecto) {
-      console.log('[authBarbero] loginBarbero — PIN incorrecto | barbero_id:', barbero_id);
+      console.warn('[authBarbero] loginBarbero — PIN incorrecto | barbero_id:', barbero_id);
       return res.status(401).json({ error: 'Usuario o PIN incorrecto' });
     }
 

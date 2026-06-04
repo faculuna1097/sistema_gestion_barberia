@@ -71,6 +71,7 @@ Cleanup global) son la excepción: viven en otro contexto y van al final por dis
 | 8 | Convivencia `formato.js`/`formatos.js` + `fecha.js`/`fechas.js` | 8 (Fase 6) | `utils/*` | Media | ✅ |
 | 9 | Vulnerabilidades de `npm audit` | 8 (Fase 6) | `package.json` | Alta | ✅ |
 | 47 | `TabServicios` no usa el helper `getServiciosAdmin` (fetch inline) | — | `TabServicios` | Baja | ✅ |
+| 48 | Naming "Admin" en el login unificado por PIN | — | `PantallaLoginAdmin`, `App.jsx` | Baja | 🔲 |
 | 27 | Semántica engañosa columna comisión (Planillas) | — | `SeccionPlanillas` | Baja | 💤 |
 | 28 | Acoplamiento sutil entre tabs (Planillas) | — | `SeccionPlanillas` | Baja | 💤 |
 | 42 | `BloqueFeriados` con overflow propio | — | `BloqueFeriados` | Baja | 💤 |
@@ -301,6 +302,19 @@ la carga inline no chequeaba `res.ok` antes de `res.json()`, así que un respons
 seteaba el body de error como si fueran servicios; el helper hace `throw` ante `!ok`, con
 lo que ahora cae correctamente en el `catch` → estado de error. Build verificado OK;
 verificado funcionalmente por el usuario (carga del catálogo + regresión alta/edición).
+
+### #48 — Naming "Admin" en el login unificado por PIN · Baja · 🔲
+Detectada en la Fase 4 del plan de acceso de barberos al panel (2026-06-03). Desde que el
+login por PIN se unificó (admin **y** barbero entran por la misma pantalla, y el backend
+resuelve el rol según el PIN), el naming "Admin" quedó stale en el frontend de gestión:
+`screens/PantallaLoginAdmin.jsx` (y sus sub-componentes `ShellLoginAdmin`,
+`BotonCancelarEsquina`, más el prefijo de log `[pantallaLoginAdmin]`), el estado de
+pantalla `currentScreen === "loginAdmin"` y el handler `cerrarSesionAdmin` en `App.jsx`.
+La pantalla ya sirve a ambos roles; el nombre sugiere lo contrario. Es **cosmético**
+(naming), sin impacto funcional. Se dejó fuera del scope de la Fase 4 para no arrastrar el
+rename del archivo al import de `App.jsx` ni ensuciar el diff de la feature. Resolver en un
+cleanup de naming aparte → renombrar a algo neutro (ej. `PantallaLoginPanel` /
+`currentScreen === "loginPanel"` / `cerrarSesionPanel`).
 
 ---
 

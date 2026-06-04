@@ -6,6 +6,7 @@
 
 import { query } from '../config/db.js';
 import bcrypt from 'bcrypt';
+import { pinColisiona } from '../utils/pin.js';
 
 const SALT_ROUNDS = 10;
 
@@ -51,14 +52,24 @@ export const crearBarbero = async (req, res) => {
   if (!/^\d{4}$/.test(pin)) {
     return res.status(400).json({ error: 'El PIN debe ser exactamente 4 dígitos numéricos' });
   }
+  const comision = Number(comision_valor);
+  if (!Number.isFinite(comision) || comision < 0 || comision > 100) {
+    return res.status(400).json({ error: 'comision_valor debe ser un número entre 0 y 100' });
+  }
 
   try {
+    // Unicidad de PIN dentro del tenant (vs admin y otros barberos). Pre-requisito
+    // del login unificado del panel: dos PINs iguales harían el login ambiguo.
+    if (await pinColisiona(pin, { tenantId: req.tenant_id })) {
+      return res.status(409).json({ error: 'Ese PIN ya está en uso por otro barbero o por el admin' });
+    }
+
     const pinHash = await bcrypt.hash(pin, SALT_ROUNDS);
     const result = await query(
       `INSERT INTO barbero (tenant_id, nombre, pin, comision_tipo, comision_valor, activo)
        VALUES ($1, $2, $3, 'porcentaje', $4, true)
        RETURNING id, nombre, comision_tipo, comision_valor, activo`,
-      [req.tenant_id, nombre.trim(), pinHash, Number(comision_valor)]
+      [req.tenant_id, nombre.trim(), pinHash, comision]
     );
     console.log('[gestion] crearBarbero completado | barbero_id:', result.rows[0].id);
     res.status(201).json(result.rows[0]);
@@ -87,6 +98,10 @@ export const editarBarbero = async (req, res) => {
   if (!nombre || comision_valor === undefined || activo === undefined) {
     return res.status(400).json({ error: 'nombre, comision_valor y activo son requeridos' });
   }
+  const comision = Number(comision_valor);
+  if (!Number.isFinite(comision) || comision < 0 || comision > 100) {
+    return res.status(400).json({ error: 'comision_valor debe ser un número entre 0 y 100' });
+  }
 
   try {
     let result;
@@ -95,13 +110,18 @@ export const editarBarbero = async (req, res) => {
       if (!/^\d{4}$/.test(pin)) {
         return res.status(400).json({ error: 'El PIN debe ser exactamente 4 dígitos numéricos' });
       }
+      // Unicidad de PIN dentro del tenant, excluyéndose a sí mismo (un barbero
+      // puede reguardar su mismo PIN sin que cuente como colisión).
+      if (await pinColisiona(pin, { tenantId: req.tenant_id, excluirBarberoId: id })) {
+        return res.status(409).json({ error: 'Ese PIN ya está en uso por otro barbero o por el admin' });
+      }
       const pinHash = await bcrypt.hash(pin, SALT_ROUNDS);
       result = await query(
         `UPDATE barbero
          SET nombre = $1, comision_valor = $2, activo = $3, pin = $4
          WHERE id = $5 AND tenant_id = $6
          RETURNING id, nombre, comision_tipo, comision_valor, activo`,
-        [nombre.trim(), Number(comision_valor), activo, pinHash, id, req.tenant_id]
+        [nombre.trim(), comision, activo, pinHash, id, req.tenant_id]
       );
     } else {
       result = await query(
@@ -109,7 +129,7 @@ export const editarBarbero = async (req, res) => {
          SET nombre = $1, comision_valor = $2, activo = $3
          WHERE id = $4 AND tenant_id = $5
          RETURNING id, nombre, comision_tipo, comision_valor, activo`,
-        [nombre.trim(), Number(comision_valor), activo, id, req.tenant_id]
+        [nombre.trim(), comision, activo, id, req.tenant_id]
       );
     }
 
@@ -409,8 +429,14 @@ export const cambiarPinAdmin = async (req, res) => {
 
     const pinCorrecto = await bcrypt.compare(pin_actual, tenantResult.rows[0].pin_admin);
     if (!pinCorrecto) {
-      console.log('[gestion] cambiarPinAdmin — PIN actual incorrecto | cambio rechazado');
+      console.warn('[gestion] cambiarPinAdmin — PIN actual incorrecto | cambio rechazado');
       return res.status(401).json({ error: 'El PIN actual es incorrecto' });
+    }
+
+    // Unicidad: el nuevo PIN del admin no puede chocar con el de ningún barbero
+    // (ni con el actual del propio admin, que cuenta como "ya en uso").
+    if (await pinColisiona(pin_nuevo, { tenantId: req.tenant_id })) {
+      return res.status(409).json({ error: 'Ese PIN ya está en uso por otro barbero o por el admin' });
     }
 
     const nuevoPinHash = await bcrypt.hash(pin_nuevo, SALT_ROUNDS);

@@ -1,14 +1,18 @@
 // /frontend/src/screens/PantallaLoginAdmin.jsx
-// Pantalla de ingreso de PIN para acceder al Panel de Administrador.
+// Pantalla de ingreso de PIN para acceder al panel. El login es unificado: el
+// backend resuelve el rol (admin o barbero) según el PIN ingresado.
 // Tiene teclado numérico táctil + soporte de teclado físico.
-// Si la suscripción del tenant está vencida, muestra pantalla de acceso suspendido.
+// Si la suscripción del tenant está vencida (solo path admin), muestra pantalla
+// de acceso suspendido.
 //
 // Layout: full-screen con fondo surfaceAlt, card centrada (~480 px) con
 // shadowMd. Estilo Stripe/Clerk auth. Botón "Cancelar"/"Volver" en la esquina
 // superior izquierda de la card (ghost button con flecha).
 //
 // Props:
-//   onAcceso     — función llamada cuando el PIN es correcto y suscripción vigente.
+//   onAcceso     — función llamada con (token, { rol, aviso_pago, barbero }) cuando
+//                  el PIN es correcto. El backend resuelve el rol (admin o barbero)
+//                  según el PIN; `barbero` ({ id, nombre }) viene solo si rol='barbero'.
 //   onCancelar   — función llamada al presionar "Cancelar"/"Volver".
 //   imagenLogo   — URL del logo del tenant (de tenant_imagen tipo='logo').
 //                  Si no hay, cae a un círculo con el icono Lock.
@@ -17,7 +21,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Delete, ArrowLeft } from "lucide-react";
 import { theme } from "../theme/tokens.js";
 import { EmptyState, IconoAlerta, Card, LogoCirculo } from "../components/ui";
-import { loginAdmin } from "../services/api";
+import { loginPanel } from "../services/api";
 
 /**
  * BotonCancelarEsquina
@@ -201,9 +205,9 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo })
    */
   const validarPin = useCallback(async (pinIngresado) => {
     try {
-      const { token, aviso_pago } = await loginAdmin(pinIngresado);
+      const { token, rol, aviso_pago, barbero } = await loginPanel(pinIngresado);
       setEstado("exito");
-      setTimeout(() => onAcceso(token, aviso_pago), 600);
+      setTimeout(() => onAcceso(token, { rol, aviso_pago, barbero }), 600);
     } catch (err) {
       console.error('[pantallaLoginAdmin] Error en validarPin:', err.message);
       if (err.bloqueado) {
@@ -285,7 +289,7 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo })
           letterSpacing: '-0.02em',
           margin: 0,
         }}>
-          Panel de administrador
+          Acceso al panel
         </h1>
         <p style={{
           fontFamily: theme.body,

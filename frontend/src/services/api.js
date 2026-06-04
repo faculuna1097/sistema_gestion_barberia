@@ -321,17 +321,20 @@ export const getImagenesNegocio = async () => {
 };
 
 /**
- * loginAdmin
- * Envía el PIN al backend para autenticación del admin.
+ * loginPanel
+ * Envía el PIN al backend para el login unificado del panel (admin o barbero).
+ * El backend resuelve el rol según qué PIN matchea: primero compara contra el
+ * PIN admin del tenant; si no, contra el de cada barbero activo.
  * Casos:
- *   - 200: PIN correcto → devuelve { token, aviso_pago }
- *   - 402: suscripción vencida → lanza error con bloqueado: true
+ *   - 200: PIN correcto → { token, rol: 'admin'|'barbero', aviso_pago?, barbero? }
+ *           (barbero: { id, nombre } solo cuando rol='barbero')
+ *   - 402: suscripción vencida (solo path admin) → lanza error con bloqueado: true
  *   - otros: PIN incorrecto u otro error → lanza error con bloqueado: false
  * @param {string} pin - PIN de 4 dígitos ingresado por el usuario
- * @returns {Promise<Object>} { token, aviso_pago }
+ * @returns {Promise<Object>} { token, rol, aviso_pago, barbero }
  */
-export const loginAdmin = async (pin) => {
-  const response = await fetch(`${BASE_URL}/auth/admin/login`, {
+export const loginPanel = async (pin) => {
+  const response = await fetch(`${BASE_URL}/auth/panel/login`, {
     method: 'POST',
     headers: publicHeaders,
     body: JSON.stringify({ pin }),
@@ -344,7 +347,7 @@ export const loginAdmin = async (pin) => {
   }
 
   if (!response.ok) throw new Error('PIN incorrecto');
-  return response.json(); // { token, aviso_pago }
+  return response.json(); // { token, rol, aviso_pago, barbero }
 };
 
 /**
