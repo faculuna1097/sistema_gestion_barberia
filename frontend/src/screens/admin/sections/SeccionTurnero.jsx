@@ -12,11 +12,13 @@
 //       rango, se dibuja una línea horizontal indigo de "ahora".
 //     * Lista: tabla densa D10 (sin bandas grises, hover scoped). Click en
 //       fila abre el mismo Modal de detalle que la agenda.
-//   - Filtros: chips de barbero (primarios, tamaño md) + chips de estado
-//     (secundarios, tamaño sm) usando el primitivo ChipFiltro.
-//   - KPIs del día (Total / Reservados / Completados / Sin éxito) calculados
-//     sobre el dataset completo del día (no respeta filtros), así representan
-//     siempre "lo que hay en el día".
+//   - Filtro: chips de barbero (primarios, tamaño md) usando el primitivo
+//     ChipFiltro. (Ya no hay filtro por estado.)
+//   - Los turnos cancelados NO aparecen en esta sección: ni en la agenda/lista
+//     ni en los KPIs. El dataset visible (turnosDelDia) se deriva excluyéndolos.
+//   - KPIs del día (Total / Reservados / Completados / No asistió) calculados
+//     sobre el dataset visible del día (sin cancelados), así representan siempre
+//     "lo que hay en el día".
 //   - Errores de acción (cambiar estado / cancelar) se muestran como banner
 //     inline con auto-dismiss. NO se usa alert() ni Toast (Toast queda como
 //     deuda — construir cuando aparezca el segundo caso).
@@ -88,9 +90,6 @@ const ESTADO_MAP = {
   no_asistio: { bg: theme.warningSoft, fg: theme.warning, border: theme.warning, label: 'No asistió', Icon: UserX },
   cancelado:  { bg: theme.surfaceAlt,  fg: theme.muted,   border: theme.muted,   label: 'Cancelado',  Icon: X },
 };
-
-// Lista de estados filtrables, en el orden visual deseado.
-const ESTADOS_FILTRO = ['reservado', 'completado', 'no_asistio', 'cancelado'];
 
 // Altura de cada hora en la grilla de agenda (px).
 const ALTO_HORA_PX = 60;
@@ -299,6 +298,7 @@ function KpiMini({ label, valor, tono }) {
     accent:  theme.accent,
     success: theme.success,
     warning: theme.warning,
+    danger:  theme.danger,
     muted:   theme.muted,
     ink:     theme.ink,
   }[tono || 'ink'];
@@ -1235,7 +1235,6 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
   const [servicios, setServicios]         = useState([]); // catálogo, solo para derivar precio al completar
   const [horarioAtencion, setHorarioAtencion] = useState(null); // 7 días {dia_semana,abierto,hora_inicio,hora_fin}; null = aún no cargó / falló
   const [barberoActivo, setBarberoActivo] = useState(null); // null = Todos
-  const [estadoActivo, setEstadoActivo]   = useState(null); // null = Todos
   const [turnos, setTurnos]               = useState([]);
   const [cargando, setCargando]           = useState(true);
   const [error, setError]                 = useState(null);
@@ -1303,8 +1302,8 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
   }, []);
 
   // ── Carga de turnos (cuando cambia fecha / barbero / intento) ───────────
-  // Nota: el filtro por estado se aplica client-side (no impacta el fetch),
-  // así no se rehace la request cada vez que se togglean los chips de estado.
+  // Nota: el fetch trae todos los estados; el descarte de cancelados se hace
+  // client-side al derivar `turnosDelDia` (no impacta la request).
   useEffect(() => {
     let cancelado = false;
     const cargar = async () => {
@@ -1400,18 +1399,23 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
   };
 
   // ── Derivados ───────────────────────────────────────────────────────────
-  // KPIs del día: SIEMPRE sobre el dataset completo (no respeta filtros).
+  // Dataset visible del día: excluye cancelados. Los turnos cancelados no se
+  // muestran (agenda/lista) ni se cuentan (KPIs) en esta sección. El estado
+  // crudo `turnos` se mantiene para las acciones: al cancelar, el turno pasa a
+  // 'cancelado' y desaparece de este derivado (sin necesidad de refetch).
+  const turnosDelDia = turnos.filter((t) => t.estado !== 'cancelado');
+
+  // KPIs del día: sobre el dataset visible (sin cancelados).
   const kpisDia = {
-    total:      turnos.length,
-    reservado:  turnos.filter((t) => t.estado === 'reservado').length,
-    completado: turnos.filter((t) => t.estado === 'completado').length,
-    sinExito:   turnos.filter((t) => t.estado === 'no_asistio' || t.estado === 'cancelado').length,
+    total:      turnosDelDia.length,
+    reservado:  turnosDelDia.filter((t) => t.estado === 'reservado').length,
+    completado: turnosDelDia.filter((t) => t.estado === 'completado').length,
+    noAsistio:  turnosDelDia.filter((t) => t.estado === 'no_asistio').length,
   };
 
-  // Turnos visibles: aplica filtro de estado (el de barbero ya viene del fetch).
-  const turnosVisibles = estadoActivo
-    ? turnos.filter((t) => t.estado === estadoActivo)
-    : turnos;
+  // Turnos visibles en agenda/lista = el dataset del día. El filtro de barbero
+  // ya viene aplicado del fetch; ya no hay filtro por estado.
+  const turnosVisibles = turnosDelDia;
 
   // Barberos visibles en la agenda (columnas).
   const barberosVisibles = barberoActivo
@@ -1429,9 +1433,8 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
   const localCerrado = estadoJornada?.abierto === false;
 
   // Rango horario de la agenda — base = jornada del local; se expande con el
-  // dataset completo del día (no los filtrados), así no "pega saltos" cuando
-  // cambia el chip de estado.
-  const rangoAgenda = calcularRangoAgenda(turnos, jornadaAbierta);
+  // dataset visible del día (sin cancelados).
+  const rangoAgenda = calcularRangoAgenda(turnosDelDia, jornadaAbierta);
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
@@ -1472,69 +1475,28 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
         <KpiMini label="Total del día" valor={kpisDia.total}      tono="ink" />
         <KpiMini label="Reservados"    valor={kpisDia.reservado}  tono="accent" />
         <KpiMini label="Completados"   valor={kpisDia.completado} tono="success" />
-        <KpiMini label="Sin éxito"     valor={kpisDia.sinExito}   tono="muted" />
+        <KpiMini label="No asistió"    valor={kpisDia.noAsistio}  tono="danger" />
       </div>
 
       {/* ── FILTRO PRIMARIO: BARBEROS ──────────────────────────────────── */}
-      {/* Oculto en modo barbero: un solo barbero (el logueado), el filtro sobra. */}
+      {/* Sin pill "Todos": por defecto (barberoActivo === null) se ven todos.
+          Cada pill es un toggle — click filtra a ese barbero; click de nuevo en
+          la activa vuelve a "todos".
+          Oculto en modo barbero: un solo barbero (el logueado), el filtro sobra. */}
       {!modoBarbero && barberos.length > 0 && (
-        <div style={{ marginBottom: 10 }}>
+        <div style={{ marginBottom: 18 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <ChipFiltro
-              label="Todos"
-              activo={barberoActivo === null}
-              onClick={() => setBarberoActivo(null)}
-            />
             {barberos.map((b) => (
               <ChipFiltro
                 key={b.id}
                 label={b.nombre}
                 activo={barberoActivo === b.id}
-                onClick={() => setBarberoActivo(b.id)}
+                onClick={() => setBarberoActivo((prev) => (prev === b.id ? null : b.id))}
               />
             ))}
           </div>
         </div>
       )}
-
-      {/* ── FILTRO SECUNDARIO: ESTADO ──────────────────────────────────── */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          marginBottom: 18,
-          flexWrap: 'wrap',
-        }}
-      >
-        <span
-          style={{
-            fontFamily: theme.mono,
-            fontSize: theme.sizeMicro,
-            fontWeight: theme.weightHeading,
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: theme.inkSoft,
-          }}
-        >
-          Estado
-        </span>
-        <ChipFiltro
-          size="sm"
-          label="Todos"
-          activo={estadoActivo === null}
-          onClick={() => setEstadoActivo(null)}
-        />
-        {ESTADOS_FILTRO.map((e) => (
-          <ChipFiltro
-            key={e}
-            size="sm"
-            label={ESTADO_MAP[e].label}
-            activo={estadoActivo === e}
-            onClick={() => setEstadoActivo(e)}
-          />
-        ))}
-      </div>
 
       {/* ── CONTENIDO ──────────────────────────────────────────────────── */}
       {cargando && <LoadingState />}
@@ -1569,7 +1531,7 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
 
       {/* Día que el local tiene cerrado y sin turnos: EmptyState en vez de la
           grilla vacía 08–22, que sugeriría falsamente "abierto sin reservas". */}
-      {!cargando && !error && barberosVisibles.length > 0 && localCerrado && turnos.length === 0 && (
+      {!cargando && !error && barberosVisibles.length > 0 && localCerrado && turnosDelDia.length === 0 && (
         <EmptyState
           glyph={<CalendarOff size={28} strokeWidth={1.5} />}
           title="Local cerrado"
@@ -1579,7 +1541,7 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
 
       {/* Día cerrado PERO con turnos (reservados antes de cerrar ese día): se
           muestra la grilla igual, con una nota que explica la rareza. */}
-      {!cargando && !error && barberosVisibles.length > 0 && localCerrado && turnos.length > 0 && (
+      {!cargando && !error && barberosVisibles.length > 0 && localCerrado && turnosDelDia.length > 0 && (
         <div style={{ marginBottom: 12 }}>
           <Toast tone="warning">
             El local figura cerrado este día, pero tiene turnos cargados.
@@ -1587,7 +1549,7 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
         </div>
       )}
 
-      {!cargando && !error && barberosVisibles.length > 0 && !(localCerrado && turnos.length === 0) && vista === 'agenda' && (
+      {!cargando && !error && barberosVisibles.length > 0 && !(localCerrado && turnosDelDia.length === 0) && vista === 'agenda' && (
         <AgendaVista
           turnos={turnosVisibles}
           barberosVisibles={barberosVisibles}
@@ -1598,7 +1560,7 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
         />
       )}
 
-      {!cargando && !error && barberosVisibles.length > 0 && !(localCerrado && turnos.length === 0) && vista === 'lista' && (
+      {!cargando && !error && barberosVisibles.length > 0 && !(localCerrado && turnosDelDia.length === 0) && vista === 'lista' && (
         <ListaVista
           turnos={turnosVisibles}
           mostrarBarbero={!modoBarbero && barberoActivo === null}
