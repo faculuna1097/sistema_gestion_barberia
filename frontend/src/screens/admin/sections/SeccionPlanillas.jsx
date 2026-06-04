@@ -89,7 +89,17 @@ const TABS_PRINCIPALES = [
 ];
 
 // ─── Componente principal ─────────────────────────────────────────────────────
-export default function SeccionPlanillas() {
+/**
+ * SeccionPlanillas
+ * Planilla semanal de cortes y comisiones por barbero (read-only).
+ * @param {object} props
+ * @param {boolean} [props.modoBarbero=false] - Si true, la sección corre en modo
+ *   barbero: el token ya scopea `/admin/planilla` a su propia data (un solo
+ *   barbero en `detalleData`, autoseleccionado), así que se oculta la fila de
+ *   chips de filtro por barbero (sobra con uno). El resto —toggle de comisiones,
+ *   selector de semana, export— queda igual: es SU planilla y SU comisión.
+ */
+export default function SeccionPlanillas({ modoBarbero = false }) {
   const [semana, setSemana]                       = useState(getSemanaActual);
   const [tabActiva, setTabActiva]                 = useState('detalle');
   const [detalleData, setDetalleData]             = useState([]);
@@ -293,16 +303,20 @@ export default function SeccionPlanillas() {
           />
         ) : (
           <>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {detalleData.map((b) => (
-                <ChipFiltro
-                  key={b.barbero_id}
-                  label={b.barbero_nombre}
-                  activo={barberoActivo === b.barbero_id}
-                  onClick={() => cambiarBarbero(b.barbero_id)}
-                />
-              ))}
-            </div>
+            {/* Fila de filtro por barbero: se oculta en modo barbero (un solo
+                barbero, ya autoseleccionado, hace el filtro redundante). */}
+            {!modoBarbero && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {detalleData.map((b) => (
+                  <ChipFiltro
+                    key={b.barbero_id}
+                    label={b.barbero_nombre}
+                    activo={barberoActivo === b.barbero_id}
+                    onClick={() => cambiarBarbero(b.barbero_id)}
+                  />
+                ))}
+              </div>
+            )}
 
             {diasDelBarbero.length === 0 ? (
               <EmptyState

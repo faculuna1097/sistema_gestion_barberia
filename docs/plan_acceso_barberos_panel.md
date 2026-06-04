@@ -396,6 +396,26 @@ PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
 > (GET admin+barbero, PUT admin-only); para el turnero del barbero la única ruta
 > imprescindible sigue siendo `/admin/turnos`.
 
+> **Estado: ✅ Hecha (2026-06-04)** — secciones en modo barbero + hardening backend, en
+> `feature/acceso-barberos-panel`.
+> - **Backend** (`index.js`): `/api/admin/turnos` y `/api/admin/planilla` pasaron a
+>   `requiereRol('admin','barbero')` (excluyen operativo). Verificado que ningún flujo
+>   operativo del iPad las llama (usa `/api/turnos` y `/api/cortes`); el panel de gestión
+>   las consume con token admin (`apiFetch`) y `frontend-barbero` con token barbero, ambos
+>   cubiertos por el nuevo `requiereRol`. Deuda de `estado_actual.md` marcada resuelta.
+> - **`SeccionPlanillas.jsx`** (consume `modoBarbero`): oculta la fila de `ChipFiltro` de
+>   barberos en modo barbero (un solo barbero, ya autoseleccionado). Resto intacto (comisiones,
+>   semana, export = SU planilla).
+> - **`SeccionTurnero.jsx`** (consume `modoBarbero` + `barberoSesion`): `barberos` lazy-init
+>   `[barberoSesion]` + se saltea `getBarberosAdmin()`; se saltea `getServiciosAdmin()`;
+>   `getAdminTurnos(fecha, barberoSesion.id)`; se ocultan las pills de barbero y la columna
+>   "Barbero" de la Lista; modal read-only (prop `readonly` → sin completar/no asistió/cancelar,
+>   D1). El filtro de estado se mantiene. ESLint limpio (exit 0). Efectos con `modoBarbero`/
+>   `barberoSesion` en sus dep arrays (estables por montaje, no re-disparan).
+> - **Deuda nueva** (en `estado_actual.md`): `/admin/horarios|suspensiones|clientes` van sin
+>   `requiereRol` y `frontend-barbero` ya los reusa con token barbero → auditar scoping por
+>   `req.barbero_id` (escalada horizontal) y posible unificación/duplicación. Fuera de alcance.
+
 ---
 
 ## 7. Pruebas / criterios de aceptación (end-to-end)
@@ -438,15 +458,15 @@ PIN de barbero → `{rol:'barbero', barbero{...}}`; PIN inexistente → 401.
 - [x] `routes/authPanel.js` (nuevo) + registro en `index.js`. ✅ Fase 3.
 - [x] Cleanup: eliminar `/api/auth/admin/login` — `routes/authAdmin.js` + `controllers/authAdmin.js` + import/registro en `index.js`. ✅ Fase 4.
 - [x] Revisar `requiereRol` de `/admin/turnos`, `/admin/planilla`, `/admin/horario-atencion` (incluir `'barbero'`). ✅ Fase 3.
-- [ ] `index.js` — endurecer `/admin/turnos` y `/admin/planilla` a `requiereRol('admin','barbero')` (excluir operativo; deuda en `estado_actual.md`). → Fase 6.
+- [x] `index.js` — endurecer `/admin/turnos` y `/admin/planilla` a `requiereRol('admin','barbero')` (excluir operativo; deuda en `estado_actual.md`). ✅ Fase 6.
 
 **Frontend (`/frontend`)**
 - [x] `services/api.js` — `loginPanel` (+ eliminado `loginAdmin`, cleanup). ✅ Fase 4.
 - [x] `screens/PantallaLoginAdmin.jsx` — usar `loginPanel`, copy neutral, pasar rol/barbero al `onAcceso`. ✅ Fase 4.
 - [x] `App.jsx` — estado `rolPanel` + `barberoSesion`, wiring del login y cierre de sesión. ✅ Fase 4.
 - [x] `screens/admin/PanelAdmin.jsx` — menú condicional + props a secciones. ✅ Fase 5.
-- [ ] `screens/admin/sections/SeccionPlanillas.jsx` — `modoBarbero` (ocultar chips).
-- [ ] `screens/admin/sections/SeccionTurnero.jsx` — `modoBarbero` (barbero único, sin acciones, fetches condicionales).
+- [x] `screens/admin/sections/SeccionPlanillas.jsx` — `modoBarbero` (ocultar chips). ✅ Fase 6.
+- [x] `screens/admin/sections/SeccionTurnero.jsx` — `modoBarbero` (barbero único, sin acciones, fetches condicionales). ✅ Fase 6.
 
 **Datos (operativo)**
 - [x] Reasignar PINs únicos por tenant (Fase 2). ✅ Hecho por el dueño (2026-06-03).
@@ -482,9 +502,13 @@ a la app del barbero con selector + PIN, compatible con PINs únicos).
     `IdentidadBarbero` en el footer del sidebar (D5, Opción B), y `modoBarbero`/`barberoSesion`
     propagadas a la sección activa. Planilla del barbero ya carga su data; el Turnero queda
     no-funcional (403 en `/barberos` y `/admin/servicios`, admin-only) hasta la Fase 6.
-  - **Próximo: Fase 6** — secciones en modo barbero: `SeccionTurnero` rol-aware (barbero único,
-    sin acciones D1, fetches condicionales para evitar los 403) y `SeccionPlanillas` (ocultar
-    chips de barbero), + hardening de `/admin/turnos` y `/admin/planilla` a `requiereRol('admin','barbero')`.
-- Nada pendiente de decisión: el plan está cerrado y listo para ejecutar la Fase 6.
+  - **Fase 6 ✅ hecha** — secciones en modo barbero: `SeccionTurnero` rol-aware (barbero único
+    desde `barberoSesion`, sin `getBarberosAdmin`/`getServiciosAdmin`, modal read-only D1, pills
+    y columna "Barbero" ocultas) y `SeccionPlanillas` (ocultar chips de barbero), + hardening de
+    `/admin/turnos` y `/admin/planilla` a `requiereRol('admin','barbero')`. ESLint limpio. Deuda
+    nueva registrada (`/admin/horarios|suspensiones|clientes` sin `requiereRol`, reusadas por
+    `frontend-barbero` → auditar scoping/unificación).
+- **Plan completo**: las 6 fases ✅ hechas. Pendiente: verificación end-to-end del usuario (§7) y
+  merge del branch `feature/acceso-barberos-panel`.
 
 *— Fin del documento —*

@@ -904,8 +904,11 @@ const totalValorStyle = {
  * @param {Array} servicios - catálogo de servicios del tenant ({ id, nombre,
  *   precio, activo }). Fuente del selector de servicio y del precio. Si está
  *   vacío (no cargó), el form degrada a precio editable a mano.
+ * @param {boolean} [readonly=false] - Si true (modo barbero, D1), el modal es de
+ *   solo lectura: oculta las acciones (completar/no asistió/cancelar) y, por ende,
+ *   los modos 'completando'/'confirmando' quedan inalcanzables.
  */
-function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCancelar, accionando, servicios }) {
+function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCancelar, accionando, servicios, readonly = false }) {
   const [modo, setModo] = useState('detalle');
 
   // Estado del form de "completar" (local al modal, como el modo confirmando).
@@ -1017,7 +1020,7 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
               (flex: 1) para llenar el ancho del modal.
               Fila 2 (solo si el turno NO empezó todavía): Cancelar turno,
               centrado en su propio div con ancho natural. */}
-          {esReservado && (
+          {esReservado && !readonly && (
             <>
               <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
                 <Button
@@ -1210,10 +1213,25 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
 // Componente principal
 // ═══════════════════════════════════════════════════════════════════════════
 
-export default function SeccionTurnero() {
+/**
+ * SeccionTurnero
+ * Vista de turnos del día (agenda + lista) del panel.
+ * @param {object} props
+ * @param {boolean} [props.modoBarbero=false] - Si true, corre en modo barbero: no
+ *   llama a getBarberosAdmin() ni getServiciosAdmin() (admin/operativo-only → 403
+ *   con token barbero); usa [barberoSesion] como única columna, oculta el filtro de
+ *   pills de barbero y la columna "Barbero" de la Lista, y el modal de detalle es
+ *   read-only (sin completar/no asistió/cancelar — D1). El backend igual scopea
+ *   /admin/turnos por req.barbero_id.
+ * @param {{id: string, nombre: string}|null} [props.barberoSesion=null] - Barbero
+ *   logueado; única columna visible en modo barbero.
+ */
+export default function SeccionTurnero({ modoBarbero = false, barberoSesion = null }) {
   const [fecha, setFecha]                 = useState(getFechaHoy);
   const [vista, setVista]                 = useState('agenda'); // 'agenda' | 'lista'
-  const [barberos, setBarberos]           = useState([]);
+  // En modo barbero la única "columna" es el barbero logueado, inyectado como
+  // estado inicial; el efecto de carga NO pega a /barberos (403 con token barbero).
+  const [barberos, setBarberos]           = useState(modoBarbero && barberoSesion ? [barberoSesion] : []);
   const [servicios, setServicios]         = useState([]); // catálogo, solo para derivar precio al completar
   const [horarioAtencion, setHorarioAtencion] = useState(null); // 7 días {dia_semana,abierto,hora_inicio,hora_fin}; null = aún no cargó / falló
   const [barberoActivo, setBarberoActivo] = useState(null); // null = Todos
@@ -1232,7 +1250,10 @@ export default function SeccionTurnero() {
   const mostrarErrorAccion = (mensaje) => setErrorAccion(mensaje);
 
   // ── Carga inicial de barberos ───────────────────────────────────────────
+  // En modo barbero `barberos` ya viene del estado inicial ([barberoSesion]) y
+  // /barberos es admin/operativo-only (403 con token barbero): se saltea el fetch.
   useEffect(() => {
+    if (modoBarbero) return;
     const cargar = async () => {
       try {
         const data = await getBarberosAdmin();
@@ -1242,7 +1263,7 @@ export default function SeccionTurnero() {
       }
     };
     cargar();
-  }, []);
+  }, [modoBarbero]);
 
   // ── Carga del catálogo de servicios ─────────────────────────────────────
   // Solo se usa para derivar el precio del servicio al completar un turno (el
@@ -1250,6 +1271,9 @@ export default function SeccionTurnero() {
   // propósito: si esta falla, la agenda sigue andando y el modal de completar
   // degrada a precio editable (precioDerivado = undefined).
   useEffect(() => {
+    // En modo barbero el modal es read-only (sin "completar"): no se necesita el
+    // catálogo de precios y /admin/servicios es admin-only (403 con token barbero).
+    if (modoBarbero) return;
     const cargar = async () => {
       try {
         const data = await getServiciosAdmin();
@@ -1259,7 +1283,7 @@ export default function SeccionTurnero() {
       }
     };
     cargar();
-  }, []);
+  }, [modoBarbero]);
 
   // ── Carga del horario de atención del local ──────────────────────────────
   // Define el rango base de la agenda (la jornada real del día) y permite marcar
@@ -1287,7 +1311,10 @@ export default function SeccionTurnero() {
       setCargando(true);
       setError(null);
       try {
-        const data = await getAdminTurnos(fecha, barberoActivo);
+        // En modo barbero el backend scopea por token; pasar el id propio
+        // mantiene la UI coherente (inocuo para el filtro server-side).
+        const barberoIdFetch = modoBarbero ? barberoSesion?.id : barberoActivo;
+        const data = await getAdminTurnos(fecha, barberoIdFetch);
         if (!cancelado) setTurnos(data);
       } catch (err) {
         console.error('[seccionTurnero] Error en cargarTurnos:', err.message);
@@ -1298,7 +1325,7 @@ export default function SeccionTurnero() {
     };
     cargar();
     return () => { cancelado = true; };
-  }, [fecha, barberoActivo, intento]);
+  }, [fecha, barberoActivo, intento, modoBarbero, barberoSesion]);
 
   // ── Acciones ────────────────────────────────────────────────────────────
   const cambiarEstado = async (turnoId, nuevoEstado) => {
@@ -1449,7 +1476,8 @@ export default function SeccionTurnero() {
       </div>
 
       {/* ── FILTRO PRIMARIO: BARBEROS ──────────────────────────────────── */}
-      {barberos.length > 0 && (
+      {/* Oculto en modo barbero: un solo barbero (el logueado), el filtro sobra. */}
+      {!modoBarbero && barberos.length > 0 && (
         <div style={{ marginBottom: 10 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <ChipFiltro
@@ -1573,7 +1601,7 @@ export default function SeccionTurnero() {
       {!cargando && !error && barberosVisibles.length > 0 && !(localCerrado && turnos.length === 0) && vista === 'lista' && (
         <ListaVista
           turnos={turnosVisibles}
-          mostrarBarbero={barberoActivo === null}
+          mostrarBarbero={!modoBarbero && barberoActivo === null}
           onTurnoClick={setTurnoSeleccionado}
         />
       )}
@@ -1589,6 +1617,7 @@ export default function SeccionTurnero() {
           onCancelar={cancelarTurno}
           accionando={accionando === turnoSeleccionado.id}
           servicios={servicios}
+          readonly={modoBarbero}
         />
       )}
     </div>
