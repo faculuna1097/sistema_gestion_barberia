@@ -290,6 +290,23 @@ function ConfirmadoView({ reserva, resultado, onNuevaReserva }) {
           <span style={{ color: theme.ink, fontWeight: theme.weightMedium }}>{reserva.email}</span>
         </p>
 
+        {/* Recordatorio anti-spam: el mail de confirmación suele caer en
+            "correo no deseado", sobre todo en Outlook/Hotmail. */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: 6,
+          marginTop: 10,
+          fontFamily: theme.body,
+          fontSize: 12,
+          color: theme.muted,
+          lineHeight: 1.5,
+        }}>
+          <IconoInfo/>
+          <span>Revisá la carpeta de spam o correo no deseado.</span>
+        </div>
+
         {/* Card resumen del turno confirmado */}
         <div style={{
           background: theme.surface,

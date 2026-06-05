@@ -31,6 +31,18 @@ const PAISES = [
 ];
 
 /**
+ * MAX_DIGITOS_POR_PAIS
+ * Tope de dígitos editables por país: el largo estándar del número (el celular
+ * en el caso típico). Al llegar al tope, el input deja de aceptar más dígitos.
+ * Para Argentina son 10: libphonenumber considera "posible" también 11 dígitos
+ * (la forma con el 9 de celular), pero la entrada estándar son 10, así que lo
+ * topamos ahí a propósito.
+ */
+const MAX_DIGITOS_POR_PAIS = {
+  AR: 10, BO: 8, BR: 11, CL: 9, PY: 9, UY: 9, US: 10,
+};
+
+/**
  * capitalizarNombre
  * Pone en mayúscula la primera letra de cada palabra, dejando el resto del
  * texto tal como lo escribió el cliente (no fuerza el resto a minúscula, para
@@ -117,21 +129,26 @@ function DatosCliente({ datos, onConfirmar, onVolver }) {
    * Formatea el número a medida que se escribe, con las reglas del país elegido
    * (AsYouType: "1133111686" → "11 3311 1686"). Se crea una instancia nueva por
    * llamada para reformatear el string completo (uso recomendado en inputs
-   * controlados de React).
+   * controlados de React). Frena la entrada al llegar al tope de dígitos del país.
    * @param {string} crudo - Valor crudo del input
    */
   const handleTelefonoChange = (crudo) => {
+    // Freno duro: ignoramos la tecla si excede el tope de dígitos del país.
+    const digitos = crudo.replace(/\D/g, '');
+    if (digitos.length > (MAX_DIGITOS_POR_PAIS[pais] ?? 15)) return;
     setTelefono(new AsYouType(pais).input(crudo));
   };
 
   /**
    * handlePaisChange
-   * Cambia el país y reformatea el número actual con las reglas del nuevo país.
+   * Cambia el país y limpia el número. Como las reglas de formato y longitud
+   * cambian según el país, es más claro que el cliente lo reescriba desde cero
+   * que arrastrar un número a medio formatear con las reglas del país anterior.
    * @param {string} nuevoIso - ISO del país elegido
    */
   const handlePaisChange = (nuevoIso) => {
     setPais(nuevoIso);
-    setTelefono(new AsYouType(nuevoIso).input(telefono));
+    setTelefono('');
   };
 
   /**
