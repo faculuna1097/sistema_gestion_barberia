@@ -10,7 +10,7 @@ import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { calcularSlotsDisponibles, calcularDiasConDisponibilidad, DisponibilidadError } from '../services/disponibilidadService.js';
 import { actualizarEvento, cancelarEvento } from '../services/googleCalendar.js';
-import { enviarCancelacion, enviarReprogramacion } from '../services/mailer.js';
+import { enviarCancelacion, enviarReprogramacion, construirContextoMail } from '../services/mailer.js';
 import {
   calcularDuracionServicio, upsertCliente, insertarTurno, enriquecerTurno,
   armarLinkGestion, sincronizarCalendarCreacion, notificarConfirmacion,
@@ -404,11 +404,8 @@ export const cancelarTurno = async (req, res) => {
     if (r.google_event_id) {
       await cancelarEvento(r.google_event_id);
     }
-    const turnoParaServices = { inicio: r.inicio, fin: r.fin };
-    const barbero  = { nombre: r.barbero_nombre, email: r.barbero_email };
-    const servicio = { nombre: r.servicio_nombre };
-    const cliente  = { nombre: r.cliente_nombre, email: r.cliente_email, telefono: r.cliente_telefono };
-    await enviarCancelacion(turnoParaServices, barbero, servicio, cliente, 'cliente');
+    const { turno, barbero, servicio, cliente } = construirContextoMail(r);
+    await enviarCancelacion(turno, barbero, servicio, cliente, 'cliente');
 
     console.log('[turnero] cancelarTurno completado | turno_id:', r.id);
     res.json({ ok: true });
@@ -503,9 +500,7 @@ export const reprogramarTurno = async (req, res) => {
 
     // ── Best-effort: Google Calendar + mail ────────────────────────────────
     const nuevoTurno = { inicio: inicioDT.toISO(), fin: finDT.toISO() };
-    const barbero  = { nombre: r.barbero_nombre, email: r.barbero_email };
-    const servicio = { nombre: r.servicio_nombre };
-    const cliente  = { nombre: r.cliente_nombre, email: r.cliente_email, telefono: r.cliente_telefono };
+    const { barbero, servicio, cliente } = construirContextoMail(r);
 
     if (r.google_event_id) {
       await actualizarEvento(r.google_event_id, nuevoTurno, barbero, servicio, cliente);

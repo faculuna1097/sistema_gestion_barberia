@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { crearEvento, cancelarEvento } from './googleCalendar.js';
-import { enviarConfirmacion, enviarCancelacion } from './mailer.js';
+import { enviarConfirmacion, enviarCancelacion, construirContextoMail } from './mailer.js';
 import { TZ, ANTELACION_MINIMA_MINUTOS } from '../utils/constantes.js';
 import { registrarCorte } from './cortesService.js';
 
@@ -155,12 +155,9 @@ export const armarLinkTurnero = (req) => {
  * @param {Object} enriquecido - resultado de enriquecerTurno
  */
 export const sincronizarCalendarCreacion = async (turnoId, enriquecido) => {
-  const turnoData = { inicio: enriquecido.inicio, fin: enriquecido.fin };
-  const barbero   = { nombre: enriquecido.barbero_nombre, email: enriquecido.barbero_email };
-  const servicio  = { nombre: enriquecido.servicio_nombre };
-  const cliente   = { nombre: enriquecido.cliente_nombre, email: enriquecido.cliente_email, telefono: enriquecido.cliente_telefono };
+  const { turno, barbero, servicio, cliente } = construirContextoMail(enriquecido);
 
-  const eventId = await crearEvento(turnoData, barbero, servicio, cliente);
+  const eventId = await crearEvento(turno, barbero, servicio, cliente);
   if (eventId) {
     try {
       await query(`UPDATE turno SET google_event_id = $1 WHERE id = $2`, [eventId, turnoId]);
@@ -176,12 +173,9 @@ export const sincronizarCalendarCreacion = async (turnoId, enriquecido) => {
  * @param {string} linkGestion - URL de gestión del turno
  */
 export const notificarConfirmacion = async (enriquecido, linkGestion) => {
-  const turnoData = { inicio: enriquecido.inicio, fin: enriquecido.fin };
-  const barbero   = { nombre: enriquecido.barbero_nombre, email: enriquecido.barbero_email };
-  const servicio  = { nombre: enriquecido.servicio_nombre };
-  const cliente   = { nombre: enriquecido.cliente_nombre, email: enriquecido.cliente_email, telefono: enriquecido.cliente_telefono };
+  const { turno, barbero, servicio, cliente } = construirContextoMail(enriquecido);
 
-  await enviarConfirmacion(turnoData, barbero, servicio, cliente, linkGestion);
+  await enviarConfirmacion(turno, barbero, servicio, cliente, linkGestion);
 };
 
 /**
@@ -468,11 +462,8 @@ export const cancelarTurnoPorId = async (turnoId, canceladoPor, tenantId, barber
   if (r.google_event_id) {
     await cancelarEvento(r.google_event_id);
   }
-  const turnoData = { inicio: r.inicio, fin: r.fin };
-  const barbero   = { nombre: r.barbero_nombre, email: r.barbero_email };
-  const servicio  = { nombre: r.servicio_nombre };
-  const cliente   = { nombre: r.cliente_nombre, email: r.cliente_email, telefono: r.cliente_telefono };
-  await enviarCancelacion(turnoData, barbero, servicio, cliente, canceladoPor);
+  const { turno, barbero, servicio, cliente } = construirContextoMail(r);
+  await enviarCancelacion(turno, barbero, servicio, cliente, canceladoPor);
 
   return { id: turnoId, estado: 'cancelado' };
 };

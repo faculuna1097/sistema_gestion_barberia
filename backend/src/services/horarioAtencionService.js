@@ -9,7 +9,7 @@ import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { TZ } from '../utils/constantes.js';
 import { cancelarEvento } from './googleCalendar.js';
-import { enviarCancelacionAutomatica } from './mailer.js';
+import { enviarCancelacionAutomatica, construirContextoMail } from './mailer.js';
 
 /**
  * Obtiene las filas crudas de horario del tenant tal como están en la DB.
@@ -246,12 +246,9 @@ export const ejecutarCascada = async (delta, linkTurnero) => {
     // Best-effort: mail al cliente. El mensaje habla de un cierre/cambio de
     // horario, no de "cancelado por el barbero".
     if (t.cliente_email) {
-      const turnoData = { inicio: t.inicio, fin: t.fin };
-      const barbero   = { nombre: t.barbero_nombre, email: t.barbero_email };
-      const servicio  = { nombre: t.servicio_nombre };
-      const cliente   = { nombre: t.cliente_nombre, email: t.cliente_email, telefono: t.cliente_telefono };
+      const { turno, barbero, servicio, cliente } = construirContextoMail(t);
       await enviarCancelacionAutomatica(
-        turnoData, barbero, servicio, cliente,
+        turno, barbero, servicio, cliente,
         {
           intro: `Hola ${cliente.nombre ?? ''}, cambiamos el horario de atención del local y tu turno quedó fuera del nuevo horario. Lamentamos el inconveniente; podés reservar otro cuando quieras.`,
           motivo: 'Cierre',

@@ -195,6 +195,24 @@ const debeSaltarseEnvio = (nombreFuncion, cliente) => {
 };
 
 /**
+ * Mapea una fila enriquecida de turno (resultado de un SELECT con JOINs a
+ * barbero, servicio y cliente que usa los alias estándar del proyecto:
+ * inicio, fin, barbero_nombre, barbero_email, servicio_nombre, cliente_nombre,
+ * cliente_email, cliente_telefono) a los objetos de dominio que consumen el
+ * mailer y Google Calendar. Centraliza el desempaquetado que antes estaba
+ * duplicado en cada caller.
+ *
+ * @param {Object} fila - fila cruda de la query, con los alias estándar
+ * @returns {{turno: {inicio, fin}, barbero: {nombre, email}, servicio: {nombre}, cliente: {nombre, email, telefono}}}
+ */
+export const construirContextoMail = (fila) => ({
+  turno:    { inicio: fila.inicio, fin: fila.fin },
+  barbero:  { nombre: fila.barbero_nombre, email: fila.barbero_email },
+  servicio: { nombre: fila.servicio_nombre },
+  cliente:  { nombre: fila.cliente_nombre, email: fila.cliente_email, telefono: fila.cliente_telefono },
+});
+
+/**
  * Mail de confirmación de turno reservado.
  *
  * @param {Object} turno - { inicio, fin }

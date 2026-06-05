@@ -8,7 +8,7 @@
 import { query } from '../config/db.js';
 import { TZ } from '../utils/constantes.js';
 import { cancelarEvento } from './googleCalendar.js';
-import { enviarCancelacionAutomatica } from './mailer.js';
+import { enviarCancelacionAutomatica, construirContextoMail } from './mailer.js';
 
 /**
  * Lista los feriados del tenant con fecha >= desde, ordenados ascendentemente.
@@ -102,13 +102,10 @@ export const ejecutarCascadaFeriado = async (turnos, linkTurnero, descripcion) =
 
     // Best-effort: mail al cliente.
     if (t.cliente_email) {
-      const turnoData = { inicio: t.inicio, fin: t.fin };
-      const barbero   = { nombre: t.barbero_nombre, email: t.barbero_email };
-      const servicio  = { nombre: t.servicio_nombre };
-      const cliente   = { nombre: t.cliente_nombre, email: t.cliente_email, telefono: t.cliente_telefono };
+      const { turno, barbero, servicio, cliente } = construirContextoMail(t);
       const detalle = descripcion ? ` (${descripcion})` : '';
       await enviarCancelacionAutomatica(
-        turnoData, barbero, servicio, cliente,
+        turno, barbero, servicio, cliente,
         {
           intro: `Hola ${cliente.nombre ?? ''}, declaramos feriado el día de tu turno${detalle} y el local va a estar cerrado. Lamentamos el inconveniente; podés reservar otro cuando quieras.`,
           motivo: 'Feriado',
