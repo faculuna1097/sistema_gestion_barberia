@@ -57,7 +57,7 @@ function SearchInput({ value, onChange, placeholder = 'Buscar...', ariaLabel = '
           border: 'none',
           outline: 'none',
           fontFamily: theme.body,
-          fontSize: 15,
+          fontSize: theme.sizeInput,
           color: theme.ink,
         }}
       />

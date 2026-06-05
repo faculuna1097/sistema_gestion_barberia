@@ -67,7 +67,7 @@ function Field({
           border: `1px solid ${borderColor}`,
           borderRadius: theme.radius,
           fontFamily: theme.body,
-          fontSize: 15,
+          fontSize: theme.sizeInput,
           color: theme.ink,
           transition: `border-color ${theme.transitionFast}, box-shadow ${theme.transitionFast}`,
           boxShadow: focus ? `0 0 0 3px ${theme.accent}26` : 'none',

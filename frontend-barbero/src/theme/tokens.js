@@ -45,6 +45,10 @@ export const theme = {
   sizeBody:    14,  // texto base
   sizeMicro:   11,  // eyebrows, micro-labels en mayúsculas
 
+  // Tamaño funcional (no de jerarquía): los inputs deben ser ≥16px para
+  // evitar el auto-zoom de iOS Safari al enfocar un campo de texto.
+  sizeInput:   16,
+
   weightRegular: 400,
   weightMedium:  500,
   weightHeading: 600,

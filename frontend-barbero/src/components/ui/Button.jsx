@@ -63,7 +63,9 @@ function Button({
       color: theme.inkSoft,
     },
     danger: {
-      background: hover && !disabled ? theme.dangerSoft : 'transparent',
+      // Sin cambio de fondo en hover: la acción destructiva queda
+      // desjerarquizada y no "parpadea" en rojo al pasar el cursor.
+      background: 'transparent',
       color: theme.danger,
       borderColor: theme.hairline,
     },

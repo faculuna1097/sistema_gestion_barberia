@@ -6,15 +6,14 @@
 // Props:
 //   barbero — { id, nombre }
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { ChevronLeft, ChevronRight, X, Check, UserX } from 'lucide-react';
 
-import { getTurnos, patchEstadoTurno, cancelarTurno } from '../services/api.js';
+import { getTurnos, patchEstadoTurno, cancelarTurno, getTenant } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { fmtHora, fmtFechaLarga } from '../utils/fecha.js';
 
 import {
-  ScreenHeader,
   Skeleton,
   Button,
   ConfirmDialog,
@@ -23,10 +22,12 @@ import {
 
 // ─── Constantes del timeline ────────────────────────────────────────────────
 const PX_POR_HORA = 80;           // alto en px de cada franja horaria
-const HORA_INICIO = 7;            // primera hora visible (deuda: debería ser por tenant)
-const HORA_FIN    = 22;           // última hora visible
-const ALTO_TOTAL  = (HORA_FIN - HORA_INICIO) * PX_POR_HORA;
-const OFFSET_IZQ   = 56;          // ancho reservado para las labels de hora
+const OFFSET_IZQ  = 56;           // ancho reservado para las labels de hora
+
+// Rango horario por defecto. Red de seguridad para cuando no hay horario del
+// local: falla la carga de getTenant, o el día está cerrado y no hay turnos.
+const HORA_INICIO_DEFAULT = 7;
+const HORA_FIN_DEFAULT    = 22;
 
 // Mapa estado → tokens del sistema. La barra lateral usa el color fuerte;
 // el fondo del bloque, su variante soft.
@@ -96,10 +97,74 @@ function minutosDelDia(iso) {
  * topDesdeMinutos
  * Convierte minutos-del-día a coordenada `top` dentro del timeline.
  * @param {number} minutos
+ * @param {number} horaInicio - primera hora visible del timeline (su `top` es 0)
  * @returns {number} px
  */
-function topDesdeMinutos(minutos) {
-  return (minutos / 60 - HORA_INICIO) * PX_POR_HORA;
+function topDesdeMinutos(minutos, horaInicio) {
+  return (minutos / 60 - horaInicio) * PX_POR_HORA;
+}
+
+/**
+ * parseHoraAFloat
+ * Convierte una hora 'HH:MM' (o 'HH:MM:SS') a horas como decimal.
+ * Ej: '10:30' → 10.5. Sirve para floor/ceil del rango sin perder los minutos.
+ * @param {string} hora
+ * @returns {number} horas con fracción
+ */
+function parseHoraAFloat(hora) {
+  const [h, m] = (hora || '0:0').split(':');
+  return Number(h) + Number(m) / 60;
+}
+
+/**
+ * calcularRangoHoras
+ * Deriva el rango horario [horaInicio, horaFin] del timeline para el día mostrado.
+ * Base = horario de atención del local ese día: apertura-1h .. cierre+1h, con
+ * floor/ceil para que las líneas de hora queden en enteros prolijos. Luego expande
+ * el rango para que cualquier turno fuera de esa franja siga siendo visible.
+ * Si el día está cerrado (o no hay horario): deriva de los turnos del día (±1h);
+ * si tampoco hay turnos, cae al rango por defecto.
+ * @param {Array<{dia_semana, hora_inicio, hora_fin}>|null} horarioAtencion - días abiertos del local
+ * @param {string} fecha - 'YYYY-MM-DD' del día mostrado
+ * @param {Array<{inicio, fin}>} turnos - turnos visibles del día (no cancelados)
+ * @returns {{horaInicio: number, horaFin: number}} horas enteras acotadas a [0, 24]
+ */
+function calcularRangoHoras(horarioAtencion, fecha, turnos) {
+  // getDay() sobre mediodía local evita el corrimiento de día por timezone.
+  const diaSemana = new Date(fecha + 'T12:00:00').getDay();
+  const dia = (horarioAtencion || []).find((h) => h.dia_semana === diaSemana);
+
+  let inicio;
+  let fin;
+
+  if (dia) {
+    // Día abierto: apertura-1h .. cierre+1h (floor/ceil para horas prolijas).
+    inicio = Math.floor(parseHoraAFloat(dia.hora_inicio)) - 1;
+    fin    = Math.ceil(parseHoraAFloat(dia.hora_fin)) + 1;
+  } else if (turnos.length > 0) {
+    // Día cerrado pero con turnos cargados a mano: derivar de los turnos (±1h).
+    const horasInicio = turnos.map((t) => minutosDelDia(t.inicio) / 60);
+    const horasFin    = turnos.map((t) => minutosDelDia(t.fin) / 60);
+    inicio = Math.floor(Math.min(...horasInicio)) - 1;
+    fin    = Math.ceil(Math.max(...horasFin)) + 1;
+  } else {
+    // Sin horario ni turnos (día cerrado vacío, o falló getTenant): default.
+    inicio = HORA_INICIO_DEFAULT;
+    fin    = HORA_FIN_DEFAULT;
+  }
+
+  // Expandir para que ningún turno quede fuera del rango (clamp al min/max).
+  for (const t of turnos) {
+    inicio = Math.min(inicio, Math.floor(minutosDelDia(t.inicio) / 60));
+    fin    = Math.max(fin,    Math.ceil(minutosDelDia(t.fin) / 60));
+  }
+
+  // Acotar a un reloj válido y garantizar al menos 1 hora de alto.
+  inicio = Math.max(0, inicio);
+  fin    = Math.min(24, fin);
+  if (fin <= inicio) fin = Math.min(24, inicio + 1);
+
+  return { horaInicio: inicio, horaFin: fin };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -116,6 +181,16 @@ export default function Agenda() {
   const [turnos, setTurnos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
+
+  // Horario de atención del local (días abiertos). Se carga una sola vez al
+  // montar — no cambia al navegar días. `tenantListo` gatea el primer render
+  // del timeline para que no aparezca con el rango default y "salte" al real.
+  const [horarioAtencion, setHorarioAtencion] = useState(null);
+  const [tenantListo, setTenantListo] = useState(false);
+
+  // Banner efímero para errores de acción (completar/no asistió/cancelar).
+  // Va aparte de errorCarga para no tapar el timeline si una acción falla.
+  const [errorAccion, setErrorAccion] = useState(null);
 
   const [detalle, setDetalle] = useState(null);                       // turno expandido
   const [confirma, setConfirma] = useState({ open: false, accion: null, turno: null });
@@ -148,12 +223,29 @@ export default function Agenda() {
     setDetalle(null);
   }, [cargarTurnos]);
 
-  // Auto-scroll al indicador de "ahora" cuando se ve el día de hoy.
+  // Carga best-effort del horario del local (una sola vez). Si falla, queda en
+  // [] → el cálculo del rango cae al default 7–22 (red de seguridad).
   useEffect(() => {
-    if (!cargando && esHoy && refAhora.current) {
+    (async () => {
+      try {
+        const tenant = await getTenant();
+        setHorarioAtencion(tenant.horario_atencion || []);
+      } catch (err) {
+        console.error('[Agenda] Error cargando horario del local:', err.message);
+        setHorarioAtencion([]);
+      } finally {
+        setTenantListo(true);
+      }
+    })();
+  }, []);
+
+  // Auto-scroll al indicador de "ahora" cuando se ve el día de hoy. Espera a
+  // tenantListo porque el indicador vive en el Timeline, que recién monta ahí.
+  useEffect(() => {
+    if (!cargando && tenantListo && esHoy && refAhora.current) {
       refAhora.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
-  }, [cargando, esHoy]);
+  }, [cargando, tenantListo, esHoy]);
 
   /**
    * pedirConfirmacion
@@ -163,6 +255,15 @@ export default function Agenda() {
     setDetalle(null);
     setConfirma({ open: true, accion, turno });
   };
+
+  /**
+   * mostrarErrorAccion
+   * Banner de error efímero (4s) que NO reemplaza el timeline.
+   */
+  const mostrarErrorAccion = useCallback((msg) => {
+    setErrorAccion(msg);
+    setTimeout(() => setErrorAccion(null), 4000);
+  }, []);
 
   /**
    * ejecutarAccion
@@ -183,14 +284,24 @@ export default function Agenda() {
     } catch (err) {
       console.error('[Agenda] Error en ejecutarAccion:', err.message);
       setConfirma({ open: false, accion: null, turno: null });
-      setErrorCarga(`Error: ${err.message}`);
+      mostrarErrorAccion(`Error: ${err.message}`);
     } finally {
       setProcesando(false);
     }
   };
 
   // Turnos visibles en el timeline (los cancelados no se dibujan).
-  const turnosVisibles = turnos.filter((t) => t.estado !== 'cancelado');
+  const turnosVisibles = useMemo(
+    () => turnos.filter((t) => t.estado !== 'cancelado'),
+    [turnos],
+  );
+
+  // Rango horario del día mostrado, derivado del horario del local + los turnos.
+  const { horaInicio, horaFin } = useMemo(
+    () => calcularRangoHoras(horarioAtencion, fecha, turnosVisibles),
+    [horarioAtencion, fecha, turnosVisibles],
+  );
+  const altoTotal = (horaFin - horaInicio) * PX_POR_HORA;
 
   return (
     <div style={{
@@ -199,8 +310,6 @@ export default function Agenda() {
       gap: 12,
       padding: '16px 16px 24px',
     }}>
-      <ScreenHeader eyebrow="Agenda" title="Mi agenda" />
-
       <NavegadorDia
         fecha={fecha}
         esHoy={esHoy}
@@ -209,9 +318,25 @@ export default function Agenda() {
         onHoy={() => setFecha(fechaHoyISO())}
       />
 
-      {cargando && <Skeleton height={ALTO_TOTAL} radius={theme.radius} />}
+      {errorAccion && (
+        <div
+          role="alert"
+          style={{
+            background: theme.dangerSoft,
+            border: `1px solid ${theme.danger}`,
+            borderRadius: theme.radius,
+            padding: '10px 12px',
+            color: theme.danger,
+            fontSize: theme.sizeBody,
+          }}
+        >
+          {errorAccion}
+        </div>
+      )}
 
-      {!cargando && errorCarga && (
+      {(cargando || !tenantListo) && <Skeleton height={altoTotal} radius={theme.radius} />}
+
+      {!cargando && tenantListo && errorCarga && (
         <div
           role="alert"
           style={{
@@ -232,10 +357,13 @@ export default function Agenda() {
         </div>
       )}
 
-      {!cargando && !errorCarga && (
+      {!cargando && tenantListo && !errorCarga && (
         <Timeline
           turnos={turnosVisibles}
           esHoy={esHoy}
+          horaInicio={horaInicio}
+          horaFin={horaFin}
+          altoTotal={altoTotal}
           refAhora={refAhora}
           onTocarTurno={setDetalle}
         />
@@ -317,6 +445,9 @@ function NavegadorDia({ fecha, esHoy, onAnterior, onSiguiente, onHoy }) {
           onClick={onHoy}
           style={{
             alignSelf: 'center',
+            minHeight: 44,
+            display: 'inline-flex',
+            alignItems: 'center',
             background: 'transparent',
             border: 'none',
             cursor: 'pointer',
@@ -324,7 +455,7 @@ function NavegadorDia({ fecha, esHoy, onAnterior, onSiguiente, onHoy }) {
             fontFamily: theme.body,
             fontSize: theme.sizeMicro + 1,
             fontWeight: theme.weightMedium,
-            padding: '2px 8px',
+            padding: '0 12px',
             borderRadius: theme.radiusSm,
           }}
         >
@@ -349,8 +480,8 @@ function FlechaDia({ children, onClick, aria }) {
       onMouseLeave={() => setHover(false)}
       aria-label={aria}
       style={{
-        width: 36,
-        height: 36,
+        width: 44,
+        height: 44,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -376,31 +507,34 @@ function FlechaDia({ children, onClick, aria }) {
  * Dibuja las franjas horarias, el indicador de "ahora" y los bloques de turno.
  * @param {Array} props.turnos - Turnos NO cancelados.
  * @param {boolean} props.esHoy
+ * @param {number} props.horaInicio - primera hora visible (su `top` es 0)
+ * @param {number} props.horaFin - última hora visible (inclusive)
+ * @param {number} props.altoTotal - alto del timeline en px
  * @param {React.RefObject} props.refAhora - Ref que se ancla al indicador de ahora.
  * @param {(turno) => void} props.onTocarTurno
  */
-function Timeline({ turnos, esHoy, refAhora, onTocarTurno }) {
+function Timeline({ turnos, esHoy, horaInicio, horaFin, altoTotal, refAhora, onTocarTurno }) {
   // Horas a renderizar (inclusive).
   const horas = [];
-  for (let h = HORA_INICIO; h <= HORA_FIN; h++) horas.push(h);
+  for (let h = horaInicio; h <= horaFin; h++) horas.push(h);
 
   // Posición del indicador de "ahora".
   const ahora = new Date();
   const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes();
-  const topAhora = topDesdeMinutos(minutosAhora);
-  const mostrarAhora = esHoy && topAhora >= 0 && topAhora <= ALTO_TOTAL;
+  const topAhora = topDesdeMinutos(minutosAhora, horaInicio);
+  const mostrarAhora = esHoy && topAhora >= 0 && topAhora <= altoTotal;
 
   return (
     <div style={{
       position: 'relative',
-      height: ALTO_TOTAL,
+      height: altoTotal,
       background: theme.surface,
       border: `1px solid ${theme.hairline}`,
       borderRadius: theme.radius,
     }}>
       {/* Franjas horarias */}
       {horas.map((h) => {
-        const top = (h - HORA_INICIO) * PX_POR_HORA;
+        const top = (h - horaInicio) * PX_POR_HORA;
         return (
           <div key={h} style={{ position: 'absolute', top, left: 0, right: 0 }}>
             <span style={{
@@ -451,7 +585,12 @@ function Timeline({ turnos, esHoy, refAhora, onTocarTurno }) {
 
       {/* Bloques de turno */}
       {turnos.map((turno) => (
-        <BloqueTurno key={turno.id} turno={turno} onClick={() => onTocarTurno(turno)} />
+        <BloqueTurno
+          key={turno.id}
+          turno={turno}
+          horaInicio={horaInicio}
+          onClick={() => onTocarTurno(turno)}
+        />
       ))}
 
       {/* Estado vacío — texto sutil centrado */}
@@ -478,14 +617,15 @@ function Timeline({ turnos, esHoy, refAhora, onTocarTurno }) {
  * BloqueTurno
  * Bloque clickable posicionado por hora. Fondo soft + barra lateral de color.
  * @param {Object} props.turno
+ * @param {number} props.horaInicio - primera hora visible del timeline (origen del `top`)
  * @param {() => void} props.onClick
  */
-function BloqueTurno({ turno, onClick }) {
+function BloqueTurno({ turno, horaInicio, onClick }) {
   const [hover, setHover] = useState(false);
 
   const minInicio = minutosDelDia(turno.inicio);
   const minFin = minutosDelDia(turno.fin);
-  const top = topDesdeMinutos(minInicio);
+  const top = topDesdeMinutos(minInicio, horaInicio);
   const alto = Math.max(((minFin - minInicio) / 60) * PX_POR_HORA, 28);
 
   const estilo = ESTILO_ESTADO[turno.estado] || ESTILO_ESTADO.reservado;
@@ -625,8 +765,8 @@ function DetalleTurnoModal({ turno, onCerrar, onAccion }) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 32,
-              height: 32,
+              width: 44,
+              height: 44,
               background: 'transparent',
               border: 'none',
               borderRadius: 999,
@@ -659,19 +799,24 @@ function DetalleTurnoModal({ turno, onCerrar, onAccion }) {
 
         {/* Acciones — sólo si está reservado. Turnos futuros: sólo cancelar. */}
         {esReservado && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: esFuturo ? '1fr' : '1fr 1fr 1fr',
-            gap: 8,
-            marginTop: 20,
-          }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 20 }}>
             {!esFuturo && (
-              <Button variant="primary" onClick={() => onAccion(turno, 'completar')}>Completé</Button>
+              <Button variant="primary" onClick={() => onAccion(turno, 'completar')}>
+                <Check size={16} strokeWidth={2} aria-hidden="true" />
+                Completado
+              </Button>
             )}
-            {!esFuturo && (
-              <Button variant="secondary" onClick={() => onAccion(turno, 'no_asistio')}>No vino</Button>
+            {!esFuturo ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <Button variant="secondary" onClick={() => onAccion(turno, 'no_asistio')}>
+                  <UserX size={16} strokeWidth={1.75} aria-hidden="true" />
+                  No asistió
+                </Button>
+                <Button variant="danger" onClick={() => onAccion(turno, 'cancelar')}>Cancelar</Button>
+              </div>
+            ) : (
+              <Button variant="danger" onClick={() => onAccion(turno, 'cancelar')}>Cancelar</Button>
             )}
-            <Button variant="danger" onClick={() => onAccion(turno, 'cancelar')}>Cancelar</Button>
           </div>
         )}
       </div>

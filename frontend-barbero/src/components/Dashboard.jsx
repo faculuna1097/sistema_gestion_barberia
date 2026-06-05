@@ -78,6 +78,7 @@ const ACCIONES = {
 export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
   const [turnos, setTurnos] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [refrescando, setRefrescando] = useState(false);
   const [errorCarga, setErrorCarga] = useState(null);
 
   // Banner inline para errores de acción (reemplaza alert() del MD §2).
@@ -107,6 +108,17 @@ export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
   }, [hoy]);
 
   useEffect(() => { cargarTurnos(); }, [cargarTurnos]);
+
+  /**
+   * refrescar
+   * Recarga manual desde el botón "Actualizar". Usa un estado propio
+   * (refrescando) para girar el ícono sin reemplazar la lista por skeletons.
+   */
+  const refrescar = useCallback(async () => {
+    setRefrescando(true);
+    await cargarTurnos();
+    setRefrescando(false);
+  }, [cargarTurnos]);
 
   /**
    * mostrarErrorAccion
@@ -260,7 +272,7 @@ export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
           }}>
             <KPI label="Pendientes"  value={reservados.length}   tone="accent" />
             <KPI label="Completados" value={completados.length}  tone="success" />
-            <KPI label="No vinieron" value={noAsistieron.length} tone="warning" />
+            <KPI label="No asistieron" value={noAsistieron.length} tone="warning" />
           </div>
           {cancelados.length > 0 && (
             <div style={{
@@ -296,9 +308,14 @@ export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
         }}>
           Turnos del día
         </div>
-        <Button variant="ghost" full={false} onClick={cargarTurnos}>
-          <RefreshCw size={14} strokeWidth={1.75} aria-hidden="true" />
-          Actualizar
+        <Button variant="ghost" full={false} onClick={refrescar} disabled={refrescando}>
+          <RefreshCw
+            size={14}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            style={{ animation: refrescando ? 'om-spin 0.6s linear infinite' : undefined }}
+          />
+          {refrescando ? 'Actualizando…' : 'Actualizar'}
         </Button>
       </div>
 

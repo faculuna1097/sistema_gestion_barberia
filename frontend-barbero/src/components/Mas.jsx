@@ -6,7 +6,7 @@
 
 import { Users, Settings, LogOut, ChevronRight } from 'lucide-react';
 import { theme } from '../theme/tokens.js';
-import { ScreenHeader, Card } from './ui';
+import { Card } from './ui';
 
 /**
  * Mas
@@ -19,34 +19,36 @@ import { ScreenHeader, Card } from './ui';
  */
 function Mas({ barbero, onIrClientes, onIrGestion, onCerrarSesion }) {
   return (
-    <>
-      <ScreenHeader
-        title="Más"
-        subtitle={`Sesión iniciada como ${barbero?.nombre ?? '—'}`}
+    <div style={{
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 8,
+      padding: '16px 16px 24px',
+    }}>
+      <ItemFila
+        icon={Users}
+        label="Clientes"
+        descripcion="Historial de clientes atendidos"
+        onClick={onIrClientes}
+      />
+      <ItemFila
+        icon={Settings}
+        label="Gestión"
+        descripcion="Mis horarios y suspensiones"
+        onClick={onIrGestion}
       />
 
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-        padding: '8px 16px 16px',
-      }}>
-        <ItemFila
-          icon={Users}
-          label="Clientes"
-          descripcion="Historial de clientes atendidos"
-          onClick={onIrClientes}
-        />
-        <ItemFila
-          icon={Settings}
-          label="Gestión"
-          descripcion="Mis horarios y suspensiones"
-          onClick={onIrGestion}
-        />
-
-        {/* Separador visual antes de la acción destructiva */}
-        <div style={{ height: 16 }} />
-
+      {/* Sesión actual + cerrar sesión, ancladas al fondo de la pantalla */}
+      <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{
+          fontFamily: theme.body,
+          fontSize: theme.sizeMicro + 1,
+          color: theme.muted,
+          textAlign: 'center',
+        }}>
+          Sesión iniciada como {barbero?.nombre ?? '—'}
+        </div>
         <ItemFila
           icon={LogOut}
           label="Cerrar sesión"
@@ -55,7 +57,7 @@ function Mas({ barbero, onIrClientes, onIrGestion, onCerrarSesion }) {
           onClick={onCerrarSesion}
         />
       </div>
-    </>
+    </div>
   );
 }
 

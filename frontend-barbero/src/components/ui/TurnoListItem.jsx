@@ -4,6 +4,7 @@
 // Si el turno está reservado, debajo aparece una fila de acciones (Completar / No asistió / Cancelar).
 // Las acciones se ocultan automáticamente para estados no-reservado.
 
+import { Check, UserX } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
 import { fmtHora } from '../../utils/fecha.js';
 import Button from './Button.jsx';
@@ -86,26 +87,34 @@ function TurnoListItem({ turno, onCompletar, onNoAsistio, onCancelar, bloqueado 
       </div>
 
       {mostrarAcciones && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${cantAcciones}, 1fr)`,
-          gap: 8,
-          marginTop: 12,
-        }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+          {/* Acción dominante: completar el turno (camino del día a día). */}
           {onCompletar && (
             <Button variant="primary" onClick={onCompletar} disabled={bloqueado}>
-              Completé
+              <Check size={16} strokeWidth={2} aria-hidden="true" />
+              Completado
             </Button>
           )}
-          {onNoAsistio && (
-            <Button variant="secondary" onClick={onNoAsistio} disabled={bloqueado}>
-              No vino
-            </Button>
-          )}
-          {onCancelar && (
-            <Button variant="danger" onClick={onCancelar} disabled={bloqueado}>
-              Cancelar
-            </Button>
+
+          {/* Acciones secundarias: menos frecuentes, peso visual menor. */}
+          {(onNoAsistio || onCancelar) && (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${[onNoAsistio, onCancelar].filter(Boolean).length}, 1fr)`,
+              gap: 8,
+            }}>
+              {onNoAsistio && (
+                <Button variant="secondary" onClick={onNoAsistio} disabled={bloqueado}>
+                  <UserX size={16} strokeWidth={1.75} aria-hidden="true" />
+                  No asistió
+                </Button>
+              )}
+              {onCancelar && (
+                <Button variant="danger" onClick={onCancelar} disabled={bloqueado}>
+                  Cancelar
+                </Button>
+              )}
+            </div>
           )}
         </div>
       )}

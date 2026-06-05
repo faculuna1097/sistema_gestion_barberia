@@ -355,55 +355,48 @@ function FilaDia({ dia, bloques, horarioTenant, onAgregar, onActualizar, onElimi
   return (
     <Card padding={12}>
       <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: sinHorario ? 0 : 8,
+        fontFamily: theme.body,
+        fontSize: theme.sizeBody,
+        fontWeight: theme.weightMedium,
+        color: theme.ink,
+        marginBottom: 8,
       }}>
-        <div style={{
-          fontFamily: theme.body,
-          fontSize: theme.sizeBody,
-          fontWeight: theme.weightMedium,
-          color: theme.ink,
-        }}>
-          {NOMBRE_DIA[dia]}
-        </div>
-
-        <button
-          type="button"
-          onClick={onAgregar}
-          disabled={diaCerrado}
-          aria-label={`Agregar bloque a ${NOMBRE_DIA[dia]}`}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            padding: '4px 10px',
-            background: 'transparent',
-            border: `1px solid ${theme.hairline}`,
-            borderRadius: 999,
-            cursor: diaCerrado ? 'not-allowed' : 'pointer',
-            opacity: diaCerrado ? 0.5 : 1,
-            color: theme.inkSoft,
-            fontFamily: theme.body,
-            fontSize: theme.sizeMicro + 1,
-            fontWeight: theme.weightMedium,
-          }}
-        >
-          <Plus size={14} strokeWidth={2} aria-hidden="true" />
-          Agregar
-        </button>
+        {NOMBRE_DIA[dia]}
       </div>
 
-      {sinHorario ? (
+      {diaCerrado ? (
         <div style={{
           fontFamily: theme.body,
           fontSize: theme.sizeMicro + 1,
           color: theme.muted,
-          marginTop: 4,
         }}>
-          {diaCerrado ? 'El negocio no abre este día' : 'Sin horario asignado'}
+          El negocio no abre este día
         </div>
+      ) : sinHorario ? (
+        <button
+          type="button"
+          onClick={onAgregar}
+          aria-label={`Agregar bloque a ${NOMBRE_DIA[dia]}`}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            width: '100%',
+            minHeight: 44,
+            background: 'transparent',
+            border: `1px dashed ${theme.hairline}`,
+            borderRadius: theme.radius,
+            cursor: 'pointer',
+            color: theme.inkSoft,
+            fontFamily: theme.body,
+            fontSize: theme.sizeBody,
+            fontWeight: theme.weightMedium,
+          }}
+        >
+          <Plus size={16} strokeWidth={2} aria-hidden="true" />
+          Agregar bloque
+        </button>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {bloquesDelDia.map((bloque) => (
@@ -414,6 +407,7 @@ function FilaDia({ dia, bloques, horarioTenant, onAgregar, onActualizar, onElimi
               fuera={bloqueFueraDeRango(bloque, horarioTenant)}
               onActualizar={onActualizar}
               onEliminar={() => onEliminar(bloque._index)}
+              onAgregar={onAgregar}
             />
           ))}
         </div>
@@ -422,13 +416,30 @@ function FilaDia({ dia, bloques, horarioTenant, onAgregar, onActualizar, onElimi
   );
 }
 
+// Estilo compartido de los botones-ícono de 44×44 de una fila de bloque
+// (eliminar / agregar). flexShrink:0 para que no se compriman al achicar.
+const iconBtnStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flexShrink: 0,
+  width: 44,
+  height: 44,
+  background: 'transparent',
+  border: 'none',
+  borderRadius: theme.radiusSm,
+  cursor: 'pointer',
+  color: theme.muted,
+};
+
 /**
  * FilaBloque
- * Dos time pickers inline + botón eliminar.
+ * Dos time pickers inline + botón eliminar + botón agregar (suma un bloque al día).
  * @param {Object} props.horarioDia - rango del negocio ese día, o undefined si cierra
  * @param {boolean} props.fuera - true si el bloque cae fuera del horario del negocio
+ * @param {() => void} props.onAgregar - Agrega un bloque nuevo a este día
  */
-function FilaBloque({ bloque, horarioDia, fuera, onActualizar, onEliminar }) {
+function FilaBloque({ bloque, horarioDia, fuera, onActualizar, onEliminar, onAgregar }) {
   // Limitar los pickers al rango del negocio. Si el día está cerrado no hay
   // límite que aplicar — el bloque ya está marcado como fuera de rango.
   const min = horarioDia ? horarioDia.hora_inicio : undefined;
@@ -465,20 +476,17 @@ function FilaBloque({ bloque, horarioDia, fuera, onActualizar, onEliminar }) {
         type="button"
         onClick={onEliminar}
         aria-label="Eliminar bloque"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 36,
-          height: 36,
-          background: 'transparent',
-          border: 'none',
-          borderRadius: theme.radiusSm,
-          cursor: 'pointer',
-          color: theme.muted,
-        }}
+        style={iconBtnStyle}
       >
         <Trash2 size={16} strokeWidth={1.75} aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        onClick={onAgregar}
+        aria-label="Agregar bloque"
+        style={iconBtnStyle}
+      >
+        <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
       </button>
     </div>
   );
@@ -503,12 +511,13 @@ function InputHora({ value, onChange, min, max, invalido, aria }) {
       aria-label={aria}
       aria-invalid={invalido || undefined}
       style={{
+        flex: 1,
         padding: '8px 10px',
         background: theme.surface,
         border: `1px solid ${invalido ? theme.danger : theme.hairline}`,
         borderRadius: theme.radiusSm,
         fontFamily: theme.body,
-        fontSize: theme.sizeBody,
+        fontSize: theme.sizeInput,
         color: theme.ink,
         minWidth: 0,
       }}
@@ -866,8 +875,8 @@ function FilaSuspension({ suspension, onEliminar }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: 36,
-            height: 36,
+            width: 44,
+            height: 44,
             background: 'transparent',
             border: 'none',
             borderRadius: theme.radiusSm,

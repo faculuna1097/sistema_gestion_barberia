@@ -5,9 +5,9 @@ import { theme } from '../../theme/tokens.js';
 
 // Mapa de estado del turno → colores y label. Usado para no repetir if/else en pantallas.
 const ESTADO_MAP = {
-  reservado:  { bg: theme.successSoft, fg: theme.success, dot: theme.success, label: 'reservado' },
+  reservado:  { bg: theme.accentSoft,  fg: theme.accent,  dot: theme.accent,  label: 'reservado' },
   cancelado:  { bg: theme.dangerSoft,  fg: theme.danger,  dot: theme.danger,  label: 'cancelado' },
-  completado: { bg: theme.surfaceAlt,  fg: theme.muted,   dot: theme.muted,   label: 'completado' },
+  completado: { bg: theme.successSoft, fg: theme.success, dot: theme.success, label: 'completado' },
   no_asistio: { bg: theme.warningSoft, fg: theme.warning, dot: theme.warning, label: 'no asistió' },
 };
 

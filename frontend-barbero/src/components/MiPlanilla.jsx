@@ -6,7 +6,7 @@
 //   - Detalle de cortes agrupados por día.
 
 import { useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, ClipboardX } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, ClipboardX, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 import { getPlanilla, getResumenPlanilla } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
@@ -14,12 +14,11 @@ import { fmtPesos } from '../utils/formato.js';
 import { fmtFechaCorta, fmtFechaLarga } from '../utils/fecha.js';
 
 import {
-  ScreenHeader,
   Card,
   Skeleton,
   EmptyState,
   Button,
-  SummaryRow,
+  KPI,
 } from './ui';
 
 // ─── Helpers locales de semana ─────────────────────────────────────────────
@@ -74,20 +73,6 @@ function domingoDe(lunes) {
 }
 
 /**
- * tituloSemana
- * Genera el título contextual de la semana ("Esta semana" / "Semana anterior" / "Semana del DD de mmm").
- * No contempla semanas futuras: el NavegadorSemana bloquea avanzar más allá de la actual.
- * @param {string} lunes
- * @returns {string}
- */
-function tituloSemana(lunes) {
-  const lunesActual = lunesDeEstaSemana();
-  if (lunes === lunesActual) return 'Esta semana';
-  if (lunes === sumarSemanas(lunesActual, -1)) return 'Semana anterior';
-  return `Semana del ${fmtFechaCorta(lunes)}`;
-}
-
-/**
  * agruparPorDia
  * Toma los cortes (cada uno con `fecha` ISO) y los agrupa por día YYYY-MM-DD.
  * Devuelve un array ordenado de menor a mayor fecha.
@@ -106,6 +91,25 @@ function agruparPorDia(cortes) {
     .map(([fecha, cortes]) => ({ fecha, cortes }));
 }
 
+/**
+ * calcularComisionDia
+ * Comisión del barbero por los cortes de un día. Replica EXACTO el cálculo del
+ * backend (resumenSemanal): porcentaje = % sobre servicios + propinas; fijo =
+ * monto por corte (sin propinas). Así la suma de los días da la comisión
+ * semanal del Hero y los números cierran.
+ * @param {Array} cortes - cortes del día
+ * @param {'porcentaje'|'fijo'} tipo - comision_tipo del barbero
+ * @param {number} valor - comision_valor del barbero
+ * @returns {number}
+ */
+function calcularComisionDia(cortes, tipo, valor) {
+  const montoServicios = cortes.reduce((s, c) => s + Number(c.monto_servicios || 0), 0);
+  const propinas = cortes.reduce((s, c) => s + Number(c.propina || 0), 0);
+  if (tipo === 'porcentaje' && valor != null) return montoServicios * Number(valor) / 100 + propinas;
+  if (tipo === 'fijo' && valor != null) return Number(valor) * cortes.length;
+  return 0;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Componente principal
 // ═══════════════════════════════════════════════════════════════════════════
@@ -118,6 +122,7 @@ export default function MiPlanilla() {
   const [semana, setSemana] = useState(lunesDeEstaSemana());
   const [detalle, setDetalle] = useState(null);
   const [resumen, setResumen] = useState(null);
+  const [comisionPrev, setComisionPrev] = useState(null); // comisión de la semana anterior (comparativa)
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
 
@@ -128,13 +133,28 @@ export default function MiPlanilla() {
   const cargar = useCallback(async () => {
     setCargando(true);
     setErrorCarga(null);
+
+    // Comparativa con la semana anterior — best-effort: si falla, la pantalla
+    // funciona igual, solo no se muestra el indicador de tendencia.
+    const cargarComisionPrev = async () => {
+      try {
+        const resPrev = await getResumenPlanilla(sumarSemanas(semana, -1));
+        return Number(resPrev?.barberos?.[0]?.comision ?? 0);
+      } catch (err) {
+        console.warn('[MiPlanilla] Comparativa semanal no disponible:', err.message);
+        return null;
+      }
+    };
+
     try {
-      const [det, res] = await Promise.all([
+      const [det, res, comisionAnterior] = await Promise.all([
         getPlanilla(semana),
         getResumenPlanilla(semana),
+        cargarComisionPrev(),
       ]);
       setDetalle(det);
       setResumen(res);
+      setComisionPrev(comisionAnterior);
     } catch (err) {
       console.error('[MiPlanilla] Error cargando planilla:', err.message);
       setErrorCarga('No se pudo cargar la planilla.');
@@ -161,19 +181,12 @@ export default function MiPlanilla() {
       gap: 16,
       padding: '16px 16px 24px',
     }}>
-      <ScreenHeader
-        eyebrow="Mi planilla"
-        title={tituloSemana(semana)}
-        subtitle={`Del ${fmtFechaCorta(semana)} al ${fmtFechaCorta(domingoDe(semana))}`}
-      />
-
       <NavegadorSemana
         semana={semana}
         esEstaSemana={esEstaSemana}
         puedeAvanzar={!esEstaSemana}
         onAnterior={() => setSemana(sumarSemanas(semana, -1))}
         onSiguiente={() => setSemana(sumarSemanas(semana, 1))}
-        onHoy={() => setSemana(lunesDeEstaSemana())}
       />
 
       {cargando && <EsqueletoPlanilla />}
@@ -193,9 +206,13 @@ export default function MiPlanilla() {
 
       {!cargando && !errorCarga && (
         <>
-          <HeroComision resumen={miResumen} />
+          <HeroComision resumen={miResumen} comisionPrev={comisionPrev} />
           <DesgloseSemanal resumen={miResumen} cantidadCortes={cortes.length} />
-          <DetalleCortes diasConCortes={diasConCortes} />
+          <DetalleCortes
+            diasConCortes={diasConCortes}
+            comisionTipo={miResumen?.comision_tipo}
+            comisionValor={miResumen?.comision_valor}
+          />
         </>
       )}
     </div>
@@ -212,7 +229,7 @@ export default function MiPlanilla() {
  * La etiqueta se vuelve botón "Volver a esta semana" cuando no es la semana actual.
  * La flecha "siguiente" queda deshabilitada cuando puedeAvanzar=false (bloquea futuro).
  */
-function NavegadorSemana({ semana, esEstaSemana, puedeAvanzar, onAnterior, onSiguiente, onHoy }) {
+function NavegadorSemana({ semana, esEstaSemana, puedeAvanzar, onAnterior, onSiguiente }) {
   return (
     <div style={{
       display: 'flex',
@@ -229,33 +246,33 @@ function NavegadorSemana({ semana, esEstaSemana, puedeAvanzar, onAnterior, onSig
 
       <div style={{
         flex: 1,
-        textAlign: 'center',
-        fontFamily: theme.body,
-        fontSize: theme.sizeBody,
-        fontWeight: theme.weightMedium,
-        color: theme.ink,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 3,
       }}>
-        {esEstaSemana ? (
-          <span>{fmtFechaCorta(semana)} – {fmtFechaCorta(domingoDe(semana))}</span>
-        ) : (
-          <button
-            type="button"
-            onClick={onHoy}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              color: theme.accent,
-              fontFamily: theme.body,
-              fontSize: theme.sizeBody,
-              fontWeight: theme.weightMedium,
-              padding: '4px 8px',
-              borderRadius: theme.radiusSm,
-            }}
-            aria-label="Volver a la semana actual"
-          >
-            Ir a esta semana
-          </button>
+        <span style={{
+          fontFamily: theme.body,
+          fontSize: theme.sizeBody,
+          fontWeight: theme.weightMedium,
+          color: esEstaSemana ? theme.accent : theme.ink,
+        }}>
+          {fmtFechaCorta(semana)} – {fmtFechaCorta(domingoDe(semana))}
+        </span>
+        {esEstaSemana && (
+          <span style={{
+            fontFamily: theme.mono,
+            fontSize: theme.sizeMicro,
+            fontWeight: theme.weightMedium,
+            color: theme.accentInk,
+            background: theme.accent,
+            padding: '2px 8px',
+            borderRadius: 20,
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+          }}>
+            Esta semana
+          </span>
         )}
       </div>
 
@@ -286,8 +303,8 @@ function BotonFlecha({ children, onClick, aria, disabled = false }) {
       disabled={disabled}
       aria-label={aria}
       style={{
-        width: 36,
-        height: 36,
+        width: 44,
+        height: 44,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -311,31 +328,46 @@ function BotonFlecha({ children, onClick, aria, disabled = false }) {
  * Si resumen es null (sin cortes esta semana), igual se muestra con $0
  * para que el barbero entienda que cargó pero no facturó nada.
  */
-function HeroComision({ resumen }) {
+function HeroComision({ resumen, comisionPrev }) {
   // Si no hay resumen del backend, defaults a 0.
   const comision = Number(resumen?.comision ?? 0);
   const tipo = resumen?.comision_tipo;
   const valor = resumen?.comision_valor;
 
-  // Sub-label que explica cómo se calcula la comisión.
+  // Sub-label que explica cómo se calcula la comisión (porcentaje incluye
+  // propinas, igual que el backend; fijo es un monto por corte).
   let detalleComision = '—';
   if (tipo === 'porcentaje' && valor != null) {
-    detalleComision = `${valor}% de ${fmtPesos(Number(resumen?.total_generado ?? 0))}`;
+    detalleComision = `${valor}% de ${fmtPesos(Number(resumen?.monto_servicios ?? 0))} + propinas`;
   } else if (tipo === 'fijo' && valor != null) {
     detalleComision = `${fmtPesos(Number(valor))} fijo por corte`;
   }
 
+  // Tendencia vs. semana anterior — sólo si hay una base previa > 0.
+  const hayComparacion = comisionPrev != null && comisionPrev > 0;
+  const pct = hayComparacion
+    ? Math.round(((comision - comisionPrev) / comisionPrev) * 100)
+    : null;
+
   return (
     <Card padding={20} style={{ borderRadius: theme.radiusLg }}>
       <div style={{
-        fontFamily: theme.mono,
-        fontWeight: theme.weightMedium,
-        fontSize: theme.sizeMicro,
-        letterSpacing: '0.04em',
-        textTransform: 'uppercase',
-        color: theme.muted,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
       }}>
-        Comisión semanal
+        <div style={{
+          fontFamily: theme.mono,
+          fontWeight: theme.weightMedium,
+          fontSize: theme.sizeMicro,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          color: theme.muted,
+        }}>
+          Comisión semanal
+        </div>
+        {pct != null && <DeltaSemanal pct={pct} />}
       </div>
       <div style={{
         fontFamily: theme.body,
@@ -345,6 +377,7 @@ function HeroComision({ resumen }) {
         lineHeight: 1.1,
         color: theme.accent,
         marginTop: 4,
+        fontVariantNumeric: 'tabular-nums',
       }}>
         {fmtPesos(comision)}
       </div>
@@ -361,31 +394,58 @@ function HeroComision({ resumen }) {
 }
 
 /**
- * DesgloseSemanal
- * Lista de SummaryRow con los totales de la semana (cortes, montos, propinas).
+ * DeltaSemanal
+ * Chip de tendencia de la comisión vs. la semana anterior. Sube = verde,
+ * baja o igual = neutro (no rojo: ganar un poco menos no es un "error").
+ * El texto accesible aclara la comparación.
+ * @param {number} props.pct - variación porcentual (entero, con signo)
  */
-function DesgloseSemanal({ resumen, cantidadCortes }) {
-  // Para semanas sin cortes, mostramos igual la tabla con ceros — informa más que ocultarla.
-  const montoServ  = Number(resumen?.monto_servicios ?? 0);
-  const propinas   = Number(resumen?.propinas ?? 0);
-  const totalGen   = Number(resumen?.total_generado ?? 0);
+function DeltaSemanal({ pct }) {
+  const sube = pct > 0;
+  const baja = pct < 0;
+  const color = sube ? theme.success : theme.muted;
+  const Icon = sube ? TrendingUp : (baja ? TrendingDown : Minus);
+  const ariaTexto = sube
+    ? `${pct}% más que la semana anterior`
+    : baja
+      ? `${Math.abs(pct)}% menos que la semana anterior`
+      : 'Igual que la semana anterior';
 
   return (
-    <Card padding={14}>
-      <div style={{
+    <span
+      aria-label={ariaTexto}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        flexShrink: 0,
+        color,
         fontFamily: theme.body,
-        fontWeight: theme.weightHeading,
-        fontSize: theme.sizeHeading,
-        color: theme.ink,
-        marginBottom: 6,
-      }}>
-        Desglose
-      </div>
-      <SummaryRow label="Cortes"          value={cantidadCortes} />
-      <SummaryRow label="Monto servicios" value={fmtPesos(montoServ)} />
-      <SummaryRow label="Propinas"        value={fmtPesos(propinas)} />
-      <SummaryRow label="Total generado"  value={fmtPesos(totalGen)} />
-    </Card>
+        fontSize: theme.sizeMicro + 1,
+        fontWeight: theme.weightMedium,
+      }}
+    >
+      <Icon size={14} strokeWidth={2} aria-hidden="true" />
+      {Math.abs(pct)}%
+    </span>
+  );
+}
+
+/**
+ * DesgloseSemanal
+ * Fila de 3 KPIs con los totales de la semana (cortes, generado, propinas).
+ */
+function DesgloseSemanal({ resumen, cantidadCortes }) {
+  // Para semanas sin cortes, mostramos igual los tiles con ceros — informa más que ocultarlos.
+  const propinas = Number(resumen?.propinas ?? 0);
+  const totalGen = Number(resumen?.total_generado ?? 0);
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+      <KPI label="Cortes"   value={cantidadCortes}    size="sm" />
+      <KPI label="Generado" value={fmtPesos(totalGen)} size="sm" />
+      <KPI label="Propinas" value={fmtPesos(propinas)} size="sm" tone="success" />
+    </div>
   );
 }
 
@@ -394,7 +454,25 @@ function DesgloseSemanal({ resumen, cantidadCortes }) {
  * Lista de cortes agrupados por día. Si no hay cortes, muestra EmptyState inline.
  * @param {Array<{ fecha: string, cortes: Array }>} props.diasConCortes
  */
-function DetalleCortes({ diasConCortes }) {
+function DetalleCortes({ diasConCortes, comisionTipo, comisionValor }) {
+  const hoy = formatearFechaISO(new Date());
+  // Sólo el día de hoy arranca desplegado (igual que el panel de gestión).
+  // En semanas pasadas, hoy no está en la lista → arrancan todos contraídos.
+  const [expandidos, setExpandidos] = useState(() => new Set([hoy]));
+
+  /**
+   * toggle
+   * Despliega/contrae el día por su fecha.
+   */
+  const toggle = (fecha) => {
+    setExpandidos((prev) => {
+      const nuevo = new Set(prev);
+      if (nuevo.has(fecha)) nuevo.delete(fecha);
+      else nuevo.add(fecha);
+      return nuevo;
+    });
+  };
+
   return (
     <div>
       <div style={{
@@ -414,9 +492,18 @@ function DetalleCortes({ diasConCortes }) {
           body="Cuando registres un corte, va a aparecer acá."
         />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {diasConCortes.map(({ fecha, cortes }) => (
-            <DiaConCortes key={fecha} fecha={fecha} cortes={cortes} />
+            <DiaConCortes
+              key={fecha}
+              fecha={fecha}
+              cortes={cortes}
+              comisionTipo={comisionTipo}
+              comisionValor={comisionValor}
+              expandido={expandidos.has(fecha)}
+              esHoy={fecha === hoy}
+              onToggle={() => toggle(fecha)}
+            />
           ))}
         </div>
       )}
@@ -426,69 +513,154 @@ function DetalleCortes({ diasConCortes }) {
 
 /**
  * DiaConCortes
- * Sub-header con la fecha + lista de cortes del día.
+ * Card colapsable de un día: header clickeable (fecha + pill "Hoy" + comisión
+ * del día + chevron) y, al expandir, la lista de cortes. Sólo el día de hoy
+ * arranca desplegado (lo controla DetalleCortes).
  */
-function DiaConCortes({ fecha, cortes }) {
-  // Sumatoria del día — informativo, no obligatorio.
-  const totalDia = cortes.reduce(
-    (acc, c) => acc + Number(c.monto_servicios || 0) + Number(c.propina || 0),
-    0
-  );
+function DiaConCortes({ fecha, cortes, comisionTipo, comisionValor, expandido, esHoy, onToggle }) {
+  const comisionDia = calcularComisionDia(cortes, comisionTipo, comisionValor);
+  const Chevron = expandido ? ChevronDown : ChevronRight;
 
   return (
-    <div>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'baseline',
-        marginBottom: 6,
-        padding: '0 2px',
-      }}>
-        <div style={{
-          fontFamily: theme.mono,
-          fontWeight: theme.weightMedium,
-          fontSize: theme.sizeMicro,
-          letterSpacing: '0.04em',
-          textTransform: 'uppercase',
-          color: theme.muted,
-        }}>
-          {fmtFechaLarga(fecha)}
+    <div style={{
+      background: theme.surface,
+      border: `1px solid ${esHoy ? theme.accent : theme.hairline}`,
+      borderRadius: theme.radiusLg,
+      overflow: 'hidden',
+    }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expandido}
+        style={{
+          display: 'flex',
+          width: '100%',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '12px 14px',
+          background: esHoy ? theme.accentSoft : theme.surface,
+          border: 'none',
+          borderBottom: expandido ? `1px solid ${theme.hairline}` : 'none',
+          cursor: 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <span style={{
+            fontFamily: theme.body,
+            fontWeight: theme.weightMedium,
+            fontSize: theme.sizeBody,
+            color: theme.ink,
+            textTransform: 'capitalize',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            {fmtFechaLarga(fecha)}
+          </span>
+          {esHoy && (
+            <span style={{
+              fontFamily: theme.mono,
+              fontSize: theme.sizeMicro,
+              fontWeight: theme.weightMedium,
+              background: theme.accent,
+              color: theme.accentInk,
+              padding: '2px 8px',
+              borderRadius: theme.radiusSm,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              flexShrink: 0,
+            }}>
+              Hoy
+            </span>
+          )}
         </div>
-        <div style={{
-          fontFamily: theme.body,
-          fontSize: theme.sizeMicro + 1,
-          color: theme.muted,
-        }}>
-          {cortes.length} corte{cortes.length === 1 ? '' : 's'} · {fmtPesos(totalDia)}
-        </div>
-      </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {cortes.map((c) => <CorteFila key={c.corte_id} corte={c} />)}
-      </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <span style={{
+            fontFamily: theme.body,
+            fontSize: theme.sizeMicro + 1,
+            color: theme.muted,
+          }}>
+            {cortes.length} corte{cortes.length === 1 ? '' : 's'}
+          </span>
+          <span style={{
+            fontFamily: theme.body,
+            fontWeight: theme.weightHeading,
+            fontSize: theme.sizeBody,
+            color: theme.accent,
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            {fmtPesos(comisionDia)}
+          </span>
+          <Chevron size={16} strokeWidth={1.75} color={theme.muted} aria-hidden="true" />
+        </div>
+      </button>
+
+      {expandido && (
+        <div>
+          {cortes.map((c, i) => (
+            <CorteFila key={c.corte_id} corte={c} ultimo={i === cortes.length - 1} />
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+// Pill de forma de pago — color por método (mismo criterio que el panel de
+// gestión: efectivo en verde, Mercado Pago en indigo). Forma desconocida →
+// neutro con el valor crudo, para no ocultar datos raros.
+const FORMA_PAGO_PILL = {
+  efectivo:     { bg: theme.successSoft, fg: theme.success, label: 'Efectivo' },
+  mercado_pago: { bg: theme.accentSoft,  fg: theme.accent,  label: 'Mercado Pago' },
+};
+
+/**
+ * PillFormaPago
+ * Chip chico de color con la forma de pago del corte.
+ * @param {string} props.forma - 'efectivo' | 'mercado_pago' | otro
+ */
+function PillFormaPago({ forma }) {
+  const v = FORMA_PAGO_PILL[forma] || { bg: theme.surfaceAlt, fg: theme.muted, label: forma };
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '2px 8px',
+      borderRadius: theme.radiusSm,
+      fontFamily: theme.body,
+      fontSize: theme.sizeMicro,
+      fontWeight: theme.weightMedium,
+      letterSpacing: '0.02em',
+      whiteSpace: 'nowrap',
+      background: v.bg,
+      color: v.fg,
+    }}>
+      {v.label}
+    </span>
   );
 }
 
 /**
  * CorteFila
- * Una línea de corte: hora + servicio + forma_pago a la izquierda; $monto y $propina a la derecha.
- * Si la propina es 0, no se muestra.
+ * Fila de un corte dentro de la card del día (sin borde propio; el separador
+ * lo da la card). Hora + servicio + pill de pago a la izquierda; $monto y
+ * $propina a la derecha. Si la propina es 0, no se muestra.
+ * @param {boolean} props.ultimo - true en el último corte del día (sin separador)
  */
-function CorteFila({ corte }) {
+function CorteFila({ corte, ultimo }) {
   const monto = Number(corte.monto_servicios || 0);
   const propina = Number(corte.propina || 0);
   const hora = corte.hora?.slice(0, 5) || '—';
 
   return (
     <div style={{
-      background: theme.surface,
-      border: `1px solid ${theme.hairline}`,
-      borderRadius: theme.radius,
-      padding: 12,
       display: 'flex',
       alignItems: 'flex-start',
       gap: 12,
+      padding: '10px 14px',
+      borderBottom: ultimo ? 'none' : `1px solid ${theme.hairlineSoft}`,
     }}>
       <div style={{
         fontFamily: theme.body,
@@ -496,6 +668,7 @@ function CorteFila({ corte }) {
         fontSize: theme.sizeBody,
         color: theme.ink,
         minWidth: 44,
+        fontVariantNumeric: 'tabular-nums',
       }}>
         {hora}
       </div>
@@ -512,15 +685,28 @@ function CorteFila({ corte }) {
         }}>
           {corte.servicio_nombre || 'Servicio'}
         </div>
-        {corte.forma_pago && (
+        {(corte.forma_pago || corte.cliente_nombre) && (
           <div style={{
-            fontFamily: theme.body,
-            fontSize: theme.sizeMicro + 1,
-            color: theme.muted,
-            marginTop: 2,
-            textTransform: 'capitalize',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginTop: 4,
+            flexWrap: 'wrap',
           }}>
-            {corte.forma_pago.replace('_', ' ')}
+            {corte.forma_pago && <PillFormaPago forma={corte.forma_pago} />}
+            {corte.cliente_nombre && (
+              <span style={{
+                fontFamily: theme.body,
+                fontSize: theme.sizeMicro + 1,
+                color: theme.inkSoft,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                minWidth: 0,
+              }}>
+                {corte.cliente_nombre}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -531,6 +717,7 @@ function CorteFila({ corte }) {
           fontSize: theme.sizeBody,
           fontWeight: theme.weightMedium,
           color: theme.ink,
+          fontVariantNumeric: 'tabular-nums',
         }}>
           {fmtPesos(monto)}
         </div>
@@ -551,16 +738,20 @@ function CorteFila({ corte }) {
 
 /**
  * EsqueletoPlanilla
- * Esqueleto de carga: una "hero" grande + tres SummaryRow + algunas filas de detalle.
+ * Esqueleto de carga: hero grande + fila de 3 KPIs + algunas cards de día.
  */
 function EsqueletoPlanilla() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <Skeleton height={110} radius={theme.radiusLg} />
-      <Skeleton height={170} radius={theme.radius} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} height={60} radius={theme.radius} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} height={64} radius={theme.radius} />
+        ))}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} height={52} radius={theme.radius} />
         ))}
       </div>
     </div>

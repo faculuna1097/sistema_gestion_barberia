@@ -42,6 +42,7 @@ export const detalleSemanal = async ({ tenantId, semana, barberoId }) => {
        TO_CHAR(c.timestamp AT TIME ZONE $4, 'YYYY-MM-DD') AS fecha,
        TO_CHAR(c.timestamp AT TIME ZONE $4, 'HH24:MI')    AS hora,
        s.nombre                                            AS servicio_nombre,
+       cl.nombre                                           AS cliente_nombre,
        c.precio                                            AS monto_servicios,
        c.propina,
        c.forma_pago,
@@ -50,6 +51,8 @@ export const detalleSemanal = async ({ tenantId, semana, barberoId }) => {
      FROM corte c
      JOIN barbero b  ON b.id = c.barbero_id
      JOIN servicio s ON s.id = c.servicio_id
+     LEFT JOIN turno   t  ON t.id = c.turno_id
+     LEFT JOIN cliente cl ON cl.id = t.cliente_id
      WHERE c.tenant_id = $1
        AND DATE(c.timestamp AT TIME ZONE $4) BETWEEN $2 AND $3
        ${filtroExtra}
@@ -71,6 +74,7 @@ export const detalleSemanal = async ({ tenantId, semana, barberoId }) => {
       fecha: row.fecha,
       hora: row.hora,
       servicio_nombre: row.servicio_nombre,
+      cliente_nombre: row.cliente_nombre,
       monto_servicios: Number(row.monto_servicios),
       propina: Number(row.propina),
       forma_pago: row.forma_pago,

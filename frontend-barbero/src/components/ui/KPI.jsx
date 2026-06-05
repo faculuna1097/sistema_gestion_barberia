@@ -13,8 +13,10 @@ import { theme } from '../../theme/tokens.js';
  * @param {string} [props.sublabel] - Texto secundario opcional debajo del valor.
  * @param {'default'|'success'|'warning'|'danger'|'accent'} [props.tone='default']
  *        - Color del valor. Resto de tonos del MD: §3.1.
+ * @param {'lg'|'sm'} [props.size='lg'] - Tamaño del valor: 'lg' (24, contadores
+ *        cortos) o 'sm' (18, ideal para moneda en grillas angostas).
  */
-function KPI({ label, value, sublabel, tone = 'default' }) {
+function KPI({ label, value, sublabel, tone = 'default', size = 'lg' }) {
   const colorValor = {
     default: theme.ink,
     success: theme.success,
@@ -22,6 +24,10 @@ function KPI({ label, value, sublabel, tone = 'default' }) {
     danger:  theme.danger,
     accent:  theme.accent,
   }[tone] || theme.ink;
+
+  // 'sm' (sizeHeading) para moneda en grillas angostas; 'lg' (sizeTitle) por
+  // defecto, para contadores cortos (ej. los KPIs del Dashboard).
+  const valueFontSize = size === 'sm' ? theme.sizeHeading : theme.sizeTitle;
 
   return (
     <div style={{
@@ -46,10 +52,11 @@ function KPI({ label, value, sublabel, tone = 'default' }) {
       <div style={{
         fontFamily: theme.body,
         fontWeight: theme.weightHeading,
-        fontSize: theme.sizeTitle,
+        fontSize: valueFontSize,
         letterSpacing: '-0.02em',
         lineHeight: 1.1,
         color: colorValor,
+        fontVariantNumeric: 'tabular-nums',
       }}>{value}</div>
 
       {sublabel && (

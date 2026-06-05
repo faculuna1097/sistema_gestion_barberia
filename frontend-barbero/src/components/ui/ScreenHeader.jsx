@@ -12,7 +12,7 @@ import { theme } from '../../theme/tokens.js';
  */
 function ScreenHeader({ eyebrow, title, subtitle }) {
   return (
-    <div style={{ padding: '4px 16px 16px' }}>
+    <div style={{ padding: '4px 0 16px' }}>
       {eyebrow && (
         <div style={{
           fontFamily: theme.mono,
