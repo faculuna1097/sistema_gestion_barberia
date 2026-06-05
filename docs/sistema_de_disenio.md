@@ -452,7 +452,7 @@ actualizá este doc.**
 2. ~~`esDomingo` hardcodeado~~ — **Resuelto**: `MiniCalendario` grisa los días que el negocio no atiende y los feriados, leyendo `horario_atencion` + `feriados` de `GET /api/turnero/tenant`.
 3. ~~**Falta endpoint de disponibilidad por día (precisión por barbero).**~~ — **Resuelto**: el endpoint `GET /api/turnero/dias-disponibles` (`calcularDiasConDisponibilidad` en `disponibilidadService.js`) calcula, dado `barbero_id` + `servicio_id` + un rango de fechas, qué días tienen ≥1 slot reservable, con un set fijo de queries independiente del tamaño del rango. `MiniCalendario` ahora recibe `diasDisponibles` y grisa cualquier día que no esté en esa lista; se eliminó la lógica client-side de días cerrados/feriados (el backend pasó a ser la fuente única de qué día es reservable). Lo consumen `SeleccionFecha` y la reprogramación de `GestionTurno`.
 4. Cortes de turno (13:00 y 20:00) hardcodeados en `SeleccionHorario.jsx` — debería ser por tenant.
-5. Validación de teléfono solo AR (10 dígitos) hardcodeada en `DatosCliente.jsx`.
+5. ~~Validación de teléfono solo AR (10 dígitos) hardcodeada en `DatosCliente.jsx`.~~ — **Resuelto**: reemplazada por `libphonenumber-js`. `DatosCliente` ahora tiene un selector de país (Argentina default + limítrofes + EE.UU.), formatea el número a medida que se escribe (`AsYouType`), valida por país (`isValidPhoneNumber`) y guarda el teléfono en formato E.164 (`parsePhoneNumber`). El backend no valida formato de teléfono, así que el cambio de formato guardado es seguro. El campo compuesto `[select país | input]` vive en el componente local `CampoTelefono` (no extiende el primitivo universal `Field`).
 6. Catálogos (`servicios`, `barberos`) sin `ORDER BY` explícito en backend.
 7. ~~`MiniCalendario` "2 semanas" hardcodeado~~ — **Resuelto**: el sublabel se deriva de `dias.length` como "N días".
 8. **Inline styles + `useState` para hover** (§4.1, §4.2) — validado solo para mobile/turnero. **Antes de arrancar el front de gestión**, revisar: las tablas densas con muchas filas hover-ables pueden hacer ruidoso el re-render. Considerar híbrido: tokens en JS + `:hover` puntual via `<style>` scoped donde la performance importe.
@@ -466,4 +466,6 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-05-26 — §4.5 amplía con excepción para el panel de gestión (admin usa `LoadingState` en vez de `Skeleton`). Inventario §6.1 suma `LoadingState`. Decisión documentada en detalle en el plan de rediseño del front gestión (D6).*
+*Última actualización: 2026-06-04 — deuda #5 de §9 (teléfono AR hardcodeado) resuelta con `libphonenumber-js` en el turnero (`DatosCliente` / `CampoTelefono`).*
+
+*2026-05-26 — §4.5 amplía con excepción para el panel de gestión (admin usa `LoadingState` en vez de `Skeleton`). Inventario §6.1 suma `LoadingState`. Decisión documentada en detalle en el plan de rediseño del front gestión (D6).*

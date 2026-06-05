@@ -156,9 +156,11 @@ function Landing({ tenant, imagenes = [], onReservar }) {
           {/* Estado del negocio + horario semanal desplegable */}
           <HorarioSemanal estado={estado} horarioAtencion={tenant.horario_atencion} />
 
-          {/* Bloque de contacto — solo si hay al menos un dato cargado */}
+          {/* Bloque de contacto — solo si hay al menos un dato cargado.
+              Sin marginTop: las filas de estado/dirección/teléfono comparten
+              el mismo ritmo uniforme de 44px (touch target) sin huecos extra. */}
           {(tenant.direccion || tenant.telefono) && (
-            <div style={{ marginTop: 8 }}>
+            <div>
               {tenant.direccion && (
                 <LineaContacto
                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(tenant.direccion)}`}
@@ -279,7 +281,6 @@ function HorarioSemanal({ estado, horarioAtencion = [] }) {
   const [foco, setFoco] = useState(false);
 
   const diaHoy = new Date().getDay();
-  const colorIcono = estado.abierto ? theme.success : theme.mutedSoft;
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -310,7 +311,7 @@ function HorarioSemanal({ estado, horarioAtencion = [] }) {
           borderRadius: theme.radiusSm,
         }}
       >
-        <IconoReloj size={16} color={colorIcono} />
+        <DotEstado abierto={estado.abierto} />
         <span style={{ flex: 1 }}>{estado.texto}</span>
         <IconoChevron expandido={expandido} />
       </button>
@@ -384,17 +385,37 @@ function LineaContacto({ href, externo = false, icono, texto }) {
 }
 
 /**
- * IconoReloj
- * SVG inline de un reloj, para la fila de estado del negocio.
- * @param {number} props.size - Tamaño en px (ancho y alto)
- * @param {string} props.color - Color del trazo
+ * DotEstado
+ * Punto de estado del negocio en la fila de horario: verde (success) cuando
+ * está abierto, gris (mutedSoft) cuando está cerrado. El color comunica el
+ * estado de un vistazo, sin necesidad de leer el texto. Mismo lenguaje visual
+ * que el dot de StatusPill.
+ *
+ * El dot (8px) va centrado dentro de una caja de 16px — el mismo ancho que los
+ * íconos de dirección/teléfono — para que las tres filas de meta alineen su
+ * columna de texto.
+ * @param {boolean} props.abierto - True si el negocio está abierto ahora
  */
-function IconoReloj({ size = 16, color = 'currentColor' }) {
+function DotEstado({ abierto }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" stroke={color} strokeWidth="1.5"/>
-      <path d="M12 7v5l3.5 2" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 16,
+        height: 16,
+        flexShrink: 0,
+      }}
+    >
+      <span style={{
+        width: 8,
+        height: 8,
+        borderRadius: 999,
+        background: abierto ? theme.success : theme.mutedSoft,
+      }} />
+    </span>
   );
 }
 
