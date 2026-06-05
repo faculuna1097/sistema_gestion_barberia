@@ -97,7 +97,7 @@ export const insertarTurno = async ({
 };
 
 /**
- * SELECT enriquecido con JOINs a barbero, servicio y cliente.
+ * SELECT enriquecido con JOINs a barbero, servicio, cliente y tenant.
  * Usado para armar los datos que necesitan Google Calendar y mailer.
  * @param {string} turnoId
  * @returns {Promise<Object|null>}
@@ -107,11 +107,13 @@ export const enriquecerTurno = async (turnoId) => {
     `SELECT t.inicio, t.fin, t.google_event_id, t.token_gestion,
             b.nombre AS barbero_nombre, b.email AS barbero_email,
             s.nombre AS servicio_nombre,
-            c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono
+            c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
+            tn.nombre_negocio AS tenant_nombre, tn.direccion AS tenant_direccion
      FROM turno t
      JOIN barbero  b ON b.id = t.barbero_id
      JOIN servicio s ON s.id = t.servicio_id
      JOIN cliente  c ON c.id = t.cliente_id
+     JOIN tenant   tn ON tn.id = t.tenant_id
      WHERE t.id = $1`,
     [turnoId]
   );
@@ -173,9 +175,9 @@ export const sincronizarCalendarCreacion = async (turnoId, enriquecido) => {
  * @param {string} linkGestion - URL de gestión del turno
  */
 export const notificarConfirmacion = async (enriquecido, linkGestion) => {
-  const { turno, barbero, servicio, cliente } = construirContextoMail(enriquecido);
+  const { turno, barbero, servicio, cliente, tenant } = construirContextoMail(enriquecido);
 
-  await enviarConfirmacion(turno, barbero, servicio, cliente, linkGestion);
+  await enviarConfirmacion(turno, barbero, servicio, cliente, linkGestion, tenant);
 };
 
 /**

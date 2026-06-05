@@ -70,6 +70,69 @@ const formatearFecha = (timestamp) => {
 };
 
 /**
+ * Capitaliza la primera letra de un string. Función interna, no exportada.
+ *
+ * @param {string} texto
+ * @returns {string} texto con la primera letra en mayúscula
+ */
+const capitalizar = (texto) => (texto ? texto.charAt(0).toUpperCase() + texto.slice(1) : texto);
+
+/**
+ * Formatea un timestamp como "Miércoles, 10 de junio" en TZ Argentina.
+ * Función interna, no exportada.
+ *
+ * @param {string|Date} timestamp
+ * @returns {string} fecha larga en español, con el día de semana capitalizado
+ */
+const formatearFechaLarga = (timestamp) => {
+  const texto = new Intl.DateTimeFormat('es-AR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    timeZone: TZ,
+  }).format(new Date(timestamp));
+  return capitalizar(texto);
+};
+
+/**
+ * Formatea solo la hora de inicio como "11:30" en TZ Argentina.
+ * Función interna, no exportada.
+ *
+ * @param {string|Date} timestamp
+ * @returns {string} hora en formato HH:mm
+ */
+const formatearHora = (timestamp) => {
+  return new Intl.DateTimeFormat('es-AR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: TZ,
+  }).format(new Date(timestamp));
+};
+
+/**
+ * Formatea un timestamp compacto para el asunto: "Mié 10/06 · 11:30".
+ * Función interna, no exportada.
+ *
+ * @param {string|Date} timestamp
+ * @returns {string} día de semana abreviado + fecha + hora
+ */
+const formatearFechaAsunto = (timestamp) => {
+  const fecha = new Date(timestamp);
+  const dia = new Intl.DateTimeFormat('es-AR', { weekday: 'short', timeZone: TZ })
+    .format(fecha)
+    .replace('.', '');
+  // es-AR no rellena el mes con cero al combinar día y mes, así que extraigo
+  // las partes y las relleno a mano para tener siempre dd/mm.
+  const partes = {};
+  new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'numeric', timeZone: TZ })
+    .formatToParts(fecha)
+    .forEach((p) => { partes[p.type] = p.value; });
+  const diaMes = `${partes.day.padStart(2, '0')}/${partes.month.padStart(2, '0')}`;
+  return `${capitalizar(dia)} ${diaMes} · ${formatearHora(fecha)}`;
+};
+
+/**
  * Escapa caracteres con significado en HTML para que valores dinámicos
  * (nombres de servicio, barbero, motivos) no rompan ni inyecten markup.
  * Función interna, no exportada.
@@ -95,7 +158,7 @@ const escaparHtml = (valor) => {
  * @param {string} opciones.eyebrowColor - color del eyebrow (token de paleta)
  * @param {string} opciones.titulo - título principal del mail
  * @param {string} opciones.intro - línea de texto introductoria
- * @param {Array<{label: string, valor: string}>} opciones.filas - detalle del turno
+ * @param {Array<{label: string, valor: string, href?: string}>} opciones.filas - detalle del turno (si una fila trae href, su valor se muestra como link)
  * @param {{label: string, url: string}|null} [opciones.cta] - botón de acción
  * @returns {string} HTML completo del mail
  */
@@ -106,10 +169,16 @@ const construirHtml = ({ eyebrow, eyebrowColor, titulo, intro, filas, cta }) => 
     const borde = i < filas.length - 1
       ? `border-bottom:1px solid ${paleta.hairline};`
       : '';
+    // Si la fila trae `href`, el valor se renderiza como link (acento indigo,
+    // no botón, para respetar el acento único del sistema de diseño). El valor
+    // y el href se escapan por separado.
+    const valorHtml = fila.href
+      ? `<a href="${escaparHtml(fila.href)}" style="color:${paleta.accent};text-decoration:none;">${escaparHtml(fila.valor)}</a>`
+      : escaparHtml(fila.valor);
     return `
       <tr>
         <td style="padding:12px 0;${borde}font-size:14px;color:${paleta.muted};">${escaparHtml(fila.label)}</td>
-        <td style="padding:12px 0;${borde}font-size:14px;color:${paleta.ink};font-weight:500;text-align:right;">${escaparHtml(fila.valor)}</td>
+        <td style="padding:12px 0;${borde}font-size:14px;color:${paleta.ink};font-weight:500;text-align:right;">${valorHtml}</td>
       </tr>`;
   }).join('');
 
@@ -154,13 +223,14 @@ const construirHtml = ({ eyebrow, eyebrowColor, titulo, intro, filas, cta }) => 
 /**
  * Envía un mail. Wrapper interno con manejo de errores y logging común.
  *
- * @param {Object} opciones - { destino, asunto, texto, html, nombreFuncion }
+ * @param {Object} opciones - { destino, asunto, texto, html, nombreFuncion, remitente }
+ *   remitente: nombre visible del "from" (default "BarberManager")
  * @returns {Promise<boolean>} true si OK, false si falla
  */
-const enviarMail = async ({ destino, asunto, texto, html, nombreFuncion }) => {
+const enviarMail = async ({ destino, asunto, texto, html, nombreFuncion, remitente }) => {
   try {
     await transporter.sendMail({
-      from: `BarberManager <${GOOGLE_CALENDAR_EMAIL}>`,
+      from: { name: remitente || 'BarberManager', address: GOOGLE_CALENDAR_EMAIL },
       to: destino,
       subject: asunto,
       text: texto,
@@ -200,16 +270,19 @@ const debeSaltarseEnvio = (nombreFuncion, cliente) => {
  * inicio, fin, barbero_nombre, barbero_email, servicio_nombre, cliente_nombre,
  * cliente_email, cliente_telefono) a los objetos de dominio que consumen el
  * mailer y Google Calendar. Centraliza el desempaquetado que antes estaba
- * duplicado en cada caller.
+ * duplicado en cada caller. El bloque `tenant` queda con campos undefined si
+ * la query no trae tenant_nombre / tenant_direccion (hoy solo lo consume el
+ * mail de confirmación, que se alimenta de enriquecerTurno con el JOIN).
  *
  * @param {Object} fila - fila cruda de la query, con los alias estándar
- * @returns {{turno: {inicio, fin}, barbero: {nombre, email}, servicio: {nombre}, cliente: {nombre, email, telefono}}}
+ * @returns {{turno: {inicio, fin}, barbero: {nombre, email}, servicio: {nombre}, cliente: {nombre, email, telefono}, tenant: {nombre, direccion}}}
  */
 export const construirContextoMail = (fila) => ({
   turno:    { inicio: fila.inicio, fin: fila.fin },
   barbero:  { nombre: fila.barbero_nombre, email: fila.barbero_email },
   servicio: { nombre: fila.servicio_nombre },
   cliente:  { nombre: fila.cliente_nombre, email: fila.cliente_email, telefono: fila.cliente_telefono },
+  tenant:   { nombre: fila.tenant_nombre, direccion: fila.tenant_direccion },
 });
 
 /**
@@ -220,28 +293,46 @@ export const construirContextoMail = (fila) => ({
  * @param {Object} servicio - { nombre }
  * @param {Object} cliente - { nombre, email }
  * @param {string} linkGestion - URL para cancelar/reprogramar
+ * @param {Object} tenant - { nombre, direccion } datos del negocio: el nombre
+ *   se usa como remitente y la dirección (puede venir vacía) arma la fila de
+ *   ubicación con link a Google Maps
  * @returns {Promise<boolean>}
  */
-export const enviarConfirmacion = async (turno, barbero, servicio, cliente, linkGestion) => {
+export const enviarConfirmacion = async (turno, barbero, servicio, cliente, linkGestion, tenant) => {
   if (debeSaltarseEnvio('enviarConfirmacion', cliente)) return false;
 
-  const fechaTexto = formatearFecha(turno.inicio);
-  const asunto = `Turno confirmado — ${fechaTexto}`;
-  const texto = `Turno confirmado.\n\nServicio: ${servicio.nombre}\nBarbero: ${barbero.nombre}\nFecha: ${fechaTexto}\n\nGestionar: ${linkGestion}`;
+  const fechaLarga = formatearFechaLarga(turno.inicio);
+  const hora = formatearHora(turno.inicio);
+  const asunto = `Turno confirmado — ${formatearFechaAsunto(turno.inicio)}`;
+
+  // Filas de detalle. La dirección se agrega solo si el negocio la tiene
+  // cargada; su href abre la búsqueda en Google Maps (en el celular, la app).
+  const filas = [
+    { label: 'Servicio', valor: servicio.nombre },
+    { label: 'Barbero', valor: barbero.nombre },
+    { label: 'Fecha', valor: fechaLarga },
+    { label: 'Horario', valor: hora },
+  ];
+  const direccion = tenant?.direccion?.trim();
+  if (direccion) {
+    const urlMaps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion)}`;
+    filas.push({ label: 'Dirección', valor: direccion, href: urlMaps });
+  }
+
+  // Texto plano (fallback para clientes que no renderizan HTML).
+  const lineaDireccion = direccion ? `\nDirección: ${direccion}` : '';
+  const texto = `Turno confirmado.\n\nServicio: ${servicio.nombre}\nBarbero: ${barbero.nombre}\nFecha: ${fechaLarga}\nHorario: ${hora}${lineaDireccion}\n\nGestionar: ${linkGestion}`;
+
   const html = construirHtml({
+    titulo: tenant.nombre,
     eyebrow: 'Turno confirmado',
     eyebrowColor: paleta.success,
-    titulo: 'Tu turno está confirmado',
     intro: `Hola ${cliente.nombre ?? ''}, te esperamos. Acá están los detalles de tu reserva.`,
-    filas: [
-      { label: 'Servicio', valor: servicio.nombre },
-      { label: 'Barbero', valor: barbero.nombre },
-      { label: 'Fecha', valor: fechaTexto },
-    ],
+    filas,
     cta: { label: 'Gestionar turno', url: linkGestion },
   });
 
-  return enviarMail({ destino: cliente.email, asunto, texto, html, nombreFuncion: 'enviarConfirmacion' });
+  return enviarMail({ destino: cliente.email, asunto, texto, html, nombreFuncion: 'enviarConfirmacion', remitente: tenant?.nombre });
 };
 
 /**
