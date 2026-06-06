@@ -177,11 +177,13 @@ export const calcularDelta = async (tenantId, horariosNuevos) => {
     `SELECT t.id, t.inicio, t.fin, t.google_event_id,
             b.nombre AS barbero_nombre, b.email AS barbero_email,
             s.nombre AS servicio_nombre,
-            c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono
+            c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
+            tn.nombre_negocio AS tenant_nombre
      FROM turno t
      JOIN barbero  b ON b.id = t.barbero_id
      JOIN servicio s ON s.id = t.servicio_id
      JOIN cliente  c ON c.id = t.cliente_id
+     JOIN tenant   tn ON tn.id = t.tenant_id
      WHERE t.tenant_id = $1
        AND t.estado = 'reservado'
        AND t.inicio > now()`,
@@ -246,7 +248,7 @@ export const ejecutarCascada = async (delta, linkTurnero) => {
     // Best-effort: mail al cliente. El mensaje habla de un cierre/cambio de
     // horario, no de "cancelado por el barbero".
     if (t.cliente_email) {
-      const { turno, barbero, servicio, cliente } = construirContextoMail(t);
+      const { turno, barbero, servicio, cliente, tenant } = construirContextoMail(t);
       await enviarCancelacionAutomatica(
         turno, barbero, servicio, cliente,
         {
@@ -254,6 +256,7 @@ export const ejecutarCascada = async (delta, linkTurnero) => {
           motivo: 'Cierre',
         },
         linkTurnero,
+        tenant,
       );
     }
   }

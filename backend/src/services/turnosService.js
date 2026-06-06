@@ -429,11 +429,13 @@ export const cancelarTurnoPorId = async (turnoId, canceladoPor, tenantId, barber
     `SELECT t.id, t.estado, t.google_event_id, t.inicio, t.fin,
             b.nombre AS barbero_nombre, b.email AS barbero_email,
             s.nombre AS servicio_nombre,
-            c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono
+            c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
+            tn.nombre_negocio AS tenant_nombre
      FROM turno t
      JOIN barbero  b ON b.id = t.barbero_id
      JOIN servicio s ON s.id = t.servicio_id
      JOIN cliente  c ON c.id = t.cliente_id
+     JOIN tenant   tn ON tn.id = t.tenant_id
      WHERE ${where}`,
     params
   );
@@ -464,8 +466,8 @@ export const cancelarTurnoPorId = async (turnoId, canceladoPor, tenantId, barber
   if (r.google_event_id) {
     await cancelarEvento(r.google_event_id);
   }
-  const { turno, barbero, servicio, cliente } = construirContextoMail(r);
-  await enviarCancelacion(turno, barbero, servicio, cliente, canceladoPor);
+  const { turno, barbero, servicio, cliente, tenant } = construirContextoMail(r);
+  await enviarCancelacion(turno, barbero, servicio, cliente, canceladoPor, tenant);
 
   return { id: turnoId, estado: 'cancelado' };
 };

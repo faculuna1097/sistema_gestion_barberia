@@ -372,11 +372,13 @@ export const cancelarTurno = async (req, res) => {
       `SELECT t.id, t.estado, t.google_event_id, t.inicio, t.fin,
               b.nombre AS barbero_nombre, b.email AS barbero_email,
               s.nombre AS servicio_nombre,
-              c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono
+              c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
+              tn.nombre_negocio AS tenant_nombre
        FROM turno t
        JOIN barbero  b ON b.id = t.barbero_id
        JOIN servicio s ON s.id = t.servicio_id
        JOIN cliente  c ON c.id = t.cliente_id
+       JOIN tenant   tn ON tn.id = t.tenant_id
        WHERE t.token_gestion = $1 AND t.tenant_id = $2`,
       [req.params.token, req.tenant_id]
     );
@@ -404,8 +406,8 @@ export const cancelarTurno = async (req, res) => {
     if (r.google_event_id) {
       await cancelarEvento(r.google_event_id);
     }
-    const { turno, barbero, servicio, cliente } = construirContextoMail(r);
-    await enviarCancelacion(turno, barbero, servicio, cliente, 'cliente');
+    const { turno, barbero, servicio, cliente, tenant } = construirContextoMail(r);
+    await enviarCancelacion(turno, barbero, servicio, cliente, 'cliente', tenant);
 
     console.log('[turnero] cancelarTurno completado | turno_id:', r.id);
     res.json({ ok: true });
@@ -446,7 +448,8 @@ export const reprogramarTurno = async (req, res) => {
               (tn.duracion_slot_minutos * s.cantidad_slots) AS duracion_minutos,
               b.nombre AS barbero_nombre, b.email AS barbero_email,
               s.nombre AS servicio_nombre,
-              c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono
+              c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
+              tn.nombre_negocio AS tenant_nombre, tn.direccion AS tenant_direccion
        FROM turno t
        JOIN tenant   tn ON tn.id = t.tenant_id
        JOIN barbero  b  ON b.id  = t.barbero_id
@@ -500,13 +503,13 @@ export const reprogramarTurno = async (req, res) => {
 
     // ── Best-effort: Google Calendar + mail ────────────────────────────────
     const nuevoTurno = { inicio: inicioDT.toISO(), fin: finDT.toISO() };
-    const { barbero, servicio, cliente } = construirContextoMail(r);
+    const { barbero, servicio, cliente, tenant } = construirContextoMail(r);
 
     if (r.google_event_id) {
       await actualizarEvento(r.google_event_id, nuevoTurno, barbero, servicio, cliente);
     }
     const linkGestion = armarLinkGestion(req, req.params.token);
-    await enviarReprogramacion(nuevoTurno, barbero, servicio, cliente, linkGestion);
+    await enviarReprogramacion(nuevoTurno, barbero, servicio, cliente, linkGestion, tenant);
 
     console.log('[turnero] reprogramarTurno completado | turno_id:', r.id);
     res.json({ ok: true, turno: { id: r.id, inicio: nuevoTurno.inicio, fin: nuevoTurno.fin } });

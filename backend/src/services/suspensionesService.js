@@ -46,11 +46,13 @@ export const buscarTurnosAfectados = async (tenantId, barberoId, desde, hasta) =
     `SELECT t.id, t.inicio, t.fin, t.google_event_id,
             b.nombre AS barbero_nombre, b.email AS barbero_email,
             s.nombre AS servicio_nombre,
-            c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono
+            c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
+            tn.nombre_negocio AS tenant_nombre
      FROM turno t
      JOIN barbero  b ON b.id = t.barbero_id
      JOIN servicio s ON s.id = t.servicio_id
      JOIN cliente  c ON c.id = t.cliente_id
+     JOIN tenant   tn ON tn.id = t.tenant_id
      WHERE t.tenant_id = $1
        AND t.barbero_id = $2
        AND t.estado = 'reservado'
@@ -100,7 +102,7 @@ export const crearSuspension = async ({
 
     // Best-effort: mail al cliente
     if (t.cliente_email) {
-      const { turno, barbero, servicio, cliente } = construirContextoMail(t);
+      const { turno, barbero, servicio, cliente, tenant } = construirContextoMail(t);
       await enviarCancelacionAutomatica(
         turno, barbero, servicio, cliente,
         {
@@ -108,6 +110,7 @@ export const crearSuspension = async ({
           motivo: motivo || 'Sin motivo especificado',
         },
         linkTurnero,
+        tenant,
       );
     }
   }

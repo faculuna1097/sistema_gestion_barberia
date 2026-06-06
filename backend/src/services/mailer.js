@@ -52,24 +52,6 @@ if (credencialesCargadas) {
 }
 
 /**
- * Formatea un timestamp como "14/05 10:30" en TZ Argentina.
- * Función interna, no exportada.
- *
- * @param {string|Date} timestamp
- * @returns {string} fecha legible
- */
-const formatearFecha = (timestamp) => {
-  return new Intl.DateTimeFormat('es-AR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: TZ,
-  }).format(new Date(timestamp));
-};
-
-/**
  * Capitaliza la primera letra de un string. Función interna, no exportada.
  *
  * @param {string} texto
@@ -146,6 +128,21 @@ const escaparHtml = (valor) => {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+};
+
+/**
+ * Construye la fila de "Dirección" con link a Google Maps, o null si el
+ * negocio no tiene dirección cargada (para no mostrar la fila). El href abre
+ * la búsqueda en Maps (en el celular, la app). Función interna, no exportada.
+ *
+ * @param {Object} tenant - { direccion }
+ * @returns {{label: string, valor: string, href: string}|null}
+ */
+const filaDireccion = (tenant) => {
+  const direccion = tenant?.direccion?.trim();
+  if (!direccion) return null;
+  const urlMaps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion)}`;
+  return { label: 'Dirección', valor: direccion, href: urlMaps };
 };
 
 /**
@@ -305,22 +302,19 @@ export const enviarConfirmacion = async (turno, barbero, servicio, cliente, link
   const hora = formatearHora(turno.inicio);
   const asunto = `Turno confirmado — ${formatearFechaAsunto(turno.inicio)}`;
 
-  // Filas de detalle. La dirección se agrega solo si el negocio la tiene
-  // cargada; su href abre la búsqueda en Google Maps (en el celular, la app).
+  // Filas de detalle. La fila de dirección (con link a Maps) se agrega solo
+  // si el negocio tiene dirección cargada.
   const filas = [
     { label: 'Servicio', valor: servicio.nombre },
     { label: 'Barbero', valor: barbero.nombre },
     { label: 'Fecha', valor: fechaLarga },
     { label: 'Horario', valor: hora },
   ];
-  const direccion = tenant?.direccion?.trim();
-  if (direccion) {
-    const urlMaps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion)}`;
-    filas.push({ label: 'Dirección', valor: direccion, href: urlMaps });
-  }
+  const filaDir = filaDireccion(tenant);
+  if (filaDir) filas.push(filaDir);
 
   // Texto plano (fallback para clientes que no renderizan HTML).
-  const lineaDireccion = direccion ? `\nDirección: ${direccion}` : '';
+  const lineaDireccion = filaDir ? `\nDirección: ${filaDir.valor}` : '';
   const texto = `Turno confirmado.\n\nServicio: ${servicio.nombre}\nBarbero: ${barbero.nombre}\nFecha: ${fechaLarga}\nHorario: ${hora}${lineaDireccion}\n\nGestionar: ${linkGestion}`;
 
   const html = construirHtml({
@@ -344,14 +338,16 @@ export const enviarConfirmacion = async (turno, barbero, servicio, cliente, link
  * @param {Object} servicio - { nombre }
  * @param {Object} cliente - { nombre, email }
  * @param {'cliente'|'barbero'|'admin'} canceladoPor
+ * @param {Object} tenant - { nombre } del negocio, para el remitente
  * @returns {Promise<boolean>}
  */
-export const enviarCancelacion = async (turno, barbero, servicio, cliente, canceladoPor) => {
+export const enviarCancelacion = async (turno, barbero, servicio, cliente, canceladoPor, tenant) => {
   if (debeSaltarseEnvio('enviarCancelacion', cliente)) return false;
 
-  const fechaTexto = formatearFecha(turno.inicio);
-  const asunto = `Turno cancelado — ${fechaTexto}`;
-  const texto = `Turno cancelado.\n\nServicio: ${servicio.nombre}\nBarbero: ${barbero.nombre}\nFecha: ${fechaTexto}\nCancelado por: ${canceladoPor}`;
+  const fechaLarga = formatearFechaLarga(turno.inicio);
+  const hora = formatearHora(turno.inicio);
+  const asunto = `Turno cancelado — ${formatearFechaAsunto(turno.inicio)}`;
+  const texto = `Turno cancelado.\n\nServicio: ${servicio.nombre}\nBarbero: ${barbero.nombre}\nFecha: ${fechaLarga}\nHorario: ${hora}\nCancelado por: ${canceladoPor}`;
   const html = construirHtml({
     eyebrow: 'Turno cancelado',
     eyebrowColor: paleta.danger,
@@ -360,13 +356,14 @@ export const enviarCancelacion = async (turno, barbero, servicio, cliente, cance
     filas: [
       { label: 'Servicio', valor: servicio.nombre },
       { label: 'Barbero', valor: barbero.nombre },
-      { label: 'Fecha', valor: fechaTexto },
+      { label: 'Fecha', valor: fechaLarga },
+      { label: 'Horario', valor: hora },
       { label: 'Cancelado por', valor: canceladoPor.charAt(0).toUpperCase() + canceladoPor.slice(1) },
     ],
     cta: null,
   });
 
-  return enviarMail({ destino: cliente.email, asunto, texto, html, nombreFuncion: 'enviarCancelacion' });
+  return enviarMail({ destino: cliente.email, asunto, texto, html, nombreFuncion: 'enviarCancelacion', remitente: tenant?.nombre });
 };
 
 /**
@@ -377,28 +374,41 @@ export const enviarCancelacion = async (turno, barbero, servicio, cliente, cance
  * @param {Object} servicio - { nombre }
  * @param {Object} cliente - { nombre, email }
  * @param {string} linkGestion - URL para cancelar/reprogramar
+ * @param {Object} tenant - { nombre, direccion } del negocio: el nombre para
+ *   el remitente y la dirección (puede venir vacía) para la fila con link a Maps
  * @returns {Promise<boolean>}
  */
-export const enviarReprogramacion = async (turno, barbero, servicio, cliente, linkGestion) => {
+export const enviarReprogramacion = async (turno, barbero, servicio, cliente, linkGestion, tenant) => {
   if (debeSaltarseEnvio('enviarReprogramacion', cliente)) return false;
 
-  const fechaTexto = formatearFecha(turno.inicio);
-  const asunto = `Turno reprogramado — ${fechaTexto}`;
-  const texto = `Turno reprogramado.\n\nServicio: ${servicio.nombre}\nBarbero: ${barbero.nombre}\nNueva fecha: ${fechaTexto}\n\nGestionar: ${linkGestion}`;
+  const fechaLarga = formatearFechaLarga(turno.inicio);
+  const hora = formatearHora(turno.inicio);
+  const asunto = `Turno reprogramado — ${formatearFechaAsunto(turno.inicio)}`;
+
+  // Filas de detalle. La fila de dirección (con link a Maps) se agrega solo
+  // si el negocio tiene dirección cargada: tras reprogramar, el cliente igual
+  // va a concurrir al local.
+  const filas = [
+    { label: 'Servicio', valor: servicio.nombre },
+    { label: 'Barbero', valor: barbero.nombre },
+    { label: 'Nueva fecha', valor: fechaLarga },
+    { label: 'Horario', valor: hora },
+  ];
+  const filaDir = filaDireccion(tenant);
+  if (filaDir) filas.push(filaDir);
+
+  const lineaDireccion = filaDir ? `\nDirección: ${filaDir.valor}` : '';
+  const texto = `Turno reprogramado.\n\nServicio: ${servicio.nombre}\nBarbero: ${barbero.nombre}\nNueva fecha: ${fechaLarga}\nHorario: ${hora}${lineaDireccion}\n\nGestionar: ${linkGestion}`;
   const html = construirHtml({
     eyebrow: 'Turno reprogramado',
     eyebrowColor: paleta.accent,
     titulo: 'Tu turno cambió de fecha',
     intro: `Hola ${cliente.nombre ?? ''}, actualizamos tu turno a una nueva fecha.`,
-    filas: [
-      { label: 'Servicio', valor: servicio.nombre },
-      { label: 'Barbero', valor: barbero.nombre },
-      { label: 'Nueva fecha', valor: fechaTexto },
-    ],
+    filas,
     cta: { label: 'Gestionar turno', url: linkGestion },
   });
 
-  return enviarMail({ destino: cliente.email, asunto, texto, html, nombreFuncion: 'enviarReprogramacion' });
+  return enviarMail({ destino: cliente.email, asunto, texto, html, nombreFuncion: 'enviarReprogramacion', remitente: tenant?.nombre });
 };
 
 /**
@@ -415,16 +425,18 @@ export const enviarReprogramacion = async (turno, barbero, servicio, cliente, li
  *   intro:  párrafo introductorio del mail (qué pasó, en tono al cliente).
  *   motivo: valor mostrado en la fila "Motivo" de la tabla.
  * @param {string} linkTurnero - URL para reservar de nuevo
+ * @param {Object} tenant - { nombre } del negocio, para el remitente
  * @returns {Promise<boolean>}
  */
-export const enviarCancelacionAutomatica = async (turno, barbero, servicio, cliente, opciones, linkTurnero) => {
+export const enviarCancelacionAutomatica = async (turno, barbero, servicio, cliente, opciones, linkTurnero, tenant) => {
   if (debeSaltarseEnvio('enviarCancelacionAutomatica', cliente)) return false;
 
-  const fechaTexto = formatearFecha(turno.inicio);
+  const fechaLarga = formatearFechaLarga(turno.inicio);
+  const hora = formatearHora(turno.inicio);
   const motivo = opciones?.motivo ?? '(sin motivo)';
   const intro = opciones?.intro ?? `Hola ${cliente.nombre ?? ''}, tuvimos que cancelar este turno.`;
-  const asunto = `Turno cancelado — ${fechaTexto}`;
-  const texto = `${intro}\n\nServicio: ${servicio.nombre}\nBarbero: ${barbero.nombre}\nFecha: ${fechaTexto}\nMotivo: ${motivo}\n\nReservar de nuevo: ${linkTurnero}`;
+  const asunto = `Turno cancelado — ${formatearFechaAsunto(turno.inicio)}`;
+  const texto = `${intro}\n\nServicio: ${servicio.nombre}\nBarbero: ${barbero.nombre}\nFecha: ${fechaLarga}\nHorario: ${hora}\nMotivo: ${motivo}\n\nReservar de nuevo: ${linkTurnero}`;
   const html = construirHtml({
     eyebrow: 'Turno cancelado',
     eyebrowColor: paleta.danger,
@@ -433,11 +445,12 @@ export const enviarCancelacionAutomatica = async (turno, barbero, servicio, clie
     filas: [
       { label: 'Servicio', valor: servicio.nombre },
       { label: 'Barbero', valor: barbero.nombre },
-      { label: 'Fecha', valor: fechaTexto },
+      { label: 'Fecha', valor: fechaLarga },
+      { label: 'Horario', valor: hora },
       { label: 'Motivo', valor: motivo },
     ],
     cta: { label: 'Reservar de nuevo', url: linkTurnero },
   });
 
-  return enviarMail({ destino: cliente.email, asunto, texto, html, nombreFuncion: 'enviarCancelacionAutomatica' });
+  return enviarMail({ destino: cliente.email, asunto, texto, html, nombreFuncion: 'enviarCancelacionAutomatica', remitente: tenant?.nombre });
 };
