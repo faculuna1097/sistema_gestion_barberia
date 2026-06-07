@@ -1,8 +1,16 @@
 # Registro de deudas técnicas — frontend (panel de gestión)
 
-Este documento es el **registro vivo** de las deudas técnicas detectadas durante el
+> **📦 DOCUMENTO ARCHIVADO (2026-06-07).** Este registro cumplió su función como
+> andamiaje del rediseño del panel de gestión: todas las deudas accionables se
+> resolvieron (ver apéndice) y las que siguen vivas se consolidaron en
+> [`estado_actual.md`](./estado_actual.md) → "Deudas técnicas conocidas".
+> Se conserva como **historia** (cómo se resolvió cada deuda, con sus decisiones y
+> trade-offs); **ya no es el registro activo**. Para el estado vigente de deudas, ir a
+> `estado_actual.md`. Los números (#NN) se siguen referenciando desde commits y otros docs.
+
+Este documento fue el **registro vivo** de las deudas técnicas detectadas durante el
 rediseño del panel de gestión (ver `docs/plan_redisenio_frontend_gestion.md`).
-Acá vive el plan escalonado para resolverlas y el seguimiento de cada una.
+Acá vivió el plan escalonado para resolverlas y el seguimiento de cada una.
 
 **Regla de oro**: una deuda no se borra. Cuando se resuelve, se cambia su estado a
 `✅`, se anota **fecha + commit**, y se mueve al apéndice "Resueltas" al final.
