@@ -21,6 +21,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Delete, ArrowLeft } from "lucide-react";
 import { theme } from "../theme/tokens.js";
 import { EmptyState, IconoAlerta, Card, LogoCirculo } from "../components/ui";
+import FondoLocal from "../components/ui/FondoLocal.jsx";
 import { loginPanel } from "../services/api";
 
 /**
@@ -64,27 +65,25 @@ function BotonCancelarEsquina({ label, onClick }) {
 
 /**
  * ShellLoginAdmin
- * Wrapper full-screen con fondo surfaceAlt y card centrada. Lo comparten la
- * pantalla normal de ingreso de PIN y la pantalla de acceso suspendido.
+ * Wrapper full-screen con la card de PIN centrada. El fondo es `FondoLocal` (la
+ * foto del local con blur + velo, el mismo de MainScreen y los 3 flujos), así el
+ * ambiente del local no se corta al entrar al login. Sin foto, FondoLocal cae a
+ * `surfaceAlt` (el look Stripe/Clerk de antes). La card opaca (`surface`) hace de
+ * "panel claro" sobre el fondo, idéntico patrón al de los flujos.
+ *
+ * Lo comparten la pantalla normal de ingreso de PIN y la de acceso suspendido.
  * El cancel button va en la esquina superior izquierda de la card.
  */
-function ShellLoginAdmin({ children, onCancelar, labelCancelar = 'Cancelar', maxWidth = 480 }) {
+function ShellLoginAdmin({ children, onCancelar, labelCancelar = 'Cancelar', maxWidth = 480, imagenLocal }) {
   return (
-    <div style={{
-      width: '100vw',
-      minHeight: '100vh',
-      background: theme.surfaceAlt,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 24,
-      fontFamily: theme.body,
-      overflow: 'auto',
-    }}>
+    <FondoLocal imagenLocal={imagenLocal}>
       <div style={{
         position: 'relative',
         width: '100%',
         maxWidth,
+        // Margen para que la card no toque los bordes en pantallas angostas
+        // (reemplaza el padding del contenedor anterior; FondoLocal va al borde).
+        margin: 24,
         background: theme.surface,
         border: `1px solid ${theme.hairline}`,
         borderRadius: theme.radiusLg,
@@ -99,7 +98,7 @@ function ShellLoginAdmin({ children, onCancelar, labelCancelar = 'Cancelar', max
         {onCancelar && <BotonCancelarEsquina label={labelCancelar} onClick={onCancelar} />}
         {children}
       </div>
-    </div>
+    </FondoLocal>
   );
 }
 
@@ -192,7 +191,7 @@ function ContactoCard() {
  * Componente principal. Maneja el flujo de ingreso de PIN, validación y
  * el estado bloqueado por suscripción vencida.
  */
-export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo }) {
+export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo, imagenLocal }) {
   const [pin, setPin]             = useState("");
   const [estado, setEstado]       = useState("idle"); // "idle" | "error" | "exito"
   const [shake, setShake]         = useState(false);
@@ -255,7 +254,7 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo })
   // ── Pantalla bloqueada (suscripción vencida) ──────────────────────────────
   if (bloqueado) {
     return (
-      <ShellLoginAdmin onCancelar={onCancelar} labelCancelar="Volver">
+      <ShellLoginAdmin onCancelar={onCancelar} labelCancelar="Volver" imagenLocal={imagenLocal}>
         <EmptyState
           tone="danger"
           glyph={<IconoAlerta size={32} />}
@@ -277,7 +276,7 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo })
   const subtituloColor = estado === 'error' ? theme.danger : theme.muted;
 
   return (
-    <ShellLoginAdmin onCancelar={onCancelar} labelCancelar="Cancelar">
+    <ShellLoginAdmin onCancelar={onCancelar} labelCancelar="Cancelar" imagenLocal={imagenLocal}>
       <LogoCirculo imagenLogo={imagenLogo} fallbackColor={iconoColor} />
 
       <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>

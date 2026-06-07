@@ -273,6 +273,7 @@ export default function App() {
     return (
       <PantallaLoginAdmin
         imagenLogo={imagenLogo}
+        imagenLocal={imagenLocal}
         onAcceso={(tokenRecibido, info) => {
           setToken(tokenRecibido);
           setAuthToken(tokenRecibido);

@@ -100,12 +100,15 @@ export function PanelWizard({ paso, total, titulo, subtitulo, onVolver, imagenLo
  * @param {boolean} [props.activo=false]  — estado seleccionado
  * @param {Function} props.onClick        — acción al activar
  * @param {'normal'|'grande'} [props.variante='normal'] — alto del card
- * @param {boolean} [props.dashed=false]  — border punteado (ej. opción "Sin turno")
+ * @param {boolean} [props.dashed=false]  — border punteado oscuro (ej. opción "Sin turno")
  * @param {React.ReactNode} props.children
  * @returns {JSX.Element}
  */
 export function BotonOpcion({ activo = false, onClick, variante = "normal", dashed = false, children }) {
   const grande = variante === "grande";
+  // Color del borde: accent si está seleccionado; el walk-in (dashed) usa un trazo
+  // oscuro (ink) para diferenciarse de los turnos reales, que llevan hairline claro.
+  const colorBorde = activo ? theme.accent : dashed ? theme.ink : theme.hairline;
   return (
     <button
       className="om-opcion"
@@ -123,7 +126,7 @@ export function BotonOpcion({ activo = false, onClick, variante = "normal", dash
         minHeight: grande ? 180 : 120,
         padding: grande ? "32px 20px" : "22px 16px",
         borderRadius: theme.radius,
-        border: `1.5px ${dashed ? "dashed" : "solid"} ${activo ? theme.accent : theme.hairline}`,
+        border: `1.5px ${dashed ? "dashed" : "solid"} ${colorBorde}`,
         background: activo ? theme.accentSoft : theme.surface,
         color: activo ? theme.accent : theme.ink,
         fontFamily: theme.body,

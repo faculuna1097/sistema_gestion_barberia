@@ -9,12 +9,12 @@
 // pre-selección del servicio del turno, payload) se mantiene intacta.
 
 import { useState, useEffect } from "react";
-import { Banknote, Check, X } from "lucide-react";
+import { Banknote, Check, X, CalendarOff } from "lucide-react";
 import { registrarCorte, getTurnosDelDia } from "../../services/api";
 import { getFechaHoy, formatHora } from "../../utils/fecha.js";
 import { theme } from "../../theme/tokens.js";
 import { fmtPesos } from "../../utils/formato.js";
-import { Button, BadgeFormaPago, LoadingState } from "../../components/ui";
+import { Button, BadgeFormaPago, LoadingState, EmptyState } from "../../components/ui";
 import {
   PanelWizard,
   BotonOpcion,
@@ -174,6 +174,23 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
   // Lista los turnos reservados de hoy. Elegir uno pre-selecciona su servicio
   // en el paso siguiente (editable). "Sin turno" sigue el flujo como walk-in.
   if (paso === 2) {
+    // Botón walk-in. Misma acción en ambos casos: si hay turnos va al final de la
+    // grilla; si no hay, va como `action` del EmptyState (centrado y al alcance,
+    // en vez de quedar suelto en una grilla aparte debajo).
+    const botonSinTurno = (
+      <BotonOpcion
+        dashed
+        onClick={() => {
+          setTurnoSeleccionado(null);
+          setServicioSeleccionado(null);
+          avanzar();
+        }}
+      >
+        <span>Sin turno</span>
+        <span style={styles.subLinea}>Cliente sin reserva</span>
+      </BotonOpcion>
+    );
+
     return (
       <PanelWizard
         paso={2}
@@ -185,13 +202,19 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
       >
         {cargandoTurnos ? (
           <LoadingState />
+        ) : turnosDelDia.length === 0 && !errorTurnos ? (
+          // Sin turnos: empty state compacto (sin body) y el walk-in en el mismo
+          // renglón, así el botón queda junto al mensaje y al alcance.
+          <div style={styles.vacioRenglon}>
+            <EmptyState
+              glyph={<CalendarOff size={28} strokeWidth={1.5} />}
+              title="No hay turnos para hoy"
+            />
+            {botonSinTurno}
+          </div>
         ) : (
           <>
-            {errorTurnos ? (
-              <p style={wizardStyles.errorTexto}>{errorTurnos}</p>
-            ) : turnosDelDia.length === 0 ? (
-              <p style={styles.notaVacia}>No hay turnos reservados para hoy.</p>
-            ) : null}
+            {errorTurnos && <p style={wizardStyles.errorTexto}>{errorTurnos}</p>}
 
             <div style={wizardStyles.gridOpciones}>
               {turnosDelDia.map((t) => (
@@ -211,17 +234,7 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
                 </BotonOpcion>
               ))}
 
-              <BotonOpcion
-                dashed
-                onClick={() => {
-                  setTurnoSeleccionado(null);
-                  setServicioSeleccionado(null);
-                  avanzar();
-                }}
-              >
-                <span>Sin turno</span>
-                <span style={styles.subLinea}>Cliente sin reserva</span>
-              </BotonOpcion>
+              {botonSinTurno}
             </div>
           </>
         )}
@@ -349,12 +362,13 @@ const styles = {
     fontWeight: theme.weightRegular,
     color: theme.muted,
   },
-  // Nota cuando no hay turnos reservados (sigue mostrándose el botón "Sin turno").
-  notaVacia: {
-    fontFamily: theme.body,
-    fontSize: theme.sizeBody,
-    color: theme.muted,
-    textAlign: "center",
-    margin: 0,
+  // Empty state (sin turnos) + botón walk-in en el mismo renglón, centrados.
+  // flexWrap: en pantallas angostas el botón baja debajo del mensaje.
+  vacioRenglon: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: 16,
   },
 };
