@@ -65,6 +65,7 @@ Excepción: podés leer los archivos `.md` de contexto general (los que están e
 | `/docs/SQL_Schema.md` | Schema completo de la DB (referencia, no ejecutar). |
 | `/docs/onboarding.md`| Alta de un cliente nuevo.
 | `/docs/deudas_tecnicas_frontend.md` | Registro vivo de deudas técnicas del frontend de gestión + plan escalonado de resolución. |
+| `/docs/plan_recordatorio_turnos.md` | Plan por etapas del mail de recordatorio de turno (lote diario, noche anterior). Contratos de código para desarrollar en chats separados. |
 
 
 ---
