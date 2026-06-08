@@ -1,4 +1,4 @@
-// Script de prueba aislado para el mail de recordatorio (services/mailer.js →
+// Script de prueba aislado para el mail de recordatorio (services/mail/mailer.js →
 // enviarRecordatorio). Manda un recordatorio de ejemplo a una casilla de test.
 // Ejecutar desde /backend: node src/scripts/probarRecordatorioMail.js
 // Verificación: abrir la bandeja del destinatario y revisar el render (eyebrow
@@ -9,7 +9,7 @@
 // lote (query + claim + envío real) se prueba con scripts/probarRecordatorios.js.
 
 import 'dotenv/config';
-import { enviarRecordatorio } from '../services/mailer.js';
+import { enviarRecordatorio } from '../services/mail/mailer.js';
 
 const main = async () => {
   // Mañana 11:30 — 12:00.

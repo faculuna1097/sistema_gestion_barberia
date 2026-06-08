@@ -1,23 +1,16 @@
-// Envío de mails transaccionales del turnero. Usa Nodemailer + SMTP de Gmail
-// con App Password de la cuenta turnos.barbermanager@gmail.com (la misma que
-// figura como organizador de los eventos de Google Calendar).
+// Envío de mails transaccionales del turnero. Arma el HTML (sistema de diseño
+// "Luz") y delega el transporte en la capa de proveedor (mailProvider →
+// resendProvider), que envía vía la API HTTP de Resend. No conoce el proveedor
+// concreto ni su API key.
 // Comportamiento best-effort: si faltan credenciales, si el cliente no tiene
-// email, o si SMTP devuelve error, se loguea y se devuelve false sin propagar.
+// email, o si el envío falla, se loguea y se devuelve false sin propagar.
 // El HTML de los mails sigue el sistema de diseño "Luz" (ver
 // docs/sistema_de_disenio.md): card clara centrada, acento indigo único,
 // tipografía neutra. Geist no carga de forma confiable en clientes de mail,
 // así que se usa el stack de fallback de los tokens.
 
-import nodemailer from 'nodemailer';
-import dns from 'node:dns';
-import { TZ } from '../utils/constantes.js';
-
-// Railway no rutea IPv6 hacia el SMTP de Gmail: si Node resuelve smtp.gmail.com a
-// una dirección IPv6 (AAAA), la conexión SMTP falla con ENETUNREACH. Forzamos
-// IPv4-first (era el default de Node hasta v17) para que el envío sea
-// determinístico desde cualquier contenedor de Railway, no sólo cuando el DNS
-// devuelve IPv4 por suerte.
-dns.setDefaultResultOrder('ipv4first');
+import { TZ } from '../../utils/constantes.js';
+import * as mailProvider from './mailProvider.js';
 
 // Espejo (parcial) de los tokens del tema "Luz". El backend no puede importar
 // frontend-turnero/src/theme/tokens.js, así que se replican acá los valores
@@ -36,24 +29,17 @@ const paleta = {
   fontBody: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
 };
 
-const {
-  GMAIL_APP_PASSWORD,
-  GOOGLE_CALENDAR_EMAIL,
-} = process.env;
+// Dirección de envío verificada en Resend. Se extrae una vez del MAIL_FROM
+// (ej. 'BarberManager <turnos@send.barbermanager.app>' → 'turnos@send.barbermanager.app')
+// para componer el From con el nombre del negocio como display name (ver
+// componerRemitente). Si MAIL_FROM no trae <...>, se asume que ya es la dirección.
+const MAIL_FROM = process.env.MAIL_FROM ?? '';
+const DIRECCION_ENVIO = MAIL_FROM.match(/<(.+)>/)?.[1] ?? MAIL_FROM;
 
-const credencialesCargadas = Boolean(GMAIL_APP_PASSWORD && GOOGLE_CALENDAR_EMAIL);
-
-let transporter = null;
-
-if (credencialesCargadas) {
-  transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: GOOGLE_CALENDAR_EMAIL,
-      pass: GMAIL_APP_PASSWORD,
-    },
-  });
-  console.log('[mailer] transporter inicializado | remitente:', GOOGLE_CALENDAR_EMAIL);
+// El estado de credenciales lo conoce el provider (es quien tiene la API key);
+// el mailer sólo lo consulta para saltarse el envío con un warn limpio.
+if (mailProvider.estaConfigurado) {
+  console.log('[mailer] proveedor de mail inicializado | remitente por defecto:', MAIL_FROM);
 } else {
   console.warn('[mailer] credenciales NO cargadas — el envío de mails queda inactivo en este proceso');
 }
@@ -225,22 +211,37 @@ const construirHtml = ({ eyebrow, eyebrowColor, titulo, intro, filas, cta }) => 
 };
 
 /**
- * Envía un mail. Wrapper interno con manejo de errores y logging común.
+ * Compone el header From con el nombre del negocio como display name,
+ * manteniendo la dirección verificada en Resend (DIRECCION_ENVIO). El nombre se
+ * entrecomilla (y se escapan " y \) para que una coma o un carácter especial no
+ * rompan el header — es lo que antes hacía nodemailer por dentro. Devuelve
+ * undefined si no hay nombre, para que el provider use el MAIL_FROM por defecto.
+ * Función interna, no exportada.
+ *
+ * @param {string} [nombre] - nombre visible del remitente (nombre del negocio)
+ * @returns {string|undefined} header From listo, o undefined si no hay nombre
+ */
+const componerRemitente = (nombre) => {
+  if (!nombre) return undefined;
+  const nombreSeguro = nombre.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `"${nombreSeguro}" <${DIRECCION_ENVIO}>`;
+};
+
+/**
+ * Envía un mail. Wrapper interno con manejo de errores y logging común: delega
+ * el transporte en mailProvider.send() (API HTTP de Resend) y registra el envío
+ * con su message_id para trazabilidad. Best-effort: ante error loguea y devuelve
+ * false sin propagar.
  *
  * @param {Object} opciones - { destino, asunto, texto, html, nombreFuncion, remitente }
- *   remitente: nombre visible del "from" (default "BarberManager")
+ *   remitente: nombre del negocio; se usa como display name del From (si falta, el provider usa MAIL_FROM)
  * @returns {Promise<boolean>} true si OK, false si falla
  */
 const enviarMail = async ({ destino, asunto, texto, html, nombreFuncion, remitente }) => {
   try {
-    await transporter.sendMail({
-      from: { name: remitente || 'BarberManager', address: GOOGLE_CALENDAR_EMAIL },
-      to: destino,
-      subject: asunto,
-      text: texto,
-      html,
-    });
-    console.log(`[mailer] ${nombreFuncion} completado | destino:`, destino);
+    const from = componerRemitente(remitente);
+    const { id } = await mailProvider.send({ from, to: destino, subject: asunto, text: texto, html });
+    console.log(`[mailer] enviarMail — enviado | tipo: ${nombreFuncion} | to: ${destino} | tenant: ${remitente ?? '(sin tenant)'} | message_id: ${id}`);
     return true;
   } catch (err) {
     console.error(`[mailer] Error en ${nombreFuncion}:`, err);
@@ -257,7 +258,7 @@ const enviarMail = async ({ destino, asunto, texto, html, nombreFuncion, remiten
  * @returns {boolean} true si hay que saltearse, false si se puede enviar
  */
 const debeSaltarseEnvio = (nombreFuncion, cliente) => {
-  if (!credencialesCargadas) {
+  if (!mailProvider.estaConfigurado) {
     console.warn(`[mailer] ${nombreFuncion} — saltado: faltan credenciales`);
     return true;
   }

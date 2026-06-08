@@ -9,7 +9,7 @@ import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { TZ } from '../utils/constantes.js';
 import { cancelarEvento } from './googleCalendar.js';
-import { enviarCancelacionAutomatica, construirContextoMail } from './mailer.js';
+import { enviarCancelacionAutomatica, construirContextoMail } from './mail/mailer.js';
 
 /**
  * Obtiene las filas crudas de horario del tenant tal como están en la DB.

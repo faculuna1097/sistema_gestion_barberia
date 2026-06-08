@@ -13,7 +13,7 @@
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { TZ, RECORDATORIO_DIAS_ANTES } from '../utils/constantes.js';
-import { enviarRecordatorio, construirContextoMail } from './mailer.js';
+import { enviarRecordatorio, construirContextoMail } from './mail/mailer.js';
 import { construirLinkGestion } from './turnosService.js';
 
 /**

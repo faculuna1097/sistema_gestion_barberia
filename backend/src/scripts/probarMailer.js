@@ -1,4 +1,4 @@
-// Script de prueba aislado para services/mailer.js.
+// Script de prueba aislado para services/mail/mailer.js.
 // Envía los 4 tipos de mail a faculunacarp@gmail.com.
 // Ejecutar desde /backend: node src/scripts/probarMailer.js
 // Verificación: abrir la bandeja de entrada del destinatario.
@@ -9,7 +9,7 @@ import {
   enviarCancelacion,
   enviarReprogramacion,
   enviarCancelacionAutomatica,
-} from '../services/mailer.js';
+} from '../services/mail/mailer.js';
 
 const main = async () => {
   // Mañana 10:00 — 10:30 (timestamps fijos para que los 4 mails muestren la misma fecha).

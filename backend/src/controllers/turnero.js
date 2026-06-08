@@ -10,7 +10,7 @@ import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { calcularSlotsDisponibles, calcularDiasConDisponibilidad, DisponibilidadError } from '../services/disponibilidadService.js';
 import { actualizarEvento, cancelarEvento } from '../services/googleCalendar.js';
-import { enviarCancelacion, enviarReprogramacion, construirContextoMail } from '../services/mailer.js';
+import { enviarCancelacion, enviarReprogramacion, construirContextoMail } from '../services/mail/mailer.js';
 import {
   calcularDuracionServicio, upsertCliente, insertarTurno, enriquecerTurno,
   armarLinkGestion, sincronizarCalendarCreacion, notificarConfirmacion,

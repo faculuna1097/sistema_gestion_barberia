@@ -8,7 +8,7 @@
 import { query } from '../config/db.js';
 import { TZ } from '../utils/constantes.js';
 import { cancelarEvento } from './googleCalendar.js';
-import { enviarCancelacionAutomatica, construirContextoMail } from './mailer.js';
+import { enviarCancelacionAutomatica, construirContextoMail } from './mail/mailer.js';
 
 /**
  * Lista los feriados del tenant con fecha >= desde, ordenados ascendentemente.

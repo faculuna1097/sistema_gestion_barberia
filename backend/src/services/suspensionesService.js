@@ -4,7 +4,7 @@
 
 import { query } from '../config/db.js';
 import { cancelarEvento } from './googleCalendar.js';
-import { enviarCancelacionAutomatica, construirContextoMail } from './mailer.js';
+import { enviarCancelacionAutomatica, construirContextoMail } from './mail/mailer.js';
 
 /**
  * Lista suspensiones futuras de un barbero (o de todos si barberoId es null).

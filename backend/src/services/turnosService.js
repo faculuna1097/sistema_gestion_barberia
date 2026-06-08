@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { crearEvento, cancelarEvento } from './googleCalendar.js';
-import { enviarConfirmacion, enviarCancelacion, construirContextoMail } from './mailer.js';
+import { enviarConfirmacion, enviarCancelacion, construirContextoMail } from './mail/mailer.js';
 import { TZ, ANTELACION_MINIMA_MINUTOS } from '../utils/constantes.js';
 import { registrarCorte } from './cortesService.js';
 
