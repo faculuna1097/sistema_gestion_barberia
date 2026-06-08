@@ -6,7 +6,7 @@
 > están escritos de forma explícita para que un chat sin contexto previo pueda
 > retomar sin re-investigar.
 >
-> **Estado:** Etapa 1 completada (commiteada). Próximo: Etapa 2 (mail del recordatorio).
+> **Estado:** Etapa 2 completada (commiteada). Próximo: Etapa 3 (disparador + scheduling).
 > **Última actualización:** 2026-06-08.
 
 ---
@@ -68,9 +68,12 @@ operar** (un solo cron, query trivial, idempotencia casi gratis).
   garantiza que la corrida de las 20:30 se intente siempre, sin depender del
   ciclo de vida del web server. El usuario crea el servicio en Railway (Etapa 3).
 
-**Abiertas:**
-- **D5 — Copy del mail:** seguir el molde de confirmación salvo indicación. Se
-  afina en la Etapa 2.
+- **D5 — Copy del mail (resuelta, Etapa 2):** eyebrow indigo "Recordatorio de
+  turno", título = nombre del negocio, intro "te recordamos tu próximo turno"
+  (sin hardcodear "mañana"), filas Servicio/Barbero/Fecha/Horario + Dirección,
+  CTA "Gestionar turno". Espeja `enviarConfirmacion` salvo el copy.
+
+**Abiertas:** (ninguna)
 
 ---
 
@@ -297,12 +300,16 @@ Cada etapa ≈ un chat. Avanzar con confirmación entre etapas.
 - **Done when:** el dry-run lista correctamente los turnos del día objetivo del
       tenant demo. ✓ (verificado con un turno reservado de prueba en demo).
 
-### Etapa 2 — Mail del recordatorio
-- [ ] `enviarRecordatorio(...)` en `mailer.js` (§7.5), espejando confirmación.
-- [ ] Conectarlo al service (envío real cuando `dryRun = false`).
-- [ ] Script de prueba (estilo `probarMailer.js`) que manda un recordatorio de
-      ejemplo a una casilla de test.
-- **Done when:** llega un mail de prueba bien renderizado.
+### Etapa 2 — Mail del recordatorio ✅ COMPLETADA (commiteada 2026-06-08)
+- [x] `enviarRecordatorio(...)` en `mailer.js` (§7.5), espejando confirmación
+      (eyebrow indigo, título = nombre del negocio, CTA "Gestionar turno").
+- [x] Conectarlo al service: loop unificado en `procesarRecordatorios` con el
+      orden email→claim→envío; resumen `{ enviados, salteados, fallidos, yaReclamados }`.
+- [x] Script de prueba `scripts/probarRecordatorioMail.js` (render del mail a una
+      casilla de test). De paso se arreglaron dos deudas menores: `probarMailer.js`
+      llamaba a los mails sin el arg `tenant` (rompía confirmación y reprogramación),
+      y `mailer.js` hardcodeaba `TZ` en vez de importarlo de `utils/constantes.js`.
+- **Done when:** llega un mail de prueba bien renderizado. ✓
 
 ### Etapa 3 — Disparador + scheduling
 - [ ] `jobs/recordatorios.js`: entrypoint que llama a `procesarRecordatorios()`

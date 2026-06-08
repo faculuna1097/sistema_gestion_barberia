@@ -9,8 +9,7 @@
 // así que se usa el stack de fallback de los tokens.
 
 import nodemailer from 'nodemailer';
-
-const TZ = 'America/Argentina/Buenos_Aires';
+import { TZ } from '../utils/constantes.js';
 
 // Espejo (parcial) de los tokens del tema "Luz". El backend no puede importar
 // frontend-turnero/src/theme/tokens.js, así que se replican acá los valores
@@ -453,4 +452,56 @@ export const enviarCancelacionAutomatica = async (turno, barbero, servicio, clie
   });
 
   return enviarMail({ destino: cliente.email, asunto, texto, html, nombreFuncion: 'enviarCancelacionAutomatica', remitente: tenant?.nombre });
+};
+
+/**
+ * Mail de recordatorio de turno (lote diario, la noche anterior). Espeja a
+ * enviarConfirmacion: mismas filas (Servicio/Barbero/Fecha/Horario + Dirección
+ * con link a Maps) y mismo CTA "Gestionar turno"; sólo cambian el eyebrow, el
+ * asunto y el copy. A diferencia de los otros cuatro mails (transaccionales,
+ * disparados por una acción del usuario), éste lo dispara el job programado
+ * (recordatoriosService.js).
+ *
+ * @param {Object} turno - { inicio, fin }
+ * @param {Object} barbero - { nombre }
+ * @param {Object} servicio - { nombre }
+ * @param {Object} cliente - { nombre, email }
+ * @param {string} linkGestion - URL para cancelar/reprogramar
+ * @param {Object} tenant - { nombre, direccion } del negocio: el nombre arma el
+ *   título y el remitente; la dirección (puede venir vacía) arma la fila de
+ *   ubicación con link a Google Maps
+ * @returns {Promise<boolean>}
+ */
+export const enviarRecordatorio = async (turno, barbero, servicio, cliente, linkGestion, tenant) => {
+  if (debeSaltarseEnvio('enviarRecordatorio', cliente)) return false;
+
+  const fechaLarga = formatearFechaLarga(turno.inicio);
+  const hora = formatearHora(turno.inicio);
+  const asunto = `Recordatorio de turno — ${formatearFechaAsunto(turno.inicio)}`;
+
+  // Filas de detalle. La fila de dirección (con link a Maps) se agrega solo si
+  // el negocio tiene dirección cargada: el cliente va a concurrir al local.
+  const filas = [
+    { label: 'Servicio', valor: servicio.nombre },
+    { label: 'Barbero', valor: barbero.nombre },
+    { label: 'Fecha', valor: fechaLarga },
+    { label: 'Horario', valor: hora },
+  ];
+  const filaDir = filaDireccion(tenant);
+  if (filaDir) filas.push(filaDir);
+
+  // Texto plano (fallback para clientes que no renderizan HTML).
+  const lineaDireccion = filaDir ? `\nDirección: ${filaDir.valor}` : '';
+  const texto = `Recordatorio de turno.\n\nServicio: ${servicio.nombre}\nBarbero: ${barbero.nombre}\nFecha: ${fechaLarga}\nHorario: ${hora}${lineaDireccion}\n\nGestionar: ${linkGestion}`;
+
+  const html = construirHtml({
+    titulo: tenant.nombre,
+    eyebrow: 'Recordatorio de turno',
+    eyebrowColor: paleta.accent,
+    intro: `Hola ${cliente.nombre ?? ''}, te recordamos tu próximo turno. Acá están los detalles.`,
+    filas,
+    cta: { label: 'Gestionar turno', url: linkGestion },
+  });
+
+  return enviarMail({ destino: cliente.email, asunto, texto, html, nombreFuncion: 'enviarRecordatorio', remitente: tenant?.nombre });
 };

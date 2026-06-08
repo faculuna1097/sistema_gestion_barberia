@@ -22,24 +22,29 @@ const main = async () => {
   const barbero  = { nombre: 'Facundo' };
   const servicio = { nombre: 'Corte de prueba' };
   const cliente  = { nombre: 'Cliente Test', email: 'faculunacarp@gmail.com' };
+  // tenant del negocio: el nombre arma el título y el remitente; la dirección
+  // arma la fila "Dirección" con link a Maps. Sin tenant, enviarConfirmacion y
+  // enviarReprogramacion rompen al leer tenant.nombre.
+  const tenant   = { nombre: 'Barbería Demo', direccion: 'Av. Corrientes 1234, CABA' };
 
   const linkGestion = 'https://demo.barbermanager.app/turnos/TOKEN-DEMO';
   const linkTurnero = 'https://demo.barbermanager.app/turnos/';
 
   console.log('--- 1) enviarConfirmacion ---');
-  await enviarConfirmacion(turno, barbero, servicio, cliente, linkGestion);
+  await enviarConfirmacion(turno, barbero, servicio, cliente, linkGestion, tenant);
 
   console.log('--- 2) enviarCancelacion (canceladoPor=cliente) ---');
-  await enviarCancelacion(turno, barbero, servicio, cliente, 'cliente');
+  await enviarCancelacion(turno, barbero, servicio, cliente, 'cliente', tenant);
 
   console.log('--- 3) enviarReprogramacion ---');
-  await enviarReprogramacion(turno, barbero, servicio, cliente, linkGestion);
+  await enviarReprogramacion(turno, barbero, servicio, cliente, linkGestion, tenant);
 
   console.log('--- 4) enviarCancelacionAutomatica ---');
   await enviarCancelacionAutomatica(
     turno, barbero, servicio, cliente,
     { intro: 'Hola Cliente Test, el barbero suspendió su agenda y tuvimos que cancelar este turno.', motivo: 'Vacaciones' },
     linkTurnero,
+    tenant,
   );
 
   console.log('--- script terminado ---');
