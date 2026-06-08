@@ -6,7 +6,9 @@
 > están escritos de forma explícita para que un chat sin contexto previo pueda
 > retomar sin re-investigar.
 >
-> **Estado:** Etapa 2 completada (commiteada). Próximo: Etapa 3 (disparador + scheduling).
+> **Estado:** Etapa 3 en progreso. Disparador (`jobs/recordatorios.js` + `cerrarPool`
+> en `db.js`) implementado y commiteado; falta la verificación de la corrida real en
+> Railway sobre el tenant demo para cerrarla. Luego: Etapa 4.
 > **Última actualización:** 2026-06-08.
 
 ---
@@ -312,10 +314,31 @@ Cada etapa ≈ un chat. Avanzar con confirmación entre etapas.
 - **Done when:** llega un mail de prueba bien renderizado. ✓
 
 ### Etapa 3 — Disparador + scheduling
-- [ ] `jobs/recordatorios.js`: entrypoint que llama a `procesarRecordatorios()`
-      y **termina el proceso** limpio (cierra/agota el pool, `process.exit`).
-- [ ] Configurar el cron (Railway Cron o node-cron, según D1) — **lo hace el
-      usuario en Railway**; el chat le pasa el comando/schedule.
+- [x] `jobs/recordatorios.js`: entrypoint (cáscara fina) que llama a
+      `procesarRecordatorios({ dryRun: false })`, loguea el resumen del lote y
+      **termina el proceso** limpio. Cierre ordenado: se agregó `cerrarPool()` a
+      `config/db.js` (export que encapsula `pool.end()` sin exponer el pool crudo
+      → respeta §9); el job hace `await cerrarPool()` en un `finally` y después
+      `process.exit(code)` (0 ok / 1 fallo catastrófico, que es lo que lee el cron).
+- [ ] Configurar el cron en **Railway Cron** (servicio dedicado, D1) — **lo hace el
+      usuario en Railway**. Config del servicio:
+  - **Root Directory:** `backend` (igual que el web service). Si no se setea,
+    Railpack analiza la raíz del repo (monorepo, sin `package.json` en root) y el
+    build falla con "could not determine how to build the app".
+  - **Start Command:** `node src/jobs/recordatorios.js`
+  - **Cron Schedule:** `30 23 * * *` (23:30 UTC = 20:30 ART; Argentina sin horario
+    de verano → offset fijo −3).
+  - **Env vars:** replicar las del web service (`DB_*`, `GMAIL_APP_PASSWORD`,
+    `GOOGLE_CALENDAR_EMAIL`). **`PUBLIC_BASE_URL` no hace falta:** es sólo el
+    fallback de `construirLinkGestion` cuando el tenant no tiene subdominio; en
+    prod todos lo tienen, así que nunca se lee.
+  - **Branch connected to production:** apuntar a `feature/turnero` para verificar
+    la Etapa 3 antes de mergear. **Al mergear a `main`, cambiar este setting a
+    `main`** (si no, el servicio seguiría deployando el código congelado de la
+    rama vieja).
+  - **Railway buildea desde GitHub, no desde local:** el código (job + cambio en
+    `db.js`) tiene que estar **commiteado y pusheado** a la rama conectada antes de
+    que el servicio pueda buildear/correr.
 - **Done when:** una corrida programada manda los recordatorios del tenant demo.
 
 ### Etapa 4 — Activación en producción + hardening

@@ -35,6 +35,16 @@ pool.on('error', (err) => console.error('[db] ❌ Error inesperado en pool:', er
 export const query = (text, params) => pool.query(text, params);
 
 /**
+ * cerrarPool
+ * Cierra el pool drenando las conexiones abiertas. Lo usa el job del cron de
+ * recordatorios para terminar limpio: el pool mantiene vivo el event loop, así
+ * que sin cerrarlo el proceso no termina solo. No exponemos el pool crudo para
+ * no habilitar pool.connect() (restricción del Session Pooler, plan §9).
+ * @returns {Promise} resuelve cuando todas las conexiones quedaron cerradas
+ */
+export const cerrarPool = () => pool.end();
+
+/**
  * testConnection
  * Verifica que la conexión a PostgreSQL funciona al arrancar el servidor.
  * Llamada desde index.js antes de levantar el servidor.
