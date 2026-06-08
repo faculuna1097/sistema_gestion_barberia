@@ -85,7 +85,7 @@ operar** (un solo cron, query trivial, idempotencia casi gratis).
 
 ## 4. Lo que ya existe y se reusa (mapa de reuso)
 
-- **`backend/src/services/mailer.js`**
+- **`backend/src/services/mail/mailer.js`** (movido desde `services/mailer.js` en la migración a Resend, ver [`plan_entregabilidad_mail.md`](plan_entregabilidad_mail.md))
   - `construirHtml({ eyebrow, eyebrowColor, titulo, intro, filas, cta })` — molde
     visual común. Se reusa tal cual.
   - `filaDireccion(tenant)` — fila "Dirección" con link a Maps (o `null` si el

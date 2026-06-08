@@ -5,6 +5,15 @@ el envío de mails transaccionales del turnero desde el SMTP de Gmail hacia un d
 propio autenticado vía **Resend**, para (1) que los mails **salgan** desde producción
 y (2) que lleguen a bandeja de entrada y no a spam (sobre todo en Outlook/Hotmail).
 
+> **Progreso (2026-06-08):** Fases 1, 2 y 4 ✅. Cuenta Resend creada, dominio
+> `send.barbermanager.app` agregado y **verificado** (DKIM/SPF/MX en verde), y el
+> código migrado a la API HTTP de Resend (commit `ecc5484`, validado end-to-end con
+> `onboarding@resend.dev`). **Pendiente para que salga en prod:** cargar
+> `RESEND_API_KEY` + `MAIL_FROM` en Railway (web service **y** cron) + deploy (último
+> ítem de Fase 4); después Fase 5 (verificación) y el DMARC (Fase 3) + endurecimiento
+> (Fase 6). **Corrección:** la zona DNS no está en Namecheap sino delegada a **Vercel**
+> (NS `vercel-dns.com`); los registros se cargaron en Vercel. Ver §3, §6 y §12.
+
 > **Actualización 2026-06-08 — dos cambios de contexto que mandan sobre el resto del doc:**
 > 1. **Driver primario nuevo:** el backend corre en **Railway plan Hobby**, que
 >    **bloquea el SMTP saliente** (puertos 25/465/587, anti-spam de la plataforma).
@@ -41,7 +50,7 @@ de entrada y no a spam, configurando autenticación de dominio real:
 ## 2. Diagnóstico (por qué hoy cae en spam)
 
 El `From` actual es `BarberManager <turnos.barbermanager@gmail.com>`
-(ver [`backend/src/services/mailer.js`](../backend/src/services/mailer.js), líneas 45 y 163).
+(ver [`backend/src/services/mail/mailer.js`](../backend/src/services/mail/mailer.js); estado previo a la migración).
 
 El problema de raíz: **el dominio del `From` es `gmail.com`, que no controlamos.**
 SPF/DKIM/DMARC autentican el dominio del `From`, así que configurarlos en
@@ -79,7 +88,7 @@ idea original de "mantener nodemailer con SMTP de Resend" (ver §4 y §7 corregi
 |---|---|---|---|
 | 1 | Proveedor | **Resend** | Mejor equilibrio para nuestro caso: built sobre AWS SES, API HTTP simple, **tier gratis 3.000 mails/mes (100/día)**, panel que entrega los DNS listos para copiar y los verifica. Curva suave para quien recién entra a infra de mail. |
 | 2 | Dominio de envío | **Subdominio dedicado** `send.barbermanager.app` | Aísla la reputación de envío del dominio raíz y de los subdominios de tenants (`kingsai.barbermanager.app`, etc.). Si un mail problemático afecta reputación, no contamina el dominio principal. Es la práctica recomendada por Resend. |
-| 3 | Registrador / zona DNS | **Namecheap** | Es donde se compró `barbermanager.app`. Los registros se cargan en Namecheap → **Advanced DNS** (asumiendo nameservers de Namecheap / BasicDNS; ver §6 si la zona estuviera delegada a otro lado). |
+| 3 | Registrador / zona DNS | Dominio en **Namecheap**, zona DNS en **Vercel** | `barbermanager.app` se compró en Namecheap, pero los nameservers están delegados a Vercel (`ns1/ns2.vercel-dns.com`), donde vive el frontend. **Los registros DNS se cargan en Vercel → Domains → barbermanager.app → DNS Records**, no en Namecheap (su Advanced DNS está inactivo). Confirmado con `nslookup -type=ns` y ya registrado en `estado_actual.md`. Ver §6. |
 | 4 | Plan B de entregabilidad | **Postmark** | Solo si tras migrar a Resend Outlook sigue mandando a spam. Es el gold standard transaccional para Outlook, pero el tier gratis es de prueba (~100/mes) y arranca en ~US$15/mes. No se adopta ahora. |
 | 5 | Transporte | **`fetch` nativo + API HTTP de Resend** | Railway Hobby bloquea el SMTP saliente (§2.1), así que `smtp.resend.com:465` fallaría igual que Gmail; la API HTTP sale por HTTPS/443. Se usa `fetch` nativo, **no el SDK**: la API es muy simple, evita una dependencia, menos superficie de mantenimiento y menos riesgo de incompatibilidades futuras; el proyecto no usa features avanzadas que justifiquen el SDK. |
 
@@ -94,11 +103,11 @@ Backend (Railway, Hobby)
         From: BarberManager <turnos@send.barbermanager.app>
         Reply-To: <mail real de la barbería>   (mejora futura, ver §11)
 
-DNS de barbermanager.app (Namecheap)
-  ├─ send.barbermanager.app           TXT  SPF        (autoriza a SES)
-  ├─ resend._domainkey.send...        TXT  DKIM       (clave pública, la genera Resend)
-  ├─ send.barbermanager.app           MX   feedback   (bounces/quejas de SES)
-  └─ _dmarc.barbermanager.app         TXT  DMARC      (política + reportes)
+DNS de barbermanager.app (zona en Vercel — DNS Records)
+  ├─ send.send.barbermanager.app             TXT  SPF      (autoriza a SES; subdominio de bounce)
+  ├─ resend._domainkey.send.barbermanager.app TXT DKIM     (clave pública, la genera Resend)
+  ├─ send.send.barbermanager.app             MX   feedback (bounces/quejas de SES)
+  └─ _dmarc.barbermanager.app                TXT  DMARC    (política + reportes)
 ```
 
 Se mantiene **todo el HTML** de los mails (`construirHtml` y los 5 tipos). Cambia el
@@ -112,23 +121,23 @@ propio. nodemailer y el SDK de Resend no se usan.
 ## 5. Plan por fases
 
 ### Fase 0 — Pre-requisitos
-- [ ] Acceso al panel de Namecheap (cuenta donde se compró el dominio).
-- [ ] Decidir el mail de origen exacto. Propuesta: `turnos@send.barbermanager.app` (o `no-reply@send.barbermanager.app`).
+- [x] Acceso al panel de DNS — **Vercel** (la zona de `barbermanager.app` está delegada ahí, no a Namecheap).
+- [x] Mail de origen: `turnos@send.barbermanager.app` (el display name es el nombre del negocio por tenant; el default es `MAIL_FROM`).
 - [ ] Decidir a dónde van los reportes DMARC. Propuesta: un buzón propio + un lector gratuito de reportes (ver Fase 3).
 
-### Fase 1 — Crear cuenta y dominio en Resend
-- [ ] Crear cuenta en Resend.
-- [ ] **Add Domain** → escribir `send.barbermanager.app` (el subdominio, no el dominio raíz).
-- [ ] Elegir **región**: si está disponible, **`sa-east-1` (São Paulo)** por cercanía a Argentina (afecta el host del registro MX de feedback y la latencia).
-- [ ] Resend muestra una lista de registros DNS a cargar (SPF + DKIM + MX). **Dejar esa pantalla abierta**: esos valores son los que se copian a Namecheap. El DKIM es único por dominio y lo genera Resend — no se inventa.
+### Fase 1 — Crear cuenta y dominio en Resend ✅
+- [x] Crear cuenta en Resend.
+- [x] **Add Domain** → `send.barbermanager.app` (el subdominio, no el dominio raíz).
+- [x] Elegir **región** (afecta el host del MX de feedback y la latencia).
+- [x] Resend muestra los registros DNS a cargar (SPF + DKIM + MX). El DKIM es único por dominio y lo genera Resend — no se inventa. Esos valores se cargan en **Vercel** (Fase 2).
 
-### Fase 2 — Cargar DNS en Namecheap
-Ver §6 para el detalle exacto de cada registro y cómo traducir el "Host". En resumen:
-- [ ] Namecheap → Domain List → `barbermanager.app` → **Manage** → **Advanced DNS**.
-- [ ] Agregar el **TXT de SPF** del subdominio.
-- [ ] Agregar el **TXT de DKIM** (selector `resend`).
-- [ ] Agregar el **MX de feedback** del subdominio.
-- [ ] Volver a Resend y tocar **Verify**. Cuando los registros propagan, pasan a verde (suele ser minutos; puede tardar hasta 24-48 h, ver §10).
+### Fase 2 — Cargar DNS en Vercel ✅
+Ver §6 para el detalle exacto de cada registro y el mapeo de "Name". En resumen:
+- [x] Vercel → **Domains** → `barbermanager.app` → **DNS Records**.
+- [x] Agregar el **TXT de DKIM** (Name `resend._domainkey.send`).
+- [x] Agregar el **TXT de SPF** (Name `send.send`).
+- [x] Agregar el **MX de feedback** (Name `send.send`, priority 10).
+- [x] Volver a Resend y tocar **Verify** → **en verde** (DKIM, SPF y MX).
 
 ### Fase 3 — DMARC en política suave (monitoreo)
 - [ ] Agregar el TXT de DMARC en `_dmarc.barbermanager.app` con `p=none` (ver §6.4).
@@ -167,41 +176,45 @@ Ver §6 para el detalle exacto de cada registro y cómo traducir el "Host". En r
 > verificación del dominio. Acá se muestra la *forma* esperada para que sepas qué
 > estás cargando; **el valor real (sobre todo la clave DKIM) se copia del panel**.
 
-### Regla de traducción "Name" (Resend) → "Host" (Namecheap)
-Namecheap **auto-agrega `.barbermanager.app`** al Host. Entonces: tomá el `Name`
-que muestra Resend y **quitale `.barbermanager.app` del final**; lo que queda es
-el Host de Namecheap.
+### Regla de traducción "Name" (Resend) → "Name" (Vercel)
+**La zona está en Vercel**, no en Namecheap. Resend muestra los `Name` **relativos a
+la raíz `barbermanager.app`**, y el campo `Name` de Vercel también es relativo a la
+raíz → **el Name de Vercel es idéntico al que muestra Resend, tal cual** (no hay que
+transformar nada).
 
-| Lo que muestra Resend (FQDN) | Host a escribir en Namecheap |
-|---|---|
-| `send.barbermanager.app` | `send` |
-| `resend._domainkey.send.barbermanager.app` | `resend._domainkey.send` |
-| `_dmarc.barbermanager.app` | `_dmarc` |
-| `barbermanager.app` (raíz, si apareciera) | `@` |
+Dato clave: para el SPF y el MX, Resend muestra `send.send`. **No es un typo**: SES
+usa un subdominio de bounce (`send.`) **adelante** del dominio de envío
+(`send.barbermanager.app`), así que el FQDN real es `send.send.barbermanager.app`.
+
+| Lo que muestra Resend (Name) | Name a escribir en Vercel | Tipo |
+|---|---|---|
+| `resend._domainkey.send` | `resend._domainkey.send` | TXT (DKIM) |
+| `send.send` | `send.send` | TXT (SPF) y MX |
+| `_dmarc` | `_dmarc` | TXT (DMARC) |
 
 ### 6.1 SPF (TXT)
-- **Type**: TXT Record
-- **Host**: `send`
+- **Type**: TXT
+- **Name** (Vercel): `send.send`  → FQDN `send.send.barbermanager.app`
 - **Value** (forma típica de Resend/SES): `v=spf1 include:amazonses.com ~all`
-- **Por qué**: autoriza a los servidores de Amazon SES (que usa Resend) a enviar en nombre de `send.barbermanager.app`. El `~all` (softfail) marca como sospechoso lo no autorizado sin rechazarlo de una.
+- **Por qué**: autoriza a los servidores de Amazon SES (que usa Resend) a enviar desde el subdominio de bounce. El `~all` (softfail) marca como sospechoso lo no autorizado sin rechazarlo de una.
 
 ### 6.2 DKIM (TXT)
-- **Type**: TXT Record
-- **Host**: `resend._domainkey.send` (selector `resend`)
+- **Type**: TXT
+- **Name** (Vercel): `resend._domainkey.send` (selector `resend`)
 - **Value**: `p=MIGfMA0GCSqGSIb3DQ...` (clave pública larga, **copiar exacta del panel de Resend**)
 - **Por qué**: Resend firma cada mail con la clave privada; el receptor valida con esta clave pública publicada en DNS. Es lo que prueba que el mail es auténtico y no fue alterado.
-- **Nota Namecheap**: pegar el value tal cual, sin comillas extra ni saltos de línea. Si Namecheap parte el valor, igual lo acepta.
+- **Nota Vercel**: pegar el value tal cual, sin comillas extra ni saltos de línea. Vercel parte solo los valores largos (>255 chars) en chunks; no hay que hacer nada.
 
 ### 6.3 MX de feedback (MX)
-- **Type**: MX Record
-- **Host**: `send`
-- **Value**: `feedback-smtp.sa-east-1.amazonses.com` (el host depende de la región elegida en Fase 1 — **copiar del panel**)
+- **Type**: MX
+- **Name** (Vercel): `send.send`  → FQDN `send.send.barbermanager.app`
+- **Value**: `feedback-smtp.<región>.amazonses.com` (el host depende de la región elegida en Fase 1 — **copiar del panel**)
 - **Priority**: `10`
-- **Por qué**: SES usa este MX para manejar rebotes y quejas del subdominio. No afecta la recepción de mails del dominio raíz (es un MX del subdominio `send`, independiente).
+- **Por qué**: SES usa este MX para manejar rebotes y quejas en el subdominio de bounce. No afecta la recepción de mails del dominio raíz (es un MX de `send.send`, independiente).
 
 ### 6.4 DMARC (TXT) — progresión
-- **Type**: TXT Record
-- **Host**: `_dmarc`
+- **Type**: TXT
+- **Name** (Vercel): `_dmarc`
 
 **Escalón 1 — monitoreo (arrancar acá):**
 ```
@@ -231,16 +244,16 @@ v=DMARC1; p=reject; rua=mailto:dmarc@barbermanager.app; sp=reject; adkim=r; aspf
 > algo legítimo todavía fallando, ese correo se va a spam (quarantine) o se
 > pierde (reject).
 
-### 6.5 Posibles conflictos en Namecheap
-- Si existe un **wildcard** (`*`) o registros para los subdominios de tenants, no chocan con `send` (un Host explícito gana sobre el wildcard). Igual, revisar que no haya un registro `send` previo.
-- Si el dominio tiene activado **Parking / URL Redirect** de Namecheap, puede meter registros por default que conviene revisar.
-- **TTL**: dejar en `Automatic`.
+### 6.5 Posibles conflictos en Vercel
+- El proyecto de gestión tiene un **wildcard** `*.barbermanager.app` para los subdominios de tenants. No choca con `send.send` ni con el DKIM: un registro explícito gana sobre el wildcard. Igual, revisar que no haya un `send.send` previo.
+- **No tocar** los registros que Vercel auto-gestiona para el frontend (el A de la raíz, los de cada proyecto). Estos 3 (DKIM/SPF/MX) son aditivos.
+- **TTL**: dejar el default de Vercel (60 s).
 
 ---
 
 ## 7. Cambio de código
 
-Archivos: [`backend/src/services/mailer.js`](../backend/src/services/mailer.js) más los
+Archivos: [`backend/src/services/mail/mailer.js`](../backend/src/services/mail/mailer.js) más los
 módulos nuevos de la capa de mail (§7.1). La idea es **mínima invasión funcional**:
 mantener todo el HTML (`construirHtml`) y la forma de las funciones de envío; cambiar
 sólo **cómo se manda** (el transporte) y el `From`. Como Railway Hobby bloquea SMTP
@@ -268,7 +281,11 @@ Responsabilidades:
   async send({ to, subject, html, replyTo }) // → { id }  (message id del proveedor)
   ```
   Es el único punto que `mailer.js` importa para enviar. El contrato es agnóstico
-  (camelCase `replyTo`); cada provider traduce a su propia API.
+  (camelCase `replyTo`); cada provider traduce a su propia API. **Implementación final
+  (commit `ecc5484`):** el contrato sumó `from` opcional (display name por-tenant; si
+  falta, el provider usa `MAIL_FROM`) y `text` (fallback de texto plano → multipart,
+  mejor score de entregabilidad), y el provider expone `estaConfigurado` (booleano)
+  para que el mailer saltee el envío con un warn limpio cuando faltan credenciales.
 - **`resendProvider.js`** — implementa `send(...)` con `fetch` hacia
   `https://api.resend.com/emails` (§7.2). Acá vive **todo** lo específico de Resend
   (endpoint, `Authorization: Bearer`, mapeo `replyTo` → `reply_to`, parseo del `id`).
@@ -386,9 +403,9 @@ cuando se confirme que nada más la usa.
 
 ## 10. Tiempos de propagación DNS
 
-- **TTL** de Namecheap: dejar en Automatic.
+- **TTL** en Vercel: default 60 s.
 - Propagación típica: **minutos a pocas horas**; el máximo formal es **24–48 h**.
-- Resend reintenta la verificación solo; si a las pocas horas no pasó a verde, revisar Host/valor en Namecheap (el error más común es haber dejado `.barbermanager.app` de más en el Host, ver §6).
+- Resend reintenta la verificación solo; si a las pocas horas no pasó a verde, revisar Name/valor en Vercel (el error más común es equivocarse en el Name — recordar que SPF y MX van en `send.send`, no `send`, ver §6).
 
 ---
 
@@ -409,7 +426,7 @@ reportes limpios entre escalones.
   no-reply. Convendría setear `Reply-To` al mail real de la barbería (multi-tenant:
   saldría de los datos del tenant). Ligado a la deuda de acoplamiento del mailer.
 - **Reintentos / cola**: el envío es best-effort y si SMTP falla se pierde el mail
-  ([`mailer.js`](../backend/src/services/mailer.js), bloque `catch` de `enviarMail`).
+  ([`mailer.js`](../backend/src/services/mail/mailer.js), bloque `catch` de `enviarMail`).
   A más volumen, evaluar reintento o cola.
 - **Límite del tier gratis de Resend**: 3.000/mes y 100/día. Con varios tenants
   activos puede quedar corto; monitorear y subir de plan o evaluar Postmark.
@@ -419,13 +436,13 @@ reportes limpios entre escalones.
 ## 12. Checklist resumido (para el día que se ejecute)
 
 ```
-[ ] F1  Crear cuenta Resend + Add Domain send.barbermanager.app (región sa-east-1)
-[ ] F2  Namecheap → Advanced DNS: cargar SPF (TXT), DKIM (TXT), MX feedback
-[ ] F2  Resend → Verify (esperar verde)
-[ ] F3  Namecheap: TXT _dmarc con p=none + conectar lector de reportes
+[x] F1  Crear cuenta Resend + Add Domain send.barbermanager.app
+[x] F2  Vercel → DNS Records: DKIM (TXT), SPF (TXT en send.send), MX feedback (send.send)
+[x] F2  Resend → Verify (en verde)
+[ ] F3  Vercel: TXT _dmarc con p=none + conectar lector de reportes
 [ ] F3  Esperar 1–2 semanas, reportes 100% alineados
-[ ] F4  Código: transporter Resend + MAIL_FROM en mailer.js
-[ ] F4  Railway: RESEND_API_KEY + MAIL_FROM ; .env.example documentado
+[x] F4  Código: capa mail/ (mailProvider + resendProvider) + From por-tenant en mailer.js + .env.example (commit ecc5484)
+[ ] F4  Railway: RESEND_API_KEY + MAIL_FROM en web service Y cron + deploy
 [ ] F5  probarMailer.js + mail-tester + MXToolbox + prueba real Gmail/Outlook
 [ ] F6  Subir DMARC a quarantine, luego a reject
 ```

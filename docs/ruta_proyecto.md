@@ -101,7 +101,10 @@ sistema-gestion-barberia/
 │       │
 │       ├── services/                  # Lógica de negocio reutilizable (integraciones externas, algoritmos)
 │       │   ├── googleCalendar.js      # Crear/cancelar/actualizar evento (best-effort, googleapis)
-│       │   ├── mailer.js              # Mails transaccionales del turnero (Nodemailer + SMTP Gmail)
+│       │   ├── mail/                  # Capa de mail desacoplada del proveedor (§7.1 plan_entregabilidad_mail)
+│       │   │   ├── mailer.js          # Mails transaccionales + recordatorio (HTML + From por-tenant); delega el envío
+│       │   │   ├── mailProvider.js    # Contrato agnóstico del proveedor (send + estaConfigurado)
+│       │   │   └── resendProvider.js  # Implementación: API HTTP de Resend vía fetch (timeout + parseo del id)
 │       │   ├── disponibilidadService.js  # Algoritmo de cálculo de slots disponibles (luxon)
 │       │   ├── turnosService.js       # Helpers compartidos + operaciones backoffice de turnos
 │       │   ├── horariosService.js     # CRUD de horarios de barberos
