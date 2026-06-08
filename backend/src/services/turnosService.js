@@ -121,19 +121,30 @@ export const enriquecerTurno = async (turnoId) => {
 };
 
 /**
- * Construye el link de gestión del turno para los mails.
- * @param {Object} req   - request de Express (para leer X-Tenant-Subdomain)
+ * Construye el link de gestión del turno a partir del subdominio del tenant
+ * (no del request). Versión pura, reutilizable desde contextos sin `req` como
+ * el job de recordatorios, que arma el link con tenant.subdominio de la fila.
+ * @param {string|undefined} subdominio - subdominio del tenant (ej. 'demo')
  * @param {string} token - token_gestion del turno
- * @returns {string} URL completa
+ * @returns {string} URL completa de gestión
  */
-export const armarLinkGestion = (req, token) => {
-  const subdominio = req.headers['x-tenant-subdomain'];
+export const construirLinkGestion = (subdominio, token) => {
   if (subdominio) {
     return `https://${subdominio}.barbermanager.app/turnos/gestionar/${token}`;
   }
   const base = process.env.PUBLIC_BASE_URL ?? 'http://localhost:5173';
   return `${base}/turnos/gestionar/${token}`;
 };
+
+/**
+ * Construye el link de gestión del turno para los mails, leyendo el subdominio
+ * del header del request. Delega en construirLinkGestion (helper puro).
+ * @param {Object} req   - request de Express (para leer X-Tenant-Subdomain)
+ * @param {string} token - token_gestion del turno
+ * @returns {string} URL completa
+ */
+export const armarLinkGestion = (req, token) =>
+  construirLinkGestion(req.headers['x-tenant-subdomain'], token);
 
 /**
  * Construye el link al turnero público (sin token). Se usa en mails de

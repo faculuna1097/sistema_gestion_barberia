@@ -6,8 +6,8 @@
 > están escritos de forma explícita para que un chat sin contexto previo pueda
 > retomar sin re-investigar.
 >
-> **Estado:** diseño aprobado. Implementación no iniciada.
-> **Última actualización:** 2026-06-07.
+> **Estado:** Etapa 1 completada (commiteada). Próximo: Etapa 2 (mail del recordatorio).
+> **Última actualización:** 2026-06-08.
 
 ---
 
@@ -274,27 +274,28 @@ export const enviarRecordatorio = async (turno, barbero, servicio, cliente, link
 
 Cada etapa ≈ un chat. Avanzar con confirmación entre etapas.
 
-### Etapa 0 — Migración + config
-- [ ] Resolver decisiones abiertas D1–D4.
-- [ ] `ALTER TABLE turno ADD COLUMN recordatorio_enviado_en timestamptz;` (lo
-      ejecuta el usuario en el **SQL Editor de Supabase**).
-- [ ] Setear `configuracion.recordatorio = { "activo": true }` en el tenant
-      **demo** (para probar sin afectar al real).
-- [ ] Agregar `RECORDATORIO_HORA_ENVIO` y `RECORDATORIO_DIAS_ANTES` a
+### Etapa 0 — Migración + config ✅ COMPLETADA (commiteada 2026-06-08)
+- [x] Resolver decisiones abiertas D1–D4. (Todas cerradas; queda solo D5, que es de Etapa 2.)
+- [x] `ALTER TABLE turno ADD COLUMN recordatorio_enviado_en timestamptz;` (ejecutado
+      por el usuario en el **SQL Editor de Supabase**, verificado).
+- [x] Setear `configuracion.recordatorio = { "activo": true }` en el tenant
+      **demo** (UPDATE con merge jsonb, verificado).
+- [x] Agregar `RECORDATORIO_HORA_ENVIO` y `RECORDATORIO_DIAS_ANTES` a
       `utils/constantes.js`.
-- [ ] Actualizar `docs/SQL_Schema.md`.
-- **Done when:** la columna existe y el tenant demo tiene el flag.
+- [x] Actualizar `docs/SQL_Schema.md`.
+- **Done when:** la columna existe y el tenant demo tiene el flag. ✓
 
-### Etapa 1 — Service (lógica), con dry-run
-- [ ] `services/recordatoriosService.js`:
-  - obtener tenants activos + su config (con defaults).
-  - query del lote por tenant (§7.2).
-  - claim atómico (§7.3).
+### Etapa 1 — Service (lógica), con dry-run ✅ COMPLETADA (commiteada 2026-06-08)
+- [x] `services/recordatoriosService.js`:
+  - obtener tenants activos + su config (con defaults) → `obtenerTenantsActivos` + `leerConfigRecordatorio` (opt-in en JS).
+  - query del lote por tenant (§7.2) → `obtenerTurnosDelLote`.
+  - claim atómico (§7.3) → `reclamarTurno`, **escrito y exportado pero todavía sin invocar**; lo cablea la Etapa 2 junto al envío.
   - orquestador `procesarRecordatorios({ dryRun })` que recorre tenants y turnos.
-- [ ] Refactor del helper de link (§7.4, DT-1).
-- [ ] Modo **dry-run**: loguea a quién *se le mandaría* sin enviar ni marcar.
+- [x] Refactor del helper de link (§7.4, DT-1) → `construirLinkGestion(subdominio, token)` puro; `armarLinkGestion` delega.
+- [x] Modo **dry-run**: loguea a quién *se le mandaría* (y a quién se saltearía por no tener email) sin enviar ni marcar.
+- [x] Script de verificación `scripts/probarRecordatorios.js` (dry-run, estilo `probarMailer.js`).
 - **Done when:** el dry-run lista correctamente los turnos del día objetivo del
-      tenant demo.
+      tenant demo. ✓ (verificado con un turno reservado de prueba en demo).
 
 ### Etapa 2 — Mail del recordatorio
 - [ ] `enviarRecordatorio(...)` en `mailer.js` (§7.5), espejando confirmación.
@@ -347,9 +348,10 @@ Cada etapa ≈ un chat. Avanzar con confirmación entre etapas.
 
 ## 11. Deudas técnicas relacionadas (detectadas en el análisis)
 
-- **DT-1 — Links acoplados a `req`:** `armarLinkGestion`/`armarLinkTurnero` leen
-  `X-Tenant-Subdomain` del request; el job no puede reusarlos. Se resuelve en
-  Etapa 1 extrayendo `construirLinkGestion(subdominio, token)` (§7.4).
+- **DT-1 — Links acoplados a `req` ✅ RESUELTA (Etapa 1):** se extrajo
+  `construirLinkGestion(subdominio, token)` (puro) en `turnosService.js`, y
+  `armarLinkGestion(req, token)` pasó a delegar en él. `armarLinkTurnero` sigue
+  acoplado a `req`, pero el recordatorio no lo usa (§7.4).
 - **DT-2 — Tercera casi-duplicación del SELECT enriquecido:** `enriquecerTurno`,
   el lookup de `cancelarTurnoPorId` y la query del recordatorio comparten casi
   las mismas columnas/JOINs. Oportunidad de centralizar (fragmento compartido o
