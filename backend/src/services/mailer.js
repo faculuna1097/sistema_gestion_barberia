@@ -9,7 +9,15 @@
 // así que se usa el stack de fallback de los tokens.
 
 import nodemailer from 'nodemailer';
+import dns from 'node:dns';
 import { TZ } from '../utils/constantes.js';
+
+// Railway no rutea IPv6 hacia el SMTP de Gmail: si Node resuelve smtp.gmail.com a
+// una dirección IPv6 (AAAA), la conexión SMTP falla con ENETUNREACH. Forzamos
+// IPv4-first (era el default de Node hasta v17) para que el envío sea
+// determinístico desde cualquier contenedor de Railway, no sólo cuando el DNS
+// devuelve IPv4 por suerte.
+dns.setDefaultResultOrder('ipv4first');
 
 // Espejo (parcial) de los tokens del tema "Luz". El backend no puede importar
 // frontend-turnero/src/theme/tokens.js, así que se replican acá los valores
