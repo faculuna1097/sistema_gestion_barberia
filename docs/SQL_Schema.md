@@ -1,6 +1,25 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
+CREATE TABLE public.tenant (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  nombre_negocio text NOT NULL,
+  logo text,
+  pin_admin text NOT NULL,
+  configuracion jsonb DEFAULT '{}'::jsonb,
+  activo boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  booking_url text,
+  suscripcion_vigente_hasta date,
+  subdominio text NOT NULL UNIQUE,
+  duracion_slot_minutos integer NOT NULL DEFAULT 30 CHECK (duracion_slot_minutos > 0 AND duracion_slot_minutos <= 240),
+  operativo_usuario text,
+  operativo_password_hash text,
+  operativo_token_version integer NOT NULL DEFAULT 0,
+  telefono text,
+  direccion text,
+  CONSTRAINT tenant_pkey PRIMARY KEY (id)
+);
 CREATE TABLE public.barbero (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   tenant_id uuid NOT NULL,
@@ -14,29 +33,58 @@ CREATE TABLE public.barbero (
   CONSTRAINT barbero_pkey PRIMARY KEY (id),
   CONSTRAINT barbero_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
 );
-CREATE TABLE public.barbero_horario (
+CREATE TABLE public.servicio (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   tenant_id uuid NOT NULL,
-  barbero_id uuid NOT NULL,
-  dia_semana smallint NOT NULL CHECK (dia_semana >= 0 AND dia_semana <= 6),
-  hora_inicio time without time zone NOT NULL,
-  hora_fin time without time zone NOT NULL,
-  CONSTRAINT barbero_horario_pkey PRIMARY KEY (id),
-  CONSTRAINT barbero_horario_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
-  CONSTRAINT barbero_horario_barbero_id_fkey FOREIGN KEY (barbero_id) REFERENCES public.barbero(id)
-);
-CREATE TABLE public.barbero_suspension (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  tenant_id uuid NOT NULL,
-  barbero_id uuid NOT NULL,
-  desde timestamp with time zone NOT NULL,
-  hasta timestamp with time zone NOT NULL,
-  motivo text,
-  origen text NOT NULL DEFAULT 'admin'::text CHECK (origen = ANY (ARRAY['admin'::text, 'barbero'::text, 'whatsapp'::text])),
+  nombre text NOT NULL,
+  precio numeric NOT NULL,
+  activo boolean DEFAULT true,
   created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT barbero_suspension_pkey PRIMARY KEY (id),
-  CONSTRAINT barbero_suspension_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
-  CONSTRAINT barbero_suspension_barbero_id_fkey FOREIGN KEY (barbero_id) REFERENCES public.barbero(id)
+  cantidad_slots integer NOT NULL DEFAULT 1 CHECK (cantidad_slots > 0 AND cantidad_slots <= 20),
+  CONSTRAINT servicio_pkey PRIMARY KEY (id),
+  CONSTRAINT servicio_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
+);
+CREATE TABLE public.producto (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tenant_id uuid NOT NULL,
+  nombre text NOT NULL,
+  precio numeric NOT NULL,
+  stock_actual integer DEFAULT 0,
+  stock_minimo integer DEFAULT 0,
+  activo boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT producto_pkey PRIMARY KEY (id),
+  CONSTRAINT producto_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
+);
+CREATE TABLE public.corte (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tenant_id uuid NOT NULL,
+  barbero_id uuid NOT NULL,
+  forma_pago text NOT NULL CHECK (forma_pago = ANY (ARRAY['efectivo'::text, 'mercado_pago'::text])),
+  propina numeric DEFAULT 0,
+  monto_total numeric NOT NULL,
+  timestamp timestamp with time zone DEFAULT now(),
+  servicio_id uuid NOT NULL,
+  precio numeric NOT NULL,
+  turno_id uuid,
+  CONSTRAINT corte_pkey PRIMARY KEY (id),
+  CONSTRAINT corte_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  CONSTRAINT corte_barbero_id_fkey FOREIGN KEY (barbero_id) REFERENCES public.barbero(id),
+  CONSTRAINT corte_servicio_id_fkey FOREIGN KEY (servicio_id) REFERENCES public.servicio(id),
+  CONSTRAINT corte_turno_id_fkey FOREIGN KEY (turno_id) REFERENCES public.turno(id)
+);
+CREATE TABLE public.venta (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tenant_id uuid NOT NULL,
+  producto_id uuid NOT NULL,
+  cantidad integer NOT NULL DEFAULT 1,
+  precio_unitario numeric NOT NULL,
+  forma_pago text NOT NULL CHECK (forma_pago = ANY (ARRAY['efectivo'::text, 'mercado_pago'::text])),
+  timestamp timestamp with time zone DEFAULT now(),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT venta_pkey PRIMARY KEY (id),
+  CONSTRAINT venta_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  CONSTRAINT venta_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.producto(id)
 );
 CREATE TABLE public.categoria_gasto (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -46,6 +94,19 @@ CREATE TABLE public.categoria_gasto (
   activo boolean DEFAULT true,
   CONSTRAINT categoria_gasto_pkey PRIMARY KEY (id),
   CONSTRAINT categoria_gasto_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
+);
+CREATE TABLE public.gasto (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tenant_id uuid NOT NULL,
+  categoria_id uuid,
+  descripcion text NOT NULL,
+  monto numeric NOT NULL,
+  timestamp timestamp with time zone DEFAULT now(),
+  created_at timestamp with time zone DEFAULT now(),
+  forma_pago text NOT NULL DEFAULT 'efectivo'::text CHECK (forma_pago = ANY (ARRAY['efectivo'::text, 'mercado_pago'::text])),
+  CONSTRAINT gasto_pkey PRIMARY KEY (id),
+  CONSTRAINT gasto_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  CONSTRAINT gasto_categoria_id_fkey FOREIGN KEY (categoria_id) REFERENCES public.categoria_gasto(id)
 );
 CREATE TABLE public.cierre_caja (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -71,105 +132,29 @@ CREATE TABLE public.cliente (
   CONSTRAINT cliente_pkey PRIMARY KEY (id),
   CONSTRAINT cliente_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
 );
-CREATE TABLE public.corte (
+CREATE TABLE public.barbero_horario (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   tenant_id uuid NOT NULL,
   barbero_id uuid NOT NULL,
-  forma_pago text NOT NULL CHECK (forma_pago = ANY (ARRAY['efectivo'::text, 'mercado_pago'::text])),
-  propina numeric DEFAULT 0,
-  monto_total numeric NOT NULL,
-  timestamp timestamp with time zone DEFAULT now(),
-  servicio_id uuid NOT NULL,
-  precio numeric NOT NULL,
-  turno_id uuid,
-  CONSTRAINT corte_pkey PRIMARY KEY (id),
-  CONSTRAINT corte_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
-  CONSTRAINT corte_barbero_id_fkey FOREIGN KEY (barbero_id) REFERENCES public.barbero(id),
-  CONSTRAINT corte_servicio_id_fkey FOREIGN KEY (servicio_id) REFERENCES public.servicio(id),
-  CONSTRAINT corte_turno_id_fkey FOREIGN KEY (turno_id) REFERENCES public.turno(id)
-);
-CREATE TABLE public.gasto (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  tenant_id uuid NOT NULL,
-  categoria_id uuid,
-  descripcion text NOT NULL,
-  monto numeric NOT NULL,
-  timestamp timestamp with time zone DEFAULT now(),
-  created_at timestamp with time zone DEFAULT now(),
-  forma_pago text NOT NULL DEFAULT 'efectivo'::text CHECK (forma_pago = ANY (ARRAY['efectivo'::text, 'mercado_pago'::text])),
-  CONSTRAINT gasto_pkey PRIMARY KEY (id),
-  CONSTRAINT gasto_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
-  CONSTRAINT gasto_categoria_id_fkey FOREIGN KEY (categoria_id) REFERENCES public.categoria_gasto(id)
-);
-CREATE TABLE public.producto (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  tenant_id uuid NOT NULL,
-  nombre text NOT NULL,
-  precio numeric NOT NULL,
-  stock_actual integer DEFAULT 0,
-  stock_minimo integer DEFAULT 0,
-  activo boolean DEFAULT true,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT producto_pkey PRIMARY KEY (id),
-  CONSTRAINT producto_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
-);
-CREATE TABLE public.servicio (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  tenant_id uuid NOT NULL,
-  nombre text NOT NULL,
-  precio numeric NOT NULL,
-  activo boolean DEFAULT true,
-  created_at timestamp with time zone DEFAULT now(),
-  cantidad_slots integer NOT NULL DEFAULT 1 CHECK (cantidad_slots > 0 AND cantidad_slots <= 20),
-  CONSTRAINT servicio_pkey PRIMARY KEY (id),
-  CONSTRAINT servicio_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
-);
-CREATE TABLE public.tenant (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  nombre_negocio text NOT NULL,
-  logo text,
-  pin_admin text NOT NULL,
-  configuracion jsonb DEFAULT '{}'::jsonb,
-  activo boolean DEFAULT true,
-  created_at timestamp with time zone DEFAULT now(),
-  booking_url text,
-  suscripcion_vigente_hasta date,
-  subdominio text NOT NULL UNIQUE,
-  duracion_slot_minutos integer NOT NULL DEFAULT 30 CHECK (duracion_slot_minutos > 0 AND duracion_slot_minutos <= 240),
-  operativo_usuario text,
-  operativo_password_hash text,
-  operativo_token_version integer NOT NULL DEFAULT 0,
-  telefono text,
-  direccion text,
-  CONSTRAINT tenant_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.tenant_feriado (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  tenant_id uuid NOT NULL,
-  fecha date NOT NULL,
-  descripcion text,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT tenant_feriado_pkey PRIMARY KEY (id),
-  CONSTRAINT tenant_feriado_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
-);
-CREATE TABLE public.tenant_horario_atencion (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  tenant_id uuid NOT NULL,
   dia_semana smallint NOT NULL CHECK (dia_semana >= 0 AND dia_semana <= 6),
   hora_inicio time without time zone NOT NULL,
   hora_fin time without time zone NOT NULL,
-  CONSTRAINT tenant_horario_atencion_pkey PRIMARY KEY (id),
-  CONSTRAINT tenant_horario_atencion_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
+  CONSTRAINT barbero_horario_pkey PRIMARY KEY (id),
+  CONSTRAINT barbero_horario_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  CONSTRAINT barbero_horario_barbero_id_fkey FOREIGN KEY (barbero_id) REFERENCES public.barbero(id)
 );
-CREATE TABLE public.tenant_imagen (
+CREATE TABLE public.barbero_suspension (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   tenant_id uuid NOT NULL,
-  tipo text NOT NULL CHECK (tipo = ANY (ARRAY['local'::text, 'corte'::text, 'logo'::text])),
-  orden smallint NOT NULL DEFAULT 1 CHECK (orden >= 1),
-  storage_path text NOT NULL,
+  barbero_id uuid NOT NULL,
+  desde timestamp with time zone NOT NULL,
+  hasta timestamp with time zone NOT NULL,
+  motivo text,
+  origen text NOT NULL DEFAULT 'admin'::text CHECK (origen = ANY (ARRAY['admin'::text, 'barbero'::text, 'whatsapp'::text])),
   created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT tenant_imagen_pkey PRIMARY KEY (id),
-  CONSTRAINT tenant_imagen_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
+  CONSTRAINT barbero_suspension_pkey PRIMARY KEY (id),
+  CONSTRAINT barbero_suspension_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  CONSTRAINT barbero_suspension_barbero_id_fkey FOREIGN KEY (barbero_id) REFERENCES public.barbero(id)
 );
 CREATE TABLE public.turno (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -186,22 +171,38 @@ CREATE TABLE public.turno (
   created_at timestamp with time zone DEFAULT now(),
   cancelado_en timestamp with time zone,
   cancelado_por text CHECK (cancelado_por = ANY (ARRAY['cliente'::text, 'barbero'::text, 'admin'::text, 'suspension'::text])),
+  recordatorio_enviado_en timestamp with time zone,
   CONSTRAINT turno_pkey PRIMARY KEY (id),
   CONSTRAINT turno_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
   CONSTRAINT turno_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.cliente(id),
   CONSTRAINT turno_barbero_id_fkey FOREIGN KEY (barbero_id) REFERENCES public.barbero(id),
   CONSTRAINT turno_servicio_id_fkey FOREIGN KEY (servicio_id) REFERENCES public.servicio(id)
 );
-CREATE TABLE public.venta (
+CREATE TABLE public.tenant_horario_atencion (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   tenant_id uuid NOT NULL,
-  producto_id uuid NOT NULL,
-  cantidad integer NOT NULL DEFAULT 1,
-  precio_unitario numeric NOT NULL,
-  forma_pago text NOT NULL CHECK (forma_pago = ANY (ARRAY['efectivo'::text, 'mercado_pago'::text])),
-  timestamp timestamp with time zone DEFAULT now(),
+  dia_semana smallint NOT NULL CHECK (dia_semana >= 0 AND dia_semana <= 6),
+  hora_inicio time without time zone NOT NULL,
+  hora_fin time without time zone NOT NULL,
+  CONSTRAINT tenant_horario_atencion_pkey PRIMARY KEY (id),
+  CONSTRAINT tenant_horario_atencion_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
+);
+CREATE TABLE public.tenant_feriado (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tenant_id uuid NOT NULL,
+  fecha date NOT NULL,
+  descripcion text,
   created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT venta_pkey PRIMARY KEY (id),
-  CONSTRAINT venta_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
-  CONSTRAINT venta_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.producto(id)
+  CONSTRAINT tenant_feriado_pkey PRIMARY KEY (id),
+  CONSTRAINT tenant_feriado_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
+);
+CREATE TABLE public.tenant_imagen (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tenant_id uuid NOT NULL,
+  tipo text NOT NULL CHECK (tipo = ANY (ARRAY['local'::text, 'corte'::text, 'logo'::text])),
+  orden smallint NOT NULL DEFAULT 1 CHECK (orden >= 1),
+  storage_path text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT tenant_imagen_pkey PRIMARY KEY (id),
+  CONSTRAINT tenant_imagen_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
 );
