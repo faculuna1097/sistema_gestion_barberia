@@ -66,6 +66,7 @@ Excepción: podés leer los archivos `.md` de contexto general (los que están e
 | `/docs/onboarding.md`| Alta de un cliente nuevo.
 | `/docs/deudas_tecnicas_frontend.md` | **Archivado (2026-06-07).** Historia del rediseño del panel de gestión: cómo se resolvió cada deuda. El estado vigente de deudas vive en `estado_actual.md`. |
 | `/docs/plan_recordatorio_turnos.md` | Plan por etapas del mail de recordatorio de turno (lote diario, noche anterior). Contratos de código para desarrollar en chats separados. |
+| `/docs/plan_entregabilidad_mail.md` | Plan por fases de la migración del envío de mails a Resend (API HTTP vía fetch) + autenticación de dominio (SPF/DKIM/DMARC). Activo; prerrequisito de la Etapa 3 del recordatorio (Railway Hobby bloquea el SMTP saliente). |
 
 
 ---
