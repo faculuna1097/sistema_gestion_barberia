@@ -6,9 +6,13 @@
 > están escritos de forma explícita para que un chat sin contexto previo pueda
 > retomar sin re-investigar.
 >
-> **Estado:** Etapa 3 en progreso. Disparador (`jobs/recordatorios.js` + `cerrarPool`
-> en `db.js`) implementado y commiteado; falta la verificación de la corrida real en
-> Railway sobre el tenant demo para cerrarla. Luego: Etapa 4.
+> **Estado:** Etapa 3 **pausada en la puerta de verificación.** El disparador
+> (`jobs/recordatorios.js` + `cerrarPool` en `db.js`) está implementado y commiteado, y
+> el cron quedó configurado en Railway, pero la verificación reveló un **bloqueo de
+> infraestructura**: Railway (plan Hobby) bloquea el SMTP saliente, así que el mail no
+> sale desde producción (ni el recordatorio ni los transaccionales). **Prerrequisito:**
+> ejecutar [`plan_entregabilidad_mail.md`](plan_entregabilidad_mail.md) (migración a la
+> **API HTTP de Resend**). Al cerrar esa migración se retoma la verificación de Etapa 3.
 > **Última actualización:** 2026-06-08.
 
 ---
@@ -313,15 +317,27 @@ Cada etapa ≈ un chat. Avanzar con confirmación entre etapas.
       y `mailer.js` hardcodeaba `TZ` en vez de importarlo de `utils/constantes.js`.
 - **Done when:** llega un mail de prueba bien renderizado. ✓
 
-### Etapa 3 — Disparador + scheduling
+### Etapa 3 — Disparador + scheduling  ⛔ PAUSADA (bloqueo de mail, ver abajo)
+
+> **Bloqueada en verificación (2026-06-08).** El código y el cron están listos, pero
+> al correr el job en Railway el envío SMTP falla: **Railway Hobby bloquea el SMTP
+> saliente** (puertos 25/465/587). Esto bloquea también los mails transaccionales en
+> prod. Se resuelve migrando el envío a la **API HTTP de Resend** —
+> [`plan_entregabilidad_mail.md`](plan_entregabilidad_mail.md), que pasa a ser
+> prerrequisito de esta etapa. El commit del `dns.setDefaultResultOrder('ipv4first')`
+> en `mailer.js` quedó **superado** (era código muerto: nodemailer ya ordena IPv4
+> primero y el problema era el puerto SMTP, no el DNS); se quita en la Fase 4 de esa
+> migración. Al cerrar la migración se retoma la verificación de acá.
+
 - [x] `jobs/recordatorios.js`: entrypoint (cáscara fina) que llama a
       `procesarRecordatorios({ dryRun: false })`, loguea el resumen del lote y
       **termina el proceso** limpio. Cierre ordenado: se agregó `cerrarPool()` a
       `config/db.js` (export que encapsula `pool.end()` sin exponer el pool crudo
       → respeta §9); el job hace `await cerrarPool()` en un `finally` y después
       `process.exit(code)` (0 ok / 1 fallo catastrófico, que es lo que lee el cron).
-- [ ] Configurar el cron en **Railway Cron** (servicio dedicado, D1) — **lo hace el
-      usuario en Railway**. Config del servicio:
+- [x] Configurar el cron en **Railway Cron** (servicio dedicado, D1) — **hecho** (el
+      usuario lo creó en Railway; el servicio buildea y el job corre, sólo falla el
+      envío SMTP por el bloqueo de arriba). Config del servicio:
   - **Root Directory:** `backend` (igual que el web service). Si no se setea,
     Railpack analiza la raíz del repo (monorepo, sin `package.json` en root) y el
     build falla con "could not determine how to build the app".
@@ -339,7 +355,9 @@ Cada etapa ≈ un chat. Avanzar con confirmación entre etapas.
   - **Railway buildea desde GitHub, no desde local:** el código (job + cambio en
     `db.js`) tiene que estar **commiteado y pusheado** a la rama conectada antes de
     que el servicio pueda buildear/correr.
-- **Done when:** una corrida programada manda los recordatorios del tenant demo.
+- **Done when:** una corrida programada manda los recordatorios del tenant demo
+  (pendiente: requiere el envío por HTTP de la migración de Resend,
+  [`plan_entregabilidad_mail.md`](plan_entregabilidad_mail.md)).
 
 ### Etapa 4 — Activación en producción + hardening
 - [ ] Prender el flag `activo` en el tenant **real** (flip opt-in).

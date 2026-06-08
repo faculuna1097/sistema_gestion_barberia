@@ -1,13 +1,29 @@
 # Plan de entregabilidad de mail (SPF / DKIM / DMARC)
 
-Documento de plan. **No ejecutado todavía.** Describe cómo migrar el envío de
-mails transaccionales del turnero desde el SMTP de Gmail hacia un dominio propio
-autenticado, para sacarlos de la carpeta de spam (sobre todo en Outlook/Hotmail).
+Documento de plan. **Activo (en ejecución desde 2026-06-08).** Describe cómo migrar
+el envío de mails transaccionales del turnero desde el SMTP de Gmail hacia un dominio
+propio autenticado vía **Resend**, para (1) que los mails **salgan** desde producción
+y (2) que lleguen a bandeja de entrada y no a spam (sobre todo en Outlook/Hotmail).
 
-> Estado al escribir este doc (2026-06-05): el envío sigue saliendo desde
-> `turnos.barbermanager@gmail.com` vía SMTP de Gmail. La única mitigación activa
-> es el **aviso de "revisar spam"** en la pantalla de confirmación del turnero
-> (commit `e9a3a57`). Eso alcanza para hoy; este plan es para el futuro.
+> **Actualización 2026-06-08 — dos cambios de contexto que mandan sobre el resto del doc:**
+> 1. **Driver primario nuevo:** el backend corre en **Railway plan Hobby**, que
+>    **bloquea el SMTP saliente** (puertos 25/465/587, anti-spam de la plataforma).
+>    Hoy *ningún* mail sale desde producción — los transaccionales se probaron sólo
+>    en local. Dejó de ser sólo un tema de spam: sin esta migración el mail **no
+>    funciona en prod**. Detalle en §2.1.
+> 2. **Corrección de transporte:** por (1), la migración usa la **API HTTP de
+>    Resend** (`api.resend.com`, HTTPS/443), **no su SMTP** (`smtp.resend.com:465`,
+>    que Railway bloquea igual que a Gmail). Ver §3 (decisión 5), §4 y §7.
+>
+> **Este plan es ahora prerrequisito de la Etapa 3 de
+> [`plan_recordatorio_turnos.md`](plan_recordatorio_turnos.md):** el cron de
+> recordatorios no puede enviar hasta que el mail salga por HTTP, así que ese plan
+> quedó pausado en su puerta de verificación hasta cerrar al menos las Fases 1, 2 y 4
+> de acá.
+>
+> Estado previo (2026-06-05): el envío salía desde `turnos.barbermanager@gmail.com`
+> vía SMTP de Gmail; la única mitigación era el **aviso de "revisar spam"** en la
+> confirmación del turnero (commit `e9a3a57`).
 
 ---
 
@@ -40,25 +56,41 @@ Además, Outlook/Hotmail penalizan fuerte:
 **Conclusión**: no se puede arreglar sobre el dominio actual. Hay que enviar
 desde dominio propio vía proveedor transaccional, y ahí sí configurar SPF/DKIM/DMARC.
 
+### 2.1 Segundo driver (descubierto 2026-06-08): Railway bloquea el SMTP
+
+Antes que el spam, hay un bloqueo más básico: **Railway (plan Hobby) bloquea el
+tráfico SMTP saliente** (puertos 25/465/587; sólo Pro/Enterprise lo habilitan). El
+síntoma es una conexión a `:465` que se cuelga ~2 min y expira (`ETIMEDOUT`), o
+`ENETUNREACH`. Consecuencia: **hoy no sale ningún mail desde producción** — los
+transaccionales se probaron sólo en local. Se detectó al correr el cron de
+recordatorios contra Railway (ver [`plan_recordatorio_turnos.md`](plan_recordatorio_turnos.md),
+Etapa 3).
+
+**Implicancia de diseño:** la migración a Resend tiene que usar su **API HTTP** (sale
+por HTTPS/443), no su interfaz SMTP (`smtp.resend.com:465`), que Railway bloquearía
+igual. Es además lo que Railway recomienda para planes sin SMTP. Esto reemplaza la
+idea original de "mantener nodemailer con SMTP de Resend" (ver §4 y §7 corregidos).
+
 ---
 
 ## 3. Decisiones tomadas
 
 | # | Decisión | Valor | Por qué |
 |---|---|---|---|
-| 1 | Proveedor | **Resend** | Mejor equilibrio para nuestro caso: built sobre AWS SES, SDK de Node simple, **tier gratis 3.000 mails/mes (100/día)**, panel que entrega los DNS listos para copiar y los verifica. Curva suave para quien recién entra a infra de mail. |
+| 1 | Proveedor | **Resend** | Mejor equilibrio para nuestro caso: built sobre AWS SES, API HTTP simple, **tier gratis 3.000 mails/mes (100/día)**, panel que entrega los DNS listos para copiar y los verifica. Curva suave para quien recién entra a infra de mail. |
 | 2 | Dominio de envío | **Subdominio dedicado** `send.barbermanager.app` | Aísla la reputación de envío del dominio raíz y de los subdominios de tenants (`kingsai.barbermanager.app`, etc.). Si un mail problemático afecta reputación, no contamina el dominio principal. Es la práctica recomendada por Resend. |
 | 3 | Registrador / zona DNS | **Namecheap** | Es donde se compró `barbermanager.app`. Los registros se cargan en Namecheap → **Advanced DNS** (asumiendo nameservers de Namecheap / BasicDNS; ver §6 si la zona estuviera delegada a otro lado). |
 | 4 | Plan B de entregabilidad | **Postmark** | Solo si tras migrar a Resend Outlook sigue mandando a spam. Es el gold standard transaccional para Outlook, pero el tier gratis es de prueba (~100/mes) y arranca en ~US$15/mes. No se adopta ahora. |
+| 5 | Transporte | **`fetch` nativo + API HTTP de Resend** | Railway Hobby bloquea el SMTP saliente (§2.1), así que `smtp.resend.com:465` fallaría igual que Gmail; la API HTTP sale por HTTPS/443. Se usa `fetch` nativo, **no el SDK**: la API es muy simple, evita una dependencia, menos superficie de mantenimiento y menos riesgo de incompatibilidades futuras; el proyecto no usa features avanzadas que justifiquen el SDK. |
 
 ---
 
 ## 4. Arquitectura objetivo
 
 ```
-Backend (Railway)
-  └─ Nodemailer  ──SMTP──>  Resend (smtp.resend.com)  ──>  AWS SES  ──>  destinatario
-                                   │
+Backend (Railway, Hobby)
+  └─ fetch nativo  ──HTTPS:443──>  Resend API (api.resend.com)  ──>  AWS SES  ──>  destinatario
+                                         │
         From: BarberManager <turnos@send.barbermanager.app>
         Reply-To: <mail real de la barbería>   (mejora futura, ver §11)
 
@@ -69,8 +101,11 @@ DNS de barbermanager.app (Namecheap)
   └─ _dmarc.barbermanager.app         TXT  DMARC      (política + reportes)
 ```
 
-Se mantiene **Nodemailer** y todo el HTML de los mails. Solo cambia el transporte
-(de `service:'gmail'` a SMTP de Resend) y el `From`. El cambio de código es chico.
+Se mantiene **todo el HTML** de los mails (`construirHtml` y los 5 tipos). Cambia el
+**transporte**: en vez de `nodemailer` con `service:'gmail'` (SMTP, bloqueado en
+Railway Hobby, §2.1), el envío pasa a la **API HTTP de Resend** vía **`fetch` nativo**
+(decisión 5, §3), detrás de una capa de proveedor (§7.1) y con el `From` en el dominio
+propio. nodemailer y el SDK de Resend no se usan.
 
 ---
 
@@ -101,9 +136,18 @@ Ver §6 para el detalle exacto de cada registro y cómo traducir el "Host". En r
 - [ ] Dejar correr **1–2 semanas** y mirar que el 100% del tráfico legítimo venga de Resend/SES y esté alineado (SPF y DKIM en verde para nuestro dominio).
 
 ### Fase 4 — Cambio de código + variables de entorno
-- [ ] Implementar el cambio en [`mailer.js`](../backend/src/services/mailer.js) (ver §7).
-- [ ] Cargar las variables nuevas en Railway (ver §8).
-- [ ] Deploy.
+- [ ] Crear la capa de mail `src/services/mail/` (§7.1): `mailProvider.js` (contrato),
+      `resendProvider.js` (`fetch` + timeout + logging) y mover `mailer.js` ahí,
+      actualizando los imports que lo referencian (turnosService, recordatoriosService,
+      scripts, jobs).
+- [ ] Implementar el envío con **`fetch` nativo** a `api.resend.com` (§7.2): reemplaza el
+      transporter `service:'gmail'`. Incluye timeout de 15 s con `AbortController` y
+      logging de tipo/destinatario/tenant/`message_id` (§7.3). **Quitar el
+      `dns.setDefaultResultOrder('ipv4first')`** (código muerto, §7).
+- [ ] Cargar las variables nuevas en Railway (ver §8). Aplica al **web service y al
+      servicio cron** de recordatorios (ambos mandan mail por el mismo `mailer.js`).
+- [ ] Deploy. Esto **desbloquea la verificación de la Etapa 3** de
+      [`plan_recordatorio_turnos.md`](plan_recordatorio_turnos.md).
 
 ### Fase 5 — Pruebas y verificación
 - [ ] Correr [`backend/src/scripts/probarMailer.js`](../backend/src/scripts/probarMailer.js) (manda los 4 tipos de mail).
@@ -196,41 +240,109 @@ v=DMARC1; p=reject; rua=mailto:dmarc@barbermanager.app; sp=reject; adkim=r; aspf
 
 ## 7. Cambio de código
 
-Archivo: [`backend/src/services/mailer.js`](../backend/src/services/mailer.js).
-La idea es **mínima invasión**: mantener Nodemailer y todo el HTML; solo cambiar
-el transporte y el `From`. Resend ofrece SMTP, así que no hace falta su SDK.
+Archivos: [`backend/src/services/mailer.js`](../backend/src/services/mailer.js) más los
+módulos nuevos de la capa de mail (§7.1). La idea es **mínima invasión funcional**:
+mantener todo el HTML (`construirHtml`) y la forma de las funciones de envío; cambiar
+sólo **cómo se manda** (el transporte) y el `From`. Como Railway Hobby bloquea SMTP
+(§2.1), el envío usa la **API HTTP de Resend** con **`fetch` nativo** (decisión 5, §3),
+sin SDK ni nodemailer. También se quita el `dns.setDefaultResultOrder('ipv4first')` que
+se había agregado (código muerto: el problema era el puerto SMTP, no el DNS).
 
-### 7.1 Transporter (reemplaza el bloque actual `service:'gmail'`)
-```js
-// Antes (líneas ~32-52): leía GMAIL_APP_PASSWORD + GOOGLE_CALENDAR_EMAIL
-// y armaba un transporter con service:'gmail'.
+### 7.1 Capa de abstracción del proveedor
 
-const { RESEND_API_KEY, MAIL_FROM } = process.env;
+El resto de la app **no debe conocer Resend**. El proveedor queda detrás de un contrato
+chico, de modo que una futura migración (Postmark, SES directo, otro) sea cambiar **un**
+archivo y no tocar la lógica de mails. Estructura:
 
-const credencialesCargadas = Boolean(RESEND_API_KEY && MAIL_FROM);
-
-let transporter = null;
-if (credencialesCargadas) {
-  transporter = nodemailer.createTransport({
-    host: 'smtp.resend.com',
-    port: 465,
-    secure: true,
-    auth: { user: 'resend', pass: RESEND_API_KEY },
-  });
-  console.log('[mailer] transporter Resend inicializado | remitente:', MAIL_FROM);
-} else {
-  console.warn('[mailer] credenciales NO cargadas — envío inactivo en este proceso');
-}
+```txt
+src/services/mail/
+├── mailProvider.js     # contrato del proveedor (agnóstico)
+├── resendProvider.js   # implementación con fetch contra la API de Resend
+└── mailer.js           # lógica de mails (construirHtml + los 5 tipos); delega el envío
 ```
 
-### 7.2 From (en `enviarMail`, línea ~163)
+Responsabilidades:
+
+- **`mailProvider.js`** — define el contrato que cualquier proveedor debe cumplir:
+  ```js
+  async send({ to, subject, html, replyTo }) // → { id }  (message id del proveedor)
+  ```
+  Es el único punto que `mailer.js` importa para enviar. El contrato es agnóstico
+  (camelCase `replyTo`); cada provider traduce a su propia API.
+- **`resendProvider.js`** — implementa `send(...)` con `fetch` hacia
+  `https://api.resend.com/emails` (§7.2). Acá vive **todo** lo específico de Resend
+  (endpoint, `Authorization: Bearer`, mapeo `replyTo` → `reply_to`, parseo del `id`).
+- **`mailer.js`** — mantiene **toda** la lógica existente (`construirHtml` y los mails de
+  confirmación, cancelación, reprogramación, cancelación automática y recordatorio) y
+  **delega el envío** en `mailProvider.send()` (§7.3). No conoce el endpoint ni la API
+  key de Resend.
+
+> Este cambio **no modifica comportamiento funcional**: los mismos mails, el mismo HTML,
+> el mismo best-effort. Sólo **reduce el acoplamiento tecnológico** — la app deja de
+> depender directamente de un proveedor de envío.
+>
+> **Nota de implementación (Fase 4):** mover `mailer.js` a `src/services/mail/` cambia su
+> ruta, así que hay que actualizar los imports que lo referencian (turnosService,
+> recordatoriosService, scripts, jobs). Es mecánico, pero va en el mismo paso.
+
+### 7.2 `resendProvider.js` — envío con `fetch`, timeout y parseo del id
+
+Transporte elegido (decisión 5, §3): **`fetch` nativo + API HTTP de Resend**, sin SDK.
+Toda la API key y el `From` salen de env vars (§8).
+
 ```js
-// Antes: from: `BarberManager <${GOOGLE_CALENDAR_EMAIL}>`
-from: MAIL_FROM,            // ej: 'BarberManager <turnos@send.barbermanager.app>'
-// (opcional, ver §11) replyTo: <mail real de la barbería>
+// resendProvider.js — implementa el contrato de mailProvider.send()
+const RESEND_ENDPOINT = 'https://api.resend.com/emails';
+const TIMEOUT_MS = 15000; // 15 s: corta requests colgados; una caída de Resend no bloquea el backend
+
+export const send = async ({ to, subject, html, replyTo }) => {
+  const { RESEND_API_KEY, MAIL_FROM } = process.env;
+
+  // Timeout explícito con AbortController: si Resend no responde en 15 s, se aborta.
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(RESEND_ENDPOINT, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: MAIL_FROM, to, subject, html, reply_to: replyTo }), // mapea replyTo → reply_to
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    return { id: data.id }; // message id de Resend, para trazabilidad (§7.3)
+  } finally {
+    clearTimeout(t);
+  }
+};
 ```
 
-### 7.3 Detalle importante: desacople de Google Calendar
+- **Timeout:** `AbortController` a **15 s**. Objetivo: evitar requests colgados y que una
+  caída de Resend bloquee procesos del backend — en especial el cron del recordatorio,
+  que procesa turnos en serie.
+- **Errores:** ante `!res.ok` o abort, **lanza**; la política best-effort la decide
+  `mailer.js` (§7.3), no el provider.
+
+### 7.3 `mailer.js` — delega, arma el `From` y loguea el envío
+
+`mailer.js` deja de tocar el transporte: arma el HTML como hoy y llama a
+`mailProvider.send({ to, subject, html, replyTo })` dentro del try/catch best-effort. El
+`From` ya no es `GOOGLE_CALENDAR_EMAIL` sino `MAIL_FROM`
+(ej. `BarberManager <turnos@send.barbermanager.app>`), y lo aplica el provider.
+
+**Logging mínimo recomendado** (donde se conocen el tipo de mail y el tenant): por cada
+envío, registrar **tipo de mail**, **destinatario**, **tenant** y el **`message_id`** que
+devuelve `send()`. Objetivo: soporte y trazabilidad — cuando un cliente diga "no me
+llegó", se correlaciona el evento con el panel de Resend por el `message_id`.
+
+```js
+// dentro del envío, tras delegar en mailProvider.send():
+const { id } = await mailProvider.send({ to, subject, html, replyTo });
+console.log(`[mailer] enviarMail — enviado | tipo: ${tipo} | to: ${to} | tenant: ${tenantSubdominio} | message_id: ${id}`);
+// en el catch (best-effort): console.error('[mailer] enviarMail — fallo | tipo/to/tenant ...', err); return false;
+```
+
+### 7.4 Detalle importante: desacople de Google Calendar
 Hoy `GOOGLE_CALENDAR_EMAIL` se usa para **dos** cosas: organizador de Calendar y
 remitente de mail. Este cambio **lo desacopla**: `GOOGLE_CALENDAR_EMAIL` y
 `GMAIL_APP_PASSWORD` quedan **solo para Google Calendar**; el mail pasa a usar
@@ -282,9 +394,11 @@ cuando se confirme que nada más la usa.
 
 ## 11. Riesgos, rollback y futuro
 
-**Rollback**: el cambio de código es reversible volviendo el transporter a
-`service:'gmail'` y el `From` a `GOOGLE_CALENDAR_EMAIL`. Los registros DNS son
-aditivos (no rompen nada existente del dominio).
+**Rollback**: el cambio de código es reversible, pero **ojo**: volver a Gmail SMTP
+(`service:'gmail'`) **no es un rollback válido en producción** — Railway Hobby bloquea
+ese SMTP (§2.1), así que por ahí no sale mail en prod. El rollback real es a un estado
+previo de Resend (o, en última instancia, quedarse sin envío: el mailer es
+best-effort). Los registros DNS son aditivos (no rompen nada existente del dominio).
 
 **Riesgo principal**: endurecer DMARC antes de tiempo → correo legítimo a spam o
 perdido. Mitigación: respetar la progresión `none → quarantine → reject` con
