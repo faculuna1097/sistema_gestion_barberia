@@ -6,14 +6,15 @@
 > están escritos de forma explícita para que un chat sin contexto previo pueda
 > retomar sin re-investigar.
 >
-> **Estado:** Etapa 3 **pausada en la puerta de verificación.** El disparador
-> (`jobs/recordatorios.js` + `cerrarPool` en `db.js`) está implementado y commiteado, y
-> el cron quedó configurado en Railway, pero la verificación reveló un **bloqueo de
-> infraestructura**: Railway (plan Hobby) bloquea el SMTP saliente, así que el mail no
-> sale desde producción (ni el recordatorio ni los transaccionales). **Prerrequisito:**
-> ejecutar [`plan_entregabilidad_mail.md`](plan_entregabilidad_mail.md) (migración a la
-> **API HTTP de Resend**). Al cerrar esa migración se retoma la verificación de Etapa 3.
-> **Última actualización:** 2026-06-08.
+> **Estado:** Etapa 3 **verificada (2026-06-09).** El disparador
+> (`jobs/recordatorios.js` + `cerrarPool` en `db.js`) está implementado y commiteado, el
+> cron quedó configurado en Railway, y una corrida real (Run Now) **envió el recordatorio
+> del tenant demo desde Railway** (`message_id` de Resend, Delivered, bandeja de Gmail).
+> El bloqueo previo —Railway plan Hobby bloquea el SMTP saliente— se resolvió migrando el
+> envío a la **API HTTP de Resend**
+> ([`plan_entregabilidad_mail.md`](plan_entregabilidad_mail.md), Tramo 2). Queda solo la
+> **Etapa 4** (prender el flag en el tenant real, atado al merge a `main`).
+> **Última actualización:** 2026-06-09.
 
 ---
 
@@ -317,17 +318,16 @@ Cada etapa ≈ un chat. Avanzar con confirmación entre etapas.
       y `mailer.js` hardcodeaba `TZ` en vez de importarlo de `utils/constantes.js`.
 - **Done when:** llega un mail de prueba bien renderizado. ✓
 
-### Etapa 3 — Disparador + scheduling  ⛔ PAUSADA (bloqueo de mail, ver abajo)
+### Etapa 3 — Disparador + scheduling  ✅ COMPLETADA (verificada 2026-06-09)
 
-> **Bloqueada en verificación (2026-06-08).** El código y el cron están listos, pero
-> al correr el job en Railway el envío SMTP falla: **Railway Hobby bloquea el SMTP
-> saliente** (puertos 25/465/587). Esto bloquea también los mails transaccionales en
-> prod. Se resuelve migrando el envío a la **API HTTP de Resend** —
-> [`plan_entregabilidad_mail.md`](plan_entregabilidad_mail.md), que pasa a ser
-> prerrequisito de esta etapa. El commit del `dns.setDefaultResultOrder('ipv4first')`
-> en `mailer.js` quedó **superado** (era código muerto: nodemailer ya ordena IPv4
-> primero y el problema era el puerto SMTP, no el DNS); se quita en la Fase 4 de esa
-> migración. Al cerrar la migración se retoma la verificación de acá.
+> **Resuelta (2026-06-09).** Estuvo pausada porque al correr el job en Railway el envío
+> SMTP fallaba: **Railway Hobby bloquea el SMTP saliente** (puertos 25/465/587). Se
+> resolvió migrando el envío a la **API HTTP de Resend** (HTTPS/443) —
+> [`plan_entregabilidad_mail.md`](plan_entregabilidad_mail.md), Tramo 2. Verificación
+> (Run Now del servicio cron): se envió el recordatorio del tenant demo y Resend devolvió
+> `message_id` (Delivered, bandeja de Gmail). El `dns.setDefaultResultOrder('ipv4first')`
+> que se había agregado quedó **superado** (código muerto: el problema era el puerto SMTP,
+> no el DNS) y se quitó en la Fase 4 de esa migración.
 
 - [x] `jobs/recordatorios.js`: entrypoint (cáscara fina) que llama a
       `procesarRecordatorios({ dryRun: false })`, loguea el resumen del lote y
@@ -355,9 +355,9 @@ Cada etapa ≈ un chat. Avanzar con confirmación entre etapas.
   - **Railway buildea desde GitHub, no desde local:** el código (job + cambio en
     `db.js`) tiene que estar **commiteado y pusheado** a la rama conectada antes de
     que el servicio pueda buildear/correr.
-- **Done when:** una corrida programada manda los recordatorios del tenant demo
-  (pendiente: requiere el envío por HTTP de la migración de Resend,
-  [`plan_entregabilidad_mail.md`](plan_entregabilidad_mail.md)).
+- **Done when:** una corrida manda los recordatorios del tenant demo. ✓ (verificado
+  2026-06-09 con un Run Now del servicio cron: 1 recordatorio enviado desde Railway,
+  `message_id` de Resend, Delivered en Gmail).
 
 ### Etapa 4 — Activación en producción + hardening
 - [ ] Prender el flag `activo` en el tenant **real** (flip opt-in).
@@ -389,7 +389,7 @@ Cada etapa ≈ un chat. Avanzar con confirmación entre etapas.
 - **Etapa 1:** dry-run sobre el tenant demo (sin enviar).
 - **Etapa 2:** script de prueba a casilla de test (render del mail).
 - **Etapa 3:** corrida real apuntando al tenant demo con un turno de prueba
-  cargado para el día siguiente.
+  cargado para el día siguiente. ✓ (2026-06-09)
 - **Etapa 4:** observar logs del cron en Railway tras la primera corrida en prod.
 
 ---

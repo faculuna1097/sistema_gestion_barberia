@@ -17,8 +17,15 @@ y (2) que lleguen a bandeja de entrada y no a spam (sobre todo en Outlook/Hotmai
 > **Gmail → bandeja de entrada** ✅, **Outlook/Microsoft → la mayoría a Junk** (reputación
 > de dominio nuevo, no es bug de código; ver §5 Fase 5). DMARC `p=none` publicado en
 > Vercel (`_dmarc`) con `rua` a **Postmark DMARC**, propagado y resolviendo.
-> **Pendiente:** Tramo 2 (validar salida real desde el cron en Railway + Etapa 3 del
-> recordatorio), dejar correr los reportes DMARC 1–2 semanas, re-test de Outlook tras
+> **Tramo 2 ✅ (2026-06-09):** el servicio cron en Railway envió un recordatorio real por
+> HTTP (`message_id` de Resend, **Delivered**) → **el mail sale de verdad desde
+> producción** (egress HTTPS confirmado; el bloqueo de SMTP quedó atrás), y llegó a la
+> **bandeja de entrada de Gmail**. Único escollo, ya resuelto: el `MAIL_FROM` del cron
+> tenía el valor viejo de sandbox (`onboarding@resend.dev`) que nunca se actualizó → Resend
+> devolvía 403 (con el remitente sandbox solo deja enviar a la cuenta dueña); corregido a
+> `turnos@send.barbermanager.app`. Al ser **shared variable**, el valor corregido ya vale
+> para **ambos** servicios. Con esto se **verifica la Etapa 3** del recordatorio.
+> **Pendiente:** dejar correr los reportes DMARC 1–2 semanas, re-test de Outlook tras
 > warmup, y el merge a `main` (§13). **Corrección previa:** la zona DNS está en **Vercel**
 > (NS `vercel-dns.com`), no en Namecheap. Ver §3, §6, §12 y §13.
 
@@ -179,7 +186,8 @@ Ver §6 para el detalle exacto de cada registro y el mapeo de "Name". En resumen
 - [x] **Gmail → bandeja de entrada** los 4 mails ✅.
 - [ ] **Outlook/Microsoft → PENDIENTE (reputación de dominio nuevo, NO es bug de código).** Probado con `…@alumnos.frgp.utn.edu.ar` (backend Exchange Online): entró solo el mail **sin links** (cancelación); los 3 con botón + link a Maps cayeron a **Junk**. Microsoft manda a Junk dominios sin historial aunque SPF/DKIM pasen. Mitigación: DMARC ya publicado (ayuda en Microsoft) + **warmup** (días/semanas de envío) + en prod los links resuelven. **Re-testear en unos días.**
 - [ ] MXToolbox y (a los días) Google Postmaster (ver §9). Pendiente.
-- [ ] Reserva real desde el **web service de prod** → bandeja en Gmail **y** Outlook: **bloqueado hasta el merge a `main`** (el web service no tiene el mailer todavía; ver §13). El equivalente disponible hoy es el **Tramo 2** vía el cron (salida real desde Railway + Etapa 3 del recordatorio).
+- [x] **Tramo 2 (2026-06-09):** salida real desde el **cron en Railway** confirmada — recordatorio enviado por HTTP, `message_id` de Resend, **Delivered**, Gmail inbox. Egress HTTPS OK; cerró la verificación de la Etapa 3 del recordatorio. (Incidente `MAIL_FROM` sandbox → 403, ya resuelto: ver bloque de progreso.)
+- [ ] Reserva real desde el **web service de prod** → bandeja en Gmail **y** Outlook: **bloqueado hasta el merge a `main`** (el web service no tiene el mailer todavía; ver §13).
 
 ### Fase 6 — Endurecer DMARC
 - [ ] Con reportes limpios: subir a `p=quarantine` (opcionalmente con `pct=` para rampar).
@@ -462,7 +470,7 @@ reportes limpios entre escalones.
 [x] F4  Código: capa mail/ (mailProvider + resendProvider) + From por-tenant en mailer.js + .env.example (commit ecc5484)
 [x] F4  Railway: RESEND_API_KEY + MAIL_FROM como shared vars en web Y cron — PERO solo el cron corre el código (web=main, ver §13)
 [~] F5  probarMailer.js ✅ + mail-tester 9.5 ✅ + Gmail inbox ✅ | Outlook → Junk (reputación, re-test) | MXToolbox/reserva real pendientes
-[ ] F5  Tramo 2: salida real desde el cron en Railway + Etapa 3 del recordatorio
+[x] F5  Tramo 2: salida real desde el cron en Railway + Etapa 3 del recordatorio ✅ (2026-06-09)
 [ ] F6  Subir DMARC a quarantine, luego a reject
 [ ] MERGE  feature/turnero → main: activa el mail en la barbería real (web service); ver §13
 ```
@@ -489,6 +497,11 @@ reportes limpios entre escalones.
 - **Env vars en Railway:** `RESEND_API_KEY` + `MAIL_FROM` están como **shared variables**
   referenciadas en **ambos** servicios (web y cron). Cuando el código de mail llegue a
   `main`, el web service ya las tiene → se activan solas, sin tocar Railway.
+  **Nota (2026-06-09, Tramo 2):** verificá el *valor*, no solo que la var exista. El
+  `MAIL_FROM` había quedado con el remitente sandbox viejo (`onboarding@resend.dev`) y
+  nunca se actualizó → el cron tiró un 403 de Resend en la primera corrida real. Al ser
+  shared variable, corregir el valor una vez (a `BarberManager <turnos@send.barbermanager.app>`)
+  lo dejó bien para **ambos** servicios, así que el web service ya hereda el valor correcto.
 - **DNS (SPF/DKIM/MX/DMARC):** son a nivel **dominio** (`send.barbermanager.app` /
   `_dmarc.barbermanager.app`), no dependen de la rama → ya sirven para el web service
   apenas tenga el código.
