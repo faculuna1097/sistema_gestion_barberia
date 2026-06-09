@@ -1,9 +1,19 @@
 # Plan de entregabilidad de mail (SPF / DKIM / DMARC)
 
-Documento de plan. **Activo (en ejecución desde 2026-06-08).** Describe cómo migrar
-el envío de mails transaccionales del turnero desde el SMTP de Gmail hacia un dominio
-propio autenticado vía **Resend**, para (1) que los mails **salgan** desde producción
-y (2) que lleguen a bandeja de entrada y no a spam (sobre todo en Outlook/Hotmail).
+Documento de plan. ✅ **MIGRACIÓN COMPLETADA Y VERIFICADA EN PROD / ARCHIVADO (2026-06-09).**
+Describe cómo se migró el envío de mails transaccionales del turnero desde el SMTP de Gmail
+hacia un dominio propio autenticado vía **Resend**, para (1) que los mails **salgan** desde
+producción y (2) que lleguen a bandeja de entrada y no a spam (sobre todo en Outlook/Hotmail).
+
+> **Estado del cierre:** el objetivo central está logrado y probado en prod — el mail
+> **sale desde Railway** por HTTP (Tramo 2, 2026-06-09) y el dominio está autenticado
+> (SPF/DKIM/MX/DMARC). Quedan dos residuales que **no bloquean** y que se trackean en el
+> **Checklist del merge** de [`estado_actual.md`](estado_actual.md): **(a)** el **merge
+> `feature/turnero → main`**, que activa el mailer en el web service de la barbería real;
+> **(b)** seguimiento de entregabilidad time-gated — **Fase 6** (endurecer DMARC
+> `none→quarantine→reject` tras 1–2 semanas de reportes limpios), re-test de Outlook tras
+> warmup, MXToolbox/Postmaster. Este documento queda como **referencia histórica**; el
+> estado vigente vive en `estado_actual.md`.
 
 > **Progreso (2026-06-09):** Fases 1, 2, 4 (código + env vars en el cron) y 3 (DMARC
 > `p=none`) ✅; Fase 5 validada en local. Dominio `send.barbermanager.app` verificado;

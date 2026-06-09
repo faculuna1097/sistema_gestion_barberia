@@ -207,6 +207,40 @@ de cambios:
 
 ## Pendientes
 
+### 🔀 Checklist del merge `feature/turnero` → `main` (go-live) — pendiente
+
+> Consolida lo que dejaron los planes de mail (ya archivados:
+> [`plan_entregabilidad_mail.md`](./plan_entregabilidad_mail.md) §13 +
+> [`plan_recordatorio_turnos.md`](./plan_recordatorio_turnos.md) Etapas 3–4) y el go-live
+> del turnero/barbero. **Es un go-live, no solo un merge técnico** → hacerlo con cabeza
+> fresca y checklist. Orden sugerido:
+
+**A. Antes de mergear**
+- [ ] Confirmar que Kingsai está listo para abrir reservas (horarios de barberos cargados, etc.).
+- [ ] Decidir si se activa el **recordatorio** en Kingsai (flag opt-in, paso D) o se deja apagado por ahora.
+
+**B. El merge + frontend (turnero/barbero go-live)**
+- [ ] Mergear `feature/turnero` → `main`.
+- [ ] **En el mismo commit/merge**, quitar el `has` de `frontend/vercel.json` (las dos líneas `"has": [{ "type": "host", "value": "demo.barbermanager.app" }]`). Deja el turnero de **kingsai público y reservable**. Contexto completo en el pendiente detallado más abajo («NO ENTRAR EN PÁNICO…»).
+
+**C. Mail transaccional del web service (barbería real)**
+- [ ] El merge trae `services/mail/` + imports a `main` → el web service empieza a mandar confirmación / cancelación / reprogramación / cancelación automática.
+- [ ] **Verificar el VALOR de `MAIL_FROM` y `RESEND_API_KEY` en el web service** (no solo que la var exista — en Tramo 2 el cron tenía `MAIL_FROM` con el sandbox viejo y tiró 403). Deben ser `BarberManager <turnos@send.barbermanager.app>` y la API key de prod. Son shared variables ya corregidas, así que deberían estar bien — pero confirmar.
+- [ ] Primer envío: el log del web service debe mostrar `[mailer] proveedor de mail inicializado | remitente por defecto: BarberManager <turnos@send.barbermanager.app>` (carga perezosa → aparece con el primer mail, no al bootear).
+- [ ] **Reserva real** desde el web service de prod → confirmar bandeja en Gmail **y** Outlook (Outlook con warmup en curso, puede caer a Junk; ver paso E).
+- [ ] Nada que tocar en DNS ni env vars (ya están a nivel dominio / shared).
+
+**D. Recordatorio (servicio cron)**
+- [ ] **Cambiar el branch del servicio cron** de `feature/turnero` a `main` (si no, seguiría deployando el código congelado de la rama vieja).
+- [ ] **Etapa 4** — prender el flag `configuracion.recordatorio = { "activo": true }` en el tenant **real** (kingsai) cuando se quiera activar. **Ojo:** los barberos de kingsai tienen `email = NULL` (no sincroniza Calendar), pero los **clientes** sí reciben el recordatorio → flip deliberado, no accidental.
+- [ ] (Opcional) índice parcial sobre `turno` si el volumen crece; correr el lote 2×/día para cubrir reservas tardías.
+
+**E. Seguimiento de entregabilidad (independiente del merge, time-gated)**
+- [ ] Dejar hornear los reportes **DMARC** 1–2 semanas con tráfico 100% alineado → recién ahí **Fase 6**: endurecer DMARC `p=none → quarantine → reject`.
+- [ ] **Re-test de Outlook** tras warmup (hoy los mails con link caen a Junk por reputación de dominio nuevo).
+- [ ] MXToolbox + Google Postmaster (tendencia, a los días).
+- [ ] Deuda menor: `npm uninstall nodemailer` (quedó sin uso tras migrar a `fetch`).
+
 - **Endpoint admin de invalidación de caché:** `POST /api/admin/cache/invalidate` que reciba un subdominio y lo borre del caché en memoria del `tenantMiddleware`. Necesario para que cambios sobre `tenant` (alta, baja, modificación de subdominio) se reflejen sin reiniciar Railway. Hoy el caché solo se vacía al reiniciar el servidor. **Cuando se implemente, aprovechar para cachear también `operativo_token_version` junto con `tenant_id`** y eliminar el SELECT extra que hoy hace `verificarToken` por cada request operativo (ver "Validación de `tv` operativo hace 1 SELECT por request" en deudas técnicas).
 - **Caja Tab 2 (Cierre de caja) y Tab 3 (Historial de cierres)** — plan completo en `plan_cierre_caja.txt`. Incluye `ALTER TABLE cierre_caja` con columnas nuevas (`efectivo_inicial`, `mp_inicial`, etc.). Branch sugerido: `feature/cierre-caja`.
 - **Acceso de barberos al panel:** vista reducida con solo sus propios cortes.
@@ -232,7 +266,7 @@ de cambios:
 
   **Nota sobre el síntoma en dev local (por IP desde el celular):** los rewrites son un mecanismo **exclusivo de Vercel**; el dev server de Vite no los conoce. Por eso, accediendo por IP de red local, `/turnos` y `/barbero` no se enrutan a sus apps y terminás en la gestión (→ login operativo). Para probar cada front localmente se entra a su propio puerto (turnero y barbero corren en dev servers separados), no a través del server de gestión. Es un artefacto de dev, no se arregla con el `has`; se vuelve irrelevante una vez que probás contra las URLs deployadas.
 
-- **[AL MERGEAR `feature/turnero` → `main`] El mail de la barbería real se activa con el merge.** Hoy el web service (que usa Kingsai) corre `main`, sin el mailer; el código de Resend vive en `feature/turnero` y solo el **servicio cron** lo corre. Las env vars (`RESEND_API_KEY` + `MAIL_FROM`, shared en ambos servicios) y el DNS (SPF/DKIM/MX/DMARC, a nivel dominio) **ya están listos** → al mergear, el web service empieza a mandar mail sin tocar Railway ni DNS. **Ojo con el valor de `MAIL_FROM` (no solo que la var exista):** en Tramo 2 estaba con el remitente sandbox viejo y tiró un 403 de Resend; ya quedó corregido a `turnos@send.barbermanager.app` y, por ser shared variable, el web service hereda el valor bueno. **Verificar post-merge:** una reserva real cae en bandeja en Gmail y Outlook (Outlook con warmup en curso, ver Fase 5 del plan). Detalle y checklist completo en [`plan_entregabilidad_mail.md`](./plan_entregabilidad_mail.md) §13.
+- **[AL MERGEAR `feature/turnero` → `main`] El mail de la barbería real se activa con el merge** → ver los pasos **C** (mail transaccional) y **D** (recordatorio) del **Checklist del merge** al inicio de esta sección. Detalle histórico en [`plan_entregabilidad_mail.md`](./plan_entregabilidad_mail.md) §13 y [`plan_recordatorio_turnos.md`](./plan_recordatorio_turnos.md).
 
 ---
 

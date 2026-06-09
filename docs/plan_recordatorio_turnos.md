@@ -1,6 +1,14 @@
 # Plan — Mail de recordatorio de turno (lote diario, noche anterior)
 
-> **Propósito de este documento.** Diseño y plan de implementación, por etapas,
+> ✅ **COMPLETADO / ARCHIVADO (2026-06-09).** Implementación cerrada y verificada en
+> producción: Etapas 0–3 hechas (el cron envió el recordatorio del tenant demo **desde
+> Railway** — `message_id` de Resend, Delivered, Gmail en bandeja). Solo queda la **Etapa 4**
+> (activación opt-in en el tenant real), que es **operativa y va atada al merge
+> `feature/turnero → main`**: su paso a paso vive en el **Checklist del merge** de
+> [`estado_actual.md`](estado_actual.md). Este documento queda como **referencia histórica**
+> del diseño; el estado vigente se trackea en `estado_actual.md`.
+>
+> **Propósito de este documento (histórico).** Diseño y plan de implementación, por etapas,
 > del mail automático de recordatorio de turno. Está pensado para desarrollarse
 > en **varios chats**: cada etapa es autocontenida y los contratos de código
 > están escritos de forma explícita para que un chat sin contexto previo pueda
