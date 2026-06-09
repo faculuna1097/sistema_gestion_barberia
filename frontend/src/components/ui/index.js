@@ -14,7 +14,6 @@ export { default as Card }            from './Card.jsx';
 export { default as Field }           from './Field.jsx';
 export { default as TopBar }          from './TopBar.jsx';
 export { default as ScreenHeader }    from './ScreenHeader.jsx';
-export { default as StickyFooter }    from './StickyFooter.jsx';
 export { default as EmptyState }      from './EmptyState.jsx';
 export { default as Skeleton }        from './Skeleton.jsx';
 export { default as StatusPill }      from './StatusPill.jsx';
