@@ -5,14 +5,22 @@ el envío de mails transaccionales del turnero desde el SMTP de Gmail hacia un d
 propio autenticado vía **Resend**, para (1) que los mails **salgan** desde producción
 y (2) que lleguen a bandeja de entrada y no a spam (sobre todo en Outlook/Hotmail).
 
-> **Progreso (2026-06-08):** Fases 1, 2 y 4 ✅. Cuenta Resend creada, dominio
-> `send.barbermanager.app` agregado y **verificado** (DKIM/SPF/MX en verde), y el
-> código migrado a la API HTTP de Resend (commit `ecc5484`, validado end-to-end con
-> `onboarding@resend.dev`). **Pendiente para que salga en prod:** cargar
-> `RESEND_API_KEY` + `MAIL_FROM` en Railway (web service **y** cron) + deploy (último
-> ítem de Fase 4); después Fase 5 (verificación) y el DMARC (Fase 3) + endurecimiento
-> (Fase 6). **Corrección:** la zona DNS no está en Namecheap sino delegada a **Vercel**
-> (NS `vercel-dns.com`); los registros se cargaron en Vercel. Ver §3, §6 y §12.
+> **Progreso (2026-06-09):** Fases 1, 2, 4 (código + env vars en el cron) y 3 (DMARC
+> `p=none`) ✅; Fase 5 validada en local. Dominio `send.barbermanager.app` verificado;
+> código migrado a la API HTTP de Resend (commit `ecc5484`); env vars `RESEND_API_KEY` +
+> `MAIL_FROM` cargadas en Railway como **shared variables** referenciadas en **los dos**
+> servicios (web y cron) — pero **solo el cron corre el código nuevo** (deploya de
+> `feature/turnero`); el **web service deploya de `main`**, que todavía no tiene el
+> mailer, así que el mail para la **barbería real queda atado al merge
+> `feature/turnero → main`** (ver §13). Verificación local con `probarMailer.js`:
+> **mail-tester 9.5/10** (SPF+DKIM en verde; el -0.5 es el link demo que no resuelve),
+> **Gmail → bandeja de entrada** ✅, **Outlook/Microsoft → la mayoría a Junk** (reputación
+> de dominio nuevo, no es bug de código; ver §5 Fase 5). DMARC `p=none` publicado en
+> Vercel (`_dmarc`) con `rua` a **Postmark DMARC**, propagado y resolviendo.
+> **Pendiente:** Tramo 2 (validar salida real desde el cron en Railway + Etapa 3 del
+> recordatorio), dejar correr los reportes DMARC 1–2 semanas, re-test de Outlook tras
+> warmup, y el merge a `main` (§13). **Corrección previa:** la zona DNS está en **Vercel**
+> (NS `vercel-dns.com`), no en Namecheap. Ver §3, §6, §12 y §13.
 
 > **Actualización 2026-06-08 — dos cambios de contexto que mandan sobre el resto del doc:**
 > 1. **Driver primario nuevo:** el backend corre en **Railway plan Hobby**, que
@@ -123,7 +131,7 @@ propio. nodemailer y el SDK de Resend no se usan.
 ### Fase 0 — Pre-requisitos
 - [x] Acceso al panel de DNS — **Vercel** (la zona de `barbermanager.app` está delegada ahí, no a Namecheap).
 - [x] Mail de origen: `turnos@send.barbermanager.app` (el display name es el nombre del negocio por tenant; el default es `MAIL_FROM`).
-- [ ] Decidir a dónde van los reportes DMARC. Propuesta: un buzón propio + un lector gratuito de reportes (ver Fase 3).
+- [x] Decidir a dónde van los reportes DMARC. **Resuelto:** lector gratuito **Postmark DMARC**; `rua=mailto:re+ek7hqwournl@dmarc.postmarkapp.com` (ver Fase 3).
 
 ### Fase 1 — Crear cuenta y dominio en Resend ✅
 - [x] Crear cuenta en Resend.
@@ -139,10 +147,13 @@ Ver §6 para el detalle exacto de cada registro y el mapeo de "Name". En resumen
 - [x] Agregar el **MX de feedback** (Name `send.send`, priority 10).
 - [x] Volver a Resend y tocar **Verify** → **en verde** (DKIM, SPF y MX).
 
-### Fase 3 — DMARC en política suave (monitoreo)
-- [ ] Agregar el TXT de DMARC en `_dmarc.barbermanager.app` con `p=none` (ver §6.4).
-- [ ] Conectar un lector de reportes DMARC. Opciones gratis: **dmarcian**, **URIports**, **Postmark DMARC** (postmarkapp.com/dmarc) o **Cloudflare DMARC Management**. Mandan los reportes XML legibles.
-- [ ] Dejar correr **1–2 semanas** y mirar que el 100% del tráfico legítimo venga de Resend/SES y esté alineado (SPF y DKIM en verde para nuestro dominio).
+### Fase 3 — DMARC en política suave (monitoreo) ✅ (publicado; reportes en curso)
+- [x] Agregar el TXT de DMARC en `_dmarc.barbermanager.app` con `p=none` (ver §6.4).
+      **Publicado en Vercel (2026-06-09)**, valor exacto:
+      `v=DMARC1; p=none; pct=100; rua=mailto:re+ek7hqwournl@dmarc.postmarkapp.com; sp=none; aspf=r;`
+      Propagado y resolviendo (verificado contra `8.8.8.8` y `1.1.1.1`).
+- [x] Conectar un lector de reportes DMARC. **Elegido: Postmark DMARC** (dmarc.postmarkapp.com) — gratis, resumen semanal por mail. (Alternativas evaluadas: dmarcian, URIports, Cloudflare DMARC — esta última descartada porque la zona DNS está en Vercel, no en Cloudflare.)
+- [ ] Dejar correr **1–2 semanas** y mirar que el 100% del tráfico legítimo venga de Resend/SES y esté alineado (SPF y DKIM en verde para nuestro dominio). **En curso** (los reportes agregados llegan en lotes diarios; el panel de Postmark empieza a poblarse en ~24–72 h).
 
 ### Fase 4 — Cambio de código + variables de entorno
 - [ ] Crear la capa de mail `src/services/mail/` (§7.1): `mailProvider.js` (contrato),
@@ -153,15 +164,22 @@ Ver §6 para el detalle exacto de cada registro y el mapeo de "Name". En resumen
       transporter `service:'gmail'`. Incluye timeout de 15 s con `AbortController` y
       logging de tipo/destinatario/tenant/`message_id` (§7.3). **Quitar el
       `dns.setDefaultResultOrder('ipv4first')`** (código muerto, §7).
-- [ ] Cargar las variables nuevas en Railway (ver §8). Aplica al **web service y al
-      servicio cron** de recordatorios (ambos mandan mail por el mismo `mailer.js`).
-- [ ] Deploy. Esto **desbloquea la verificación de la Etapa 3** de
-      [`plan_recordatorio_turnos.md`](plan_recordatorio_turnos.md).
+- [x] Cargar las variables nuevas en Railway (ver §8). Cargadas como **shared variables**
+      referenciadas en **los dos** servicios (web y cron). **Ojo (ver §13):** el web
+      service deploya de `main` (sin el mailer todavía) y el cron de `feature/turnero`
+      (con el mailer). O sea, hoy las env vars solo se *usan* en el cron; en el web
+      quedan inertes hasta el merge a `main`.
+- [x] Deploy. El push de `ecc5484` a `origin/feature/turnero` redeployó el **cron** con
+      el código de Resend. Esto **desbloquea la verificación de la Etapa 3** de
+      [`plan_recordatorio_turnos.md`](plan_recordatorio_turnos.md) (= Tramo 2, pendiente).
 
-### Fase 5 — Pruebas y verificación
-- [ ] Correr [`backend/src/scripts/probarMailer.js`](../backend/src/scripts/probarMailer.js) (manda los 4 tipos de mail).
-- [ ] Verificar con mail-tester.com, MXToolbox y (a los días) Google Postmaster (ver §9).
-- [ ] Probar una reserva real y mirar que llegue a bandeja de entrada en Gmail **y** en Outlook/Hotmail.
+### Fase 5 — Pruebas y verificación (local ✅ · Outlook y prod pendientes)
+- [x] Correr [`backend/src/scripts/probarMailer.js`](../backend/src/scripts/probarMailer.js) (manda los 4 tipos de mail). Ahora toma el **destino por argumento de CLI** (`node src/scripts/probarMailer.js destino@x.com`; default `faculunacarp@gmail.com`).
+- [x] **mail-tester.com: 9.5/10** — SPF ✅ y DKIM ✅ verdes y alineados. El -0.5 es el link de gestión demo (`…/TOKEN-DEMO`) que no resuelve: **artefacto del test** (en prod el link es real con token válido). El test inicial salió con `onboarding@resend.dev` (sandbox) por un `.env` no guardado → 403; corregido a `turnos@send.barbermanager.app` y re-corrido OK.
+- [x] **Gmail → bandeja de entrada** los 4 mails ✅.
+- [ ] **Outlook/Microsoft → PENDIENTE (reputación de dominio nuevo, NO es bug de código).** Probado con `…@alumnos.frgp.utn.edu.ar` (backend Exchange Online): entró solo el mail **sin links** (cancelación); los 3 con botón + link a Maps cayeron a **Junk**. Microsoft manda a Junk dominios sin historial aunque SPF/DKIM pasen. Mitigación: DMARC ya publicado (ayuda en Microsoft) + **warmup** (días/semanas de envío) + en prod los links resuelven. **Re-testear en unos días.**
+- [ ] MXToolbox y (a los días) Google Postmaster (ver §9). Pendiente.
+- [ ] Reserva real desde el **web service de prod** → bandeja en Gmail **y** Outlook: **bloqueado hasta el merge a `main`** (el web service no tiene el mailer todavía; ver §13). El equivalente disponible hoy es el **Tramo 2** vía el cron (salida real desde Railway + Etapa 3 del recordatorio).
 
 ### Fase 6 — Endurecer DMARC
 - [ ] Con reportes limpios: subir a `p=quarantine` (opcionalmente con `pct=` para rampar).
@@ -439,13 +457,57 @@ reportes limpios entre escalones.
 [x] F1  Crear cuenta Resend + Add Domain send.barbermanager.app
 [x] F2  Vercel → DNS Records: DKIM (TXT), SPF (TXT en send.send), MX feedback (send.send)
 [x] F2  Resend → Verify (en verde)
-[ ] F3  Vercel: TXT _dmarc con p=none + conectar lector de reportes
-[ ] F3  Esperar 1–2 semanas, reportes 100% alineados
+[x] F3  Vercel: TXT _dmarc con p=none + lector de reportes (Postmark DMARC) — publicado y propagado
+[ ] F3  Esperar 1–2 semanas, reportes 100% alineados (en curso)
 [x] F4  Código: capa mail/ (mailProvider + resendProvider) + From por-tenant en mailer.js + .env.example (commit ecc5484)
-[ ] F4  Railway: RESEND_API_KEY + MAIL_FROM en web service Y cron + deploy
-[ ] F5  probarMailer.js + mail-tester + MXToolbox + prueba real Gmail/Outlook
+[x] F4  Railway: RESEND_API_KEY + MAIL_FROM como shared vars en web Y cron — PERO solo el cron corre el código (web=main, ver §13)
+[~] F5  probarMailer.js ✅ + mail-tester 9.5 ✅ + Gmail inbox ✅ | Outlook → Junk (reputación, re-test) | MXToolbox/reserva real pendientes
+[ ] F5  Tramo 2: salida real desde el cron en Railway + Etapa 3 del recordatorio
 [ ] F6  Subir DMARC a quarantine, luego a reject
+[ ] MERGE  feature/turnero → main: activa el mail en la barbería real (web service); ver §13
 ```
+
+---
+
+## 13. Topología de despliegue y activación en la barbería real (post-merge a `main`)
+
+> **Hallazgo clave (2026-06-09):** en Railway hay **dos servicios** que deployan de
+> **ramas distintas**, así que "el mail anda en prod" significa cosas distintas según
+> el servicio:
+>
+> | Servicio Railway | Rama que deploya | ¿Tiene el mailer de Resend? |
+> |---|---|---|
+> | **web** (API que usa la barbería real, Kingsai) | `main` | **No** — `main` está ~136 commits atrás, sin `services/` ni mailer |
+> | **cron** (recordatorios) | `feature/turnero` | **Sí** — incluye `ecc5484` |
+>
+> Consecuencia: hoy el mail solo puede salir desde el **cron**. La **barbería real**
+> (web service, `main`) **no manda mail** todavía — de hecho esa versión nunca tuvo la
+> feature. El mail para la barbería real se activa **con el merge `feature/turnero →
+> main`**.
+
+### Qué YA quedó listo para el merge (no hay que volver a tocarlo)
+- **Env vars en Railway:** `RESEND_API_KEY` + `MAIL_FROM` están como **shared variables**
+  referenciadas en **ambos** servicios (web y cron). Cuando el código de mail llegue a
+  `main`, el web service ya las tiene → se activan solas, sin tocar Railway.
+- **DNS (SPF/DKIM/MX/DMARC):** son a nivel **dominio** (`send.barbermanager.app` /
+  `_dmarc.barbermanager.app`), no dependen de la rama → ya sirven para el web service
+  apenas tenga el código.
+
+### Qué hay que hacer/verificar EN el merge
+- [ ] El merge trae `services/mail/` + sus imports a `main` → el web service empieza a
+      mandar mail (confirmación / cancelación / reprogramación / cancelación automática).
+- [ ] **Verificar el remitente en el web service** tras el primer deploy de `main`: en
+      el primer envío los logs tienen que mostrar `[mailer] proveedor de mail
+      inicializado | remitente por defecto: BarberManager <turnos@send.barbermanager.app>`
+      (el mailer se carga perezoso, no en el boot, así que ese log aparece recién con el
+      primer mail, no al arrancar).
+- [ ] **Re-test de entregabilidad desde el web service de prod** con una reserva real:
+      bandeja en Gmail **y** Outlook (ojo Outlook, ver Fase 5 — warmup en curso).
+- [ ] **Nada que tocar en DNS ni en env vars** (ver arriba; ya están).
+
+### `.env` local (no se commitea, gitignored)
+- `MAIL_FROM` local quedó en `BarberManager <turnos@send.barbermanager.app>` (el
+  remitente real). El `onboarding@resend.dev` fue solo para el primer test sin dominio.
 
 ---
 
