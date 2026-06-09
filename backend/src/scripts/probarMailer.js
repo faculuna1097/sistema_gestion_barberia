@@ -1,7 +1,9 @@
 // Script de prueba aislado para services/mail/mailer.js.
-// Envía los 4 tipos de mail a faculunacarp@gmail.com.
-// Ejecutar desde /backend: node src/scripts/probarMailer.js
-// Verificación: abrir la bandeja de entrada del destinatario.
+// Envía los 4 tipos de mail a un destinatario.
+// Ejecutar desde /backend:
+//   node src/scripts/probarMailer.js                -> default (faculunacarp@gmail.com)
+//   node src/scripts/probarMailer.js destino@x.com  -> usa la dirección pasada como argumento
+// Verificación: abrir la bandeja de entrada del destinatario (o el panel de mail-tester).
 
 import 'dotenv/config';
 import {
@@ -12,6 +14,11 @@ import {
 } from '../services/mail/mailer.js';
 
 const main = async () => {
+  // Destinatario: 1er argumento de CLI, o el default. Permite apuntar el envío a
+  // mail-tester, a una casilla de Outlook, etc., sin editar el archivo.
+  const destino = process.argv[2] || 'faculunacarp@gmail.com';
+  console.log(`[probarMailer] destinatario: ${destino}`);
+
   // Mañana 10:00 — 10:30 (timestamps fijos para que los 4 mails muestren la misma fecha).
   const manana = new Date();
   manana.setDate(manana.getDate() + 1);
@@ -21,7 +28,7 @@ const main = async () => {
   const turno    = { inicio: manana.toISOString(), fin: finManana.toISOString() };
   const barbero  = { nombre: 'Facundo' };
   const servicio = { nombre: 'Corte de prueba' };
-  const cliente  = { nombre: 'Cliente Test', email: 'faculunacarp@gmail.com' };
+  const cliente  = { nombre: 'Cliente Test', email: destino };
   // tenant del negocio: el nombre arma el título y el remitente; la dirección
   // arma la fila "Dirección" con link a Maps. Sin tenant, enviarConfirmacion y
   // enviarReprogramacion rompen al leer tenant.nombre.
