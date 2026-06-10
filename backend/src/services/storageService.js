@@ -39,7 +39,12 @@ export const urlPublica = (storagePath) =>
 export const subirImagen = async (storagePath, buffer) => {
   const { error } = await supabase.storage
     .from(BUCKET_IMAGENES)
-    .upload(storagePath, buffer, { contentType: 'image/webp' });
+    // cacheControl: 1 año (en segundos). La URL es content-addressed por UUID
+    // (ver construirPath) → la imagen de esa ruta nunca cambia, así que es seguro
+    // cachearla a largo plazo. Default de Supabase = '3600' (1 h), corto para un
+    // asset estable. Solo aplica a subidas NUEVAS; las ya cargadas se actualizan
+    // con el script de backfill (backend/src/scripts/backfillCacheControl.js).
+    .upload(storagePath, buffer, { contentType: 'image/webp', cacheControl: '31536000' });
   if (error) throw new Error(`Storage upload: ${error.message}`);
 };
 
