@@ -229,6 +229,7 @@ frontend/
     |       |-- DataTable.jsx
     |       |-- DetalleRecurso.jsx
     |       |-- EmptyState.jsx
+    |       |-- ErrorBoundary.jsx
     |       |-- Field.jsx
     |       |-- FondoLocal.jsx
     |       |-- IconoAlerta.jsx

@@ -1,15 +1,19 @@
 // /frontend/src/App.jsx
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import MainScreen from "./screens/MainScreen";
 import FlujoCorte from "./screens/flows/FlujoCorte";
 import FlujoVenta from "./screens/flows/FlujoVenta";
 import FlujoGasto from "./screens/flows/FlujoGasto";
 import PantallaLoginAdmin from "./screens/PantallaLoginAdmin";
 import PantallaLoginOperativo from "./screens/PantallaLoginOperativo";
-import PanelAdmin from "./screens/admin/PanelAdmin";
+// PanelAdmin (panel admin/barbero) se carga con React.lazy: es el subárbol más
+// pesado y "frío" del front (solo el dueño/barbero, post-login). Así el login y
+// el camino operativo no bajan NADA del código del panel hasta entrar (#7). El
+// import() queda al final del bloque de imports porque depende de `lazy` (arriba).
+const PanelAdmin = lazy(() => import("./screens/admin/PanelAdmin"));
 import { Loader2 } from "lucide-react";
 import { theme } from "./theme/tokens.js";
-import { EmptyState, Button, IconoAlerta } from "./components/ui";
+import { EmptyState, Button, IconoAlerta, ErrorBoundary } from "./components/ui";
 import {
   getBarberosOperativo,
   getServicios,
@@ -289,7 +293,16 @@ export default function App() {
   }
 
   if (currentScreen === "admin") {
-    return <PanelAdmin rol={rolPanel} barberoSesion={barberoSesion} onCerrarSesion={cerrarSesionAdmin} avisosPago={avisosPago} nombreNegocio={nombreNegocio} />;
+    // <Suspense> muestra el spinner full-screen del boot mientras baja el chunk
+    // del panel; <ErrorBoundary> captura un fallo de descarga de ese chunk
+    // (red caída o hash viejo tras redeploy) → auto-reload una vez.
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PantallaCargando />}>
+          <PanelAdmin rol={rolPanel} barberoSesion={barberoSesion} onCerrarSesion={cerrarSesionAdmin} avisosPago={avisosPago} nombreNegocio={nombreNegocio} />
+        </Suspense>
+      </ErrorBoundary>
+    );
   }
 
   return (

@@ -1,6 +1,6 @@
 # Performance de los frontends — diagnóstico y plan
 
-> **Estado:** Diagnóstico **cerrado** (turnero, gestión y backend del bootstrap), midiendo antes de optimizar. Plan priorizado en **§7**; puntos de entrada para ejecutarlo en frío en **§8**. **Primera data de prod (2026-06-10, §5-bis):** el proceso de Railway no duerme y la conexión DB fría no mostró spike → el cuello "backend ~2 s" era artefacto de medir local; #1/#2 probablemente marginales en prod (a confirmar con un 200 post-merge). **#1 implementado.** Recomendación actualizada: empezar por **#3**. **#3 hecho y medido (2026-06-10):** lazy-load de xlsx → bundle inicial de gestión **233.44 → 137.07 kB gzip (−41%)**; xlsx (143 kB gzip) se carga recién al exportar. **#4 hecho y medido (2026-06-10):** lazy-load de browser-image-compression → **137.07 → 114.63 kB gzip**; chunk de 21 kB diferido a la subida. **Acumulado #3+#4: 233.44 → 114.63 kB gzip (−51%).**
+> **Estado:** Diagnóstico **cerrado** (turnero, gestión y backend del bootstrap), midiendo antes de optimizar. Plan priorizado en **§7**; puntos de entrada para ejecutarlo en frío en **§8**. **Primera data de prod (2026-06-10, §5-bis):** el proceso de Railway no duerme y la conexión DB fría no mostró spike → el cuello "backend ~2 s" era artefacto de medir local; #1/#2 probablemente marginales en prod (a confirmar con un 200 post-merge). **#1 implementado.** Recomendación actualizada: empezar por **#3**. **#3 hecho y medido (2026-06-10):** lazy-load de xlsx → bundle inicial de gestión **233.44 → 137.07 kB gzip (−41%)**; xlsx (143 kB gzip) se carga recién al exportar. **#4 hecho y medido (2026-06-10):** lazy-load de browser-image-compression → **137.07 → 114.63 kB gzip**; chunk de 21 kB diferido a la subida. **Acumulado #3+#4: 233.44 → 114.63 kB gzip (−51%).** **#7 hecho y medido (2026-06-10):** code-split de `src/screens` (8 secciones + shell de `PanelAdmin`) con `React.lazy`+`Suspense`+`ErrorBoundary` nuevo → bundle inicial **114.63 → 77.93 kB gzip (−32%)**; el login/operativo deja de bajar código de admin. **#8 hecho y medido (2026-06-10):** `manualChunks` aísla `react-vendor` (60.29 kB gzip) → `index.js` queda en **17.78 kB gzip** (solo mi código); no baja la 1ª carga (total ~78 kB igual) pero el re-download post-deploy de un returning user cae de ~78 → ~18 kB. **Acumulado #3+#4+#7: 233.44 → 77.93 kB gzip (−67%).**
 > **Iniciado:** 2026-06-09. **Branch:** `feature/turnero`.
 
 Prioridad: **turnero primero** (público, mobile, primera visita de un cliente) → gestión después (interno, escritorio/iPad).
@@ -344,8 +344,8 @@ Ordenado por **impacto medido / esfuerzo / riesgo**. Reglas: **nunca cachear slo
 |---|---|---|---|---|---|
 | 5 | **Cache-Control de imágenes** a 1 año + `immutable` (al subir a Storage) | Ambos | 🟡 Medio — visitas repetidas / concurrencia (no la 1ª) | Bajo-medio | Bajo |
 | 6 | **Fix del flash gris→imagen** (`new Image()` + gate/fade en `FondoLocal`, con timeout) | Gestión (UX) | 🟡 Medio — la UX pedida; "entra ya con la imagen" | Medio | Bajo |
-| 7 | **Code-split de `src/screens`** con `React.lazy()` + `Suspense` | Gestión | 🟠 Medio-alto — baja el bundle inicial; el login deja de cargar el panel entero | Medio | Medio (boundaries) |
-| 8 | **`manualChunks`** para aislar el vendor (react-dom/react/scheduler) | Gestión | 🟢 Bajo 1ª carga / Medio repetidas (cachea React entre deploys) | Bajo | Bajo |
+| 7 | ✅ **Hecho (2026-06-10)** — **Code-split de `src/screens`** (`React.lazy`+`Suspense`+`ErrorBoundary`): 8 secciones + shell de `PanelAdmin` lazy | Gestión | 🟠 **Alto, medido** — bundle inicial 114.63 → **77.93 kB gzip (−32%)**; login/operativo baja 0 de admin | Medio | Medio (resuelto) |
+| 8 | ✅ **Hecho (2026-06-10)** — **`manualChunks`** aísla `react-vendor` (react/react-dom/scheduler/react-is) | Gestión | 🟢 **Medido** — 1ª carga igual (~78 kB); `index.js` propio queda en 17.78 kB gzip → re-download post-deploy ~78 → ~18 kB | Bajo | Bajo |
 
 ### 🧊 Marginal (hacer si sobra tiempo)
 | # | Acción | Capa | Impacto | Esfuerzo | Riesgo |
@@ -401,8 +401,44 @@ Mismo patrón que el #3, en **1 archivo** (`BloqueImagenes.jsx` → handler `han
 - El gzip del chunk (21.07 kB) coincide con el estimado del treemap (~20 kB).
 - El chunk `xlsx-*.js` quedó intacto (mismo hash) → #4 no lo tocó.
 
+### Detalle de implementación — #7 code-split de `src/screens`
+
+Dos boundaries (Opción B), ambos con el mismo primitivo nuevo `ErrorBoundary`:
+1. **Secciones** (`PanelAdmin.jsx`): los 8 `import` estáticos pasaron a `const Seccion* = lazy(() => import('./sections/...'))`. El render (`<SeccionActual/>`) se envolvió en `<ErrorBoundary key={seccionActiva}><Suspense fallback={<LoadingState/>}>…`. El `key` remonta el boundary al cambiar de sección (un error en una no "pega" a la siguiente). Fallback = `LoadingState`, idéntico al spinner que la sección usa después mientras trae datos → un solo loader continuo.
+2. **Panel** (`App.jsx`): `import PanelAdmin` pasó a `lazy()`; el render se envolvió en `<ErrorBoundary><Suspense fallback={<PantallaCargando/>}>…` (spinner full-screen del boot). Así el login/operativo no baja nada del panel.
+
+**`ErrorBoundary`** (`components/ui/ErrorBoundary.jsx`, class component — React lo exige): distingue chunk-load-error (→ `window.location.reload()` una vez, guard por timestamp en `sessionStorage`, ventana 10 s anti-loop) de un bug real (→ `EmptyState` tone danger + Reintentar, que limpia el estado y re-renderiza). Cubre el **render-path**; el `import('xlsx')` de handlers sigue siendo deuda aparte (ver "Deuda detectada").
+
+**Resultado medido (2026-06-10, `npm run build`):**
+
+| | Antes (post-#4) | Después (#7) | Δ |
+|---|---|---|---|
+| Bundle inicial `index-*.js` (raw) | 423.39 kB | 253.84 kB | −169.5 kB (−40%) |
+| Bundle inicial (gzip — lo que viaja) | 114.63 kB | **77.93 kB** | **−36.7 kB (−32%)** |
+| Chunks nuevos diferidos | — | `PanelAdmin` (4.01 kB gz) + 8 secciones (`SeccionGestion` 16.12 … `SeccionInicio` 2.47 kB gz) + ~18 micro-chunks compartidos (íconos + `Tabs`/`Select`/`Toast`/…) | on-demand |
+
+- El split de los ~18 micro-chunks (componentes/íconos que comparten ≥2 secciones) es comportamiento normal de Rollup (evita duplicarlos); que estén separados **confirma** que el camino operativo no los usa.
+- **Verificado en runtime** (`vite preview`): los `Seccion*-*.js` bajan al abrir cada sección, no al arrancar.
+- **Acumulado #3+#4+#7: 233.44 → 77.93 kB gzip (−67%).**
+
+### Detalle de implementación — #8 `manualChunks` react-vendor
+
+`vite.config.js` → `build.rollupOptions.output.manualChunks(id)` devuelve `'react-vendor'` para `node_modules/{react,react-dom,scheduler,react-is}/` (barras finales para no matchear `lucide-react`).
+
+**Resultado medido (2026-06-10, `npm run build`):**
+
+| | Post-#7 | Post-#8 |
+|---|---|---|
+| `index-*.js` (gzip) — solo mi código | 77.93 kB (incluía React) | **17.78 kB** |
+| `react-vendor-*.js` (gzip) | — (dentro del index) | 60.29 kB |
+| Total 1ª carga (index + react-vendor) | 77.93 kB | ~78.07 kB (igual; +0.14 kB de overhead del split) |
+
+- **No baja la 1ª carga** (esperado): React solo se mudó de archivo. La ganancia es de **cache entre deploys**: al deployar un cambio mío, solo `index.js` (17.78 kB) cambia de hash; `react-vendor` (60.29 kB) se mantiene cacheado → el returning user re-baja ~18 kB en vez de ~78 kB. `index.html` sumó un `modulepreload` (+0.08 kB) para react-vendor.
+
 ### Deuda detectada (no-perf, a confirmar)
-- **Manejo de error de carga de chunk lazy (transversal).** Con el #3, `await import('xlsx')` introduce un modo de falla nuevo: si el navegador no puede bajar el chunk (caída de red a mitad de sesión, o un hash viejo tras un redeploy), la promesa rechaza → *unhandled rejection* y el botón "no hace nada" en silencio. Se decidió **no** parchar try/catch por handler (cambio quirúrgico del #3), porque la solución correcta es **global** (un handler de `chunkLoadError → recargar`). Encararlo junto con el **#7 (`React.lazy`)**, que multiplica los chunks lazy y vuelve esto más relevante.
+- **Manejo de error de carga de chunk lazy (transversal).** Bajar un chunk lazy puede fallar: caída de red a mitad de sesión, o (lo más común) un hash de archivo viejo en el HTML cacheado tras un redeploy. Hay **dos caminos distintos** y se tratan distinto:
+  - **Render-path (`React.lazy` de secciones + panel, #7):** un componente lazy que no baja tira el error en el render → lo agarra un **error boundary**. ✅ **Resuelto (2026-06-10):** primitivo nuevo `frontend/src/components/ui/ErrorBoundary.jsx` que distingue chunk-load-error (→ `window.location.reload()` **una sola vez**, guardado por timestamp en `sessionStorage` para no loopear si el chunk de verdad no existe; un redeploy posterior, fuera de la ventana, sí puede re-auto-sanar) de un bug real (→ `EmptyState` tone danger + "Reintentar"). Se envuelve el `<Suspense>` de las secciones (scope = área de contenido, el sidebar sobrevive) y el de `PanelAdmin` en `App.jsx`.
+  - **Handler-path (`await import('xlsx')` dentro de un `onClick`, #3):** ⚠️ **un error boundary de render NO lo agarra** — la promesa rechaza fuera del ciclo de render de React → *unhandled rejection* y el botón "no hace nada" en silencio. **Sigue siendo DEUDA ABIERTA**, aparte del #7. Fix propio: try/catch + Toast por handler (los 6 de xlsx), o un helper compartido `cargarChunk(fn)` con retry. El `import()` de browser-image-compression (#4) **ya** está cubierto por su try/catch + Toast existente; **xlsx no**.
 - **`logo_kingsai_graffiti.jpeg`** devuelve `text/html` (request muerta, §3). Probablemente referencia legacy a un logo viejo; **es posible que ya esté en el "Checklist del merge" de `estado_actual.md`** como algo a eliminar al mergear `feature/turnero`→`main`. Cruzar y deduplicar.
 - **Aplanar la cadena (factor 5):** ¿se puede arrancar `imagenes`/`servicios` antes, o devolver más en una sola respuesta del bootstrap?
 
@@ -435,11 +471,13 @@ Mismo patrón que el #3, en **1 archivo** (`BloqueImagenes.jsx` → handler `han
 **#6 — Fix flash gris→imagen** (toca UI → leer `docs/sistema_de_disenio.md` antes)
 - `frontend/src/components/ui/FondoLocal.jsx` (render del `background-image`) + `frontend/src/App.jsx` → `cargarDatosTenant` (setea `imagenLocal`, ~L146-174). Patrón: `new Image()` con la URL, gate/fade del contenido hasta `onload`, con timeout de fallback para no bloquear si la imagen tarda.
 
-**#7 — Code-split `src/screens`**
-- Las secciones se importan **estáticamente** en `frontend/src/screens/admin/PanelAdmin.jsx` (~L28-33: SeccionCaja/Planillas/Gastos/Ventas/Balances, etc.). Convertir a `React.lazy(() => import('./sections/...'))` + envolver el render en `<Suspense fallback={...}>`. Riesgo medio: definir bien los boundaries y un fallback acorde al sistema de diseño.
+**#7 — Code-split `src/screens`** — ✅ **Hecho (2026-06-10).** Opción B (2 boundaries).
+- `frontend/src/screens/admin/PanelAdmin.jsx`: los 8 `import` de sección pasaron a `lazy(() => import('./sections/...'))`; render envuelto en `<ErrorBoundary key={seccionActiva}><Suspense fallback={<LoadingState/>}>`.
+- `frontend/src/App.jsx`: `import PanelAdmin` pasó a `lazy()`; render envuelto en `<ErrorBoundary><Suspense fallback={<PantallaCargando/>}>`.
+- Nuevo primitivo `frontend/src/components/ui/ErrorBoundary.jsx` (+ barrel) — maneja chunk-load-error con auto-reload guardado. Detalle y medición en §7 ("Detalle de implementación — #7").
 
-**#8 — `manualChunks`**
-- `frontend/vite.config.js` → `build.rollupOptions.output.manualChunks` para aislar `react`/`react-dom`/`scheduler` en un chunk `vendor` (cacheable entre deploys).
+**#8 — `manualChunks`** — ✅ **Hecho (2026-06-10).**
+- `frontend/vite.config.js` → `build.rollupOptions.output.manualChunks(id)` devuelve `'react-vendor'` para `node_modules/{react,react-dom,scheduler,react-is}/`. Medición en §7 ("Detalle de implementación — #8").
 
 ---
 

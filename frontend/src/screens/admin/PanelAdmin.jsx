@@ -15,23 +15,28 @@
 //                     Se usa para su identidad en el sidebar (D5) y se propaga a
 //                     las secciones (lo consumen recién en la Fase 6).
 
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import {
   Home, DollarSign, ClipboardList, BarChart3, ShoppingBag,
   Receipt, Calendar, Settings, LogOut, ChevronLeft, ChevronRight,
   AlertTriangle, X,
 } from "lucide-react";
 import { theme } from "../../theme/tokens.js";
-import { AvatarIniciales } from "../../components/ui";
+import { AvatarIniciales, LoadingState, ErrorBoundary } from "../../components/ui";
 
-import SeccionInicio     from "./sections/SeccionInicio";
-import SeccionCaja       from "./sections/SeccionCaja";
-import SeccionPlanillas  from "./sections/SeccionPlanillas";
-import SeccionGastos     from "./sections/SeccionGastos";
-import SeccionVentas     from "./sections/SeccionVentas";
-import SeccionGestion    from "./sections/SeccionGestion";
-import SeccionBalances   from './sections/SeccionBalances.jsx';
-import SeccionTurnero    from './sections/SeccionTurnero.jsx';
+// Las 8 secciones se cargan con React.lazy: cada una baja en su propio chunk JS
+// on-demand recién al abrirla (#7 de docs/performance_frontends.md). El render
+// va envuelto en <Suspense> (fallback LoadingState) + <ErrorBoundary> (más
+// abajo, en el <main>). Antes eran imports estáticos → todo el panel viajaba en
+// el bundle inicial aunque el usuario estuviera en el login/operativo.
+const SeccionInicio    = lazy(() => import("./sections/SeccionInicio"));
+const SeccionCaja      = lazy(() => import("./sections/SeccionCaja"));
+const SeccionPlanillas = lazy(() => import("./sections/SeccionPlanillas"));
+const SeccionGastos    = lazy(() => import("./sections/SeccionGastos"));
+const SeccionVentas    = lazy(() => import("./sections/SeccionVentas"));
+const SeccionGestion   = lazy(() => import("./sections/SeccionGestion"));
+const SeccionBalances  = lazy(() => import("./sections/SeccionBalances.jsx"));
+const SeccionTurnero   = lazy(() => import("./sections/SeccionTurnero.jsx"));
 
 // Items del sidebar — cada uno con su ícono Lucide, label y componente.
 const SECCIONES = [
@@ -441,7 +446,18 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago, nombreNegocio, 
           overflow: 'auto',
           background: theme.surfaceAlt,
         }}>
-          {SeccionActual && <SeccionActual modoBarbero={esBarbero} barberoSesion={barberoSesion} />}
+          {/* key={seccionActiva}: remonta el boundary al cambiar de sección, así
+              un error en una sección no "pega" a la siguiente (su estado de error
+              se resetea). El <Suspense> muestra LoadingState mientras baja el
+              chunk de la sección — idéntico al spinner que la sección usa después
+              mientras trae datos, así se ve un solo loader continuo. */}
+          {SeccionActual && (
+            <ErrorBoundary key={seccionActiva}>
+              <Suspense fallback={<LoadingState />}>
+                <SeccionActual modoBarbero={esBarbero} barberoSesion={barberoSesion} />
+              </Suspense>
+            </ErrorBoundary>
+          )}
         </main>
       </div>
     </div>
