@@ -295,8 +295,22 @@ export default function MainScreen({
   imagenLocal,
   bookingUrl,
 }) {
+  // Precarga del logo de Mercado Pago: asset estático del paso "forma de pago"
+  // de los 3 flujos. MainScreen es el hub del que se entra a ellos, así que
+  // precargarlo acá lo deja en cache → cuando se llega al paso de pago, el logo
+  // ya está (sin el hueco/pop de descarga). Se usa new Image() y no
+  // <link rel=prefetch> porque Safari (el iPad del local) no soporta prefetch.
+  useEffect(() => {
+    const img = new Image();
+    img.src = "/mercadopago.png";
+  }, []);
+
   return (
-    <FondoLocal imagenLocal={imagenLocal}>
+    // esperarImagen: MainScreen es la superficie ambiental de ENTRADA. Retiene
+    // el contenido tras el telón gris hasta que la foto cargó, para "entrar ya
+    // con la imagen" (#6). Solo cuesta en la 1ª carga sin cache; al volver desde
+    // un flujo la foto ya está cacheada → revela al instante (ver FondoLocal).
+    <FondoLocal imagenLocal={imagenLocal} esperarImagen>
       {/* Estilos scoped: hover/press de los botones. No se pueden expresar
           inline (pseudo-clases), igual que los keyframes — excepción del §4.1.
           Da press instantáneo en iPad sin usar onPointerDown. */}

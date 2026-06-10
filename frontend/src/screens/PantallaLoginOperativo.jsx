@@ -5,9 +5,21 @@
 //   1. Alguien presione el botón de logout en MainScreen, o
 //   2. El backend devuelva 401 (token expirado a los 30d, o credenciales rotadas).
 //
-// Layout: fondo full-screen con la imagen del local (tenant_imagen tipo='local')
-// + overlay oscuro sutil para legibilidad + card sólida centrada con shadowMd.
-// El logo del tenant va dentro de un círculo arriba de la card.
+// Layout: fondo full-screen con la foto del local vía `FondoLocal` (el mismo
+// fondo compartido por MainScreen, los flujos y el login admin), con un blur
+// MÁS fuerte (10px) que el resto para reforzar la sensación de "bloqueo /
+// todavía no ingresaste al sistema". Card sólida centrada con shadowMd; el logo
+// del tenant va dentro de un círculo arriba de la card. Sin foto, FondoLocal
+// cae a `surfaceAlt` liso.
+//
+// La card vive dentro de un overlay scrollable (overflowY:auto): FondoLocal es
+// overflow:hidden, así que el scroll propio garantiza que, si sube el teclado
+// del iPad y achica el viewport, el form scrollee en vez de recortarse.
+//
+// Al montar este login, FondoLocal precarga la foto (`new Image()`): así, cuando
+// el operativo entra a MainScreen, la foto ya está en cache y entra al instante.
+// No se gatea el contenido (sin `esperarImagen`): el formulario debe ser usable
+// de entrada; FondoLocal igual hace fade-in del fondo (mata el snap).
 //
 // Props:
 //   onAcceso     — callback(token) tras login exitoso. App.jsx lo usa para
@@ -19,6 +31,7 @@
 import { useState } from "react";
 import { theme } from "../theme/tokens.js";
 import { Field, Button, LogoCirculo } from "../components/ui";
+import FondoLocal from "../components/ui/FondoLocal.jsx";
 import { loginOperativo } from "../services/api";
 
 /**
@@ -57,113 +70,98 @@ export default function PantallaLoginOperativo({ onAcceso, imagenLogo, imagenLoc
     }
   };
 
-  // Fondo: si hay imagen del local, la usamos como cover; si no, surfaceAlt liso.
-  const fondoStyle = imagenLocal
-    ? {
-        background: `url("${imagenLocal}") center/cover no-repeat`,
-      }
-    : { background: theme.surfaceAlt };
-
   return (
-    <div style={{
-      width: '100vw',
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 24,
-      fontFamily: theme.body,
-      position: 'relative',
-      overflow: 'auto',
-      ...fondoStyle,
-    }}>
-      {/* Overlay oscuro sutil para asegurar contraste de la card sobre la imagen.
-          No es glassmorphism — es un velo plano de sombra. */}
-      {imagenLocal && (
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'rgba(9, 9, 11, 0.35)',
-          pointerEvents: 'none',
-        }} />
-      )}
+    // blurPx 10: más desenfoque que MainScreen (4) → sensación de "bloqueo".
+    // El velo y el fade los aporta FondoLocal (mismo fondo que el resto).
+    <FondoLocal imagenLocal={imagenLocal} blurPx={10}>
+      {/* Overlay scrollable: restaura el scroll que el login tenía antes
+          (FondoLocal es overflow:hidden). Si sube el teclado del iPad y achica
+          el viewport, el form scrollea en vez de recortarse. `margin:auto` en el
+          form lo centra cuando sobra espacio y permite scroll cuando no. */}
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        overflowY: 'auto',
+        display: 'flex',
+        padding: 24,
+        boxSizing: 'border-box',
+      }}>
+        <form
+          onSubmit={submit}
+          style={{
+            margin: 'auto',
+            width: '100%',
+            maxWidth: 380,
+            background: theme.surface,
+            border: `1px solid ${theme.hairline}`,
+            borderRadius: theme.radiusLg,
+            boxShadow: theme.shadowMd,
+            padding: 32,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 20,
+            animation: 'om-fade .26s ease-out both',
+          }}
+        >
+          <LogoCirculo imagenLogo={imagenLogo} />
 
-      <form
-        onSubmit={submit}
-        style={{
-          position: 'relative',
-          zIndex: 1,
-          width: '100%',
-          maxWidth: 380,
-          background: theme.surface,
-          border: `1px solid ${theme.hairline}`,
-          borderRadius: theme.radiusLg,
-          boxShadow: theme.shadowMd,
-          padding: 32,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 20,
-          animation: 'om-fade .26s ease-out both',
-        }}
-      >
-        <LogoCirculo imagenLogo={imagenLogo} />
+          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <h1 style={{
+              fontFamily: theme.body,
+              fontWeight: theme.weightHeading,
+              fontSize: theme.sizeTitle,
+              color: theme.ink,
+              letterSpacing: '-0.02em',
+              margin: 0,
+            }}>
+              Modo operativo
+            </h1>
+            <p style={{
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              fontWeight: error ? theme.weightMedium : theme.weightRegular,
+              color: error ? theme.danger : theme.muted,
+              margin: 0,
+              minHeight: 22,
+              transition: `color ${theme.transitionFast}`,
+            }}>
+              {error || "Ingresá las credenciales del local"}
+            </p>
+          </div>
 
-        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <h1 style={{
-            fontFamily: theme.body,
-            fontWeight: theme.weightHeading,
-            fontSize: theme.sizeTitle,
-            color: theme.ink,
-            letterSpacing: '-0.02em',
-            margin: 0,
+          <div style={{
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
           }}>
-            Modo operativo
-          </h1>
-          <p style={{
-            fontFamily: theme.body,
-            fontSize: theme.sizeBody,
-            fontWeight: error ? theme.weightMedium : theme.weightRegular,
-            color: error ? theme.danger : theme.muted,
-            margin: 0,
-            minHeight: 22,
-            transition: `color ${theme.transitionFast}`,
-          }}>
-            {error || "Ingresá las credenciales del local"}
-          </p>
-        </div>
-
-        <div style={{
-          width: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}>
-          <Field
-            label="Usuario"
-            value={usuario}
-            onChange={(v) => { setUsuario(v); setError(null); }}
-            placeholder="usuario"
-            autoComplete="username"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            disabled={enviando}
-          />
-          <Field
-            label="Contraseña"
-            value={password}
-            onChange={(v) => { setPassword(v); setError(null); }}
-            placeholder="contraseña"
-            type="password"
-            autoComplete="current-password"
-            disabled={enviando}
-          />
-          <Button type="submit" disabled={enviando}>
-            {enviando ? 'Ingresando…' : 'Ingresar'}
-          </Button>
-        </div>
-      </form>
-    </div>
+            <Field
+              label="Usuario"
+              value={usuario}
+              onChange={(v) => { setUsuario(v); setError(null); }}
+              placeholder="usuario"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              disabled={enviando}
+            />
+            <Field
+              label="Contraseña"
+              value={password}
+              onChange={(v) => { setPassword(v); setError(null); }}
+              placeholder="contraseña"
+              type="password"
+              autoComplete="current-password"
+              disabled={enviando}
+            />
+            <Button type="submit" disabled={enviando}>
+              {enviando ? 'Ingresando…' : 'Ingresar'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </FondoLocal>
   );
 }

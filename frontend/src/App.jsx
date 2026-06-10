@@ -14,6 +14,7 @@ const PanelAdmin = lazy(() => import("./screens/admin/PanelAdmin"));
 import { Loader2 } from "lucide-react";
 import { theme } from "./theme/tokens.js";
 import { EmptyState, Button, IconoAlerta, ErrorBoundary } from "./components/ui";
+import FondoLocal from "./components/ui/FondoLocal.jsx";
 import {
   getBarberosOperativo,
   getServicios,
@@ -64,19 +65,33 @@ const ContenedorBoot = ({ children }) => (
  * lugar de un Skeleton porque no hay una silueta de contenido específica a
  * la cual aspirar (excepción consciente a la regla del sistema de diseño §4.5).
  * Usa el keyframe `spin` ya definido en index.css.
+ *
+ * Si recibe `imagenLocal`, el loader vive sobre el MISMO fondo ambiental que el
+ * login y MainScreen (FondoLocal) → la transición login→carga→main NO corta a
+ * blanco (la foto ya está cacheada del login). Sin foto (primer boot frío sin
+ * URL aún, o el Suspense del panel admin que entra a un dashboard claro) cae al
+ * contenedor de boot claro.
+ *
+ * @param {Object} props
+ * @param {string|null} [props.imagenLocal] — foto del local para el fondo ambiental.
+ * @returns {JSX.Element}
  */
-const PantallaCargando = () => (
-  <ContenedorBoot>
+const PantallaCargando = ({ imagenLocal } = {}) => {
+  const spinner = (
     <Loader2
       size={32}
       strokeWidth={1.75}
       style={{
-        color: theme.muted,
+        // Sobre la foto (velo oscuro) el spinner va claro; sin foto, gris sobre el claro.
+        color: imagenLocal ? '#FFFFFF' : theme.muted,
         animation: 'spin 1s linear infinite',
       }}
     />
-  </ContenedorBoot>
-);
+  );
+  return imagenLocal
+    ? <FondoLocal imagenLocal={imagenLocal}>{spinner}</FondoLocal>
+    : <ContenedorBoot>{spinner}</ContenedorBoot>;
+};
 
 /**
  * PantallaError — pantalla full-screen cuando la precarga falla.
@@ -92,6 +107,25 @@ const PantallaError = ({ onReintentar }) => (
     />
   </ContenedorBoot>
 );
+
+/**
+ * actualizarFavicon — apunta el <link rel="icon"> del documento al logo del
+ * tenant. Si el link no existe, lo crea. Reusa la imagen del logo que ya se
+ * descarga para la UI (cache hit, sin pedido extra). Reemplaza el favicon
+ * placeholder de index.html. Si no hay logo, deja el placeholder.
+ * @param {string|null} url — URL del logo (tenant_imagen tipo='logo').
+ * @returns {void}
+ */
+function actualizarFavicon(url) {
+  if (!url) return;
+  let link = document.querySelector("link[rel='icon']");
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'icon';
+    document.head.appendChild(link);
+  }
+  link.href = url;
+}
 
 export default function App() {
   // tokenOperativo: hidratado desde localStorage al primer render (lazy init).
@@ -161,7 +195,11 @@ export default function App() {
       const logos = (imagenes || [])
         .filter((i) => i.tipo === 'logo')
         .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
-      setImagenLogo(logos[0]?.url || null);
+      const urlLogo = logos[0]?.url || null;
+      setImagenLogo(urlLogo);
+      // El favicon del tab pasa a ser el logo del tenant (reusa el cache del
+      // logo de la UI). Hasta acá rige el placeholder de index.html.
+      actualizarFavicon(urlLogo);
 
       // Foto del local: primera imagen de tipo='local' ordenada por `orden`.
       const locales = (imagenes || [])
@@ -176,6 +214,21 @@ export default function App() {
   useEffect(() => {
     cargarDatosTenant();
   }, [cargarDatosTenant]);
+
+  // Precarga (calienta el cache) de la foto del local y el logo apenas se
+  // conocen sus URLs, en paralelo con el resto del boot. Así, cuando una
+  // pantalla las use como fondo/imagen, ya están en cache → MainScreen "entra"
+  // con la foto sin esperar la descarga, también en el camino del device ya
+  // logueado que no pasa por el login (#6). Solo dispara la bajada del
+  // navegador; no bloquea ni afecta el render.
+  useEffect(() => {
+    [imagenLocal, imagenLogo].forEach((url) => {
+      if (url) {
+        const img = new Image();
+        img.src = url;
+      }
+    });
+  }, [imagenLocal, imagenLogo]);
 
   const precargarDatos = useCallback(async () => {
     setDatos(prev => ({ ...prev, cargando: true, error: null }));
@@ -247,7 +300,7 @@ export default function App() {
     );
   }
 
-  if (datos.cargando && datos.barberos.length === 0) return <PantallaCargando />;
+  if (datos.cargando && datos.barberos.length === 0) return <PantallaCargando imagenLocal={imagenLocal} />;
 
   if (datos.error && datos.barberos.length === 0) {
     return <PantallaError onReintentar={reintentar} />;
