@@ -1,6 +1,6 @@
 # Performance de los frontends — diagnóstico y plan
 
-> **Estado:** Diagnóstico **cerrado** (turnero, gestión y backend del bootstrap), midiendo antes de optimizar. Plan priorizado en **§7**; puntos de entrada para ejecutarlo en frío en **§8**. Falta solo: validar contra prod cuando el turnero esté deployado (cold start Railway).
+> **Estado:** Diagnóstico **cerrado** (turnero, gestión y backend del bootstrap), midiendo antes de optimizar. Plan priorizado en **§7**; puntos de entrada para ejecutarlo en frío en **§8**. **Primera data de prod (2026-06-10, §5-bis):** el proceso de Railway no duerme y la conexión DB fría no mostró spike → el cuello "backend ~2 s" era artefacto de medir local; #1/#2 probablemente marginales en prod (a confirmar con un 200 post-merge). **#1 implementado.** Recomendación actualizada: empezar por **#3**.
 > **Iniciado:** 2026-06-09. **Branch:** `feature/turnero`.
 
 Prioridad: **turnero primero** (público, mobile, primera visita de un cliente) → gestión después (interno, escritorio/iPad).
@@ -287,6 +287,27 @@ new Pool({ ssl:{...}, max: 3, idleTimeoutMillis: 30000, connectionTimeoutMillis:
 - **Paralelizar `getTenant`** con `Promise.all` (las 3 queries son independientes) → de 3 RTTs a 1. Quick win, el front no cambia.
 - **(Estratégico) Migrar Supabase a región cercana** (`sa-east-1` São Paulo) → baja el piso de **toda** query, no solo el bootstrap. Máximo leverage pero alto esfuerzo (en free tier = recrear el proyecto + migrar datos).
 
+### Medición en prod (2026-06-10) — primera data real contra Railway 🔬
+
+Primera medición contra el backend **deployado** (Railway), no el local. Método: `curl.exe` con `-w` (separa TTFB de tiempo de conexión), corrido a las **8:50, 1 h antes de que abra la barbería** → backend ocioso toda la noche = caso frío real. Se aisló **proceso vs DB** con el truco del 400: una request **sin** header `X-Tenant-Subdomain` corta en `tenantMiddleware` con 400 **sin tocar la DB** → mide solo el despertar del proceso.
+
+| Request | http | TTFB frío | TTFB tibio | Qué mide |
+|---|---|---|---|---|
+| `/api/health` **sin header** | 400 | **0.78 s** | ~0.55 s | proceso (sin DB) |
+| `/api/negocio` + `demo` | 404 *(tenant)* | 0.55 s | ~0.55 s | conexión DB (tenant lookup, cache miss → sí pega a DB) |
+| `/api/negocio` + `kingsai` | 404 *(ruta)* | 0.57 s | ~0.57 s | ruta inexistente en main (no llega a query real) |
+
+**Hallazgos:**
+1. 🟢 **El proceso NO duerme.** Frío 0.78 s, no 3–10 s; la diferencia vs tibio está toda en el `conex` (warmup DNS/TLS de curl), no en el lado servidor. → **Railway no hace sleep de este servicio. Se descarta la Parte B del #1 (pinger externo anti-sleep): no hace falta.**
+2. 🟢 **El "monstruo de ~2 s" era un artefacto de medir LOCAL.** Los 2.17 s del §4.1 se midieron contra el backend **local** (Argentina) → Supabase (Oregon): conexión fría cruzando ~10.000 km × varios handshakes. En prod el backend está en Railway (US) → Supabase us-west-2 (US) = **salto corto**. La penalidad de conexión fría es **proporcional a la distancia backend↔DB**, y el diagnóstico midió la topología equivocada. La query de tenant lookup fría en prod (`demo`, que sí pega a la DB) no mostró spike (~0.55 s, casi todo red Argentina↔Railway de *nuestro* curl).
+3. ⚠️ **Caveat — todavía no hay un 200 del bootstrap real.** El backend deployado es `main`, con **otra estructura de rutas** que `feature/turnero`: el sitio en vivo pega a `/api/gestion/negocio` (main), mientras que `feature/turnero` lo refactorizó a `/api/negocio` y agregó `/api/turnero/*` (inexistentes en main). Por eso las requests a las rutas nuevas dieron **404 de ruta-no-encontrada** (no de tenant). No llegamos a medir `getNegocio` completo ni `getTenant` (3 queries) en 200.
+
+**Consecuencia para el plan:** muy probablemente **#1 (keep-alive) y #2 (paralelizar) sean MARGINALES en prod**, no el game-changer que sugerían los números locales. El **#1 ya está implementado** (`db.js` + `index.js`: `keepAlive:true` + `iniciarKeepAlive` con `SELECT 1` cada 20 s) y se queda como higiene barata + seguro contra conexión stale; su impacto y el del #2 se **validan post-merge**.
+
+**Para el próximo chat (post-merge):** re-correr el test contra Railway con las rutas de `feature/turnero` ya deployadas, midiendo en frío en 200: turnero `getTenant` (`/api/turnero/tenant`) + gestión `getNegocio` (`/api/negocio`). Datos confirmados por F12: subdominio **`kingsai`**, backend `https://sistemagestionbarberia-production.up.railway.app`.
+
+> ⚠️ **Riesgo de deploy (a watchear en el merge):** front y back de gestión cambian la ruta juntos (`/api/gestion/negocio` → `/api/negocio`). Si se deployan desfasados, el panel de la barbería en vivo se rompe. Deben subir coordinados. (Cruzar con el "Checklist del merge" de `estado_actual.md`.)
+
 ---
 
 ## 6. Pendientes de medir
@@ -300,7 +321,7 @@ new Pool({ ssl:{...}, max: 3, idleTimeoutMillis: 30000, connectionTimeoutMillis:
 - [x] **Gestión:** xlsx confirmado como slice #1; monolito = `src/screens` (25 pantallas). (§3)
 - [ ] **Flash gris→imagen en gestión** (UX/perf percibida): medir cómo/cuándo carga la foto de fondo (Network + Performance, primera carga post-login).
 - [ ] (Opcional) Treemap del **turnero** — su JS ya está exonerado, pero serviría para confirmar que no hay sorpresas.
-- [ ] **Cold start de Railway + latencia de red real:** solo medible cuando el turnero esté deployado (hoy vive en `feature/turnero`, sin merge a `main`).
+- [~] **Cold start de Railway + latencia de red real:** medido parcial 2026-06-10 (§5-bis "Medición en prod"): **el proceso NO duerme** (Parte B descartada) y la conexión DB fría no mostró spike en prod. **Falta el 200 del bootstrap real** (las rutas nuevas de `feature/turnero` no están deployadas en `main`) → post-merge.
 - [x] **Diagnóstico del backend:** causa raíz = región lejana + cold connection + getTenant con 3 queries en serie. (§5-bis)
 - [ ] (Opcional, validación fina) **`Server-Timing` header** en los endpoints del bootstrap para medir en prod el split conexión-vs-query con números exactos.
 
@@ -313,7 +334,7 @@ Ordenado por **impacto medido / esfuerzo / riesgo**. Reglas: **nunca cachear slo
 ### 🚀 Quick wins (empezar acá — bajo esfuerzo, bajo riesgo, alto retorno)
 | # | Acción | Capa | Impacto | Esfuerzo | Riesgo |
 |---|---|---|---|---|---|
-| 1 | **Keep-alive del pool** (`SELECT 1` periódico <30 s, o subir `idleTimeoutMillis`, o `keepAlive:true`) **+ ping anti-sleep** al backend en Railway | Backend | 🔴 **Alto** — mata el cold ~2 s de **ambos** fronts (1ª visita del día) | Bajo | Bajo |
+| 1 | **Keep-alive del pool** (`keepAlive:true` + `SELECT 1` cada 20 s vía `iniciarKeepAlive`). ✅ **Código hecho** (`db.js`/`index.js`). ~~+ ping anti-sleep Railway~~ → **descartado: el proceso no duerme** (medido 2026-06-10, §5-bis) | Backend | 🟡 **Revisado a Bajo-medio** — la data de prod sugiere que el cold ~2 s era artefacto local; impacto real a validar post-merge | Bajo | Bajo |
 | 2 | **Paralelizar `getTenant`** con `Promise.all` (las 3 queries son independientes) | Backend | 🟠 Medio-alto — turnero, ~0.4–0.6 s por carga | Bajo | Bajo |
 | 3 | **Lazy-load de `xlsx`** (`import()` dinámico en el handler de exportar) | Gestión | 🟠 Alto — slice #1 del bundle (~34% raw), por acción rara | Bajo | Bajo |
 | 4 | **Lazy-load de `browser-image-compression`** (mismo patrón, solo al subir imagen) | Gestión | 🟡 Medio — ~55 kB raw fuera del arranque | Bajo | Bajo |
@@ -336,8 +357,12 @@ Ordenado por **impacto medido / esfuerzo / riesgo**. Reglas: **nunca cachear slo
 |---|---|---|---|---|---|
 | 10 | **Migrar Supabase a región cercana** (`sa-east-1` São Paulo) | Infra | 🔴 Alto — baja el **piso de latencia de TODA query**, no solo el bootstrap | Alto (free tier = recrear proyecto + migrar datos) | Medio |
 
-### Por dónde empezar (recomendación)
-Los **#1, #2 y #3** son el sweet-spot: bajo esfuerzo, bajo riesgo, y atacan los dos cuellos reales (backend frío + bundle de gestión). Con esos tres se siente la mayor parte de la mejora. El #10 es la palanca de fondo, pero es una decisión de infraestructura aparte.
+### Por dónde empezar (recomendación — actualizada 2026-06-10)
+La data de prod (§5-bis "Medición en prod") **reordenó la prioridad**: el backend frío resultó **mucho menos grave en prod** de lo que sugería la medición local (el proceso no duerme; la conexión fría no mostró spike). Por eso:
+- **Empezar por #3 (lazy-load de xlsx):** frontend de gestión, **medible local ya** (`npm run build` + `vite preview`), sin depender de prod/merge/subdominio. Quick win más limpio y de impacto real (~34% del bundle de gestión).
+- **#1:** código hecho, se queda; impacto a validar post-merge (probablemente marginal).
+- **#2:** bajo riesgo, viaja con el merge del turnero; impacto modesto, a validar post-merge.
+- El #10 sigue siendo la palanca de fondo, decisión de infraestructura aparte.
 
 ### Detalle de implementación — #3 lazy-load de xlsx
 ```js
@@ -358,7 +383,7 @@ async function exportar() {
 
 > Cada ítem del §7 con su(s) archivo(s) y función(es). Las líneas son aproximadas (pueden correrse) — ubicar por nombre de función. **Recordar:** branch `feature/turnero`; medir sobre build de prod + `vite preview` (no `dev`); verificar cada ahorro re-buildeando/re-midiendo.
 
-**#1 — Keep-alive del pool + anti-sleep Railway**
+**#1 — Keep-alive del pool + anti-sleep Railway** — ✅ **Código hecho (2026-06-10)**: `db.js` con `keepAlive:true` + `iniciarKeepAlive(20000)` (`SELECT 1`, `.unref()`, tolerante a fallos), llamado desde `index.js`. **Parte B (anti-sleep) descartada**: el proceso no duerme (§5-bis). Falta deployar + validar impacto post-merge.
 - Pool: `backend/src/config/db.js` (`new Pool({ max:3, idleTimeoutMillis:30000, ... })`, sin `min`, sin keepAlive).
 - ⚠️ **Gotcha:** `idleTimeoutMillis:30000` cierra la conexión a los 30 s. Un ping de keep-alive debe correr a **intervalo < idleTimeout** (ej. cada 20–25 s) para servir, **o** subir `idleTimeoutMillis`. Un ping cada 5 min NO mantiene la conexión con el timeout actual.
 - Dónde colgar el ping: `backend/src/index.js` (al levantar el server), p.ej. `setInterval(() => query('SELECT 1'), ...)`. Evaluar también `keepAlive:true` en el Pool (TCP, complementario).
@@ -389,4 +414,4 @@ async function exportar() {
 
 ---
 
-*— Documento vivo. Última actualización: 2026-06-09 —*
+*— Documento vivo. Última actualización: 2026-06-10 —*
