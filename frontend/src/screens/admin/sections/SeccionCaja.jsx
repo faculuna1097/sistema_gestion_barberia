@@ -15,11 +15,13 @@ import { Banknote, Trash2, Inbox, Construction, RefreshCw, Info } from 'lucide-r
 import { apiFetch } from '../../../services/api';
 import { getFechaHoy } from '../../../utils/fecha';
 import { fmtPesos, formatPago } from '../../../utils/formato';
+import { cargarChunk } from '../../../utils/cargarChunk';
 import {
   ScreenHeader,
   Tabs,
   LoadingState,
   EmptyState,
+  Toast,
   ConfirmDialog,
   Button,
   BotonIconoFila,
@@ -252,6 +254,7 @@ function TabMovimientos() {
   const [movimientoAEliminar, setMovimientoAEliminar] = useState(null);
   const [eliminando, setEliminando]                   = useState(false);
   const [soloNegocio, setSoloNegocio]                 = useState(false);
+  const [errorExport, setErrorExport]                 = useState(null);
 
   // Carga de movimientos. `intento` re-dispara el efecto al hacer "Reintentar".
   useEffect(() => {
@@ -305,7 +308,16 @@ function TabMovimientos() {
   };
 
   const exportarExcel = async () => {
-    const XLSX = await import('xlsx');
+    // El chunk de xlsx se baja recién acá (lazy, #3). Si la descarga falla,
+    // cargarChunk lo convierte en un error con mensaje al usuario en vez de
+    // un unhandled rejection silencioso.
+    let XLSX;
+    try {
+      XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
+    } catch (err) {
+      setErrorExport(err.message);
+      return;
+    }
     const datos = movimientos.map(m => ({
       Hora:            m.hora,
       Tipo:            m.tipo === 'corte' ? 'Corte' : m.tipo === 'venta' ? 'Venta' : 'Gasto',
@@ -398,6 +410,12 @@ function TabMovimientos() {
         </div>
         <BotonExportarExcel onClick={exportarExcel} disabled={movimientos.length === 0} />
       </div>
+
+      {errorExport && (
+        <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
+          {errorExport}
+        </Toast>
+      )}
 
       {movimientosFiltrados.length === 0 ? (
         <EmptyState

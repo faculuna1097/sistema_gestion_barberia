@@ -14,10 +14,12 @@ import { Pencil, Trash2, Package, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../../../services/api';
 import { mesALabel, getMesActual } from '../../../utils/fecha';
 import { fmtPesos } from '../../../utils/formato';
+import { cargarChunk } from '../../../utils/cargarChunk';
 import {
   ScreenHeader,
   LoadingState,
   EmptyState,
+  Toast,
   ConfirmDialog,
   Modal,
   Select,
@@ -419,6 +421,7 @@ export default function SeccionVentas() {
   const [formEditar, setFormEditar]             = useState({});
   const [guardando, setGuardando]               = useState(false);
   const [errorEditar, setErrorEditar]           = useState(null);
+  const [errorExport, setErrorExport]           = useState(null);
 
   // Carga de ventas del mes. `intento` re-dispara el efecto en "Reintentar".
   useEffect(() => {
@@ -545,7 +548,16 @@ export default function SeccionVentas() {
   };
 
   const exportarExcel = async () => {
-    const XLSX = await import('xlsx');
+    // El chunk de xlsx se baja recién acá (lazy, #3). Si la descarga falla
+    // (red caída / hash viejo post-redeploy), cargarChunk lo convierte en un
+    // error con mensaje al usuario en vez de un unhandled rejection silencioso.
+    let XLSX;
+    try {
+      XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
+    } catch (err) {
+      setErrorExport(err.message);
+      return;
+    }
     const wb = XLSX.utils.book_new();
     const filas = ventas.map((v) => ({
       Fecha:             v.fecha,
@@ -628,6 +640,12 @@ export default function SeccionVentas() {
           <BotonExportarExcel onClick={exportarExcel} disabled={ventas.length === 0} />
         </div>
       </div>
+
+      {errorExport && (
+        <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
+          {errorExport}
+        </Toast>
+      )}
 
       {cargando ? (
         <LoadingState />

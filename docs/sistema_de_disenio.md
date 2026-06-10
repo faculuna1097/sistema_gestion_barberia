@@ -243,6 +243,29 @@ Cada función, componente y helper lleva JSDoc explicando **qué hace, qué
 recibe, qué devuelve**. Está en `CLAUDE.md` global pero lo repito porque
 es importante en UI también — un primitivo mal documentado se va a usar mal.
 
+### 4.8 Toasts / feedback efímero
+
+El primitivo `Toast` (`components/ui/Toast.jsx`) es hoy **inline y
+render-state**: NO es flotante global. El caller mantiene un `useState` con el
+mensaje (`{ tone, texto }` o un string), monta `<Toast>` donde su layout lo
+necesita, y le pasa `onDismiss` para limpiarlo. Se usa en `BloqueImagenes`
+(feedback de subida/borrado) y en los **6 handlers de "Exportar a Excel"**
+(error de carga del chunk lazy de `xlsx`, vía el helper `utils/cargarChunk.js`
+→ estado `errorExport` + `<Toast tone="danger">`).
+
+**Consecuencia de diseño:** como el Toast lo renderiza cada componente desde su
+estado, un helper **no puede mostrar un Toast por sí solo**. Por eso
+`cargarChunk` centraliza el import + log + mensaje, pero el `<Toast>` se cablea
+en cada call-site.
+
+**Dirección futura (target):** unificar **todos** los toasts —confirmación y
+error— a un patrón **flotante, centrado en pantalla y con auto-dismiss**, en
+vez del inline actual. Esto convierte al Toast en un **servicio global**
+(provider/portal + dispatcher imperativo `toast.show()`), y recién ahí se puede
+centralizar el feedback de error en helpers como `cargarChunk`. Es un cambio de
+arquitectura del primitivo + migración de todos los call-sites → **deuda #16 de
+§9**.
+
 ---
 
 ## 5. Accesibilidad
@@ -463,10 +486,13 @@ actualizá este doc.**
 13. **Regla ESLint `react-hooks/set-state-in-effect` desactivada en `frontend-barbero/eslint.config.js`.** Llegó por el scaffolding de Vite (`eslint-plugin-react-hooks` v7); los otros fronts usan versiones más viejas sin ella. En este código son falsos positivos sobre el patrón de fetching del proyecto (`setCargando(true)` al montar, cuando `cargando` ya es `true`). Si se actualiza react-hooks en los demás fronts, tomar una **postura unificada**: desactivarla en todos, o refactorizar el patrón de fetch a "sin setState síncrono en el efecto".
 14. ~~**Rango horario del timeline hardcodeado**~~ — **Resuelto**: `Agenda.jsx` de `frontend-barbero` ya no usa `7:00`–`22:00` fijo. El rango se deriva por día con `calcularRangoHoras(horarioAtencion, fecha, turnos)`: trae `horario_atencion` del local (`getTenant()`, fetch best-effort una sola vez al montar) y muestra desde `apertura - 1h` hasta `cierre + 1h` del día visible (`floor`/`ceil` para líneas de hora prolijas con horarios no enteros como `10:30`). El rango se expande para que cualquier turno fuera de esa franja siga visible (clamp al min/max entre horario y turnos). Día cerrado: deriva de los turnos del día (±1h) o, sin turnos, cae al default `7`–`22` — mismo camino al que cae si `getTenant()` falla (red de seguridad). `HORA_INICIO`/`HORA_FIN`/`ALTO_TOTAL` pasaron de constantes de módulo a valores derivados por render que bajan por props a `Timeline`/`BloqueTurno`. (Emparenta con la deuda 4, aún abierta en el turnero.)
 15. **`getMisClientes` sin paginación** — la pantalla Clientes de `frontend-barbero` trae todos los clientes históricos del barbero y filtra en cliente. Con 500+ clientes, el render de cards con hover-state (ver deuda 8) puede sentirse lento. Mitigación: paginar el endpoint o virtualizar la lista.
+16. **Toast inline → flotante global.** El primitivo `Toast` es hoy inline / render-state (cada caller mantiene el estado y lo monta en su layout; ver §4.8). El **target** es un Toast **flotante, centrado y con auto-dismiss** servido por un provider global con API imperativa (`toast.show()`). Migrar implica: (1) crear el provider/portal + dispatcher; (2) migrar **todos** los call-sites inline actuales (`BloqueImagenes`, los 6 handlers de export de xlsx vía `errorExport`, y cualquier otro feedback efímero); (3) recién ahí poder centralizar el feedback de error de `cargarChunk`. Hasta entonces, el patrón vigente es el inline (§4.8).
 
 ---
 
-*Última actualización: 2026-06-05 — deuda #14 de §9 (rango horario del timeline hardcodeado) resuelta: `Agenda.jsx` de `frontend-barbero` deriva el rango por día del `horario_atencion` del local.*
+*Última actualización: 2026-06-10 — §4.8 nueva (Toasts / feedback efímero): documenta el patrón inline render-state vigente y la dirección futura a Toast flotante global; deuda #16 de §9 abierta para la migración.*
+
+*2026-06-05 — deuda #14 de §9 (rango horario del timeline hardcodeado) resuelta: `Agenda.jsx` de `frontend-barbero` deriva el rango por día del `horario_atencion` del local.*
 
 *2026-06-04 — deuda #5 de §9 (teléfono AR hardcodeado) resuelta con `libphonenumber-js` en el turnero (`DatosCliente` / `CampoTelefono`).*
 

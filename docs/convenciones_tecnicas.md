@@ -191,7 +191,7 @@ No se eliminan registros en ABMs. Se usa el campo `activo` (true/false) para pre
 
 ## 9. Stack y deploy (referencia)
 
-- **Frontend:** React + Vite, inline styles, DM Sans, color primario `#1a7a4a`.
+- **Frontend:** React + Vite, inline styles, tipografía **Geist**, acento único **indigo `#4F46E5`** (token `theme.accent`). *(El verde `#1a7a4a` y "DM Sans" eran el stack viejo pre-rediseño; la fuente de verdad visual es `sistema_de_disenio.md` + `theme/tokens.js`.)*
 - **Backend:** Node.js + Express, ES Modules (`import/export`).
 - **DB:** PostgreSQL via Supabase Session Pooler.
 - **Auth:** bcrypt + JWT (token en memoria, `useState` en `App.jsx`).

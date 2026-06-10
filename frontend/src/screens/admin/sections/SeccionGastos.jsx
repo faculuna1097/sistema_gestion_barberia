@@ -18,10 +18,12 @@ import { Pencil, Trash2, Receipt, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../../../services/api';
 import { mesALabel, getMesActual } from '../../../utils/fecha';
 import { fmtPesos } from '../../../utils/formato';
+import { cargarChunk } from '../../../utils/cargarChunk';
 import {
   ScreenHeader,
   LoadingState,
   EmptyState,
+  Toast,
   ConfirmDialog,
   Modal,
   Select,
@@ -400,6 +402,7 @@ export default function SeccionGastos() {
   const [formEditar, setFormEditar]             = useState({});
   const [guardando, setGuardando]               = useState(false);
   const [errorEditar, setErrorEditar]           = useState(null);
+  const [errorExport, setErrorExport]           = useState(null);
 
   // Carga one-shot de categorías. Si falla queda como array vacío — el
   // select del modal queda sin opciones, pero la sección no se rompe.
@@ -546,7 +549,16 @@ export default function SeccionGastos() {
   };
 
   const exportarExcel = async () => {
-    const XLSX = await import('xlsx');
+    // El chunk de xlsx se baja recién acá (lazy, #3). Si la descarga falla,
+    // cargarChunk lo convierte en un error con mensaje al usuario en vez de
+    // un unhandled rejection silencioso.
+    let XLSX;
+    try {
+      XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
+    } catch (err) {
+      setErrorExport(err.message);
+      return;
+    }
     const wb = XLSX.utils.book_new();
     const filas = gastos.map((g) => ({
       Fecha:           g.fecha,
@@ -627,6 +639,12 @@ export default function SeccionGastos() {
           <BotonExportarExcel onClick={exportarExcel} disabled={gastos.length === 0} />
         </div>
       </div>
+
+      {errorExport && (
+        <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
+          {errorExport}
+        </Toast>
+      )}
 
       {cargando ? (
         <LoadingState />

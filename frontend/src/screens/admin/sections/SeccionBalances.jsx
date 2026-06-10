@@ -23,6 +23,7 @@ import {
 import { apiFetch } from '../../../services/api';
 import { fmtPesos } from '../../../utils/formato';
 import { getMesActual, mesALabel } from '../../../utils/fecha';
+import { cargarChunk } from '../../../utils/cargarChunk';
 import { theme } from '../../../theme/tokens.js';
 
 import {
@@ -33,6 +34,7 @@ import {
   IconoAlerta,
   Button,
   LoadingState,
+  Toast,
   BadgeVariacion,
   BotonExportarExcel,
   TogglePill,
@@ -205,6 +207,7 @@ export default function SeccionBalances() {
   const [tabActivo, setTabActivo]                 = useState('mensual');
   const [mesSeleccionado, setMesSeleccionado]     = useState(getMesActual());
   const [mostrarComisiones, setMostrarComisiones] = useState(true);
+  const [errorExport, setErrorExport]             = useState(null);
 
   // Tab mensual.
   const [datosMensual, setDatosMensual]   = useState(null);
@@ -276,7 +279,16 @@ export default function SeccionBalances() {
    * Tab mensual: 2 hojas (Ingresos + Egresos). Tab histórico: 1 hoja.
    */
   const exportarExcel = async () => {
-    const XLSX = await import('xlsx');
+    // El chunk de xlsx se baja recién acá (lazy, #3). Si la descarga falla,
+    // cargarChunk lo convierte en un error con mensaje al usuario en vez de
+    // un unhandled rejection silencioso.
+    let XLSX;
+    try {
+      XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
+    } catch (err) {
+      setErrorExport(err.message);
+      return;
+    }
     const wb = XLSX.utils.book_new();
 
     if (tabActivo === 'mensual' && datosMensual) {
@@ -389,6 +401,12 @@ export default function SeccionBalances() {
             </div>
           </div>
 
+          {errorExport && (
+            <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
+              {errorExport}
+            </Toast>
+          )}
+
           {cargandoMensual && <LoadingState />}
 
           {errorMensual && !cargandoMensual && (
@@ -451,6 +469,12 @@ export default function SeccionBalances() {
               <BotonExportarExcel onClick={exportarExcel} disabled={!puedeExportar} />
             </div>
           </div>
+
+          {errorExport && (
+            <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
+              {errorExport}
+            </Toast>
+          )}
 
           {cargandoHistorico && <LoadingState />}
 
