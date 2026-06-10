@@ -8,7 +8,6 @@
 // ConfirmDialog; los errores se muestran con Toast.
 
 import { useState, useEffect, useRef } from 'react';
-import imageCompression from 'browser-image-compression';
 import { ImagePlus, X } from 'lucide-react';
 
 import { getImagenesAdmin, subirImagen, eliminarImagen } from '../../../../services/api';
@@ -177,7 +176,10 @@ export default function BloqueImagenes() {
     setSubiendo(`${tipo}-${orden}`);
     setFeedback(null);
     try {
-      // Compresión + conversión a WebP en el navegador.
+      // Compresión + conversión a WebP en el navegador. La librería se carga
+      // on-demand (lazy) recién al subir, no en el arranque del panel; si la
+      // descarga del chunk falla, cae en el catch de abajo.
+      const { default: imageCompression } = await import('browser-image-compression');
       const comprimida = await imageCompression(file, {
         ...OPCIONES_COMPRESION[tipo],
         fileType: 'image/webp',
