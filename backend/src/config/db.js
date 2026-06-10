@@ -21,6 +21,7 @@ const pool = new Pool({
   max: 3,                             // máximo 3 conexiones simultáneas (límite plan gratuito Supabase)
   idleTimeoutMillis: 30000,           // cierra conexiones inactivas después de 30s
   connectionTimeoutMillis: 5000,      // falla si no conecta en 5s (evita colgar el servidor)
+  keepAlive: true,                    // TCP keep-alive a nivel socket: evita que un NAT/firewall corte la conexión ociosa (complementa el SELECT 1 periódico de iniciarKeepAlive)
 });
 
 pool.on('error', (err) => console.error('[db] ❌ Error inesperado en pool:', err));
@@ -57,4 +58,37 @@ export const testConnection = async () => {
     console.error('[db] ❌ Error conectando a PostgreSQL:', err);
     console.error('[db] Verificá las variables de entorno: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD');
   }
+};
+
+/**
+ * iniciarKeepAlive
+ * Mantiene caliente una conexión del pool ejecutando un `SELECT 1` periódico.
+ * El intervalo es deliberadamente MENOR que idleTimeoutMillis (30s): así la
+ * conexión nunca llega a estar ociosa 30s y el pool no la cierra, evitando que
+ * la próxima request pague el establecimiento completo (TCP + TLS + auth del
+ * Session Pooler) contra Supabase en us-west-2 — ese cold connection es el
+ * grueso de los ~2s fríos del bootstrap (ver docs/performance_frontends.md §5-bis).
+ *
+ * El ping corre en background y es tolerante a fallos: si un tick falla (blip de
+ * red a Oregon) se loguea como degradación recuperable y se reintenta en el
+ * siguiente — nunca tira el proceso. El interval va con .unref() para no ser por
+ * sí mismo la razón de que el proceso siga vivo: lo mantiene vivo app.listen, y
+ * así no interfiere con un cierre limpio (ej. cerrarPool() en el cron de
+ * recordatorios).
+ *
+ * @param {number} intervaloMs - Cada cuánto pinguear, en ms. Default 20000 (20s),
+ *   con margen cómodo bajo los 30s del idleTimeoutMillis.
+ * @returns {NodeJS.Timeout} el handle del interval (por si hace falta cancelarlo).
+ */
+export const iniciarKeepAlive = (intervaloMs = 20000) => {
+  const handle = setInterval(async () => {
+    try {
+      await pool.query('SELECT 1');
+    } catch (err) {
+      console.warn('[db] keep-alive: ping falló, se reintenta en el próximo tick:', err.message);
+    }
+  }, intervaloMs);
+  handle.unref();
+  console.log(`[db] ✅ keep-alive iniciado | intervalo: ${intervaloMs / 1000}s`);
+  return handle;
 };

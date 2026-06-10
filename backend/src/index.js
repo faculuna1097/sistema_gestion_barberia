@@ -5,7 +5,7 @@
 
 import express from 'express';
 import cors from 'cors';
-import { testConnection } from './config/db.js';
+import { testConnection, iniciarKeepAlive } from './config/db.js';
 import { verificarToken } from './middlewares/authMiddleware.js';
 import { tenantMiddleware } from './middlewares/tenantMiddleware.js';
 import { sanitizarObjeto } from './utils/sanitizarLogs.js';
@@ -175,6 +175,9 @@ app.use('/api/admin/imagenes',         verificarToken, requiereRol('admin'), adm
 const startServer = async () => {
   console.log('[index] Verificando conexión a la base de datos...');
   await testConnection();
+  // Mantiene caliente la conexión a Supabase (evita el cold connection del pool
+  // tras 30s de inactividad). Ver docs/performance_frontends.md §7 #1.
+  iniciarKeepAlive();
   app.listen(PORT, () => {
     console.log(`[index] ✅ Servidor corriendo en http://localhost:${PORT}`);
     console.log(`[index] Entorno: ${process.env.NODE_ENV || 'development'}`);
