@@ -50,12 +50,16 @@ export const getTenant = async (req, res) => {
       return res.status(404).json({ error: 'Tenant no encontrado' });
     }
     const row = result.rows[0];
-    // Horario semanal de atención: sólo los días abiertos. El cliente lo usa
-    // para grisar días cerrados sin pegarle al endpoint de disponibilidad.
-    const horarioAtencion = await obtenerHorarioCrudo(req.tenant_id);
-    // Feriados futuros (fecha >= hoy): el cliente los usa para grisar días.
+    // Horario semanal (días abiertos) + feriados futuros (fecha >= hoy): el cliente
+    // los usa para grisar días cerrados sin pegarle al endpoint de disponibilidad.
+    // Son independientes entre sí (solo dependen de tenant_id) → se piden en
+    // paralelo: 2 RTTs a la DB en vez de 3 en serie. El tenant va antes y solo
+    // para poder cortar con 404 sin disparar estas dos.
     const hoy = DateTime.now().setZone(TZ).toISODate();
-    const feriados = await obtenerFeriados(req.tenant_id, hoy);
+    const [horarioAtencion, feriados] = await Promise.all([
+      obtenerHorarioCrudo(req.tenant_id),
+      obtenerFeriados(req.tenant_id, hoy),
+    ]);
     res.json({
       id: row.id,
       nombre: row.nombre_negocio,
