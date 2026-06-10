@@ -11,7 +11,6 @@
 // queda con el bruto (ingresos_brutos − egresos), no se descuenta la comisión.
 
 import { useState, useEffect } from 'react';
-import * as XLSX from 'xlsx';
 import {
   Banknote,
   Receipt,
@@ -276,7 +275,8 @@ export default function SeccionBalances() {
    * exportarExcel — genera un xlsx con los datos del tab activo.
    * Tab mensual: 2 hojas (Ingresos + Egresos). Tab histórico: 1 hoja.
    */
-  const exportarExcel = () => {
+  const exportarExcel = async () => {
+    const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
 
     if (tabActivo === 'mensual' && datosMensual) {

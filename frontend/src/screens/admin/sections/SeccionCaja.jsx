@@ -10,7 +10,6 @@
 // Loading via primitivo LoadingState (D6).
 
 import { useState, useEffect } from 'react';
-import * as XLSX from 'xlsx';
 import { Banknote, Trash2, Inbox, Construction, RefreshCw, Info } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
@@ -305,7 +304,8 @@ function TabMovimientos() {
     }
   };
 
-  const exportarExcel = () => {
+  const exportarExcel = async () => {
+    const XLSX = await import('xlsx');
     const datos = movimientos.map(m => ({
       Hora:            m.hora,
       Tipo:            m.tipo === 'corte' ? 'Corte' : m.tipo === 'venta' ? 'Venta' : 'Gasto',

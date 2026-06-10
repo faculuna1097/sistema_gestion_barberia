@@ -9,7 +9,6 @@
 // DataTable se posterga hasta tener un caso con sort/filtros reales (deuda #20).
 
 import { useState, useEffect } from 'react';
-import * as XLSX from 'xlsx';
 import { Pencil, Trash2, Package, RefreshCw } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
@@ -545,7 +544,8 @@ export default function SeccionVentas() {
     }
   };
 
-  const exportarExcel = () => {
+  const exportarExcel = async () => {
+    const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
     const filas = ventas.map((v) => ({
       Fecha:             v.fecha,

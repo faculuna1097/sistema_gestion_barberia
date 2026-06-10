@@ -1,6 +1,6 @@
 # Performance de los frontends — diagnóstico y plan
 
-> **Estado:** Diagnóstico **cerrado** (turnero, gestión y backend del bootstrap), midiendo antes de optimizar. Plan priorizado en **§7**; puntos de entrada para ejecutarlo en frío en **§8**. **Primera data de prod (2026-06-10, §5-bis):** el proceso de Railway no duerme y la conexión DB fría no mostró spike → el cuello "backend ~2 s" era artefacto de medir local; #1/#2 probablemente marginales en prod (a confirmar con un 200 post-merge). **#1 implementado.** Recomendación actualizada: empezar por **#3**.
+> **Estado:** Diagnóstico **cerrado** (turnero, gestión y backend del bootstrap), midiendo antes de optimizar. Plan priorizado en **§7**; puntos de entrada para ejecutarlo en frío en **§8**. **Primera data de prod (2026-06-10, §5-bis):** el proceso de Railway no duerme y la conexión DB fría no mostró spike → el cuello "backend ~2 s" era artefacto de medir local; #1/#2 probablemente marginales en prod (a confirmar con un 200 post-merge). **#1 implementado.** Recomendación actualizada: empezar por **#3**. **#3 hecho y medido (2026-06-10):** lazy-load de xlsx → bundle inicial de gestión **233.44 → 137.07 kB gzip (−41%)**; xlsx (143 kB gzip) se carga recién al exportar.
 > **Iniciado:** 2026-06-09. **Branch:** `feature/turnero`.
 
 Prioridad: **turnero primero** (público, mobile, primera visita de un cliente) → gestión después (interno, escritorio/iPad).
@@ -336,7 +336,7 @@ Ordenado por **impacto medido / esfuerzo / riesgo**. Reglas: **nunca cachear slo
 |---|---|---|---|---|---|
 | 1 | **Keep-alive del pool** (`keepAlive:true` + `SELECT 1` cada 20 s vía `iniciarKeepAlive`). ✅ **Código hecho** (`db.js`/`index.js`). ~~+ ping anti-sleep Railway~~ → **descartado: el proceso no duerme** (medido 2026-06-10, §5-bis) | Backend | 🟡 **Revisado a Bajo-medio** — la data de prod sugiere que el cold ~2 s era artefacto local; impacto real a validar post-merge | Bajo | Bajo |
 | 2 | **Paralelizar `getTenant`** con `Promise.all` (las 3 queries son independientes) | Backend | 🟠 Medio-alto — turnero, ~0.4–0.6 s por carga | Bajo | Bajo |
-| 3 | **Lazy-load de `xlsx`** (`import()` dinámico en el handler de exportar) | Gestión | 🟠 Alto — slice #1 del bundle (~34% raw), por acción rara | Bajo | Bajo |
+| 3 | ✅ **Hecho (2026-06-10)** — **Lazy-load de `xlsx`** (`import()` dinámico en los **6 handlers** de exportar, 5 archivos) | Gestión | 🟠 **Alto, medido** — bundle inicial 233.44 → **137.07 kB gzip** (−96 kB, −41%); xlsx (143 kB gzip) diferido al click | Bajo | Bajo |
 | 4 | **Lazy-load de `browser-image-compression`** (mismo patrón, solo al subir imagen) | Gestión | 🟡 Medio — ~55 kB raw fuera del arranque | Bajo | Bajo |
 
 ### 🛠️ Medio plazo (más esfuerzo o más riesgo, buen retorno)
@@ -359,7 +359,7 @@ Ordenado por **impacto medido / esfuerzo / riesgo**. Reglas: **nunca cachear slo
 
 ### Por dónde empezar (recomendación — actualizada 2026-06-10)
 La data de prod (§5-bis "Medición en prod") **reordenó la prioridad**: el backend frío resultó **mucho menos grave en prod** de lo que sugería la medición local (el proceso no duerme; la conexión fría no mostró spike). Por eso:
-- **Empezar por #3 (lazy-load de xlsx):** frontend de gestión, **medible local ya** (`npm run build` + `vite preview`), sin depender de prod/merge/subdominio. Quick win más limpio y de impacto real (~34% del bundle de gestión).
+- **Empezar por #3 (lazy-load de xlsx):** frontend de gestión, **medible local ya** (`npm run build` + `vite preview`), sin depender de prod/merge/subdominio. Quick win más limpio y de impacto real (~34% del bundle de gestión). → ✅ **Hecho (2026-06-10): −41% del bundle inicial gzip** (ver tabla de quick wins y §8 #3).
 - **#1:** código hecho, se queda; impacto a validar post-merge (probablemente marginal).
 - **#2:** bajo riesgo, viaja con el merge del turnero; impacto modesto, a validar post-merge.
 - El #10 sigue siendo la palanca de fondo, decisión de infraestructura aparte.
@@ -373,7 +373,21 @@ async function exportar() {
 ```
 `import()` carga el módulo on-demand; Rollup lo separa solo en su propio chunk → el arranque deja de cargar xlsx. **Verificar el ahorro real re-buildeando** (no fiarse del número pre-minify del treemap).
 
+**Resultado medido (2026-06-10, `npm run build`):**
+
+| | Antes | Después | Δ |
+|---|---|---|---|
+| Bundle inicial `index-*.js` (raw) | 761.39 kB | 477.25 kB | −284 kB (−37%) |
+| Bundle inicial (gzip — lo que viaja) | 233.44 kB | **137.07 kB** | **−96 kB (−41%)** |
+| Chunk `xlsx-*.js` (gzip) | — (dentro del bundle) | 142.94 kB **diferido** | se baja recién al click de Exportar |
+
+- El gzip del chunk xlsx (142.94 kB) coincide con el estimado del treemap (~140.5 kB) → separó exactamente lo previsto.
+- El **warning de Vite >500 kB desaparece** (el main quedó en 477 kB raw).
+- La suma de los dos chunks (906 kB raw) supera el monolito original (761 kB): overhead normal del code-splitting; irrelevante porque xlsx sale del camino crítico del arranque.
+- `await import('xlsx')` devuelve el mismo namespace object que `import * as XLSX` → `XLSX.utils.*` / `XLSX.writeFile` quedan idénticos; los handlers solo pasan a `async`.
+
 ### Deuda detectada (no-perf, a confirmar)
+- **Manejo de error de carga de chunk lazy (transversal).** Con el #3, `await import('xlsx')` introduce un modo de falla nuevo: si el navegador no puede bajar el chunk (caída de red a mitad de sesión, o un hash viejo tras un redeploy), la promesa rechaza → *unhandled rejection* y el botón "no hace nada" en silencio. Se decidió **no** parchar try/catch por handler (cambio quirúrgico del #3), porque la solución correcta es **global** (un handler de `chunkLoadError → recargar`). Encararlo junto con el **#7 (`React.lazy`)**, que multiplica los chunks lazy y vuelve esto más relevante.
 - **`logo_kingsai_graffiti.jpeg`** devuelve `text/html` (request muerta, §3). Probablemente referencia legacy a un logo viejo; **es posible que ya esté en el "Checklist del merge" de `estado_actual.md`** como algo a eliminar al mergear `feature/turnero`→`main`. Cruzar y deduplicar.
 - **Aplanar la cadena (factor 5):** ¿se puede arrancar `imagenes`/`servicios` antes, o devolver más en una sola respuesta del bootstrap?
 
@@ -392,8 +406,8 @@ async function exportar() {
 **#2 — Paralelizar `getTenant`**
 - `backend/src/controllers/turnero.js` → `getTenant` (~L40-71). Hoy en serie: `await query(tenant)` (L42) → `await obtenerHorarioCrudo` (L55) → `await obtenerFeriados` (L58). Las 3 usan solo `tenant_id` → independientes. Envolver en `Promise.all`. Opción conservadora: tenant primero (para el 404), luego `Promise.all([horario, feriados])`.
 
-**#3 — Lazy-load `xlsx`** (¡son **5 archivos**, no 1!)
-- `frontend/src/screens/admin/sections/`: `SeccionVentas.jsx`, `SeccionGastos.jsx`, `SeccionBalances.jsx`, `SeccionCaja.jsx`, `SeccionPlanillas.jsx`. Cada uno: `import * as XLSX from 'xlsx'` arriba + un handler `exportarExcel` con `XLSX.writeFile`. Quitar el import top-level y poner `const XLSX = await import('xlsx')` dentro del handler (hacerlo `async`). Rollup dedupea → 1 solo chunk xlsx compartido.
+**#3 — Lazy-load `xlsx`** — ✅ **Hecho (2026-06-10).** (¡son **5 archivos**, no 1!)
+- `frontend/src/screens/admin/sections/`: `SeccionVentas.jsx`, `SeccionGastos.jsx`, `SeccionBalances.jsx`, `SeccionCaja.jsx` (handler dentro de `TabMovimientos`), `SeccionPlanillas.jsx` (**2 handlers**: `exportarDetalle` + `exportarResumen` → 6 handlers en total). Se sacó el `import * as XLSX from 'xlsx'` top-level de cada uno y se puso `const XLSX = await import('xlsx')` dentro del handler (vuelto `async`). En Planillas, la línea va **después** del early-return para no bajar el chunk en un export vacío. Rollup dedupea los 6 → 1 solo chunk xlsx compartido. Resultado medido en el §7 ("Resultado medido"). Verificado con `xlsx` greppeado en todo `frontend/src`: 0 imports top-level restantes.
 - Interacción con #7: el code-split de secciones difiere xlsx hasta **abrir** la sección; #3 lo difiere hasta el **click** de exportar. #3 sigue valiendo aunque se haga #7, y es más fácil.
 
 **#4 — Lazy-load `browser-image-compression`** (1 archivo)

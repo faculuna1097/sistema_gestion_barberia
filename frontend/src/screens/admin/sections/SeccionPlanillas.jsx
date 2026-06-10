@@ -25,7 +25,6 @@
 // <style> inline (excepción consciente §4.2, deuda #21).
 
 import { useState, useEffect } from 'react';
-import * as XLSX from 'xlsx';
 import { ChevronRight, ChevronDown, Scissors, RefreshCw } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
@@ -146,8 +145,9 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
   }, [semana, intento]);
 
   // ── Exportación Excel — Detalle ───────────────────────────────────────────
-  const exportarDetalle = () => {
+  const exportarDetalle = async () => {
     if (!detalleData.length) return;
+    const XLSX = await import('xlsx');
     const filas = [];
     detalleData.forEach((barbero) => {
       const infoComision = resumenData?.barberos.find((b) => b.barbero_id === barbero.barbero_id);
@@ -200,8 +200,9 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
   };
 
   // ── Exportación Excel — Resumen ───────────────────────────────────────────
-  const exportarResumen = () => {
+  const exportarResumen = async () => {
     if (!resumenData?.barberos.length) return;
+    const XLSX = await import('xlsx');
     const filas = resumenData.barberos.map((b) => ({
       Barbero: b.barbero_nombre, Cortes: b.cantidad_cortes,
       'Monto servicios ($)': b.monto_servicios, 'Propinas ($)': b.propinas,

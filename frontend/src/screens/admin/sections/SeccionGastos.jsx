@@ -13,7 +13,6 @@
 // la fila de gasto en SeccionCaja). Total del mes y resumen en theme.accent.
 
 import { useState, useEffect } from 'react';
-import * as XLSX from 'xlsx';
 import { Pencil, Trash2, Receipt, RefreshCw } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
@@ -546,7 +545,8 @@ export default function SeccionGastos() {
     }
   };
 
-  const exportarExcel = () => {
+  const exportarExcel = async () => {
+    const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
     const filas = gastos.map((g) => ({
       Fecha:           g.fecha,
