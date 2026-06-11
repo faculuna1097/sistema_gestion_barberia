@@ -143,9 +143,36 @@ Refrescar el panel del cliente. El logo debe aparecer en el header.
 
 ### Caché del middleware
 
-El `tenantMiddleware` cachea las resoluciones de `subdominio → tenant_id` en memoria. Si das de alta un tenant, lo borrás y volvés a crear otro con el mismo subdominio dentro de la misma sesión del servidor, podés ver datos inconsistentes hasta el próximo reinicio de Railway.
+El `tenantMiddleware` cachea en memoria las resoluciones de `subdominio → { tenant_id, operativo_token_version }`. El caché se invalida al reiniciar el server **o** vía invalidación explícita: automática al rotar la password operativa, y manual con el endpoint de plataforma (ver "Baja de un tenant" más abajo).
 
-Para alta de clientes nuevos esto no es problema — el subdominio es nuevo y el caché no lo tiene. Solo aparece si reciclás subdominios o borrás tenants. Ver pendiente en `estado_actual.md`: endpoint admin de invalidación de caché.
+Para alta de clientes nuevos esto no es problema — el subdominio es nuevo y el caché no lo tiene (y los 404 tampoco se cachean). El caché entra en juego cuando editás a mano un tenant **ya cacheado** (baja, cambio de subdominio): ahí hay que invalidar para que el cambio pegue sin esperar al próximo redeploy.
+
+### Baja de un tenant (o cambio de subdominio) — invalidar el caché
+
+Cuando editás a mano un tenant que el server de prod ya tiene cacheado (darlo de baja, cambiarle el subdominio, o tocar `operativo_token_version`/`activo` por SQL), el cambio **no pega hasta invalidar el caché**. Se hace con un endpoint de plataforma que disparás manualmente desde Bruno (no hay UI — es una herramienta de ops).
+
+**Prerequisito (una sola vez):** la env var `PLATFORM_ADMIN_KEY` debe estar seteada en Railway. Por defecto **no** lo está (el endpoint queda deshabilitado → responde 503). Setearla dispara un autodeploy, así que hacelo en un momento de poco tráfico, la primera vez que vayas a usar el endpoint.
+
+**Ejemplo — dar de baja la barbería `exbarberia`:**
+
+1. **Baja en la DB** (Supabase → SQL Editor):
+   ```sql
+   UPDATE tenant SET activo = false WHERE subdominio = 'exbarberia';
+   ```
+   En este punto el server de prod todavía tiene el `tenant_id` viejo en su caché → el local seguiría operando.
+
+2. **Invalidar el caché desde Bruno:**
+   - **Método:** `POST`
+   - **URL:** `https://<backend-railway>/api/plataforma/cache/invalidate`
+   - **Headers:** `X-Platform-Key: <valor de PLATFORM_ADMIN_KEY>` y `Content-Type: application/json`
+   - **Body (JSON):** `{ "subdominio": "exbarberia" }`
+   - Esperás **200** → `{ "ok": true, "subdominio": "exbarberia" }`.
+
+3. **Verificar el corte:** cualquier request de ese local (ej. login operativo con header `X-Tenant-Subdomain: exbarberia`) ahora resuelve `WHERE activo = true` → **404 "Tenant no encontrado"**. Quedó cortado al instante.
+
+Mismo patrón para **cambio de subdominio** (invalidás el subdominio viejo) o cualquier edición manual por SQL sobre un tenant ya cacheado. **El alta de un tenant nuevo no necesita este paso** (el subdominio nuevo no está cacheado, y los 404 tampoco se cachean).
+
+**Caveat (limitación conocida):** el caché es por proceso. Hoy Railway corre 1 instancia, así que invalidar sirve. Si en el futuro hay >1 instancia, la invalidación solo limpiaría la que recibió el request (haría falta Redis/pubsub — fuera de alcance hoy).
 
 ### Renovación mensual de suscripción
 
