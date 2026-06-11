@@ -16,14 +16,17 @@
 // vigilancia no debe permitirlo sin reto. Ver actualizarCredencialesOperativas.
 //
 // Cambio de password ⇒ invalidación inmediata de tokens operativos viejos:
-// se incrementa tenant.operativo_token_version en el mismo UPDATE.
-// authOperativo firma el JWT con tv = operativo_token_version, y
-// authMiddleware rechaza los tokens cuyo tv no coincida con el actual.
-// Cambiar solo el usuario NO invalida tokens (un rename no compromete
-// credenciales). Mantener consistente con esa semántica.
+// se incrementa tenant.operativo_token_version en el mismo UPDATE, y acto
+// seguido se invalida la entrada de caché del tenant (invalidar() del
+// tenantMiddleware) — authMiddleware lee la versión de ese caché, no de un
+// SELECT por request, así que sin invalidar quedaría stale. authOperativo
+// firma el JWT con tv = operativo_token_version, y authMiddleware rechaza los
+// tokens cuyo tv no coincida con el actual. Cambiar solo el usuario NO invalida
+// tokens (un rename no compromete credenciales). Mantener consistente.
 
 import bcrypt from 'bcrypt';
 import { query } from '../config/db.js';
+import { invalidar } from '../middlewares/tenantMiddleware.js';
 
 /**
  * obtenerCredencialesOperativas
@@ -127,6 +130,16 @@ export async function actualizarCredencialesOperativas(req, res) {
     const sql = `UPDATE tenant SET ${setClauses.join(', ')} WHERE id = $${indice}`;
 
     await query(sql, valores);
+
+    // Si se rotó la password, el UPDATE bumpeó operativo_token_version: el caché
+    // del tenantMiddleware (que guarda la versión por subdominio) quedó stale.
+    // Invalidarlo ACÁ, sincrónico y antes de responder, es la condición que
+    // mantiene la revocación inmediata: el próximo request operativo hace miss,
+    // re-lee la versión nueva y el token viejo queda rechazado al instante.
+    // (Cambiar solo el usuario no bumpea la versión, así que no se invalida.)
+    if (cambiarPassword) {
+      invalidar(req.headers['x-tenant-subdomain']);
+    }
 
     console.log('[adminOperativo] actualizarCredencialesOperativas completado | tenant:', tenant_id);
     return res.status(204).end();

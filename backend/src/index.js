@@ -7,7 +7,8 @@ import express from 'express';
 import cors from 'cors';
 import { testConnection, iniciarKeepAlive } from './config/db.js';
 import { verificarToken } from './middlewares/authMiddleware.js';
-import { tenantMiddleware } from './middlewares/tenantMiddleware.js';
+import { tenantMiddleware, invalidar } from './middlewares/tenantMiddleware.js';
+import { verificarClavePlataforma } from './middlewares/plataformaAuthMiddleware.js';
 import { sanitizarObjeto } from './utils/sanitizarLogs.js';
 
 // --- Importación de rutas ---
@@ -67,6 +68,32 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENDPOINT DE PLATAFORMA — operación manual, FUERA de la cadena tenant/JWT.
+//
+// Se monta ACÁ a propósito: después de express.json() (necesita el body parseado)
+// pero ANTES de app.use(tenantMiddleware), así NO exige X-Tenant-Subdomain ni JWT
+// y puede invalidar un subdominio ARBITRARIO pasado por parámetro. Por eso tampoco
+// va bajo /api/admin/* (ese prefijo exige verificarToken). Auth por secreto de
+// plataforma (header X-Platform-Key); ver plataformaAuthMiddleware.js.
+//
+// Caso de uso: tras editar a mano la tabla tenant (baja, cambio de subdominio,
+// edición directa de operativo_token_version/activo) el caché en memoria del
+// tenantMiddleware queda stale; este endpoint lo limpia sin redeploy.
+//
+// Queda antes del logger global de abajo (que corre tras tenantMiddleware), así
+// que no aparece en el log de acceso HTTP: por eso loguea su propio evento.
+// ─────────────────────────────────────────────────────────────────────────────
+app.post('/api/plataforma/cache/invalidate', verificarClavePlataforma, (req, res) => {
+  const { subdominio } = req.body || {};
+  if (!subdominio || typeof subdominio !== 'string') {
+    return res.status(400).json({ error: 'subdominio es requerido' });
+  }
+  invalidar(subdominio); // idempotente: invalidar algo no cacheado = no-op exitoso
+  console.log('[index] cache de tenant invalidado por plataforma | subdominio:', subdominio);
+  return res.json({ ok: true, subdominio });
+});
 
 // tenantMiddleware — corre en TODAS las rutas antes que cualquier controller.
 // Resuelve el tenant desde el header X-Tenant-Subdomain (producción)

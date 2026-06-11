@@ -6,7 +6,7 @@
 // para que los controllers puedan scopear la respuesta según el consumidor.
 
 import jwt from 'jsonwebtoken';
-import { query } from '../config/db.js';
+import { leerTokenVersionOperativo } from './tenantMiddleware.js';
 
 /**
  * verificarToken
@@ -48,18 +48,17 @@ export const verificarToken = async (req, res, next) => {
     req.rol        = payload.rol;
     req.barbero_id = payload.barbero_id; // solo presente si rol === 'barbero'
 
-    // Token version check para tokens operativos: al cambiar la password
-    // operativa, adminOperativo incrementa tenant.operativo_token_version.
-    // Cualquier token emitido antes (con tv menor) queda invalidado de
-    // inmediato, sin esperar a su expiración natural de 30 días.
-    // Tokens viejos sin tv en el payload se tratan como tv=0 para no
-    // romper sesiones existentes mientras nadie haya rotado la password.
+    // Token version check para tokens operativos. operativo_token_version sale
+    // del caché del tenantMiddleware (poblado por subdominio), NO de un SELECT
+    // por request. Al rotar la password operativa, adminOperativo incrementa la
+    // versión e invalida esa entrada de caché; así el próximo request re-lee la
+    // versión nueva y cualquier token emitido antes (con tv menor) queda
+    // rechazado al instante, sin esperar al reinicio del server ni a su
+    // expiración natural de 30 días. Tokens viejos sin tv en el payload se
+    // tratan como tv=0 para no romper sesiones existentes mientras nadie haya
+    // rotado la password.
     if (payload.rol === 'operativo') {
-      const resultado = await query(
-        'SELECT operativo_token_version FROM tenant WHERE id = $1',
-        [req.tenant_id]
-      );
-      const tvActual = resultado.rows[0]?.operativo_token_version ?? 0;
+      const tvActual = await leerTokenVersionOperativo(req);
       const tvToken  = payload.tv ?? 0;
       if (tvToken !== tvActual) {
         return res.status(401).json({ error: 'Token inválido o expirado' });
