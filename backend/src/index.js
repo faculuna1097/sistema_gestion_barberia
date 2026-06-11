@@ -156,9 +156,9 @@ app.use('/api/balances',  verificarToken, balancesRouter);
 // ─────────────────────────────────────────────────────────────────────────────
 // turnos: admin + barbero (excluye operativo, que opera por /api/turnos, no /api/admin/*).
 app.use('/api/admin/turnos',    verificarToken, requiereRol('admin', 'barbero'), turnosAdminRoutes);
-app.use('/api/admin/horarios',      verificarToken, horariosAdminRoutes);
-app.use('/api/admin/suspensiones',  verificarToken, suspensionesAdminRoutes);
-app.use('/api/admin/clientes',      verificarToken, clientesAdminRoutes);
+app.use('/api/admin/horarios',      verificarToken, requiereRol('admin', 'barbero'), horariosAdminRoutes);
+app.use('/api/admin/suspensiones',  verificarToken, requiereRol('admin', 'barbero'), suspensionesAdminRoutes);
+app.use('/api/admin/clientes',      verificarToken, requiereRol('admin', 'barbero'), clientesAdminRoutes);
 // planilla: admin + barbero (excluye operativo; el scoping por barbero lo hace el controller).
 app.use('/api/admin/planilla',      verificarToken, requiereRol('admin', 'barbero'), planillaAdminRoutes);
 app.use('/api/admin/barberos',     verificarToken, requiereRol('admin'), adminBarberosRoutes);
