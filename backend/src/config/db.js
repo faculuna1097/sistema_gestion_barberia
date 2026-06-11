@@ -26,14 +26,77 @@ const pool = new Pool({
 
 pool.on('error', (err) => console.error('[db] ❌ Error inesperado en pool:', err));
 
+// Códigos de error de RED de Node (no son SQLSTATE de Postgres) ante los que
+// vale reintentar: el problema es el socket, no la query.
+const CODIGOS_RED = new Set(['ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN']);
+
+/**
+ * esErrorDeConexion
+ * Distingue un fallo de CONEXIÓN (socket muerto, timeout al conectar, el pooler
+ * que cortó una conexión ociosa, Supabase reiniciando) de un error de SQL
+ * (constraint, sintaxis, dato inválido). Solo los primeros se reintentan:
+ * reintentar un error de SQL es inútil y, en un INSERT/UPDATE, peligroso.
+ *
+ * Cómo los telling apart: un error de SQL de Postgres trae un `code` SQLSTATE
+ * de 5 chars cuya clase indica el tipo (23=integridad, 22=dato, 42=sintaxis...).
+ * Los de conexión son: códigos de red de Node, o SQLSTATE de la clase 08
+ * (connection exception), o 57P01/57P03 (el server cerró / está arrancando), o
+ * errores de pg-pool sin SQLSTATE ("Connection terminated...").
+ *
+ * @param {Error} err - el error capturado de pool.query
+ * @returns {boolean} true si conviene reintentar una vez
+ */
+const esErrorDeConexion = (err) => {
+  if (!err) return false;
+  const code = err.code;
+  if (typeof code === 'string') {
+    if (CODIGOS_RED.has(code)) return true;        // red de Node (ECONNRESET, ETIMEDOUT, ...)
+    if (code.startsWith('08')) return true;        // SQLSTATE clase 08: connection exception
+    if (code === '57P01' || code === '57P03') return true; // server cerró / aún arrancando
+  }
+  // pg-pool, al usar un socket ya muerto o al timeoutear el establecimiento, tira
+  // errores sin SQLSTATE; los detectamos por mensaje (incluida la `cause`).
+  const msg = `${err.message ?? ''} ${err.cause?.message ?? ''}`;
+  return msg.includes('Connection terminated') ||
+         msg.includes('timeout exceeded when trying to connect') ||
+         msg.includes('server closed the connection');
+};
+
 /**
  * query
- * Ejecuta una query SQL contra la base de datos.
+ * Ejecuta una query SQL contra la base de datos, con UN reintento automático
+ * ante errores de CONEXIÓN (no de SQL).
+ *
+ * Por qué: hablamos con el Session Pooler de Supabase por red. El pooler corta
+ * conexiones ociosas y un blip puede matar un socket que el pool todavía creía
+ * vivo; la primera query con ese socket muerto falla con "Connection terminated
+ * unexpectedly". El reintento agarra/establece una conexión fresca y la operación
+ * sale bien — el cliente nunca ve el blip. Se reintenta UNA sola vez: si la
+ * segunda también falla, no es un hipo puntual y el error debe emerger.
+ *
+ * Solo se reintentan errores de conexión (ver esErrorDeConexion). Los errores de
+ * SQL (p. ej. la 23P01 del constraint antisolapamiento) se propagan tal cual.
+ *
+ * Nota sobre escrituras: si un socket muere en la ventana angosta entre que el
+ * server commitea un INSERT/UPDATE y entrega el resultado, el reintento reejecuta
+ * la sentencia. La integridad está cubierta por los constraints (la 23P01 impide
+ * el doble turno); el residual es un caso raro a endurecer luego con idempotency
+ * key en /turnos. Ver docs/estado_actual.md.
+ *
  * @param {string} text - La query SQL con placeholders ($1, $2, ...)
  * @param {Array} params - Los valores que reemplazan los placeholders
  * @returns {Promise} Resultado con rows, rowCount, etc.
  */
-export const query = (text, params) => pool.query(text, params);
+export const query = async (text, params) => {
+  try {
+    return await pool.query(text, params);
+  } catch (err) {
+    if (!esErrorDeConexion(err)) throw err;
+    console.warn('[db] query falló por error de conexión, reintentando una vez:', err.message);
+    await new Promise((resolve) => setTimeout(resolve, 200)); // respiro corto para que el pool entregue/establezca un socket sano
+    return pool.query(text, params);
+  }
+};
 
 /**
  * cerrarPool
