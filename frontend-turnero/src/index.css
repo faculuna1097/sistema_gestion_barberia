@@ -16,6 +16,16 @@ html, body, #root {
   height: 100%;
 }
 
+/* Desactiva el rebote elástico (overscroll) de iOS Safari y, con él, el
+   pull-to-refresh. Dos motivos:
+   1. El rebote en el borde inferior hacía asomar el fondo de la app por
+      detrás del StickyFooter, tapando el botón principal.
+   2. Evita que un arrastre accidental hacia abajo recargue la página y
+      el usuario pierda el progreso del wizard. */
+html, body {
+  overscroll-behavior: none;
+}
+
 body {
   font-family: 'Geist', 'DM Sans', system-ui, -apple-system, sans-serif;
   font-size: 14px;

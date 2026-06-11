@@ -223,21 +223,9 @@ function GestionTurno({ token, tenant }) {
           borderRadius: theme.radiusLg,
           padding: 16,
         }}>
-          {/* Eyebrow: status pill + #id */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 12,
-          }}>
+          {/* Eyebrow: status pill */}
+          <div style={{ marginBottom: 12 }}>
             <StatusPill estado={turno.estado}/>
-            <div style={{
-              fontFamily: theme.mono,
-              fontWeight: theme.weightMedium,
-              fontSize: theme.sizeMicro,
-              letterSpacing: '0.04em',
-              color: theme.mutedSoft,
-            }}>#{turno.id}</div>
           </div>
 
           {/* Fecha + hora grande */}

@@ -13,7 +13,7 @@ import { theme } from '../../theme/tokens.js';
 function PageContainer({ children }) {
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
       width: '100%',
       background: theme.surfaceAlt, // fondo lateral en desktop
       display: 'flex',
@@ -22,7 +22,7 @@ function PageContainer({ children }) {
       <div style={{
         width: '100%',
         maxWidth: theme.maxWidth,
-        minHeight: '100vh',
+        minHeight: '100dvh',
         background: theme.bg,
         display: 'flex',
         flexDirection: 'column',
