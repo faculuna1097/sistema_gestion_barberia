@@ -14,8 +14,6 @@ export const getMovimientosDia = async (req, res) => {
   const fecha = req.query.fecha
     || new Date().toLocaleDateString('sv-SE', { timeZone: TZ });
 
-  console.log(`[caja] getMovimientosDia — request recibido | fecha: ${fecha} | tenant: ${req.tenant_id}`);
-
   try {
     // ── Query 1: Cortes del día ──────────────────────────────────────────────
     const cortesResult = await query(
@@ -27,6 +25,7 @@ export const getMovimientosDia = async (req, res) => {
          s.nombre  AS detalle,
          c.monto_total AS monto,
          c.forma_pago,
+         c.turno_id,
          b.comision_valor,
          'corte' AS tipo
        FROM corte c
@@ -85,11 +84,10 @@ export const getMovimientosDia = async (req, res) => {
       ...gastosResult.rows,
     ].sort((b, a) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    console.log('[caja] getMovimientosDia — completado:', movimientos.length, 'movimientos | fecha:', fecha);
     res.json({ movimientos });
 
   } catch (err) {
-    console.error('[caja] Error en getMovimientosDia:', err.message);
+    console.error('[caja] Error en getMovimientosDia:', err);
     res.status(500).json({ error: 'Error al obtener movimientos del día' });
   }
 };
@@ -97,7 +95,7 @@ export const getMovimientosDia = async (req, res) => {
 /**
  * eliminarMovimiento
  * Elimina un registro del día por tipo e id.
- * - corte: borra directo (ya no existe corte_servicio)
+ * - corte: borra el corte y, si completaba un turno, lo devuelve a 'reservado'
  * - venta: restaura stock_actual del producto, luego borra venta
  * - gasto: borra directo
  * @param {string} req.params.tipo - 'corte' | 'venta' | 'gasto'
@@ -106,12 +104,38 @@ export const getMovimientosDia = async (req, res) => {
  */
 export const eliminarMovimiento = async (req, res) => {
   const { tipo, id } = req.params;
-  console.log(`[caja] eliminarMovimiento — request recibido | tipo: ${tipo} | id: ${id} | tenant: ${req.tenant_id}`);
 
   try {
     if (tipo === 'corte') {
+      // Recuperamos el turno vinculado (si lo hay) antes de borrar el corte, y
+      // de paso validamos existencia (404 si no existe en este tenant).
+      const corteResult = await query(
+        'SELECT turno_id FROM corte WHERE id = $1 AND tenant_id = $2',
+        [id, req.tenant_id]
+      );
+      if (corteResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Corte no encontrado' });
+      }
+      const { turno_id } = corteResult.rows[0];
+
       await query('DELETE FROM corte WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
       console.log('[caja] eliminarMovimiento — corte eliminado | id:', id);
+
+      // Si el corte completaba un turno, lo devolvemos a 'reservado'. El guard
+      // estado = 'completado' hace el revert defensivo (espejo del registro, que
+      // solo completa turnos 'reservado'): nunca toca turnos cancelados/no_asistio.
+      if (turno_id) {
+        const turnoResult = await query(
+          `UPDATE turno SET estado = 'reservado'
+           WHERE id = $1 AND tenant_id = $2 AND estado = 'completado'`,
+          [turno_id, req.tenant_id]
+        );
+        if (turnoResult.rowCount === 0) {
+          console.warn('[caja] eliminarMovimiento — turno no revertido (no existe, otro tenant, o no estaba completado) | turno_id:', turno_id);
+        } else {
+          console.log('[caja] eliminarMovimiento — turno revertido a reservado | turno_id:', turno_id);
+        }
+      }
 
     } else if (tipo === 'venta') {
       const ventaResult = await query(
@@ -141,7 +165,7 @@ export const eliminarMovimiento = async (req, res) => {
     res.json({ ok: true });
 
   } catch (err) {
-    console.error(`[caja] Error en eliminarMovimiento (${tipo}):`, err.message);
+    console.error(`[caja] Error en eliminarMovimiento (${tipo}):`, err);
     res.status(500).json({ error: `Error al eliminar ${tipo}` });
   }
 };

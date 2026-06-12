@@ -99,8 +99,10 @@ CREATE TABLE public.barbero_horario (
   PostgreSQL `EXTRACT(DOW FROM fecha)` y de JavaScript `Date.getDay()`).
 - Múltiples registros por día permitidos para representar pausas (ej: turno
   mañana 09:00–13:00 y turno tarde 15:00–19:00).
-- Sin constraint de no-solapamiento entre bloques del mismo día. Se valida en
-  backend.
+- No-solapamiento entre bloques del mismo día garantizado a nivel DB con un
+  constraint `EXCLUDE USING gist` sobre `(barbero_id, dia_semana, timerange(hora_inicio, hora_fin, '[)'))`.
+  Requiere crear el tipo `timerange` (PostgreSQL no trae rango para `time`).
+  El backend además valida en JS al hacer PUT para devolver un error legible.
 
 #### Paso 3 — Tabla `barbero_suspension`
 
@@ -356,11 +358,12 @@ del controller mirando `req.rol` y `req.barbero_id`.
 
 #### Login del admin (existente — se ajusta)
 
-`POST /api/auth/login` (ya existe).
+`POST /api/auth/verificar-pin` (ya existe; nombre histórico que se mantiene
+para no impactar el frontend de gestión).
 
 **Cambio:** al firmar el JWT, agregar el claim `rol: 'admin'` y
-`expiresIn: '30d'`. Hoy el JWT no expira o expira con default; pasamos a 30
-días explícitos por consistencia con el login del barbero.
+`expiresIn: '30d'`. Antes expiraba a las 12h; pasamos a 30 días explícitos
+por consistencia con el login del barbero.
 
 #### Login del barbero (nuevo)
 
@@ -805,7 +808,7 @@ cuando todo el flujo funcione en demo.
 | Barbero malicioso intenta crear o modificar turnos a nombre de otro barbero | Muy baja | Los controllers bajo `/api/admin/*` ignoran cualquier `barbero_id` del body/URL cuando `req.rol === 'barbero'` y usan siempre `req.barbero_id` del JWT. |
 | JWT del tenant A operando sobre el subdominio del tenant B | Baja | `verificarToken` compara `payload.tenant_id` contra `req.tenant_id` del subdominio y devuelve 403 si no coinciden (sección 3.2). |
 | Doble vinculación corte→turno por doble click | Baja | `UNIQUE INDEX corte_turno_unico ... WHERE turno_id IS NOT NULL` en la tabla `corte` (sección 2.2 Paso 8). |
-| Cliente curioso entra a `demo.barbermanager.app/` (gestión) | Media | Mitigado cuando se implemente el login del panel admin (planificado fuera de este plan). |
+| Cliente curioso entra a `demo.barbermanager.app/` (gestión) | Media | Mitigado: el panel admin exige login por PIN. |
 | Cliente curioso entra a `/barbero/` | Media | El acceso requiere PIN de barbero. Sin PIN no puede hacer nada. |
 | `tenantMiddleware` cachea un tenant inactivado | Baja | Deuda técnica conocida (sección 12). |
 
@@ -817,25 +820,26 @@ cuando todo el flujo funcione en demo.
 
 - **Endpoint admin de invalidación del caché del `tenantMiddleware`** (ya
   anotado en deudas del proyecto).
-- **Login en el panel admin** para evitar que cualquiera con la URL del
-  subdominio entre. Crítico una vez que el turnero esté en producción.
 - **Migrar de Arquitectura A a B en Google Calendar** (OAuth por barbero) si
   en el futuro se quiere lectura bidireccional del calendar.
 - **Pantalla de unificación de clientes duplicados.** Recibe dos `cliente_id`
   y reasigna todos los `turno.cliente_id` del que se va al que se queda.
 - **Eliminar `tenant.booking_url`** una vez que todos los tenants usen el
   turnero propio.
+- **Migrar el logo viejo y eliminar `tenant.logo`** (Paso 7 diferido de la
+  feature de imágenes múltiples por tenant). La feature movió el logo a la
+  tabla `tenant_imagen` + Supabase Storage; el turnero y el barbero ya lo
+  consumen desde ahí (`GET /api/negocio/imagenes`). La columna `tenant.logo`
+  sigue viva porque la app `frontend/` todavía la lee. Cuando esa app se
+  re-estile y deje de usarla: migrar el logo actual de cada tenant al slot
+  `tipo='logo', orden=1` de `tenant_imagen` y hacer `DROP COLUMN logo` de la
+  tabla `tenant`.
 - **Tabla `notificaciones` o `mails_enviados`** para trazabilidad de envíos.
 - **Tabla `metricas_diarias` (rollup)** para acelerar dashboards históricos
   cuando la tabla `corte` crezca lo suficiente.
-- **Validación SQL de no-solapamiento en `barbero_horario`** mediante
-  constraint `EXCLUDE USING gist` (en `turno` ya se aplica desde este plan,
-  ver sección 2.1 Paso 4). Hoy el no-solapamiento entre bloques del mismo
-  día se valida en backend al hacer PUT.
 - **Bot de WhatsApp para barbero** que permita suspender turnos vía
   mensajes. La columna `barbero_suspension.origen='whatsapp'` ya está
   preparada.
-- **Reseteo de PIN de barbero** desde el panel admin.
 - **Reglas más finas de "qué barbero atiende qué servicio"**, si en el
   futuro se quiere restringir (hoy todos los barberos atienden todos los
   servicios; el query param `servicio_id` en `GET /api/turnero/barberos` ya

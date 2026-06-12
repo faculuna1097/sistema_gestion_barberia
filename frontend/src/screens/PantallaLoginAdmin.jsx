@@ -1,97 +1,212 @@
 // /frontend/src/screens/PantallaLoginAdmin.jsx
-// Pantalla de ingreso de PIN para acceder al Panel de Administrador.
-// Muestra un teclado numérico táctil de 4 dígitos.
-// Si la suscripción del tenant está vencida, muestra pantalla de acceso suspendido.
+// Pantalla de ingreso de PIN para acceder al panel. El login es unificado: el
+// backend resuelve el rol (admin o barbero) según el PIN ingresado.
+// Tiene teclado numérico táctil + soporte de teclado físico.
+// Si la suscripción del tenant está vencida (solo path admin), muestra pantalla
+// de acceso suspendido.
+//
+// Layout: full-screen con fondo surfaceAlt, card centrada (~480 px) con
+// shadowMd. Estilo Stripe/Clerk auth. Botón "Cancelar"/"Volver" en la esquina
+// superior izquierda de la card (ghost button con flecha).
+//
 // Props:
-//   onAcceso   — función llamada cuando el PIN es correcto y suscripción vigente
-//   onCancelar — función llamada al presionar "Cancelar" (vuelve a MainScreen)
+//   onAcceso     — función llamada con (token, { rol, aviso_pago, barbero }) cuando
+//                  el PIN es correcto. El backend resuelve el rol (admin o barbero)
+//                  según el PIN; `barbero` ({ id, nombre }) viene solo si rol='barbero'.
+//   onCancelar   — función llamada al presionar "Cancelar"/"Volver".
+//   imagenLogo   — URL del logo del tenant (de tenant_imagen tipo='logo').
+//                  Si no hay, cae a un círculo con el icono Lock.
 
-import { useState, useEffect } from "react";
-import { verificarPin } from "../services/api";
+import { useState, useEffect, useCallback } from "react";
+import { Delete, ArrowLeft } from "lucide-react";
+import { theme } from "../theme/tokens.js";
+import { EmptyState, IconoAlerta, Card, LogoCirculo } from "../components/ui";
+import FondoLocal from "../components/ui/FondoLocal.jsx";
+import { loginPanel } from "../services/api";
 
-// ─── Ícono de candado ─────────────────────────────────────────────────────────
-const CandadoIcon = () => (
-  <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-  </svg>
-);
+/**
+ * BotonCancelarEsquina
+ * Botón ghost chico con flecha + label, posicionado en la esquina superior
+ * izquierda de la card (absolute). Lo usan tanto la pantalla normal como la
+ * bloqueada.
+ */
+function BotonCancelarEsquina({ label, onClick }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        position: 'absolute',
+        top: 12,
+        left: 12,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '6px 10px',
+        background: hover ? theme.surfaceAlt : 'transparent',
+        border: 'none',
+        color: theme.inkSoft,
+        fontFamily: theme.body,
+        fontSize: 13,
+        fontWeight: theme.weightMedium,
+        cursor: 'pointer',
+        borderRadius: theme.radius,
+        transition: `background ${theme.transitionFast}`,
+      }}
+    >
+      <ArrowLeft size={14} strokeWidth={1.75} />
+      {label}
+    </button>
+  );
+}
 
-// ─── Ícono X (borrar) ─────────────────────────────────────────────────────────
-const BackspaceIcon = () => (
-  <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
-    <line x1="18" y1="9" x2="12" y2="15" />
-    <line x1="12" y1="9" x2="18" y2="15" />
-  </svg>
-);
-
-// ─── Pantalla de acceso suspendido ────────────────────────────────────────────
-const PantallaBloqueada = ({ onCancelar }) => (
-  <div style={styles.pantalla}>
-    <div style={styles.lineaSuperior} />
-    <div style={styles.headerRow}>
-      <button style={styles.btnCancelar} onClick={onCancelar}>
-        Volver
-      </button>
-    </div>
-    <div style={styles.iconoArea}>
-      <div style={{ ...styles.iconoCirculo, borderColor: "#e74c3c", color: "#e74c3c" }}>
-        <CandadoIcon />
+/**
+ * ShellLoginAdmin
+ * Wrapper full-screen con la card de PIN centrada. El fondo es `FondoLocal` (la
+ * foto del local con blur + velo, el mismo de MainScreen y los 3 flujos), así el
+ * ambiente del local no se corta al entrar al login. Sin foto, FondoLocal cae a
+ * `surfaceAlt` (el look Stripe/Clerk de antes). La card opaca (`surface`) hace de
+ * "panel claro" sobre el fondo, idéntico patrón al de los flujos.
+ *
+ * Lo comparten la pantalla normal de ingreso de PIN y la de acceso suspendido.
+ * El cancel button va en la esquina superior izquierda de la card.
+ */
+function ShellLoginAdmin({ children, onCancelar, labelCancelar = 'Cancelar', maxWidth = 480, imagenLocal }) {
+  return (
+    <FondoLocal imagenLocal={imagenLocal}>
+      <div style={{
+        position: 'relative',
+        width: '100%',
+        maxWidth,
+        // Margen para que la card no toque los bordes en pantallas angostas
+        // (reemplaza el padding del contenedor anterior; FondoLocal va al borde).
+        margin: 24,
+        background: theme.surface,
+        border: `1px solid ${theme.hairline}`,
+        borderRadius: theme.radiusLg,
+        boxShadow: theme.shadowMd,
+        padding: '40px 32px 32px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 20,
+        animation: 'om-fade .26s ease-out both',
+      }}>
+        {onCancelar && <BotonCancelarEsquina label={labelCancelar} onClick={onCancelar} />}
+        {children}
       </div>
-      <h1 style={styles.titulo}>Acceso suspendido</h1>
-      <p style={{ ...styles.subtitulo, textAlign: "center", maxWidth: "320px", lineHeight: "1.6" }}>
-        El acceso al panel está suspendido por falta de pago.<br />
-        Contactá al soporte para regularizar tu suscripción.
-      </p>
-    </div>
-    <div style={styles.contactoCard}>
-      <p style={styles.contactoLinea}>📱 WhatsApp: <strong>11 3311-1686</strong></p>
-      <p style={styles.contactoLinea}>📧 facundolunagrebe@gmail.com</p>
-    </div>
-  </div>
-);
+    </FondoLocal>
+  );
+}
 
-// ─── Componente principal ─────────────────────────────────────────────────────
-export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {
-  console.log('[pantallaLoginAdmin] render — montada');
+/**
+ * IndicadoresPin
+ * Cuatro puntos que representan los dígitos ingresados.
+ */
+function IndicadoresPin({ pin, estado, shake }) {
+  const dotColor = estado === 'error' ? theme.danger : theme.accent;
 
-  const [pin, setPin] = useState("");
-  const [estado, setEstado] = useState("idle"); // "idle" | "error" | "exito"
-  const [shake, setShake] = useState(false);
+  return (
+    <div
+      className={shake ? 'om-shake' : undefined}
+      style={{ display: 'flex', gap: 20 }}
+    >
+      {[0, 1, 2, 3].map((i) => {
+        const filled = estado === 'error' || estado === 'exito' || i < pin.length;
+        return (
+          <div key={i} style={{
+            width: 14,
+            height: 14,
+            borderRadius: 999,
+            background: filled ? dotColor : 'transparent',
+            border: `2px solid ${filled ? dotColor : theme.hairline}`,
+            transform: filled ? 'scale(1.1)' : 'scale(1)',
+            transition: 'all 0.15s ease',
+          }} />
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * TeclaNum
+ * Botón individual del teclado numérico. Hover con useState (12 botones, costo trivial).
+ */
+function TeclaNum({ children, ariaLabel, onClick }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      aria-label={ariaLabel}
+      style={{
+        height: 60,
+        background: hover ? theme.surfaceAlt : theme.surface,
+        border: `1px solid ${theme.hairline}`,
+        borderRadius: theme.radius,
+        color: theme.ink,
+        fontFamily: theme.body,
+        fontSize: 22,
+        fontWeight: theme.weightMedium,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transition: `background ${theme.transitionFast}`,
+        userSelect: 'none',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * ContactoCard
+ * Card de contacto que aparece en la pantalla bloqueada.
+ */
+function ContactoCard() {
+  return (
+    <Card style={{ width: '100%' }} padding={16}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <p style={{ margin: 0, fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.inkSoft }}>
+          WhatsApp: <strong style={{ color: theme.ink }}>11 3311-1686</strong>
+        </p>
+        <p style={{ margin: 0, fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.inkSoft }}>
+          facundolunagrebe@gmail.com
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * PantallaLoginAdmin
+ * Componente principal. Maneja el flujo de ingreso de PIN, validación y
+ * el estado bloqueado por suscripción vencida.
+ */
+export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo, imagenLocal }) {
+  const [pin, setPin]             = useState("");
+  const [estado, setEstado]       = useState("idle"); // "idle" | "error" | "exito"
+  const [shake, setShake]         = useState(false);
   const [bloqueado, setBloqueado] = useState(false);
 
-  // ── Agregar dígito ──────────────────────────────────────────────────────────
-  const agregarDigito = (digito) => {
-    if (pin.length >= 4 || estado === "exito") return;
-
-    const nuevo = pin + digito;
-    console.log('[pantallaLoginAdmin] agregarDigito — PIN parcial:', '*'.repeat(nuevo.length));
-    setEstado("idle");
-    setPin(nuevo);
-
-    if (nuevo.length === 4) {
-      validarPin(nuevo);
-    }
-  };
-
-  // ── Borrar último dígito ────────────────────────────────────────────────────
-  const borrarDigito = () => {
-    if (pin.length === 0 || estado === "exito") return;
-    setEstado("idle");
-    setPin((p) => p.slice(0, -1));
-  };
-
-  // ── Validar PIN ─────────────────────────────────────────────────────────────
-  const validarPin = async (pinIngresado) => {
-    console.log('[pantallaLoginAdmin] validarPin — request iniciado');
+  /**
+   * validarPin — envía el PIN al backend. Si vuelve 402 (suscripción vencida)
+   * muestra la pantalla bloqueada. Si vuelve cualquier otro error, muestra
+   * el feedback de "PIN incorrecto" y resetea.
+   */
+  const validarPin = useCallback(async (pinIngresado) => {
     try {
-      const { token, aviso_pago } = await verificarPin(pinIngresado);
-      console.log('[pantallaLoginAdmin] validarPin — completado | acceso concedido | aviso_pago:', aviso_pago);
+      const { token, rol, aviso_pago, barbero } = await loginPanel(pinIngresado);
       setEstado("exito");
-      setTimeout(() => onAcceso(token, aviso_pago), 600);
+      setTimeout(() => onAcceso(token, { rol, aviso_pago, barbero }), 600);
     } catch (err) {
       console.error('[pantallaLoginAdmin] Error en validarPin:', err.message);
       if (err.bloqueado) {
@@ -106,9 +221,27 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {
         }, 800);
       }
     }
-  };
+  }, [onAcceso]);
 
-  // ── Teclado físico (desarrollo en desktop) ──────────────────────────────────
+  /** agregarDigito — suma un dígito al PIN; al llegar a 4 lo valida. */
+  const agregarDigito = useCallback((digito) => {
+    setPin((prev) => {
+      if (prev.length >= 4 || estado === "exito") return prev;
+      const nuevo = prev + digito;
+      setEstado("idle");
+      if (nuevo.length === 4) validarPin(nuevo);
+      return nuevo;
+    });
+  }, [estado, validarPin]);
+
+  /** borrarDigito — elimina el último dígito del PIN. */
+  const borrarDigito = useCallback(() => {
+    if (estado === "exito") return;
+    setEstado("idle");
+    setPin((p) => p.slice(0, -1));
+  }, [estado]);
+
+  // Soporte de teclado físico (útil en desktop / iPad con teclado bluetooth).
   useEffect(() => {
     const manejarTeclado = (e) => {
       if (e.key >= "0" && e.key <= "9") agregarDigito(e.key);
@@ -116,249 +249,80 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar }) {
     };
     window.addEventListener("keydown", manejarTeclado);
     return () => window.removeEventListener("keydown", manejarTeclado);
-  }, [pin, estado]);
+  }, [agregarDigito, borrarDigito]);
 
-  // ── Si está bloqueado, mostrar pantalla alternativa ─────────────────────────
+  // ── Pantalla bloqueada (suscripción vencida) ──────────────────────────────
   if (bloqueado) {
-    return <PantallaBloqueada onCancelar={onCancelar} />;
+    return (
+      <ShellLoginAdmin onCancelar={onCancelar} labelCancelar="Volver" imagenLocal={imagenLocal}>
+        <EmptyState
+          tone="danger"
+          glyph={<IconoAlerta size={32} />}
+          title="Acceso suspendido"
+          body="El acceso al panel está suspendido por falta de pago. Contactá al soporte para regularizar tu suscripción."
+        />
+        <ContactoCard />
+      </ShellLoginAdmin>
+    );
   }
 
-  // ── Layout del teclado numérico ─────────────────────────────────────────────
-  const teclas = [
-    ["1", "2", "3"],
-    ["4", "5", "6"],
-    ["7", "8", "9"],
-    [null, "0", "borrar"],
-  ];
+  // Color del icono fallback según estado (no se usa cuando hay logo).
+  const iconoColor = estado === 'error' ? theme.danger : theme.accent;
 
-  const colorIndicador =
-    estado === "error" ? "#e74c3c" :
-    estado === "exito" ? "#1a7a4a" :
-    "#1a7a4a";
+  const subtituloTexto = estado === 'error'
+    ? "PIN incorrecto. Intentá de nuevo."
+    : "Ingresá tu PIN de 4 dígitos";
+
+  const subtituloColor = estado === 'error' ? theme.danger : theme.muted;
 
   return (
-    <div style={styles.pantalla}>
-      <div style={styles.lineaSuperior} />
+    <ShellLoginAdmin onCancelar={onCancelar} labelCancelar="Cancelar" imagenLocal={imagenLocal}>
+      <LogoCirculo imagenLogo={imagenLogo} fallbackColor={iconoColor} />
 
-      <div style={styles.headerRow}>
-        <button style={styles.btnCancelar} onClick={() => {
-          console.log('[pantallaLoginAdmin] onCancelar — iniciado');
-          onCancelar();
+      <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <h1 style={{
+          fontFamily: theme.body,
+          fontWeight: theme.weightHeading,
+          fontSize: theme.sizeTitle,
+          color: theme.ink,
+          letterSpacing: '-0.02em',
+          margin: 0,
         }}>
-          Cancelar
-        </button>
-      </div>
-
-      <div style={styles.iconoArea}>
-        <div style={{ ...styles.iconoCirculo, borderColor: colorIndicador, color: colorIndicador }}>
-          <CandadoIcon />
-        </div>
-        <h1 style={styles.titulo}>Panel de Administrador</h1>
-        <p style={styles.subtitulo}>
-          {estado === "error" ? "PIN incorrecto. Intentá de nuevo." : "Ingresá tu PIN de 4 dígitos"}
+          Acceso al panel
+        </h1>
+        <p style={{
+          fontFamily: theme.body,
+          fontSize: theme.sizeBody,
+          color: subtituloColor,
+          margin: 0,
+          minHeight: 22,
+          transition: `color ${theme.transitionFast}`,
+        }}>
+          {subtituloTexto}
         </p>
       </div>
 
-      <div style={{ ...styles.indicadoresRow, ...(shake ? styles.shake : {}) }}>
-        {[0, 1, 2, 3].map((i) => (
-          <div
-            key={i}
-            style={{
-              ...styles.indicador,
-              backgroundColor:
-                estado === "error" ? "#e74c3c" :
-                estado === "exito" ? "#1a7a4a" :
-                i < pin.length ? "#1a7a4a" : "transparent",
-              borderColor:
-                estado === "error" ? "#e74c3c" :
-                estado === "exito" ? "#1a7a4a" :
-                i < pin.length ? "#1a7a4a" : "#cccccc",
-              transform: i < pin.length ? "scale(1.1)" : "scale(1)",
-              transition: "all 0.15s ease",
-            }}
-          />
-        ))}
-      </div>
+      <IndicadoresPin pin={pin} estado={estado} shake={shake} />
 
-      <div style={styles.teclado}>
-        {teclas.map((fila, fi) => (
-          <div key={fi} style={styles.filaTeclado}>
-            {fila.map((tecla, ti) => {
-              if (tecla === null) return <div key={ti} style={styles.teclaVacia} />;
-              if (tecla === "borrar") {
-                return (
-                  <button key={ti} style={styles.teclaBorrar} onPointerDown={borrarDigito} aria-label="Borrar">
-                    <BackspaceIcon />
-                  </button>
-                );
-              }
-              return (
-                <button key={ti} style={styles.tecla} onPointerDown={() => agregarDigito(tecla)} aria-label={`Tecla ${tecla}`}>
-                  {tecla}
-                </button>
-              );
-            })}
-          </div>
+      {/* Teclado numérico 3×4 — fila 4 es: vacío, 0, borrar */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr 1fr',
+        gap: 10,
+        width: '100%',
+        marginTop: 4,
+      }}>
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+          <TeclaNum key={n} ariaLabel={`Tecla ${n}`} onClick={() => agregarDigito(String(n))}>
+            {n}
+          </TeclaNum>
         ))}
+        <div />
+        <TeclaNum ariaLabel="Tecla 0" onClick={() => agregarDigito('0')}>0</TeclaNum>
+        <TeclaNum ariaLabel="Borrar" onClick={borrarDigito}>
+          <Delete size={22} strokeWidth={1.75} />
+        </TeclaNum>
       </div>
-
-      <style>{`
-        @keyframes shake {
-          0%, 100% { transform: translateX(0); }
-          20%       { transform: translateX(-10px); }
-          40%       { transform: translateX(10px); }
-          60%       { transform: translateX(-8px); }
-          80%       { transform: translateX(8px); }
-        }
-      `}</style>
-    </div>
+    </ShellLoginAdmin>
   );
 }
-
-// ─── Estilos ──────────────────────────────────────────────────────────────────
-const styles = {
-  pantalla: {
-    width: "100vw",
-    height: "100vh",
-    backgroundColor: "#ffffff",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    overflow: "hidden",
-    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
-    position: "relative",
-  },
-  lineaSuperior: {
-    position: "absolute",
-    top: 0, left: 0, right: 0,
-    height: "4px",
-    background: "linear-gradient(90deg, #1a7a4a 0%, #2dba6e 50%, #1a7a4a 100%)",
-  },
-  headerRow: {
-    width: "100%",
-    maxWidth: "480px",
-    display: "flex",
-    justifyContent: "flex-end",
-    padding: "28px 5vw 0",
-  },
-  btnCancelar: {
-    fontSize: "16px",
-    fontWeight: "500",
-    color: "#888888",
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    fontFamily: "inherit",
-    padding: "8px 0",
-  },
-  iconoArea: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: "12px",
-    marginTop: "4vh",
-    marginBottom: "4vh",
-  },
-  iconoCirculo: {
-    width: "72px",
-    height: "72px",
-    borderRadius: "50%",
-    border: "2px solid",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    transition: "all 0.3s ease",
-  },
-  titulo: {
-    fontSize: "clamp(22px, 3vw, 30px)",
-    fontWeight: "700",
-    color: "#111111",
-    margin: 0,
-    letterSpacing: "-0.02em",
-  },
-  subtitulo: {
-    fontSize: "clamp(14px, 1.5vw, 16px)",
-    color: "#888888",
-    margin: 0,
-    minHeight: "22px",
-    transition: "color 0.2s ease",
-  },
-  indicadoresRow: {
-    display: "flex",
-    gap: "20px",
-    marginBottom: "5vh",
-  },
-  shake: {
-    animation: "shake 0.5s ease",
-  },
-  indicador: {
-    width: "18px",
-    height: "18px",
-    borderRadius: "50%",
-    border: "2px solid",
-  },
-  teclado: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-    width: "100%",
-    maxWidth: "360px",
-    padding: "0 5vw",
-  },
-  filaTeclado: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr 1fr",
-    gap: "16px",
-  },
-  tecla: {
-    height: "clamp(70px, 10vh, 90px)",
-    borderRadius: "16px",
-    border: "1.5px solid #e8e8e8",
-    backgroundColor: "#fafafa",
-    color: "#111111",
-    fontSize: "clamp(22px, 3vw, 28px)",
-    fontWeight: "600",
-    cursor: "pointer",
-    fontFamily: "inherit",
-    transition: "background-color 0.1s, transform 0.1s",
-    WebkitTapHighlightColor: "transparent",
-    userSelect: "none",
-  },
-  teclaBorrar: {
-    height: "clamp(70px, 10vh, 90px)",
-    borderRadius: "16px",
-    border: "1.5px solid #e8e8e8",
-    backgroundColor: "#fafafa",
-    color: "#555555",
-    fontSize: "22px",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontFamily: "inherit",
-    transition: "background-color 0.1s",
-    WebkitTapHighlightColor: "transparent",
-    userSelect: "none",
-  },
-  teclaVacia: {
-    height: "clamp(70px, 10vh, 90px)",
-  },
-  // ── Pantalla bloqueada ────────────────────────────────────────────────────
-  contactoCard: {
-    marginTop: "8px",
-    padding: "20px 32px",
-    borderRadius: "16px",
-    border: "1.5px solid #f0f0f0",
-    backgroundColor: "#fafafa",
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
-    alignItems: "center",
-  },
-  contactoLinea: {
-    margin: 0,
-    fontSize: "15px",
-    color: "#555555",
-    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
-  },
-};

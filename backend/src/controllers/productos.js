@@ -9,7 +9,6 @@ import { query } from '../config/db.js';
  * @returns {JSON} Array de productos con id, nombre, precio y stock_actual
  */
 export const getProductos = async (req, res) => {
-  console.log('[productos] getProductos — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre, precio, stock_actual
@@ -18,10 +17,9 @@ export const getProductos = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    console.log('[productos] getProductos — completado:', result.rows.length, 'productos encontrados');
     res.json(result.rows);
   } catch (err) {
-    console.error('[productos] Error en getProductos:', err.message);
+    console.error('[productos] Error en getProductos:', err);
     res.status(500).json({ error: 'Error al obtener productos' });
   }
 };

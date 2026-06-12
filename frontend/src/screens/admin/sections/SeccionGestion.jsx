@@ -1,121 +1,68 @@
 // /frontend/src/screens/admin/sections/SeccionGestion.jsx
 // Sección Gestión del panel admin.
-// Contiene 5 sub-secciones (tabs internos): Barberos, Servicios, Productos,
-// Datos del negocio y Cambio de PIN admin.
-// Cada tab carga sus propios datos al activarse — no hay precarga global.
-// Estilo visual idéntico a SeccionBalances.
+// Shell con 6 tabs: Barberos, Servicios, Productos, Turnero (config booking
+// online), Negocio, Seguridad. Cada tab carga sus propios datos al
+// activarse — no hay precarga global.
+//
+// Estructura visual: Tabs underline (D8) arriba + contenido del tab activo.
+// Sin ScreenHeader (D15: el usuario decidió sacar el header de esta sección).
+// Sin padding/fondo propios en el <main> — los hereda del PanelAdmin (D7).
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import {
+  Scissors,
+  ClipboardList,
+  Package,
+  Calendar,
+  Building2,
+  Shield,
+} from 'lucide-react';
+
+import Tabs from '../../../components/ui/Tabs.jsx';
+
 import TabBarberos  from './gestion/TabBarberos.jsx';
 import TabServicios from './gestion/TabServicios.jsx';
 import TabProductos from './gestion/TabProductos.jsx';
+import TabTurnero   from './gestion/TabTurnero.jsx';
 import TabNegocio   from './gestion/TabNegocio.jsx';
-import TabPinAdmin  from './gestion/TabPinAdmin.jsx';
+import TabSeguridad from './gestion/TabSeguridad.jsx';
 
-// ─── Tabs disponibles ─────────────────────────────────────────────────────────
-const TABS = [
-  { key: 'barberos',  label: '✂️  Barberos'         },
-  { key: 'servicios', label: '📋  Servicios'         },
-  { key: 'productos', label: '🧴  Productos'         },
-  { key: 'negocio',   label: '🏠  Datos del negocio' },
-  { key: 'pin',       label: '🔑  PIN admin'         },
+// ─── Items del tablist ────────────────────────────────────────────────────────
+const TABS_ITEMS = [
+  { key: 'barberos',  label: 'Barberos',          icon: Scissors      },
+  { key: 'servicios', label: 'Servicios',         icon: ClipboardList },
+  { key: 'productos', label: 'Productos',         icon: Package       },
+  { key: 'turnero',   label: 'Turnero',           icon: Calendar      },
+  { key: 'negocio',   label: 'Negocio',           icon: Building2     },
+  { key: 'seguridad', label: 'Seguridad',         icon: Shield        },
 ];
 
+/**
+ * SeccionGestion
+ * Shell padre de las 6 tabs de administración del negocio. Mantiene cuál tab
+ * está activa y renderiza solo el contenido correspondiente.
+ *
+ * @returns {JSX.Element}
+ */
 export default function SeccionGestion() {
   const [tabActiva, setTabActiva] = useState('barberos');
 
-  useEffect(() => {
-    console.log('[seccionGestion] Montada');
-  }, []);
-
   return (
-    <div style={styles.contenedor}>
+    <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <Tabs
+        items={TABS_ITEMS}
+        value={tabActiva}
+        onChange={setTabActiva}
+      />
 
-      {/* ── Encabezado: título + tabs en el mismo row ── */}
-      <div style={styles.encabezado}>
-        <div>
-          <h2 style={styles.titulo}>Gestión</h2>
-          <p style={styles.subtitulo}>Administración de barberos, servicios, productos y configuración</p>
-        </div>
-        <div style={styles.tabsContainer}>
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              style={{
-                ...styles.tabBtn,
-                ...(tabActiva === tab.key ? styles.tabBtnActivo : {}),
-              }}
-              onPointerDown={() => setTabActiva(tab.key)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Contenido del tab activo ── */}
-      <div style={styles.tabContenido}>
+      <div>
         {tabActiva === 'barberos'  && <TabBarberos />}
         {tabActiva === 'servicios' && <TabServicios />}
         {tabActiva === 'productos' && <TabProductos />}
+        {tabActiva === 'turnero'   && <TabTurnero />}
         {tabActiva === 'negocio'   && <TabNegocio />}
-        {tabActiva === 'pin'       && <TabPinAdmin />}
+        {tabActiva === 'seguridad' && <TabSeguridad />}
       </div>
-
     </div>
   );
 }
-
-// ─── Estilos — idénticos a SeccionBalances ────────────────────────────────────
-const styles = {
-  contenedor: {
-    padding: '36px 40px',
-    fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
-    color: '#111111',
-  },
-  encabezado: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: '28px',
-    flexWrap: 'wrap',
-    gap: '16px',
-  },
-  titulo: {
-    fontSize: '24px',
-    fontWeight: '700',
-    color: '#111',
-    margin: '0 0 4px',
-  },
-  subtitulo: {
-    fontSize: '14px',
-    color: '#888',
-    margin: 0,
-  },
-  tabsContainer: {
-    display: 'flex',
-    gap: '8px',
-    backgroundColor: '#f5f5f5',
-    borderRadius: '12px',
-    padding: '4px',
-  },
-  tabBtn: {
-    padding: '8px 20px',
-    borderRadius: '9px',
-    border: 'none',
-    backgroundColor: 'transparent',
-    color: '#888888',
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-    transition: 'all 0.15s',
-  },
-  tabBtnActivo: {
-    backgroundColor: '#ffffff',
-    color: '#111111',
-    fontWeight: '600',
-    boxShadow: '0 1px 4px rgba(0,0,0,0.10)',
-  },
-  tabContenido: {},
-};

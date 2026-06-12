@@ -34,11 +34,15 @@ Lee esto antes de cualquier otra cosa.
 
 ## 2. Convenciones no-negociables
 
-Las convenciones técnicas completas (logs, errores, async, timezone, multi-tenancy, Supabase, frontend, etc.) están en:
+Las convenciones técnicas generales (logs, errores, async, timezone, multi-tenancy, Supabase, etc.) están en:
 
 **`/docs/convenciones_tecnicas.md`**
 
-Léelo cuando vayas a escribir código por primera vez en una sesión, o cuando tengas dudas de patrón.
+Las convenciones de **UI / frontend** (sistema visual, primitivos, accesibilidad, densidad por superficie, qué NO hacemos visualmente) están en:
+
+**`/docs/sistema_de_disenio.md`**
+
+Léelos cuando vayas a escribir código por primera vez en una sesión, o cuando tengas dudas de patrón. Para tareas que tocan UI, **los dos** son de lectura obligada.
 
 ---
 
@@ -48,15 +52,21 @@ Léelo cuando vayas a escribir código por primera vez en una sesión, o cuando 
 
 Excepción: podés leer los archivos `.md` de contexto general (los que están en este mapa de documentos) cuando sean **estrictamente necesarios** para la tarea que te pedí.
 
+**Excepción adicional para tareas de UI**: podés leer sin pedir permiso los archivos de la "fuente de verdad" del sistema de diseño (`frontend-turnero/src/theme/tokens.js`, `utils/formato.js`, `utils/fecha.js`, `components/ui/*`, `index.css`). Son referencia, no código que vayas a modificar sin avisar.
+
 ### Mapa de documentos
 
 | Archivo | Para qué sirve |
 |---|---|
 | `/docs/convenciones_tecnicas.md` | Referencia activa de cómo se escribe código en el proyecto. |
+| `/docs/sistema_de_disenio.md` | Sistema de diseño: tokens, primitivos, reglas visuales y de accesibilidad. Léelo para cualquier tarea de UI. |
 | `/docs/estado_actual.md` | El "dónde estamos": estado funcional, lo que ya está, lo que falta, decisiones tomadas. |
 | `/docs/ruta_proyecto.md` | Estructura de carpetas y archivos del proyecto. Consultá esto antes de asumir rutas. |
 | `/docs/SQL_Schema.md` | Schema completo de la DB (referencia, no ejecutar). |
 | `/docs/onboarding.md`| Alta de un cliente nuevo.
+| `/docs/deudas_tecnicas_frontend.md` | **Archivado (2026-06-07).** Historia del rediseño del panel de gestión: cómo se resolvió cada deuda. El estado vigente de deudas vive en `estado_actual.md`. |
+| `/docs/plan_recordatorio_turnos.md` | **Archivado (2026-06-09).** Diseño e implementación (por etapas) del mail de recordatorio de turno; Etapas 0–3 hechas y verificadas en prod. Referencia histórica del diseño y los contratos de código. Lo que falta (Etapa 4, activación en el tenant real) vive en el "Checklist del merge" de `estado_actual.md`. |
+| `/docs/plan_entregabilidad_mail.md` | **Archivado (2026-06-09).** Migración del envío de mails a Resend (API HTTP vía fetch) + autenticación de dominio (SPF/DKIM/DMARC), completada y verificada en prod. Referencia histórica. Los residuales (merge a `main`, Fase 6 de DMARC, re-test de Outlook) viven en el "Checklist del merge" de `estado_actual.md`. |
 
 
 ---

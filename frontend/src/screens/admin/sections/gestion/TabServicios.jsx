@@ -1,17 +1,40 @@
 // /frontend/src/screens/admin/sections/gestion/TabServicios.jsx
-// ABM de servicios. Permite listar, crear y editar servicios.
-// No hay eliminación — se usa el campo activo (true/false) para desactivar.
-// Los datos se cargan al montar el componente.
+// ABM de servicios. Listar / crear / editar. No hay eliminación física —
+// se desactiva via `activo: false`.
+//
+// Sistema de diseño: tokens + Geist + Lucide + onClick. Densidad compacta.
+// Tabla densa con primitivo DataTable (sort por columna + paginación a partir
+// de 7 filas). Click en fila abre modal de edición; sin columna de acciones.
+// Loading via LoadingState (D6).
 
 import { useState, useEffect } from 'react';
-import { apiFetch } from '../../../../services/api';
+import { Plus, ClipboardList, AlertTriangle, RefreshCw } from 'lucide-react';
 
-// ─── Modal crear / editar servicio ────────────────────────────────────────────
+import { apiFetch, getServiciosAdmin } from '../../../../services/api';
+import { fmtPesos } from '../../../../utils/formato';
+import {
+  Button,
+  Field,
+  Modal,
+  DataTable,
+  EmptyState,
+  LoadingState,
+  IconoAlerta,
+  BadgeEstado,
+  ToggleEstado,
+} from '../../../../components/ui';
+import { theme } from '../../../../theme/tokens.js';
+
+// ─── Modal crear / editar ─────────────────────────────────────────────────────
+
 /**
- * ModalServicio — formulario para crear o editar un servicio.
- * @param {object|null} servicio  - null = modo crear, objeto = modo editar
- * @param {function}    onGuardar - callback al guardar exitosamente
- * @param {function}    onCerrar  - callback al cancelar o cerrar
+ * ModalServicio
+ * Formulario en modal para crear o editar un servicio.
+ *
+ * @param {object} props
+ * @param {object|null} props.servicio - null = modo crear; objeto = modo editar
+ * @param {(servicio: object, esEdicion: boolean) => void} props.onGuardar
+ * @param {() => void} props.onCerrar
  */
 function ModalServicio({ servicio, onGuardar, onCerrar }) {
   const esEdicion = servicio !== null;
@@ -25,7 +48,8 @@ function ModalServicio({ servicio, onGuardar, onCerrar }) {
   const puedeGuardar = nombre.trim() !== '' && precio !== '' && Number(precio) >= 0;
 
   /**
-   * handleGuardar — envía POST (crear) o PUT (editar) al backend.
+   * handleGuardar
+   * POST (crear) o PUT (editar) al backend. Cierra el modal en éxito.
    */
   const handleGuardar = async () => {
     if (!puedeGuardar) return;
@@ -34,23 +58,15 @@ function ModalServicio({ servicio, onGuardar, onCerrar }) {
 
     const body   = { nombre: nombre.trim(), precio: Number(precio), activo };
     const method = esEdicion ? 'PUT' : 'POST';
-    const path   = esEdicion ? `/gestion/servicios/${servicio.id}` : '/gestion/servicios';
-
-    console.log(`[tabServicios] handleGuardar — request recibido | method: ${method} | nombre: ${body.nombre}`);
+    const path   = esEdicion ? `/admin/servicios/${servicio.id}` : '/admin/servicios';
 
     try {
-      const res = await apiFetch(path, {
-        method,
-        body: JSON.stringify(body),
-      });
-
+      const res = await apiFetch(path, { method, body: JSON.stringify(body) });
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Error del servidor');
       }
-
       const servicioGuardado = await res.json();
-      console.log('[tabServicios] handleGuardar — completado | id:', servicioGuardado.id);
       onGuardar(servicioGuardado, esEdicion);
     } catch (err) {
       console.error('[tabServicios] Error en handleGuardar:', err.message);
@@ -61,147 +77,205 @@ function ModalServicio({ servicio, onGuardar, onCerrar }) {
   };
 
   return (
-    <div style={styles.modalOverlay}>
-      <div style={styles.modalCard}>
-
-        {/* Título */}
-        <p style={styles.modalTitulo}>
-          {esEdicion ? 'Editar servicio' : 'Nuevo servicio'}
-        </p>
-
-        {/* Campos */}
-        <div style={styles.camposCol}>
-
-          {/* Nombre */}
-          <div style={styles.campoGrupo}>
-            <label style={styles.campoLabel}>Nombre</label>
-            <input
-              type="text"
-              value={nombre}
-              onChange={e => setNombre(e.target.value)}
-              placeholder="Ej: Corte clásico"
-              style={styles.campoInput}
-              autoFocus
-            />
-          </div>
-
-          {/* Precio */}
-          <div style={styles.campoGrupo}>
-            <label style={styles.campoLabel}>Precio</label>
-            <div style={styles.precioRow}>
-              <span style={styles.precioSigno}>$</span>
-              <input
-                type="number"
-                min="0"
-                value={precio}
-                onChange={e => setPrecio(e.target.value)}
-                placeholder="0"
-                style={{ ...styles.campoInput, flex: 1 }}
-              />
-            </div>
-          </div>
-
-          {/* Activo — solo visible en modo edición */}
-          {esEdicion && (
-            <div style={styles.activoRow}>
-              <span style={styles.campoLabel}>Estado</span>
-              <button
-                style={{
-                  ...styles.toggleBtn,
-                  ...(activo ? styles.toggleActivo : styles.toggleInactivo),
-                }}
-                onPointerDown={() => setActivo(prev => !prev)}
-              >
-                {activo ? '✓  Activo' : '✕  Inactivo'}
-              </button>
-            </div>
-          )}
-
-        </div>
-
-        {/* Error */}
-        {error && <p style={styles.errorTexto}>{error}</p>}
-
-        {/* Botones */}
-        <div style={styles.modalBotones}>
-          <button
-            style={styles.btnCancelar}
-            onPointerDown={onCerrar}
-            disabled={guardando}
-          >
+    <Modal
+      open
+      onClose={onCerrar}
+      loading={guardando}
+      title={esEdicion ? 'Editar servicio' : 'Nuevo servicio'}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCerrar} disabled={guardando}>
             Cancelar
-          </button>
-          <button
-            style={{
-              ...styles.btnGuardar,
-              ...(!puedeGuardar || guardando ? styles.btnDeshabilitado : {}),
-            }}
-            onPointerDown={handleGuardar}
-            disabled={!puedeGuardar || guardando}
-          >
-            {guardando ? 'Guardando...' : 'Guardar'}
-          </button>
-        </div>
+          </Button>
+          <Button variant="primary" onClick={handleGuardar} disabled={!puedeGuardar || guardando}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <Field
+          label="Nombre"
+          value={nombre}
+          onChange={setNombre}
+          placeholder="Ej: Corte clásico"
+        />
+        <Field
+          label="Precio"
+          type="text"
+          inputMode="numeric"
+          value={precio}
+          onChange={(v) => setPrecio(v.replace(/\D/g, ''))}
+          placeholder="Ej: 5000"
+        />
+        {esEdicion && <ToggleEstado value={activo} onChange={setActivo} />}
 
+        {error && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 12px',
+            background: theme.dangerSoft,
+            border: `1px solid ${theme.danger}33`,
+            borderRadius: theme.radius,
+            color: theme.danger,
+            fontFamily: theme.body,
+            fontSize: theme.sizeBody,
+          }}>
+            <AlertTriangle size={16} strokeWidth={1.75} />
+            <span>{error}</span>
+          </div>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
+
+/**
+ * TabServicios
+ * Tab de gestión de servicios. Lista + crear + editar (sin eliminar físico).
+ *
+ * @returns {JSX.Element}
+ */
 export default function TabServicios() {
   const [servicios, setServicios]               = useState([]);
   const [cargando, setCargando]                 = useState(true);
   const [error, setError]                       = useState(null);
+  const [intento, setIntento]                   = useState(0);
   const [modalAbierto, setModalAbierto]         = useState(false);
   const [servicioEditando, setServicioEditando] = useState(null);
 
-  // ── Carga inicial ─────────────────────────────────────────────────────────
+  // ── Carga inicial / reintentos ────────────────────────────────────────────
   useEffect(() => {
-    const cargarServicios = async () => {
-      console.log('[tabServicios] cargarServicios — request recibido');
+    let cancelado = false;
+    const cargar = async () => {
+      setCargando(true);
+      setError(null);
       try {
-        const res  = await apiFetch('/gestion/servicios');
-        const data = await res.json();
-        console.log('[tabServicios] cargarServicios — completado | servicios:', data.length);
-        setServicios(data);
+        const data = await getServiciosAdmin();
+        if (!cancelado) setServicios(data);
       } catch (err) {
-        console.error('[tabServicios] Error en cargarServicios:', err.message);
-        setError('No se pudieron cargar los servicios.');
+        console.error('[tabServicios] Error en carga:', err.message);
+        if (!cancelado) setError('No se pudieron cargar los servicios.');
       } finally {
-        setCargando(false);
+        if (!cancelado) setCargando(false);
       }
     };
-    cargarServicios();
-  }, []);
+    cargar();
+    return () => { cancelado = true; };
+  }, [intento]);
 
   // ── Control del modal ─────────────────────────────────────────────────────
-  const abrirCrear   = ()         => { setServicioEditando(null);     setModalAbierto(true); };
-  const abrirEditar  = (servicio) => { setServicioEditando(servicio); setModalAbierto(true); };
-  const cerrarModal  = ()         => { setModalAbierto(false); setServicioEditando(null); };
+  const abrirCrear  = ()         => { setServicioEditando(null);     setModalAbierto(true); };
+  const abrirEditar = (servicio) => { setServicioEditando(servicio); setModalAbierto(true); };
+  const cerrarModal = ()         => { setModalAbierto(false); setServicioEditando(null); };
 
-  // ── Callback al guardar ───────────────────────────────────────────────────
   /**
-   * handleGuardado — actualiza la lista local sin refetch al backend.
+   * handleGuardado
+   * Actualiza la lista local sin refetch al backend tras crear / editar.
    * @param {object}  servicioGuardado - objeto devuelto por el backend
-   * @param {boolean} esEdicion        - true = edición, false = creación
+   * @param {boolean} esEdicion
    */
   const handleGuardado = (servicioGuardado, esEdicion) => {
     if (esEdicion) {
-      setServicios(prev => prev.map(s => s.id === servicioGuardado.id ? servicioGuardado : s));
+      setServicios((prev) => prev.map((s) => s.id === servicioGuardado.id ? servicioGuardado : s));
     } else {
-      setServicios(prev => [...prev, servicioGuardado]);
+      setServicios((prev) => [...prev, servicioGuardado]);
     }
     cerrarModal();
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  if (cargando) return <p style={styles.estadoTexto}>Cargando servicios...</p>;
-  if (error)    return <p style={styles.errorTexto}>{error}</p>;
+  // ── Estados de carga / error ──────────────────────────────────────────────
+  if (cargando) return <LoadingState />;
+  if (error) {
+    return (
+      <EmptyState
+        tone="danger"
+        glyph={<IconoAlerta />}
+        title="No se pudieron cargar los servicios"
+        body={error}
+        action={
+          <Button variant="secondary" onClick={() => setIntento((n) => n + 1)} full={false}>
+            <RefreshCw size={16} strokeWidth={1.75} /> Reintentar
+          </Button>
+        }
+      />
+    );
+  }
 
+  // ── Columnas del DataTable ────────────────────────────────────────────────
+  const columnas = [
+    {
+      key: 'nombre',
+      label: 'Nombre',
+      sortable: true,
+      grow: true,
+      sortAccessor: (row) => String(row.nombre ?? '').toLowerCase(),
+    },
+    {
+      key: 'precio',
+      label: 'Precio',
+      sortable: true,
+      align: 'right',
+      render: (row) => fmtPesos(row.precio),
+    },
+    {
+      key: 'estado',
+      label: 'Estado',
+      sortable: true,
+      align: 'right',
+      // Activos primero al ordenar asc.
+      sortAccessor: (row) => row.activo ? 0 : 1,
+      render: (row) => <BadgeEstado activo={row.activo} />,
+    },
+  ];
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div>
-      {/* Modal */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* Fila de acción superior */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{
+          fontFamily: theme.body,
+          fontSize: theme.sizeBody,
+          color: theme.muted,
+        }}>
+          {servicios.length} servicio{servicios.length !== 1 ? 's' : ''} registrado{servicios.length !== 1 ? 's' : ''}
+        </span>
+        <Button variant="primary" onClick={abrirCrear} full={false}>
+          <Plus size={16} strokeWidth={2} /> Nuevo servicio
+        </Button>
+      </div>
+
+      {/* Tabla o empty */}
+      {servicios.length === 0 ? (
+        <EmptyState
+          glyph={<ClipboardList size={28} strokeWidth={1.5} />}
+          title="Sin servicios registrados"
+          body="Creá tu primer servicio desde el botón de arriba."
+        />
+      ) : (
+        <div style={{
+          background: theme.surface,
+          border: `1px solid ${theme.hairline}`,
+          borderRadius: theme.radiusLg,
+          overflow: 'hidden',
+        }}>
+          <DataTable
+            columns={columnas}
+            rows={servicios}
+            rowKey={(row) => row.id}
+            onRowClick={abrirEditar}
+            pageSize={6}
+          />
+        </div>
+      )}
+
+      {/* Modal crear / editar */}
       {modalAbierto && (
         <ModalServicio
           servicio={servicioEditando}
@@ -209,304 +283,6 @@ export default function TabServicios() {
           onCerrar={cerrarModal}
         />
       )}
-
-      {/* ── Fila superior: título + botón nuevo ── */}
-      <div style={styles.filaAcciones}>
-        <p style={styles.subtitulo}>
-          {servicios.length} servicio{servicios.length !== 1 ? 's' : ''} registrado{servicios.length !== 1 ? 's' : ''}
-        </p>
-        <button style={styles.btnNuevo} onPointerDown={abrirCrear}>
-          + Nuevo servicio
-        </button>
-      </div>
-
-      {/* ── Tabla ── */}
-      {servicios.length === 0 ? (
-        <p style={styles.estadoTexto}>No hay servicios registrados todavía.</p>
-      ) : (
-        <div style={styles.tablaWrapper}>
-          <table style={styles.tabla}>
-            <thead>
-              <tr>
-                <th style={styles.th}>Nombre</th>
-                <th style={styles.th}>Precio</th>
-                <th style={styles.th}>Estado</th>
-                <th style={styles.thAccion}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {servicios.map((s, i) => (
-                <tr
-                  key={s.id}
-                  style={{ backgroundColor: i % 2 === 0 ? '#ffffff' : '#fafafa' }}
-                >
-                  <td style={styles.td}>{s.nombre}</td>
-                  <td style={styles.td}>$ {Number(s.precio).toLocaleString('es-AR')}</td>
-                  <td style={styles.td}>
-                    <span style={{
-                      ...styles.badge,
-                      ...(s.activo ? styles.badgeActivo : styles.badgeInactivo),
-                    }}>
-                      {s.activo ? 'Activo' : 'Inactivo'}
-                    </span>
-                  </td>
-                  <td style={styles.tdAccion}>
-                    <button
-                      style={styles.btnEditar}
-                      onPointerDown={() => abrirEditar(s)}
-                    >
-                      ✎
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }
-
-// ─── Estilos ──────────────────────────────────────────────────────────────────
-const styles = {
-  // Layout
-  filaAcciones: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '16px',
-  },
-  subtitulo: {
-    margin: 0,
-    fontSize: '14px',
-    color: '#888888',
-  },
-  btnNuevo: {
-    padding: '10px 20px',
-    borderRadius: '10px',
-    border: 'none',
-    backgroundColor: '#1a7a4a',
-    color: '#ffffff',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-
-  // Tabla
-  tablaWrapper: {
-    overflowX: 'auto',
-    borderRadius: '12px',
-    border: '1.5px solid #eeeeee',
-  },
-  tabla: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    fontSize: '14px',
-  },
-  th: {
-    padding: '13px 16px',
-    textAlign: 'left',
-    fontSize: '11px',
-    fontWeight: '600',
-    color: '#888888',
-    textTransform: 'uppercase',
-    letterSpacing: '0.07em',
-    borderBottom: '1.5px solid #eeeeee',
-    backgroundColor: '#fafafa',
-  },
-  thAccion: {
-    padding: '13px 16px',
-    width: '48px',
-    borderBottom: '1.5px solid #eeeeee',
-    backgroundColor: '#fafafa',
-  },
-  td: {
-    padding: '13px 16px',
-    color: '#333333',
-    borderBottom: '1px solid #f0f0f0',
-    fontSize: '14px',
-  },
-  tdAccion: {
-    padding: '8px 12px',
-    textAlign: 'center',
-    borderBottom: '1px solid #f0f0f0',
-  },
-  badge: {
-    display: 'inline-block',
-    padding: '3px 10px',
-    borderRadius: '20px',
-    fontSize: '12px',
-    fontWeight: '600',
-  },
-  badgeActivo: {
-    backgroundColor: '#e8f5e9',
-    color: '#2e7d32',
-  },
-  badgeInactivo: {
-    backgroundColor: '#f5f5f5',
-    color: '#999999',
-  },
-  btnEditar: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '8px',
-    border: '1.5px solid #e0e0e0',
-    backgroundColor: '#ffffff',
-    color: '#555555',
-    fontSize: '15px',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // Estados
-  estadoTexto: {
-    textAlign: 'center',
-    color: '#888888',
-    fontSize: '15px',
-    padding: '48px 0',
-    margin: 0,
-  },
-  errorTexto: {
-    textAlign: 'center',
-    color: '#c0392b',
-    fontSize: '15px',
-    padding: '48px 0',
-    margin: 0,
-  },
-
-  // Modal
-  modalOverlay: {
-    position: 'fixed',
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
-  },
-  modalCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: '20px',
-    padding: '32px',
-    width: '420px',
-    maxWidth: '90vw',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  modalTitulo: {
-    fontSize: '20px',
-    fontWeight: '700',
-    color: '#111111',
-    margin: '0 0 24px',
-    textAlign: 'center',
-  },
-
-  // Campos del formulario
-  camposCol: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-    marginBottom: '24px',
-  },
-  campoGrupo: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  campoLabel: {
-    fontSize: '13px',
-    fontWeight: '600',
-    color: '#555555',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  campoInput: {
-    padding: '11px 14px',
-    borderRadius: '10px',
-    border: '1.5px solid #e0e0e0',
-    fontSize: '15px',
-    color: '#111111',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-    outline: 'none',
-  },
-  precioRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  precioSigno: {
-    fontSize: '18px',
-    fontWeight: '300',
-    color: '#555555',
-  },
-
-  // Toggle activo/inactivo
-  activoRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  toggleBtn: {
-    padding: '8px 20px',
-    borderRadius: '20px',
-    border: 'none',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: "'DM Sans', Arial, sans-serif",
-  },
-  toggleActivo: {
-    backgroundColor: '#e8f5e9',
-    color: '#2e7d32',
-  },
-  toggleInactivo: {
-    backgroundColor: '#f5f5f5',
-    color: '#999999',
-  },
-
-  // Error en modal
-  errorTextoModal: {
-    color: '#c0392b',
-    fontSize: '13px',
-    textAlign: 'center',
-    margin: '-8px 0 8px',
-  },
-
-  // Botones del modal
-  modalBotones: {
-    display: 'flex',
-    gap: '12px',
-  },
-  btnCancelar: {
-    flex: 1,
-    padding: '13px 0',
-    borderRadius: '12px',
-    border: '1.5px solid #e0e0e0',
-    backgroundColor: '#ffffff',
-    color: '#444444',
-    fontSize: '15px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-  },
-  btnGuardar: {
-    flex: 1,
-    padding: '13px 0',
-    borderRadius: '12px',
-    border: 'none',
-    backgroundColor: '#1a7a4a',
-    color: '#ffffff',
-    fontSize: '15px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-  },
-  btnDeshabilitado: {
-    backgroundColor: '#cccccc',
-    cursor: 'not-allowed',
-  },
-};

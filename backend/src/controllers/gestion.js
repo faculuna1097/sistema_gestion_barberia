@@ -6,6 +6,7 @@
 
 import { query } from '../config/db.js';
 import bcrypt from 'bcrypt';
+import { pinColisiona } from '../utils/pin.js';
 
 const SALT_ROUNDS = 10;
 
@@ -18,7 +19,6 @@ const SALT_ROUNDS = 10;
  * @returns {JSON} Array de barberos con id, nombre, comision_tipo, comision_valor, activo
  */
 export const getBarberos = async (req, res) => {
-  console.log('[gestion] getBarberos — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre, comision_tipo, comision_valor, activo
@@ -27,10 +27,9 @@ export const getBarberos = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    console.log('[gestion] getBarberos — completado:', result.rows.length, 'barberos');
     res.json(result.rows);
   } catch (err) {
-    console.error('[gestion] Error en getBarberos:', err.message);
+    console.error('[gestion] Error en getBarberos:', err);
     res.status(500).json({ error: 'Error al obtener barberos' });
   }
 };
@@ -45,7 +44,6 @@ export const getBarberos = async (req, res) => {
  * @returns {JSON} Barbero creado sin PIN
  */
 export const crearBarbero = async (req, res) => {
-  console.log('[gestion] crearBarbero — request recibido | body:', { ...req.body, pin: '***' }, '| tenant:', req.tenant_id);
   const { nombre, pin, comision_valor } = req.body;
 
   if (!nombre || !pin || comision_valor === undefined) {
@@ -54,19 +52,29 @@ export const crearBarbero = async (req, res) => {
   if (!/^\d{4}$/.test(pin)) {
     return res.status(400).json({ error: 'El PIN debe ser exactamente 4 dígitos numéricos' });
   }
+  const comision = Number(comision_valor);
+  if (!Number.isFinite(comision) || comision < 0 || comision > 100) {
+    return res.status(400).json({ error: 'comision_valor debe ser un número entre 0 y 100' });
+  }
 
   try {
+    // Unicidad de PIN dentro del tenant (vs admin y otros barberos). Pre-requisito
+    // del login unificado del panel: dos PINs iguales harían el login ambiguo.
+    if (await pinColisiona(pin, { tenantId: req.tenant_id })) {
+      return res.status(409).json({ error: 'Ese PIN ya está en uso por otro barbero o por el admin' });
+    }
+
     const pinHash = await bcrypt.hash(pin, SALT_ROUNDS);
     const result = await query(
       `INSERT INTO barbero (tenant_id, nombre, pin, comision_tipo, comision_valor, activo)
        VALUES ($1, $2, $3, 'porcentaje', $4, true)
        RETURNING id, nombre, comision_tipo, comision_valor, activo`,
-      [req.tenant_id, nombre.trim(), pinHash, Number(comision_valor)]
+      [req.tenant_id, nombre.trim(), pinHash, comision]
     );
-    console.log('[gestion] crearBarbero — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
+    console.log('[gestion] crearBarbero completado | barbero_id:', result.rows[0].id);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en crearBarbero:', err.message);
+    console.error('[gestion] Error en crearBarbero:', err);
     res.status(500).json({ error: 'Error al crear barbero' });
   }
 };
@@ -85,11 +93,14 @@ export const crearBarbero = async (req, res) => {
  */
 export const editarBarbero = async (req, res) => {
   const { id } = req.params;
-  console.log('[gestion] editarBarbero — request recibido | id:', id, '| body:', { ...req.body, pin: req.body.pin ? '***' : undefined }, '| tenant:', req.tenant_id);
   const { nombre, comision_valor, activo, pin } = req.body;
 
   if (!nombre || comision_valor === undefined || activo === undefined) {
     return res.status(400).json({ error: 'nombre, comision_valor y activo son requeridos' });
+  }
+  const comision = Number(comision_valor);
+  if (!Number.isFinite(comision) || comision < 0 || comision > 100) {
+    return res.status(400).json({ error: 'comision_valor debe ser un número entre 0 y 100' });
   }
 
   try {
@@ -99,13 +110,18 @@ export const editarBarbero = async (req, res) => {
       if (!/^\d{4}$/.test(pin)) {
         return res.status(400).json({ error: 'El PIN debe ser exactamente 4 dígitos numéricos' });
       }
+      // Unicidad de PIN dentro del tenant, excluyéndose a sí mismo (un barbero
+      // puede reguardar su mismo PIN sin que cuente como colisión).
+      if (await pinColisiona(pin, { tenantId: req.tenant_id, excluirBarberoId: id })) {
+        return res.status(409).json({ error: 'Ese PIN ya está en uso por otro barbero o por el admin' });
+      }
       const pinHash = await bcrypt.hash(pin, SALT_ROUNDS);
       result = await query(
         `UPDATE barbero
          SET nombre = $1, comision_valor = $2, activo = $3, pin = $4
          WHERE id = $5 AND tenant_id = $6
          RETURNING id, nombre, comision_tipo, comision_valor, activo`,
-        [nombre.trim(), Number(comision_valor), activo, pinHash, id, req.tenant_id]
+        [nombre.trim(), comision, activo, pinHash, id, req.tenant_id]
       );
     } else {
       result = await query(
@@ -113,17 +129,17 @@ export const editarBarbero = async (req, res) => {
          SET nombre = $1, comision_valor = $2, activo = $3
          WHERE id = $4 AND tenant_id = $5
          RETURNING id, nombre, comision_tipo, comision_valor, activo`,
-        [nombre.trim(), Number(comision_valor), activo, id, req.tenant_id]
+        [nombre.trim(), comision, activo, id, req.tenant_id]
       );
     }
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Barbero no encontrado' });
     }
-    console.log('[gestion] editarBarbero — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
+    console.log('[gestion] editarBarbero completado | barbero_id:', result.rows[0].id);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en editarBarbero:', err.message);
+    console.error('[gestion] Error en editarBarbero:', err);
     res.status(500).json({ error: 'Error al editar barbero' });
   }
 };
@@ -137,7 +153,6 @@ export const editarBarbero = async (req, res) => {
  * @returns {JSON} Array de servicios con id, nombre, precio, activo
  */
 export const getServicios = async (req, res) => {
-  console.log('[gestion] getServicios — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre, precio, activo
@@ -146,10 +161,9 @@ export const getServicios = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    console.log('[gestion] getServicios — completado:', result.rows.length, 'servicios');
     res.json(result.rows);
   } catch (err) {
-    console.error('[gestion] Error en getServicios:', err.message);
+    console.error('[gestion] Error en getServicios:', err);
     res.status(500).json({ error: 'Error al obtener servicios' });
   }
 };
@@ -163,7 +177,6 @@ export const getServicios = async (req, res) => {
  * @returns {JSON} Servicio creado
  */
 export const crearServicio = async (req, res) => {
-  console.log('[gestion] crearServicio — request recibido | body:', req.body, '| tenant:', req.tenant_id);
   const { nombre, precio } = req.body;
 
   if (!nombre || precio === undefined) {
@@ -177,10 +190,10 @@ export const crearServicio = async (req, res) => {
        RETURNING id, nombre, precio, activo`,
       [req.tenant_id, nombre.trim(), Number(precio)]
     );
-    console.log('[gestion] crearServicio — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
+    console.log('[gestion] crearServicio completado | servicio_id:', result.rows[0].id);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en crearServicio:', err.message);
+    console.error('[gestion] Error en crearServicio:', err);
     res.status(500).json({ error: 'Error al crear servicio' });
   }
 };
@@ -197,7 +210,6 @@ export const crearServicio = async (req, res) => {
  */
 export const editarServicio = async (req, res) => {
   const { id } = req.params;
-  console.log('[gestion] editarServicio — request recibido | id:', id, '| body:', req.body, '| tenant:', req.tenant_id);
   const { nombre, precio, activo } = req.body;
 
   if (!nombre || precio === undefined || activo === undefined) {
@@ -215,10 +227,10 @@ export const editarServicio = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Servicio no encontrado' });
     }
-    console.log('[gestion] editarServicio — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
+    console.log('[gestion] editarServicio completado | servicio_id:', result.rows[0].id);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en editarServicio:', err.message);
+    console.error('[gestion] Error en editarServicio:', err);
     res.status(500).json({ error: 'Error al editar servicio' });
   }
 };
@@ -232,7 +244,6 @@ export const editarServicio = async (req, res) => {
  * @returns {JSON} Array de productos con id, nombre, precio, stock_actual, stock_minimo, activo
  */
 export const getProductos = async (req, res) => {
-  console.log('[gestion] getProductos — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
       `SELECT id, nombre, precio, stock_actual, stock_minimo, activo
@@ -241,118 +252,99 @@ export const getProductos = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    console.log('[gestion] getProductos — completado:', result.rows.length, 'productos');
     res.json(result.rows);
   } catch (err) {
-    console.error('[gestion] Error en getProductos:', err.message);
+    console.error('[gestion] Error en getProductos:', err);
     res.status(500).json({ error: 'Error al obtener productos' });
   }
 };
 
 /**
  * crearProducto
- * Crea un nuevo producto. stock_actual arranca en 0.
+ * Crea un nuevo producto. stock_actual arranca en `agregar_stock` (stock inicial,
+ * default 0). Stock inicial y datos del producto se persisten en una sola sentencia
+ * INSERT (atómica por definición — ver convención §6: sin BEGIN/COMMIT).
  * @param {string} req.tenant_id          - Inyectado por verificarToken
  * @param {string} req.body.nombre        - Nombre del producto
  * @param {number} req.body.precio        - Precio del producto
  * @param {number} req.body.stock_minimo  - Stock mínimo para alertas (default: 0)
+ * @param {number} req.body.agregar_stock - Stock inicial con el que ingresa (default 0, >= 0)
  * @returns {JSON} Producto creado
  */
 export const crearProducto = async (req, res) => {
-  console.log('[gestion] crearProducto — request recibido | body:', req.body, '| tenant:', req.tenant_id);
-  const { nombre, precio, stock_minimo } = req.body;
+  const { nombre, precio, stock_minimo, agregar_stock } = req.body;
 
   if (!nombre || precio === undefined) {
     return res.status(400).json({ error: 'nombre y precio son requeridos' });
   }
 
+  // agregar_stock es el stock inicial (opcional). Si viene, debe ser un número >= 0.
+  const delta = Number(agregar_stock ?? 0);
+  if (!Number.isFinite(delta) || delta < 0) {
+    return res.status(400).json({ error: 'agregar_stock debe ser un número mayor o igual a 0' });
+  }
+
   try {
     const result = await query(
       `INSERT INTO producto (tenant_id, nombre, precio, stock_actual, stock_minimo, activo)
-       VALUES ($1, $2, $3, 0, $4, true)
+       VALUES ($1, $2, $3, $4, $5, true)
        RETURNING id, nombre, precio, stock_actual, stock_minimo, activo`,
-      [req.tenant_id, nombre.trim(), Number(precio), Number(stock_minimo ?? 0)]
+      [req.tenant_id, nombre.trim(), Number(precio), delta, Number(stock_minimo ?? 0)]
     );
-    console.log('[gestion] crearProducto — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
+    console.log('[gestion] crearProducto completado | producto_id:', result.rows[0].id);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en crearProducto:', err.message);
+    console.error('[gestion] Error en crearProducto:', err);
     res.status(500).json({ error: 'Error al crear producto' });
   }
 };
 
 /**
  * editarProducto
- * Edita nombre, precio, stock_minimo y/o activo. NO modifica stock_actual.
+ * Edita nombre, precio, stock_minimo y/o activo, y opcionalmente suma unidades
+ * al stock con `agregar_stock` (delta aditivo). Datos y delta de stock se aplican
+ * en una sola sentencia UPDATE (atómica por definición — convención §6: sin
+ * BEGIN/COMMIT). stock_actual nunca se setea directo, solo se incrementa.
  * @param {string}  req.params.id          - UUID del producto
  * @param {string}  req.tenant_id          - Inyectado por verificarToken
  * @param {string}  req.body.nombre        - Nombre del producto
  * @param {number}  req.body.precio        - Precio del producto
  * @param {number}  req.body.stock_minimo  - Stock mínimo para alertas
  * @param {boolean} req.body.activo        - Estado activo/inactivo
+ * @param {number}  req.body.agregar_stock - Unidades a sumar al stock actual (default 0, >= 0)
  * @returns {JSON} Producto actualizado
  */
 export const editarProducto = async (req, res) => {
   const { id } = req.params;
-  console.log('[gestion] editarProducto — request recibido | id:', id, '| body:', req.body, '| tenant:', req.tenant_id);
-  const { nombre, precio, stock_minimo, activo } = req.body;
+  const { nombre, precio, stock_minimo, activo, agregar_stock } = req.body;
 
   if (!nombre || precio === undefined || activo === undefined) {
     return res.status(400).json({ error: 'nombre, precio y activo son requeridos' });
   }
 
+  // agregar_stock es opcional (delta a sumar al stock actual). Si viene, debe ser >= 0.
+  const delta = Number(agregar_stock ?? 0);
+  if (!Number.isFinite(delta) || delta < 0) {
+    return res.status(400).json({ error: 'agregar_stock debe ser un número mayor o igual a 0' });
+  }
+
   try {
     const result = await query(
       `UPDATE producto
-       SET nombre = $1, precio = $2, stock_minimo = $3, activo = $4
-       WHERE id = $5 AND tenant_id = $6
+       SET nombre = $1, precio = $2, stock_minimo = $3, activo = $4,
+           stock_actual = stock_actual + $5
+       WHERE id = $6 AND tenant_id = $7
        RETURNING id, nombre, precio, stock_actual, stock_minimo, activo`,
-      [nombre.trim(), Number(precio), Number(stock_minimo ?? 0), activo, id, req.tenant_id]
+      [nombre.trim(), Number(precio), Number(stock_minimo ?? 0), activo, delta, id, req.tenant_id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
-    console.log('[gestion] editarProducto — completado | id:', result.rows[0].id, '| nombre:', result.rows[0].nombre);
+    console.log('[gestion] editarProducto completado | producto_id:', result.rows[0].id);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en editarProducto:', err.message);
+    console.error('[gestion] Error en editarProducto:', err);
     res.status(500).json({ error: 'Error al editar producto' });
-  }
-};
-
-/**
- * agregarStock
- * Suma unidades al stock_actual de un producto (operación aditiva, nunca directa).
- * @param {string} req.params.id      - UUID del producto
- * @param {string} req.tenant_id      - Inyectado por verificarToken
- * @param {number} req.body.cantidad  - Unidades a agregar (debe ser > 0)
- * @returns {JSON} { id, nombre, stock_actual }
- */
-export const agregarStock = async (req, res) => {
-  const { id } = req.params;
-  console.log('[gestion] agregarStock — request recibido | id:', id, '| cantidad:', req.body.cantidad, '| tenant:', req.tenant_id);
-  const { cantidad } = req.body;
-
-  if (!cantidad || Number(cantidad) <= 0) {
-    return res.status(400).json({ error: 'cantidad debe ser un número mayor a 0' });
-  }
-
-  try {
-    const result = await query(
-      `UPDATE producto
-       SET stock_actual = stock_actual + $1
-       WHERE id = $2 AND tenant_id = $3
-       RETURNING id, nombre, stock_actual`,
-      [Number(cantidad), id, req.tenant_id]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Producto no encontrado' });
-    }
-    console.log('[gestion] agregarStock — completado | nombre:', result.rows[0].nombre, '| nuevo stock:', result.rows[0].stock_actual);
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error('[gestion] Error en agregarStock:', err.message);
-    res.status(500).json({ error: 'Error al agregar stock' });
   }
 };
 
@@ -360,31 +352,29 @@ export const agregarStock = async (req, res) => {
 
 /**
  * getNegocio
- * Devuelve los datos del tenant (nombre_negocio, logo).
+ * Devuelve los datos del tenant (nombre_negocio, booking_url).
  * Ruta pública — req.tenant_id viene del tenantMiddleware (desde .env).
+ * El logo NO viaja acá: se sirve por GET /negocio/imagenes (tenant_imagen tipo='logo').
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
- * @returns {JSON} { nombre_negocio, logo }
+ * @returns {JSON} { nombre_negocio, booking_url }
  */
 export const getNegocio = async (req, res) => {
-  console.log('[gestion] getNegocio — request recibido | tenant:', req.tenant_id);
   try {
     const result = await query(
-      `SELECT nombre_negocio, logo, booking_url FROM tenant WHERE id = $1`,
+      `SELECT nombre_negocio, booking_url FROM tenant WHERE id = $1`,
       [req.tenant_id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Tenant no encontrado' });
     }
-    console.log('[gestion] getNegocio — completado | nombre:', result.rows[0].nombre_negocio);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en getNegocio:', err.message);
+    console.error('[gestion] Error en getNegocio:', err);
     res.status(500).json({ error: 'Error al obtener datos del negocio' });
   }
 };
 
 export const editarNegocio = async (req, res) => {
-  console.log('[gestion] editarNegocio — request recibido | body:', req.body, '| tenant:', req.tenant_id);
   const { nombre_negocio, booking_url } = req.body;
 
   if (!nombre_negocio) {
@@ -400,10 +390,10 @@ export const editarNegocio = async (req, res) => {
        RETURNING nombre_negocio, booking_url`,
       [nombre_negocio.trim(), booking_url ? booking_url.trim() : null, req.tenant_id]
     );
-    console.log('[gestion] editarNegocio — completado | nombre:', result.rows[0].nombre_negocio);
+    console.log('[gestion] editarNegocio completado | nombre:', result.rows[0].nombre_negocio);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('[gestion] Error en editarNegocio:', err.message);
+    console.error('[gestion] Error en editarNegocio:', err);
     res.status(500).json({ error: 'Error al editar negocio' });
   }
 };
@@ -419,7 +409,6 @@ export const editarNegocio = async (req, res) => {
  * @returns {JSON} { ok: true }
  */
 export const cambiarPinAdmin = async (req, res) => {
-  console.log('[gestion] cambiarPinAdmin — request recibido | tenant:', req.tenant_id);
   const { pin_actual, pin_nuevo } = req.body;
 
   if (!pin_actual || !pin_nuevo) {
@@ -440,8 +429,14 @@ export const cambiarPinAdmin = async (req, res) => {
 
     const pinCorrecto = await bcrypt.compare(pin_actual, tenantResult.rows[0].pin_admin);
     if (!pinCorrecto) {
-      console.log('[gestion] cambiarPinAdmin — PIN actual incorrecto | cambio rechazado');
+      console.warn('[gestion] cambiarPinAdmin — PIN actual incorrecto | cambio rechazado');
       return res.status(401).json({ error: 'El PIN actual es incorrecto' });
+    }
+
+    // Unicidad: el nuevo PIN del admin no puede chocar con el de ningún barbero
+    // (ni con el actual del propio admin, que cuenta como "ya en uso").
+    if (await pinColisiona(pin_nuevo, { tenantId: req.tenant_id })) {
+      return res.status(409).json({ error: 'Ese PIN ya está en uso por otro barbero o por el admin' });
     }
 
     const nuevoPinHash = await bcrypt.hash(pin_nuevo, SALT_ROUNDS);
@@ -450,10 +445,10 @@ export const cambiarPinAdmin = async (req, res) => {
       [nuevoPinHash, req.tenant_id]
     );
 
-    console.log('[gestion] cambiarPinAdmin — completado | PIN actualizado');
+    console.log('[gestion] cambiarPinAdmin completado');
     res.json({ ok: true });
   } catch (err) {
-    console.error('[gestion] Error en cambiarPinAdmin:', err.message);
+    console.error('[gestion] Error en cambiarPinAdmin:', err);
     res.status(500).json({ error: 'Error al cambiar el PIN' });
   }
 };
