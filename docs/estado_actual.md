@@ -209,6 +209,10 @@ de cambios:
 
 ### 🔀 Checklist del merge `feature/turnero` → `main` (go-live) — pendiente
 
+> **El paso a paso EJECUTABLE (comandos git, líneas exactas de `vercel.json`, SQL, rollback)
+> vive en [`runbook_golive_turnero.md`](./runbook_golive_turnero.md).** Lo de abajo es el
+> resumen de alto nivel; para correr el go-live, seguir el runbook.
+
 > Consolida lo que dejaron los planes de mail (ya archivados:
 > [`plan_entregabilidad_mail.md`](./plan_entregabilidad_mail.md) §13 +
 > [`plan_recordatorio_turnos.md`](./plan_recordatorio_turnos.md) Etapas 3–4) y el go-live
