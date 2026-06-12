@@ -37,7 +37,6 @@ import {
 import { fmtPesos, formatPago } from '../../../utils/formato';
 import { cargarChunk } from '../../../utils/cargarChunk';
 import {
-  ScreenHeader,
   Tabs,
   LoadingState,
   EmptyState,
@@ -293,8 +292,6 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <ScreenHeader title="Planillas" subtitle="Cortes y comisiones por barbero, semana a semana" />
-
       <Tabs items={TABS_PRINCIPALES} value={tabActiva} onChange={setTabActiva} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', gap: 16 }}>

@@ -27,7 +27,6 @@ import { cargarChunk } from '../../../utils/cargarChunk';
 import { theme } from '../../../theme/tokens.js';
 
 import {
-  ScreenHeader,
   Tabs,
   Card,
   EmptyState,
@@ -358,11 +357,6 @@ export default function SeccionBalances() {
 
   return (
     <div style={contenedor}>
-
-      <ScreenHeader
-        title="Balances"
-        subtitle="Visualización mensual de la economía del negocio"
-      />
 
       <Tabs
         items={[

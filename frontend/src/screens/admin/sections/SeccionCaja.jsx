@@ -17,7 +17,6 @@ import { getFechaHoy } from '../../../utils/fecha';
 import { fmtPesos, formatPago } from '../../../utils/formato';
 import { cargarChunk } from '../../../utils/cargarChunk';
 import {
-  ScreenHeader,
   Tabs,
   LoadingState,
   EmptyState,
@@ -468,7 +467,6 @@ export default function SeccionCaja() {
 
   return (
     <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <ScreenHeader title="Caja" subtitle="Movimientos diarios y cierres" />
 
       <Tabs items={TABS} value={tabActivo} onChange={setTabActivo} />
 
