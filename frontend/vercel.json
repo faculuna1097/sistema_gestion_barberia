@@ -3,13 +3,11 @@
   "rewrites": [
     {
       "source": "/turnos/:path*",
-      "destination": "https://sistema-gestion-barberia-turnero.vercel.app/:path*",
-      "has": [{ "type": "host", "value": "demo.barbermanager.app" }]
+      "destination": "https://sistema-gestion-barberia-turnero.vercel.app/:path*"
     },
     {
       "source": "/barbero/:path*",
-      "destination": "https://sistema-gestion-barberia-barbero.vercel.app/:path*",
-      "has": [{ "type": "host", "value": "demo.barbermanager.app" }]
+      "destination": "https://sistema-gestion-barberia-barbero.vercel.app/:path*"
     }
   ]
 }
