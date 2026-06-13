@@ -257,4 +257,46 @@ WHERE id = '<barbero_id>' AND tenant_id = 'a1b2c3d4-0000-0000-0000-000000000001'
 
 ---
 
+## Post-mortem — descubrimientos del go-live (2026-06-12)
+
+El web service de Railway entró en **crash-loop** apenas se pusheó el merge. Eran **tres causas
+encadenadas**: cada una tapaba a la siguiente, así que aparecieron de a una a medida que se
+resolvían. Servicio restaurado tras pinear Node 22; backend pasó de `502 → 400` (sano) y los
+tres fronts quedaron OK.
+
+1. **Faltaban `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` en el web service.** El merge trajo
+   `backend/src/config/supabase.js` (cliente de Supabase **Storage** para imágenes de tenant,
+   rama `imagenes-tenant`), que se inicializa al cargar el módulo. El "Estado de partida" de este
+   runbook solo verificó `RESEND_API_KEY`/`MAIL_FROM`, **no** estas dos → boot crash
+   (`supabaseUrl is required`). La conexión a la DB es por `pg` (otras credenciales), por eso no
+   saltó antes. **Fix:** agregarlas al web service — `SUPABASE_URL =
+   https://mtmqdnkbustsfawxgroe.supabase.co`, `SUPABASE_SERVICE_ROLE_KEY` desde Supabase →
+   Settings → API.
+
+2. **Las shared variables de Railway no se inyectan solas.** Crearlas a nivel proyecto **no** las
+   adjunta al servicio: hay que referenciarlas desde el servicio (`${{shared.VAR}}`) o setearlas
+   directo. El primer intento (solo crear las shared) no llegó al contenedor y **ni siquiera
+   disparó un deploy nuevo** — siguió el mismo crash. Pista en el log: `injecting env (0) from
+   .env`. **Fix:** setearlas directo en el web service (o referenciar la shared).
+
+3. **Node 18 + `@supabase/supabase-js` v2 = crash por WebSocket.** Con las vars ya presentes,
+   `createClient()` construye **siempre** su cliente de Realtime (websockets), que exige
+   `WebSocket` nativo (existe en **Node ≥22**, no en 18). Railway corría Node 18 porque
+   `engines: ">=18"` hace que Nixpacks tome el **piso** del rango (no había `Dockerfile`/`.nvmrc`/
+   `nixpacks.toml`). Node 20 no sirve (su WebSocket global es experimental detrás de flag).
+   **Fix:** pinear `"node": "22.x"` en `backend/package.json` (commit `ec1d155`); de paso saca
+   los warnings de "Node 18 deprecated".
+
+**Implicancia para el cron (Fase 4):** el servicio cron sigue en `feature/turnero`, con el mismo
+`engines: ">=18"`. Al apuntarlo a `main` se lleva el fix de Node 22 — razón extra para que apunte
+a `main` y no a la rama vieja.
+
+**Deuda técnica de fondo (registrar en `estado_actual.md`):** que una credencial o
+incompatibilidad del **Storage de imágenes** voltee **todo el backend** al bootear es un
+acoplamiento indebido. Fix correcto: inicialización **perezosa** del cliente de Supabase y que un
+fallo de Storage devuelva un 500 puntual en vez de matar el proceso. Ver
+`backend/src/config/supabase.js`.
+
+---
+
 *— Fin del runbook —*
