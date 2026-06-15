@@ -39,7 +39,7 @@ trivial, idempotencia casi gratis).
 - **Reservas tardías post-lote:** si alguien reserva *después* de que corrió el lote, no
   recibe recordatorio (ya recibió la confirmación). Comportamiento aceptado, no es bug.
 - **Dependía de la migración a Resend:** el cron no podía enviar hasta que el mail saliera
-  por HTTP (Railway bloquea SMTP) — ver [`plan_entregabilidad_mail.md`](plan_entregabilidad_mail.md).
+  por HTTP (Railway bloquea SMTP) — ver [`decisiones_mail_entregabilidad.md`](decisiones_mail_entregabilidad.md).
 
 ## Deudas relacionadas (abiertas, menores)
 

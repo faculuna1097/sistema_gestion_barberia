@@ -75,7 +75,7 @@ El SQL completo está en `SQL_Schema.md`; acá solo las decisiones que no se lee
    ANTELACION_MINIMA_MINUTOS` (5 min, constante en `utils/constantes.js`, no magic number).
 
 (El cortocircuito por día cerrado/feriado del tenant lo agregó después
-[`plan_horario_atencion.md`](plan_horario_atencion.md).)
+[`decisiones_horario_atencion.md`](decisiones_horario_atencion.md).)
 
 ## Google Calendar — Arquitectura A (invitación por email)
 

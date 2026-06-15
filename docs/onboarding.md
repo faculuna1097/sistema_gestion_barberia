@@ -174,6 +174,53 @@ Mismo patrón para **cambio de subdominio** (invalidás el subdominio viejo) o c
 
 **Caveat (limitación conocida):** el caché es por proceso. Hoy Railway corre 1 instancia, así que invalidar sirve. Si en el futuro hay >1 instancia, la invalidación solo limpiaría la que recibió el request (haría falta Redis/pubsub — fuera de alcance hoy).
 
+### Activar el recordatorio de turnos (opt-in por tenant)
+
+El mail de recordatorio (la noche anterior) está **apagado por default** en cada tenant; se
+prende a propósito, recién cuando los mails transaccionales del tenant ya se vieron llegar bien.
+
+```sql
+-- Ver estado actual
+SELECT subdominio, configuracion FROM tenant WHERE subdominio = '<subdominio>';
+
+-- PRENDER (merge superficial: crea recordatorio si no existe, preserva ciudad/moneda)
+UPDATE tenant
+SET configuracion = COALESCE(configuracion, '{}'::jsonb) || '{"recordatorio": {"activo": true}}'::jsonb
+WHERE subdominio = '<subdominio>';
+
+-- APAGAR
+UPDATE tenant
+SET configuracion = COALESCE(configuracion, '{}'::jsonb) || '{"recordatorio": {"activo": false}}'::jsonb
+WHERE subdominio = '<subdominio>';
+```
+
+> Se usa `||` (no `jsonb_set`) porque `jsonb_set` no crea el objeto `recordatorio` intermedio si
+> todavía no existe. Si en el futuro hay claves anidadas a preservar (ej. `hora_envio`), cambiar a `jsonb_set`.
+> Ojo: si los barberos del tenant tienen `email = NULL`, sus turnos no sincronizan con Calendar,
+> pero los **clientes** igual reciben el recordatorio → flip deliberado.
+
+### Cargar el email de un barbero (activa la sync con Google Calendar)
+
+El `email` del barbero **es el interruptor** de la sincronización con Google Calendar. Sin email,
+sus turnos se crean normal pero no aparecen en su calendar.
+
+```sql
+-- Ver ids y estado actual
+SELECT id, nombre, email FROM barbero WHERE tenant_id = '<tenant_uuid>';
+
+-- Cargar el email de un barbero
+UPDATE barbero SET email = 'mail-del-barbero@gmail.com'
+WHERE id = '<barbero_id>' AND tenant_id = '<tenant_uuid>';
+```
+
+**Antes de correrlo:**
+1. **Avisarle al barbero.** Apenas tiene email, empieza a recibir invitaciones de Google Calendar
+   desde `turnos.barbermanager@gmail.com`. Si no sabe qué son, las puede rechazar o marcar spam
+   (ensucia reputación). Cargar el email **después** de coordinarlo con él.
+2. **Solo afecta turnos nuevos.** Los turnos creados mientras el email era `NULL` no se
+   re-sincronizan; solo los creados después invitan al barbero.
+3. **No hay otro switch:** el email *es* el interruptor de la sync de Calendar para ese barbero.
+
 ### Renovación mensual de suscripción
 
 El script setea la suscripción inicial hasta fin del mes en curso. Para renovar:

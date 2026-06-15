@@ -9,7 +9,7 @@
 > `estado_actual.md`. Los números (#NN) se siguen referenciando desde commits y otros docs.
 
 Este documento fue el **registro vivo** de las deudas técnicas detectadas durante el
-rediseño del panel de gestión (ver `docs/plan_redisenio_frontend_gestion.md`).
+rediseño del panel de gestión (ver `docs/decisiones_redisenio_panel_gestion.md`).
 Acá vivió el plan escalonado para resolverlas y el seguimiento de cada una.
 
 **Regla de oro**: una deuda no se borra. Cuando se resuelve, se cambia su estado a
@@ -391,4 +391,4 @@ Historia. No borrar. Formato compacto: # — título — cómo/cuándo se cerró
 
 ---
 
-*Documento creado: 2026-05-29 — extraído de la sección "## 3. Deudas técnicas" de `docs/plan_redisenio_frontend_gestion.md` para llevar registro y plan de resolución dedicados.*
+*Documento creado: 2026-05-29 — extraído de la sección "## 3. Deudas técnicas" de `docs/decisiones_redisenio_panel_gestion.md` para llevar registro y plan de resolución dedicados.*

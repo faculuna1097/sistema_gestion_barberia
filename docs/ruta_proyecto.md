@@ -36,17 +36,18 @@ sistema-gestion-barberia/
 docs/
 |-- SQL_Schema.md
 |-- convenciones_tecnicas.md
+|-- decisiones_acceso_barberos.md
+|-- decisiones_horario_atencion.md
+|-- decisiones_login_operativo.md
+|-- decisiones_mail_entregabilidad.md
+|-- decisiones_mail_recordatorio.md
+|-- decisiones_redisenio_panel_gestion.md
+|-- decisiones_turnero.md
 |-- deudas_tecnicas_frontend.md
 |-- estado_actual.md
 |-- onboarding.md
 |-- performance_frontends.md
-|-- plan_acceso_barberos_panel.md
-|-- plan_entregabilidad_mail.md
-|-- plan_horario_atencion.md
-|-- plan_login_operativo.md
-|-- plan_recordatorio_turnos.md
-|-- plan_redisenio_frontend_gestion.md
-|-- plan_turnero_v2.md
+|-- postmortem_golive_turnero.md
 |-- ruta_proyecto.md
 `-- sistema_de_disenio.md
 ```

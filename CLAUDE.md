@@ -65,8 +65,14 @@ Excepción: podés leer los archivos `.md` de contexto general (los que están e
 | `/docs/SQL_Schema.md` | Schema completo de la DB (referencia, no ejecutar). |
 | `/docs/onboarding.md`| Alta de un cliente nuevo.
 | `/docs/deudas_tecnicas_frontend.md` | **Archivado (2026-06-07).** Historia del rediseño del panel de gestión: cómo se resolvió cada deuda. El estado vigente de deudas vive en `estado_actual.md`. |
-| `/docs/plan_recordatorio_turnos.md` | **Archivado.** Núcleo de decisiones del mail de recordatorio (lote diario, noche anterior): modelo elegido, claim atómico, Railway Cron, opt-in. En producción. La activación opt-in en kingsai está pendiente en `estado_actual.md`. |
-| `/docs/plan_entregabilidad_mail.md` | **Archivado.** Núcleo de decisiones de la migración del mail a Resend (API HTTP vía fetch) + autenticación de dominio (SPF/DKIM/DMARC): por qué Resend, por qué dominio propio, capa de proveedor, progresión DMARC. En producción. Residuales time-gated (DMARC, Outlook) en `estado_actual.md`. |
+| `/docs/decisiones_mail_recordatorio.md` | **Archivado.** Núcleo de decisiones del mail de recordatorio (lote diario, noche anterior): modelo elegido, claim atómico, Railway Cron, opt-in. En producción. La activación opt-in en kingsai está pendiente en `estado_actual.md`. |
+| `/docs/decisiones_mail_entregabilidad.md` | **Archivado.** Núcleo de decisiones de la migración del mail a Resend (API HTTP vía fetch) + autenticación de dominio (SPF/DKIM/DMARC): por qué Resend, por qué dominio propio, capa de proveedor, progresión DMARC. En producción. Residuales time-gated (DMARC, Outlook) en `estado_actual.md`. |
+| `/docs/decisiones_turnero.md` | **Archivado.** Núcleo de decisiones del turnero (3 frontends, disponibilidad al vuelo, EXCLUDE GIST sin transacción, Calendar Arquitectura A, endpoints por audiencia). En producción. |
+| `/docs/decisiones_horario_atencion.md` | **Archivado.** Núcleo de decisiones del horario de atención + feriados del tenant (modelado, validación write-time, cascada). En producción. |
+| `/docs/decisiones_login_operativo.md` | **Archivado.** Núcleo de decisiones del login del modo operativo (credenciales en `tenant`, token operativo 30d, rationale de seguridad). En producción. |
+| `/docs/decisiones_acceso_barberos.md` | **Archivado.** Núcleo de decisiones del acceso de barberos al panel por PIN (unicidad de PIN, login unificado, vista reducida). En producción. |
+| `/docs/decisiones_redisenio_panel_gestion.md` | **Archivado.** Decisiones de diseño (D1–D16) del rediseño del panel de gestión al sistema "Luz". El sistema vigente vive en `sistema_de_disenio.md`. |
+| `/docs/postmortem_golive_turnero.md` | **Archivado.** Post-mortem del go-live del turnero: las 3 causas del crash-loop (env vars de Supabase, shared vars de Railway, Node 18 sin WebSocket). El SQL operativo (recordatorio opt-in, emails de barberos) está en `onboarding.md`. |
 
 
 ---

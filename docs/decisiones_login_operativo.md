@@ -43,7 +43,7 @@ turnos del día con nombres de clientes. Aceptable como MVP con un solo tenant (
   aceptada (JWT self-contained)— **se resolvió** con `operativo_token_version` + claim `tv`
   (ver `estado_actual.md` §Sistema).
 - El login admin migró de `/api/auth/verificar-pin` a `/api/auth/panel/login` (login unificado
-  admin/barbero — ver `plan_acceso_barberos_panel.md`).
+  admin/barbero — ver `decisiones_acceso_barberos.md`).
 
 ## Trabajo futuro (sigue abierto)
 
