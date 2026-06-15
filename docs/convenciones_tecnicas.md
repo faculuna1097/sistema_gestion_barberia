@@ -171,8 +171,7 @@ No se eliminan registros en ABMs. Se usa el campo `activo` (true/false) para pre
 - No pasar `headers: { 'Content-Type': 'application/json' }` — `apiFetch` lo agrega internamente.
 
 ### Eventos táctiles
-- `onPointerDown` en botones operativos. **Nunca** `onClick`.
-- Aplica a: teclas del teclado de PIN, botones de selección en flujos, selectores de mes, botones exportar, tabs.
+- **Siempre `onClick`. Nunca `onPointerDown`.** (`onPointerDown` dispara al apretar, no se puede cancelar deslizando afuera, y rompe la accesibilidad por teclado.) El rediseño migró todo a `onClick`; ver `sistema_de_disenio.md` §4.3.
 
 ### Estructura del panel admin
 - Cada `SeccionXxx` es autónoma y carga sus datos en `useEffect([])`.
@@ -196,6 +195,34 @@ No se eliminan registros en ABMs. Se usa el campo `activo` (true/false) para pre
 - **DB:** PostgreSQL via Supabase Session Pooler.
 - **Auth:** bcrypt + JWT (token en memoria, `useState` en `App.jsx`).
 - **Deploy:** Backend en Railway, Frontend en Vercel, dominio `barbermanager.app`.
+
+---
+
+## 10. Medición de performance
+
+Reglas para que los números signifiquen algo (aprendidas midiendo el turnero y gestión):
+
+- **Nunca medir sobre `npm run dev`.** El dev server sirve módulos sueltos, sin minificar, sin
+  gzip, con HMR → miente. Medir **siempre** sobre build de prod servido con `vite preview`
+  (`npm run build` → `npm run preview`).
+- **Network tab:** `☑ Disable cache` (simula 1ª visita) + **throttling** (Fast/Slow 4G; sin
+  throttle localhost sirve en ~5 ms y la cascada miente).
+- **Emular el celular real, no el iPad.** El User-Agent cambia lo que sirve el server: en iPad
+  Google Fonts mandó 6 `.ttf`; en iPhone real, 2 `.woff2` (fuentes variables). Medir el
+  dispositivo equivocado dio un diagnóstico peor que la realidad.
+- **Estos fronts son CSR puro (Vite SPA):** el HTML llega vacío; el bundle pega doble en mobile
+  (descarga **y** ejecución, ~3–4× más lenta en celular). Para la CPU del celular la cura es
+  **mandar menos JS** (code-split), no cachear (el cache no ahorra parse/execute).
+- **Medí antes de optimizar.** El cuello casi nunca es lo que uno sospecha: el JS del turnero
+  parecía el problema y estaba exonerado (descarga 300 ms, ejecución 237 ms @ CPU 4×); el cuello
+  real era el backend.
+- **Local no mide bien la red ni el cold start del backend.** Apunta a la LAN (latencia ~0) y un
+  backend local no duerme. La penalidad de conexión fría es **proporcional a la distancia
+  backend↔DB** → medir contra el deploy real (la topología correcta), no contra local.
+- **Trampas de herramienta:** `curl -I` (HEAD) sobre Supabase Storage devuelve `Cache-Control:
+  no-cache` siempre (enmascara el header real) → medir con **GET** (`curl -s -o NUL -D -`).
+- **Regla de negocio innegociable:** **nunca cachear disponibilidad/slots** (riesgo de doble
+  booking). Cachear solo lo **público y estable**: imágenes, nombre/horario/ubicación del negocio.
 
 ---
 

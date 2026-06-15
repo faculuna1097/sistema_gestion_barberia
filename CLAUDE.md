@@ -64,6 +64,7 @@ Excepción: podés leer los archivos `.md` de contexto general (los que están e
 | `/docs/ruta_proyecto.md` | Estructura de carpetas y archivos del proyecto. Consultá esto antes de asumir rutas. |
 | `/docs/SQL_Schema.md` | Schema completo de la DB (referencia, no ejecutar). |
 | `/docs/onboarding.md`| Alta de un cliente nuevo.
+| `/docs/performance_frontends.md` | Diagnóstico de performance de los fronts + trabajo de fondo pendiente (migrar región de Supabase). La metodología de medición vive en `convenciones_tecnicas.md` §10. |
 | `/docs/deudas_tecnicas_frontend.md` | **Archivado (2026-06-07).** Historia del rediseño del panel de gestión: cómo se resolvió cada deuda. El estado vigente de deudas vive en `estado_actual.md`. |
 | `/docs/decisiones_mail_recordatorio.md` | **Archivado.** Núcleo de decisiones del mail de recordatorio (lote diario, noche anterior): modelo elegido, claim atómico, Railway Cron, opt-in. En producción. La activación opt-in en kingsai está pendiente en `estado_actual.md`. |
 | `/docs/decisiones_mail_entregabilidad.md` | **Archivado.** Núcleo de decisiones de la migración del mail a Resend (API HTTP vía fetch) + autenticación de dominio (SPF/DKIM/DMARC): por qué Resend, por qué dominio propio, capa de proveedor, progresión DMARC. En producción. Residuales time-gated (DMARC, Outlook) en `estado_actual.md`. |
