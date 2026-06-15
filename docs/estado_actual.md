@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-Última actualización: 2026-06-13. **Go-live del turnero mergeado a `main` y en producción** (`kingsai.barbermanager.app`): turnero del cliente, app del barbero, acceso de barberos al panel, horario de atención + feriados y rediseño del panel de gestión, todo live. Backend fijado a **Node 22** en Railway (supabase-js v2 necesita WebSocket nativo — ver post-mortem en [`postmortem_golive_turnero.md`](./postmortem_golive_turnero.md)). El mailer de Resend está activo tanto en el web service como en el cron. Quedan solo residuales operativos/time-gated de entregabilidad de mail — ver Pendientes.
+Última actualización: 2026-06-15. **Go-live del turnero mergeado a `main` y en producción** (`kingsai.barbermanager.app`): turnero del cliente, app del barbero, acceso de barberos al panel, horario de atención + feriados y rediseño del panel de gestión, todo live. Backend fijado a **Node 22** en Railway (supabase-js v2 necesita WebSocket nativo — ver post-mortem en [`postmortem_golive_turnero.md`](./postmortem_golive_turnero.md)). El mailer de Resend está activo tanto en el web service como en el cron. **(2026-06-15) Landing de marketing en producción** en `barbermanager.app` (apex canónico, `www` redirige). Quedan solo residuales operativos/time-gated de entregabilidad de mail — ver Pendientes.
 
 Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convenciones_tecnicas.md).
 
@@ -28,15 +28,28 @@ Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convencio
 
 ### Frontend — Vercel
 
-Tres proyectos deployados en Vercel, todos auto-deploy en push a `main`.
+Cuatro proyectos deployados en Vercel, todos auto-deploy en push a `main`.
 
-| Proyecto | Root | URL Vercel |
+| Proyecto | Root | URL Vercel / dominio |
 |---|---|---|
 | Gestión | `/frontend` | `sistema-gestion-barberia.vercel.app` |
 | Turnero del cliente | `/frontend-turnero` | `sistema-gestion-barberia-turnero.vercel.app` |
 | App del barbero | `/frontend-barbero` | `sistema-gestion-barberia-barbero.vercel.app` |
+| Landing (marketing) | `/frontend-landing` | `barbermanager.app` (apex, canónico) |
 
-Existe además un cuarto front en el repo, **`/frontend-landing`** (página de marketing de BarberManager, commit `53ac14e`), **pendiente de deploy en Vercel**.
+**Landing — en producción (2026-06-15).** Página de marketing de BarberManager
+(`/frontend-landing`, commit `53ac14e`), proyecto Vercel propio con auto-deploy
+en push a `main`. Es un **one-pager** sin router (`base: '/'`), así que **no
+necesita `vercel.json`**. Configuración de dominio:
+- **`barbermanager.app` (apex)** es el **canónico**: sirve el landing directo (200).
+- **`www.barbermanager.app`** redirige **308 → apex**.
+- El apex estaba libre (404 `DEPLOYMENT_NOT_FOUND`) antes de este deploy. Asignar
+  `www` explícitamente al proyecto del landing **sobrescribe el wildcard
+  `*.barbermanager.app`** del proyecto de gestión (un dominio exacto le gana al
+  wildcard en Vercel) — `kingsai` y los demás subdominios de tenant siguen
+  resolviendo al panel, sin regresión.
+- El `og:url` del `index.html` ya apunta al apex, así que coincide con el canónico.
+- **Pendiente:** falta el `og:image` (ver Pendientes).
 
 El proyecto de gestión actúa de shell: su `/frontend/vercel.json` proxea
 `/turnos/*` y `/barbero/*` a los otros dos proyectos vía rewrites.
@@ -209,6 +222,11 @@ El schema del turnero se ejecutó en Supabase el 2026-05-11 (decisiones en
 
 ## Pendientes
 
+- **Landing — `og:image` faltante.** El `index.html` de `/frontend-landing`
+  referencia `https://barbermanager.app/og-image.png`, pero ese archivo no existe
+  en `public/` (solo está `favicon.svg` y el screenshot de planillas). Sin esa
+  imagen, el preview al compartir el link (WhatsApp, el canal de conversión) sale
+  sin imagen. Resolver: sumar una imagen 1200×630 a `public/og-image.png`.
 - **Caja — Tabs 2 y 3 (Cierre de caja + Historial):** postergado. No hay plan escrito; si se retoma, branch sugerido `feature/cierre-caja` (implicaría `ALTER TABLE cierre_caja` con columnas de saldo inicial — `efectivo_inicial`, `mp_inicial`, etc.).
 - **Log de actividad:** registrar quién eliminó qué y cuándo (hoy las eliminaciones no dejan rastro).
 - **Generación de QR de Mercado Pago** para cobro en el momento desde el iPad.
