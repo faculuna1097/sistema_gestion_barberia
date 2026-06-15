@@ -24,7 +24,7 @@ Antes de arrancar, tener:
 2. Corrés `crearTenant.js` para dar de alta el tenant en la DB.
 3. Verificás que el subdominio responde y el PIN funciona.
 4. Le entregás al cliente la URL y el PIN. Le mandás el manual por separado.
-5. (Opcional, cuando llegue) Subís el logo del cliente a Supabase Storage y actualizás la DB.
+5. (Opcional, cuando llegue) Cargás el logo y las imágenes del cliente desde el panel (Gestión → Negocio).
 
 ---
 
@@ -110,32 +110,25 @@ Pasarle al cliente:
 
 ---
 
-## Paso 4 — Subir el logo (cuando el cliente lo envíe)
+## Paso 4 — Cargar el logo y las imágenes (cuando el cliente las envíe)
 
-Este paso puede pasar el día del alta o semanas después. El sistema funciona perfecto sin logo (queda `null` en la DB).
+Puede pasar el día del alta o semanas después. El sistema funciona perfecto sin logo ni imágenes.
 
-### 4.1 — Subir el archivo a Supabase Storage
+**Se hace desde el panel admin, no por SQL.** Con el PIN admin, entrar a **Gestión → Negocio →
+Imágenes** y subir:
 
-1. Entrar a Supabase → Storage → bucket `logos` (público).
-2. Subir el archivo del cliente. Naming sugerido: `logo_<subdominio>.<extension>` (ej: `logo_kingsai.jpeg`).
-3. Copiar la URL pública del archivo. Formato:
-   ```
-   https://<proyecto>.supabase.co/storage/v1/object/public/logos/<nombre_archivo>
-   ```
+- **Logo** (hasta 2),
+- **Foto del local** (hasta 2 — es el fondo del modo operativo),
+- **Cortes de ejemplo** (hasta 4).
 
-### 4.2 — Actualizar la DB
+El front comprime la imagen a WebP, la sube a Supabase Storage y la registra en la tabla
+`tenant_imagen` (cupo fijo por tipo). El logo viaja a todos los fronts vía
+`GET /api/negocio/imagenes` — **no** por una columna en `tenant` (la vieja `tenant.logo` se
+dropeó tras migrar a `tenant_imagen`).
 
-En el SQL Editor de Supabase:
+### Verificar
 
-```sql
-UPDATE tenant
-SET logo = 'https://<proyecto>.supabase.co/storage/v1/object/public/logos/<nombre_archivo>'
-WHERE subdominio = '<subdominio>';
-```
-
-### 4.3 — Verificar
-
-Refrescar el panel del cliente. El logo debe aparecer en el header.
+Refrescar el panel: el logo aparece en el header y la foto del local, de fondo en el modo operativo.
 
 ---
 

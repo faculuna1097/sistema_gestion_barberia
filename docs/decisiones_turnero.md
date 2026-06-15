@@ -104,8 +104,6 @@ si no coinciden) — cierra un agujero multi-tenant.
 - **Pantalla de unificación de clientes duplicados** (cliente reserva con otro email, o "Juan sin
   email" del barbero vs "Juan con email" online). Aceptado para MVP.
 - **Eliminar `tenant.booking_url`** cuando todos los tenants usen el turnero propio.
-- **Migrar el logo viejo y `DROP COLUMN tenant.logo`** (el turnero/barbero ya leen el logo de
-  `tenant_imagen`; falta que `frontend/` deje de leer la columna).
 - **Reglas barbero ↔ servicio** (hoy todos atienden todo; el query param `servicio_id` en
   `GET /api/turnero/barberos` ya está preparado).
 - **Bot de WhatsApp** para suspender turnos (`barbero_suspension.origen='whatsapp'` ya previsto).

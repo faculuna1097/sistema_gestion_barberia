@@ -4,7 +4,6 @@
 CREATE TABLE public.tenant (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   nombre_negocio text NOT NULL,
-  logo text,
   pin_admin text NOT NULL,
   configuracion jsonb DEFAULT '{}'::jsonb,
   activo boolean DEFAULT true,
