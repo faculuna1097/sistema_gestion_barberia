@@ -8,6 +8,10 @@ import { MARCA, CONTACTO } from '../../config/landing.js';
 import { linkWhatsApp, linkEmail } from '../../utils/contacto.js';
 import Container from './Container.jsx';
 
+// Fondo del chip del logo (indigo de marca): igual al fondo del emblema, para que
+// el recuadro redondeado se vea seamless y recorte las esquinas de la imagen.
+const LOGO_BG = theme.accent;
+
 // Anclas reusadas en el footer (mismas que el nav).
 const ANCLAS = [
   { label: 'Cómo funciona', href: '#como-funciona' },
@@ -90,16 +94,21 @@ function LandingFooter() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: 26,
-                  height: 26,
-                  borderRadius: 7,
-                  background: theme.accent,
-                  color: theme.accentInk,
-                  fontWeight: theme.weightHeading,
-                  fontSize: 15,
+                  width: 28,
+                  height: 28,
+                  borderRadius: 8,
+                  background: LOGO_BG,
+                  overflow: 'hidden',
+                  flex: '0 0 auto',
                 }}
               >
-                B
+                <img
+                  src="/logo.png"
+                  alt=""
+                  width={28}
+                  height={28}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
               </span>
               {MARCA.nombre}
             </span>

@@ -10,6 +10,10 @@ import { MARCA } from '../../config/landing.js';
 import { linkWhatsApp } from '../../utils/contacto.js';
 import Button from '../ui/Button.jsx';
 
+// Fondo del chip del logo: igual al fondo del emblema (indigo de marca) para que
+// el recuadro redondeado se vea seamless con la imagen y recorte sus esquinas.
+const LOGO_BG = theme.accent;
+
 // Anclas de navegación. El href apunta al id de cada Section.
 const ANCLAS = [
   { label: 'Cómo funciona', href: '#como-funciona' },
@@ -34,18 +38,21 @@ function Logo() {
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          width: 28,
-          height: 28,
+          width: 30,
+          height: 30,
           borderRadius: 8,
-          background: theme.accent,
-          color: theme.accentInk,
-          fontFamily: theme.body,
-          fontWeight: theme.weightHeading,
-          fontSize: 17,
-          lineHeight: 1,
+          background: LOGO_BG,
+          overflow: 'hidden',
+          flex: '0 0 auto',
         }}
       >
-        B
+        <img
+          src="/logo.png"
+          alt=""
+          width={30}
+          height={30}
+          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+        />
       </span>
       <span
         style={{
