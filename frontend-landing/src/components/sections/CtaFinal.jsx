@@ -134,7 +134,7 @@ function CtaFinal() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginTop: 4 }}>
             <BotonCta href={linkWhatsApp()} solid>
               <MessageCircle size={18} strokeWidth={2} aria-hidden="true" />
-              Probá tu primer mes gratis
+              Quiero empezar
             </BotonCta>
             <BotonCta href={linkEmail()}>
               <Mail size={18} strokeWidth={1.75} aria-hidden="true" />

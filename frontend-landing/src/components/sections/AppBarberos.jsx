@@ -30,7 +30,7 @@ function AppBarberos() {
       title="Cada barbero llega y ya sabe cómo viene el día."
       subtitle="Su agenda, sus horarios y sus días libres, en el teléfono. Menos preguntas, menos huecos, menos turnos perdidos."
       items={BENEFICIOS}
-      media={<VideoEmbed {...VIDEOS.barbero} title="La app del barbero" />}
+      media={<VideoEmbed {...VIDEOS.barbero} title="La app del barbero" style={{ maxWidth: 320, marginInline: 'auto' }} />}
     />
   );
 }

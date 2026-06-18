@@ -1,16 +1,20 @@
 // /frontend-landing/src/components/sections/SistemaGestion.jsx
 // Sección más importante: el panel de gestión del dueño. Video protagonista
 // arriba + las 10 funcionalidades agrupadas en 3 bloques (para que se lea
-// ordenado y no como una lista plana).
+// ordenado y no como una lista plana) + las métricas del mes (fusionadas desde
+// la antigua sección "Métricas"), para cerrar con el payoff: no solo ordenás el
+// día, también ves si estás creciendo.
 
 import { ClipboardList, Store, BarChart3 } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
 import { VIDEOS } from '../../config/landing.js';
+import { fmtPesos } from '../../utils/formato.js';
 import Section from '../landing/Section.jsx';
 import Reveal from '../landing/Reveal.jsx';
 import Card from '../ui/Card.jsx';
 import FeatureList from '../landing/FeatureList.jsx';
 import VideoEmbed from '../landing/VideoEmbed.jsx';
+import MetricCard from '../landing/MetricCard.jsx';
 
 // Las 10 funcionalidades agrupadas en 3 bloques temáticos.
 const GRUPOS = [
@@ -29,6 +33,14 @@ const GRUPOS = [
     titulo: 'Resultados',
     items: ['Planillas semanales', 'Planillas mensuales'],
   },
+];
+
+// Métricas del mes (fusionadas desde la antigua sección "Métricas"). Datos
+// ilustrativos: muestran la funcionalidad, no son de un tenant real.
+const METRICAS = [
+  { label: 'Ingresos del mes', value: fmtPesos(842000), delta: '+18%', deltaLabel: 'vs. el mes anterior', data: [42, 50, 47, 58, 70, 86] },
+  { label: 'Clientes atendidos', value: '318', delta: '+12%', deltaLabel: 'vs. el mes anterior', data: [60, 64, 62, 70, 78, 84] },
+  { label: 'Crecimiento', value: '+31%', deltaLabel: 'en los últimos 3 meses', data: [48, 55, 58, 66, 75, 88] },
 ];
 
 /**
@@ -109,6 +121,57 @@ function SistemaGestion() {
             style={{ flex: '1 1 280px', maxWidth: 360, display: 'flex' }}
           >
             <GrupoCard icon={g.icon} titulo={g.titulo} items={g.items} />
+          </Reveal>
+        ))}
+      </div>
+
+      {/* Cierre con el payoff: las métricas del mes. No es una sección aparte
+          (fusionada acá) para no alargar la página. */}
+      <Reveal
+        style={{
+          maxWidth: theme.maxWidthText,
+          marginInline: 'auto',
+          textAlign: 'center',
+          marginTop: 'clamp(48px, 7vw, 72px)',
+          marginBottom: 'clamp(24px, 4vw, 32px)',
+        }}
+      >
+        <h3
+          style={{
+            fontFamily: theme.body,
+            fontWeight: theme.weightHeading,
+            fontSize: 'clamp(20px, 3vw, 28px)',
+            letterSpacing: '-0.02em',
+            lineHeight: 1.2,
+            color: theme.ink,
+            margin: 0,
+          }}
+        >
+          Y a fin de mes, tus números claros.
+        </h3>
+        <p
+          style={{
+            fontFamily: theme.body,
+            fontSize: 'clamp(15px, 2.2vw, 18px)',
+            lineHeight: 1.55,
+            color: theme.muted,
+            margin: '12px auto 0',
+            maxWidth: 560,
+          }}
+        >
+          Compará mes contra mes y mirá si estás creciendo de verdad. Sin armar
+          un Excel: el sistema ya tiene tus números.
+        </p>
+      </Reveal>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'center' }}>
+        {METRICAS.map((m, i) => (
+          <Reveal
+            key={m.label}
+            delay={i * 80}
+            style={{ flex: '1 1 240px', maxWidth: 340, display: 'flex' }}
+          >
+            <MetricCard {...m} />
           </Reveal>
         ))}
       </div>

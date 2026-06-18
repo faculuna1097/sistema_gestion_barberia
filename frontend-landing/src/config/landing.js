@@ -68,7 +68,9 @@ export const CAPTURAS = {
  * Mientras src e youtubeId sean null, la UI muestra un placeholder (no rompe).
  */
 export const VIDEOS = {
-  turnero: { src: null, poster: null, youtubeId: null, aspect: '16 / 9' },
-  barbero: { src: null, poster: null, youtubeId: null, aspect: '16 / 9' },
-  gestion: { src: null, poster: null, youtubeId: null, aspect: '16 / 9' },
+  // turnero y barbero: verticales (filmados en celular, 588×1280).
+  turnero: { src: '/videos/turnero.mp4', poster: '/videos/turnero.jpg', youtubeId: null, aspect: '588 / 1280' },
+  barbero: { src: '/videos/barbero.mp4', poster: '/videos/barbero.jpg', youtubeId: null, aspect: '588 / 1280' },
+  // gestion: el FlujoCorte del iPad, horizontal (1280×576).
+  gestion: { src: '/videos/corte.mp4',   poster: '/videos/corte.jpg',   youtubeId: null, aspect: '1280 / 576' },
 };

@@ -142,16 +142,21 @@ function LandingNav() {
           </div>
         )}
 
-        <Button
-          href={linkWhatsApp()}
-          external
-          variant="primary"
-          full={false}
-          style={{ padding: '8px 14px' }}
-        >
-          <MessageCircle size={16} strokeWidth={2} aria-hidden="true" />
-          Primer mes gratis
-        </Button>
+        {/* CTA del nav: solo en desktop. En mobile la barra fija de abajo
+            (MobileCtaBar) ya mantiene el contacto a un toque; tener los dos
+            persistentes a la vez saturaba. */}
+        {isDesktop && (
+          <Button
+            href={linkWhatsApp()}
+            external
+            variant="primary"
+            full={false}
+            style={{ padding: '8px 14px' }}
+          >
+            <MessageCircle size={16} strokeWidth={2} aria-hidden="true" />
+            Primer mes gratis
+          </Button>
+        )}
       </nav>
     </header>
   );
