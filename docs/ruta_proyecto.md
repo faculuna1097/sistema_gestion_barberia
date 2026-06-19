@@ -1,6 +1,6 @@
 # Ruta del proyecto - Sistema de Gestion de Barberia
 
-Mapa de rutas del repositorio actualizado al 2026-06-10.
+Mapa de rutas del repositorio actualizado al 2026-06-19.
 
 Este documento lista las carpetas y archivos principales del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP.
 
@@ -206,9 +206,9 @@ frontend/
 |-- eslint.config.js
 |-- index.html
 |-- public/
+|   |-- favicon.png
 |   |-- manifest.json
-|   |-- mercadopago.png
-|   `-- vite.svg
+|   `-- mercadopago.png
 `-- src/
     |-- App.jsx
     |-- index.css
@@ -304,7 +304,7 @@ frontend-barbero/
 |-- eslint.config.js
 |-- index.html
 |-- public/
-|   |-- favicon.svg
+|   |-- favicon.png
 |   `-- icons.svg
 `-- src/
     |-- App.jsx
@@ -358,7 +358,7 @@ frontend-turnero/
 |-- eslint.config.js
 |-- index.html
 |-- public/
-|   |-- favicon.svg
+|   |-- favicon.png
 |   `-- icons.svg
 `-- src/
     |-- App.css

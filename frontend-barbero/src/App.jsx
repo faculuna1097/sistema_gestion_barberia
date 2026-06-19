@@ -3,10 +3,10 @@
 // Sin token → Login (selector de barbero + PIN).
 // Con token → PageContainer + sección activa + BottomNav (cuando aplica).
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { CalendarDays, CalendarRange, ClipboardList, MoreHorizontal } from 'lucide-react';
 
-import { setAuthToken, clearAuthToken } from './services/api.js';
+import { setAuthToken, clearAuthToken, getTenant, getImagenesNegocio } from './services/api.js';
 import { PageContainer, BottomNav, EmptyState } from './components/ui';
 
 import Login from './components/Login.jsx';
@@ -45,10 +45,49 @@ const SECCIONES_CON_NAV = new Set([
   SECCION.MAS,
 ]);
 
+/**
+ * actualizarFavicon — apunta el <link rel="icon"> del documento al logo del
+ * tenant. Si el link no existe, lo crea. Reemplaza el favicon placeholder de
+ * index.html. Si no hay logo, deja el placeholder (marca BarberManager).
+ * @param {string|null} url — URL del logo (tenant_imagen tipo='logo').
+ * @returns {void}
+ */
+function actualizarFavicon(url) {
+  if (!url) return;
+  let link = document.querySelector("link[rel='icon']");
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'icon';
+    document.head.appendChild(link);
+  }
+  link.href = url;
+}
+
 function App() {
   const [token, setToken] = useState(null);
   const [barbero, setBarbero] = useState(null);
   const [seccion, setSeccion] = useState(SECCION.DASHBOARD);
+
+  // Branding del tab (título = nombre del tenant, favicon = su logo). Va acá y
+  // no en Login porque si el barbero ya tiene sesión el Login no se renderiza.
+  // Best-effort: si falla, queda el default de index.html (marca BarberManager).
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      try {
+        const [tenant, imagenes] = await Promise.all([getTenant(), getImagenesNegocio()]);
+        if (!activo) return;
+        if (tenant?.nombre) document.title = tenant.nombre;
+        const logoUrl = (imagenes || [])
+          .filter((i) => i.tipo === 'logo')
+          .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))[0]?.url || null;
+        actualizarFavicon(logoUrl);
+      } catch (err) {
+        console.warn('[App] branding del tenant — falló, se mantiene el default:', err.message);
+      }
+    })();
+    return () => { activo = false; };
+  }, []);
 
   /**
    * onLogin

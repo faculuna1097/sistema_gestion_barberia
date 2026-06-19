@@ -27,6 +27,25 @@ function extraerTokenDeURL() {
   return match ? match[1] : null;
 }
 
+/**
+ * actualizarFavicon — apunta el <link rel="icon"> del documento al logo del
+ * tenant. Si el link no existe, lo crea. Reusa la imagen del logo que ya se
+ * descarga para la UI (cache hit, sin pedido extra). Reemplaza el favicon
+ * placeholder de index.html. Si no hay logo, deja el placeholder (marca BarberManager).
+ * @param {string|null} url — URL del logo (tenant_imagen tipo='logo').
+ * @returns {void}
+ */
+function actualizarFavicon(url) {
+  if (!url) return;
+  let link = document.querySelector("link[rel='icon']");
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'icon';
+    document.head.appendChild(link);
+  }
+  link.href = url;
+}
+
 function App() {
   const [tenant, setTenant] = useState(null);
   const [imagenes, setImagenes] = useState([]);
@@ -66,6 +85,14 @@ function App() {
         ]);
         setTenant(tenantData);
         setImagenes(imagenesData);
+
+        // Branding del tab: título = nombre del tenant + sufijo; favicon = logo
+        // del tenant (cae al placeholder de marca si el tenant no tiene logo).
+        if (tenantData?.nombre) document.title = `${tenantData.nombre} · Reservas`;
+        const logoUrl = (imagenesData || [])
+          .filter((i) => i.tipo === 'logo')
+          .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))[0]?.url || null;
+        actualizarFavicon(logoUrl);
       } catch (err) {
         console.error('[App] Error cargando tenant:', err.message);
         setError('No se pudo cargar la información del negocio');
