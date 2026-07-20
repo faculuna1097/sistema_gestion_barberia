@@ -104,15 +104,26 @@ const esErrorDeConexion = (err) => {
  * el doble turno); el residual es un caso raro a endurecer luego con idempotency
  * key en /turnos. Ver docs/estado_actual.md.
  *
+ * Excepción (auditoría 4.2): las escrituras RELATIVAS de stock
+ * (`stock_actual = stock_actual ± $1`) NO son idempotentes — un reintento tras un
+ * ack perdido doble-aplicaría el ajuste y corrompería el inventario en silencio.
+ * Esas se llaman con `{ reintentar: false }` (ver utils/stock.js): preferimos un
+ * fallo visible raro (el usuario reintenta) a una corrupción silenciosa. Las demás
+ * (lecturas, y writes idempotentes como SET de valor fijo o DELETE) siguen
+ * reintentando por default.
+ *
  * @param {string} text - La query SQL con placeholders ($1, $2, ...)
  * @param {Array} params - Los valores que reemplazan los placeholders
+ * @param {Object} [opciones] - { reintentar?: boolean } — reintentar default true;
+ *   pasar false para sentencias no idempotentes que no deben reejecutarse.
  * @returns {Promise} Resultado con rows, rowCount, etc.
  */
-export const query = async (text, params) => {
+export const query = async (text, params, opciones = {}) => {
+  const { reintentar = true } = opciones;
   try {
     return await pool.query(text, params);
   } catch (err) {
-    if (!esErrorDeConexion(err)) throw err;
+    if (!reintentar || !esErrorDeConexion(err)) throw err;
     console.warn('[db] query falló por error de conexión, reintentando una vez:', err.message);
     await new Promise((resolve) => setTimeout(resolve, 200)); // respiro corto para que el pool entregue/establezca un socket sano
     return pool.query(text, params);

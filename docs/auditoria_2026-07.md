@@ -441,6 +441,22 @@ contador de inventario, no un 409 confuso. Los UPDATE de estado de turno
 **Fix:** para operaciones no idempotentes, o bien no reintentar, o bien
 idempotency key / relectura-y-verificación tras el retry.
 
+> **RESUELTO parcial (tanda 5) — cerrado para stock:** se eligió la opción "no
+> reintentar" para las escrituras **relativas de stock**, que son la clase con
+> peor consecuencia (corrupción silenciosa del inventario). `query()` acepta ahora
+> un tercer arg `{ reintentar }` (default `true`, no cambia ningún caller
+> existente); el helper `utils/stock.js` ejecuta todas las mutaciones de stock con
+> `{ reintentar: false }`, y el restock relativo de `gestion.editarProducto`
+> (`stock_actual + agregar_stock`, único UPDATE) también opta por no reintentar.
+> Trade-off asumido: un fallo visible raro ante un blip
+> —que el usuario reintenta— en vez de un doble-descuento silencioso. NO se tocó
+> el retry de lecturas ni de writes idempotentes (SET de valor fijo como
+> `estado='completado'`/`'reservado'`, DELETE): siguen reintentando sin riesgo.
+> **Residual documentado:** los INSERT no idempotentes (turno protegido por la
+> 23P01, venta, gasto) siguen reintentables; su doble-apply produce un fallo/fila
+> visible, no corrupción de contador. El fix duro (idempotency keys) queda como la
+> deuda arquitectónica mayor ya anotada para `/turnos`.
+
 #### 4.3 [BAJO] `ssl: { rejectUnauthorized: false }` — el certificado de la DB no se valida
 La conexión a Postgres cifra el tráfico pero **no autentica el certificado** del
 servidor → MITM teórico entre Railway y Supabase. El comentario dice que es
@@ -585,6 +601,30 @@ atomicidad total es difícil, pero como mínimo estos paths deberían: (a) espej
 cleanup compensatorio de `createVenta`, y (b) reducir la aritmética de stock a la
 menor cantidad de sentencias posible. A futuro, evaluar mover estas operaciones a
 una función almacenada (atomicidad del lado del server, compatible con el pooler).
+
+> **RESUELTO (tanda 5):** creado `backend/src/utils/stock.js` con
+> `aplicarMutacionesStock(mutaciones)`: aplica ajustes relativos de stock
+> (`{producto_id, delta}`) en secuencia, auto-revierte (best-effort, logueado) si
+> una mutación falla a mitad, y devuelve un revertidor para que el llamador
+> compense si un paso posterior (la fila de venta/corte) falla. Patrón de diseño:
+> **la fila se escribe último** y las mutaciones de stock se revierten con el delta
+> inverso conocido → nunca hay que reconstruir la fila para compensar. Aplicado en:
+> - `createVenta` — el descuento pasa por el helper (unifica + hereda no-reintento
+>   de 4.2); su cleanup (DELETE de la venta insertada) queda como el catch externo.
+> - `updateVenta` — **colapso de escrituras**: mismo producto → 1 UPDATE por el
+>   delta neto (`cantidadVieja − cantidad`), o cero si no cambió la cantidad, en vez
+>   de restaurar+redescontar. Producto distinto → 2 mutaciones. La fila de venta se
+>   escribe al final y se compensa el stock si falla.
+> - `deleteVenta` y `caja.eliminarMovimiento` (rama venta) — restaurar stock
+>   primero, borrar después; compensa el restore si el DELETE falla.
+> - `caja.eliminarMovimiento` (rama corte) — **reordenada**: revierte el turno
+>   primero, borra el corte después; si el DELETE falla, devuelve el turno a
+>   'completado' (compensación inline, no usa el helper de stock porque no es stock).
+>
+> Verificado en frío con `node --check` en los 4 archivos. El flujo HTTP real no se
+> ejercitó (requiere bootear); los caminos de fallo/compensación se razonaron paso
+> a paso. La función almacenada (atomicidad dura del lado server) sigue como mejora
+> a futuro — requiere cambio de schema, fuera de esta tanda (una sola DB de prod).
 
 #### 6.3 [BAJO] Guardas `!monto` / `!cantidad` rechazan 0 pero aceptan negativos
 Smell de lógica, subconjunto de 6.1: `if (!monto)` trata `0` como "faltante". Se

@@ -346,7 +346,11 @@ export const editarProducto = async (req, res) => {
            stock_actual = stock_actual + $5
        WHERE id = $6 AND tenant_id = $7
        RETURNING id, nombre, precio, stock_actual, stock_minimo, activo`,
-      [nombre.trim(), Number(precio), Number(stock_minimo ?? 0), activo, delta, id, req.tenant_id]
+      [nombre.trim(), Number(precio), Number(stock_minimo ?? 0), activo, delta, id, req.tenant_id],
+      // Escritura relativa de stock (stock_actual + agregar_stock): no idempotente,
+      // no reintentar (auditoría 4.2) — un retry doble-sumaría el restock. Es un
+      // único UPDATE, sin compensación multi-paso (6.2 no aplica).
+      { reintentar: false }
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
