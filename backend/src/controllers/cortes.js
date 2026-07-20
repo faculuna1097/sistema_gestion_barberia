@@ -5,6 +5,7 @@
 // valida el body y se mapean los errores tipados del service a respuestas HTTP.
 
 import { registrarCorte } from '../services/cortesService.js';
+import { esMontoValido } from '../utils/validarNumero.js';
 
 /**
  * createCorte
@@ -23,10 +24,16 @@ import { registrarCorte } from '../services/cortesService.js';
 export const createCorte = async (req, res) => {
   const { barbero_id, servicio_id, precio, forma_pago, propina, turno_id } = req.body;
 
-  if (!barbero_id || !servicio_id || precio === undefined || !forma_pago) {
+  if (!barbero_id || !servicio_id || !forma_pago) {
     return res.status(400).json({
       error: 'Faltan campos requeridos: barbero_id, servicio_id, precio, forma_pago'
     });
+  }
+  if (!esMontoValido(precio)) {
+    return res.status(400).json({ error: 'precio es requerido y debe ser un número >= 0' });
+  }
+  if (propina !== undefined && !esMontoValido(propina)) {
+    return res.status(400).json({ error: 'propina debe ser un número >= 0' });
   }
 
   try {

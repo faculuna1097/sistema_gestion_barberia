@@ -18,7 +18,7 @@
 // (datos sin sanear), se responde 401 genérico sin adivinar a quién loguear.
 
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import { firmarToken } from '../config/jwt.js';
 import { query } from '../config/db.js';
 import { evaluarSuscripcion } from '../utils/suscripcion.js';
 
@@ -64,11 +64,7 @@ export async function loginPanel(req, res) {
         return res.status(402).json({ error: 'suscripcion_vencida' });
       }
 
-      const token = jwt.sign(
-        { tenant_id, rol: 'admin' },
-        process.env.JWT_SECRET,
-        { expiresIn: '30d' }
-      );
+      const token = firmarToken({ tenant_id, rol: 'admin' });
 
       console.log('[authPanel] loginPanel completado | rol: admin | tenant:', tenant_id);
       return res.json({ token, rol: 'admin', aviso_pago });
@@ -100,11 +96,7 @@ export async function loginPanel(req, res) {
 
     if (matches.length === 1) {
       const { id, nombre } = matches[0];
-      const token = jwt.sign(
-        { tenant_id, rol: 'barbero', barbero_id: id },
-        process.env.JWT_SECRET,
-        { expiresIn: '30d' }
-      );
+      const token = firmarToken({ tenant_id, rol: 'barbero', barbero_id: id });
 
       console.log('[authPanel] loginPanel completado | rol: barbero | barbero_id:', id);
       return res.json({ token, rol: 'barbero', barbero: { id, nombre } });

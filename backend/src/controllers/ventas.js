@@ -1,15 +1,22 @@
 // /backend/src/controllers/ventas.js
 import { query } from '../config/db.js';
+import { esMontoValido, esCantidadValida } from '../utils/validarNumero.js';
 
 const TZ = 'America/Argentina/Buenos_Aires';
 
 export const createVenta = async (req, res) => {
   const { producto_id, cantidad, precio_unitario, forma_pago } = req.body;
 
-  if (!producto_id || !cantidad || !precio_unitario || !forma_pago) {
+  if (!producto_id || !forma_pago) {
     return res.status(400).json({
       error: 'Faltan campos requeridos: producto_id, cantidad, precio_unitario, forma_pago'
     });
+  }
+  if (!esCantidadValida(cantidad)) {
+    return res.status(400).json({ error: 'cantidad es requerida y debe ser un entero >= 1' });
+  }
+  if (!esMontoValido(precio_unitario)) {
+    return res.status(400).json({ error: 'precio_unitario es requerido y debe ser un número >= 0' });
   }
 
   let ventaId = null;
@@ -163,10 +170,16 @@ export const updateVenta = async (req, res) => {
 
   const { producto_id, cantidad, precio_unitario, forma_pago } = req.body;
 
-  if (!producto_id || !cantidad || !precio_unitario || !forma_pago) {
+  if (!producto_id || !forma_pago) {
     return res.status(400).json({
       error: 'Faltan campos requeridos: producto_id, cantidad, precio_unitario, forma_pago'
     });
+  }
+  if (!esCantidadValida(cantidad)) {
+    return res.status(400).json({ error: 'cantidad es requerida y debe ser un entero >= 1' });
+  }
+  if (!esMontoValido(precio_unitario)) {
+    return res.status(400).json({ error: 'precio_unitario es requerido y debe ser un número >= 0' });
   }
 
   if (!['efectivo', 'mercado_pago'].includes(forma_pago)) {

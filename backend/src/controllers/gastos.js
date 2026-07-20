@@ -1,13 +1,17 @@
 // /backend/src/controllers/gastos.js
 import { query } from '../config/db.js';
+import { esMontoValido } from '../utils/validarNumero.js';
 
 const TZ = 'America/Argentina/Buenos_Aires';
 
 export const createGasto = async (req, res) => {
   const { categoria_id, descripcion, monto, forma_pago } = req.body;
 
-  if (!categoria_id || !descripcion || !monto || !forma_pago) {
+  if (!categoria_id || !descripcion || !forma_pago) {
     return res.status(400).json({ error: 'Faltan campos requeridos: categoria_id, descripcion, monto, forma_pago' });
+  }
+  if (!esMontoValido(monto)) {
+    return res.status(400).json({ error: 'monto es requerido y debe ser un número >= 0' });
   }
 
   if (!['efectivo', 'mercado_pago'].includes(forma_pago)) {
@@ -118,10 +122,13 @@ export const updateGasto = async (req, res) => {
 
   const { categoria_id, descripcion, monto, forma_pago } = req.body;
 
-  if (!categoria_id || !descripcion || !monto || !forma_pago) {
+  if (!categoria_id || !descripcion || !forma_pago) {
     return res.status(400).json({
       error: 'Faltan campos requeridos: categoria_id, descripcion, monto, forma_pago'
     });
+  }
+  if (!esMontoValido(monto)) {
+    return res.status(400).json({ error: 'monto es requerido y debe ser un número >= 0' });
   }
 
   if (!['efectivo', 'mercado_pago'].includes(forma_pago)) {

@@ -5,7 +5,7 @@
 // tenantMiddleware), y deja en el request el rol y, si aplica, el barbero_id
 // para que los controllers puedan scopear la respuesta según el consumidor.
 
-import jwt from 'jsonwebtoken';
+import { verificarFirmaToken } from '../config/jwt.js';
 import { leerTokenVersionOperativo } from './tenantMiddleware.js';
 
 /**
@@ -34,8 +34,8 @@ export const verificarToken = async (req, res, next) => {
   const token = authHeader.split(' ')[1];
 
   try {
-    // Verificar la firma del token con el secreto almacenado en .env
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    // Verificar firma y expiración (algoritmo fijado en HS256; ver config/jwt.js)
+    const payload = verificarFirmaToken(token);
 
     // Validación cruzada: el tenant del JWT debe coincidir con el del subdominio.
     // tenantMiddleware corre antes y ya inyectó req.tenant_id.

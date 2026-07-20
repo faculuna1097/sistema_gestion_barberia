@@ -11,7 +11,7 @@
 // GET /api/barberos), el barbero toca el suyo, y entonces ingresa el PIN.
 
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import { firmarToken } from '../config/jwt.js';
 import { query } from '../config/db.js';
 
 /**
@@ -51,11 +51,7 @@ export async function loginBarbero(req, res) {
       return res.status(401).json({ error: 'Usuario o PIN incorrecto' });
     }
 
-    const token = jwt.sign(
-      { tenant_id, rol: 'barbero', barbero_id: id },
-      process.env.JWT_SECRET,
-      { expiresIn: '30d' }
-    );
+    const token = firmarToken({ tenant_id, rol: 'barbero', barbero_id: id });
 
     console.log('[authBarbero] loginBarbero completado | barbero_id:', id);
     return res.json({ token, barbero: { id, nombre } });

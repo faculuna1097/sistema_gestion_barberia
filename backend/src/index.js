@@ -5,6 +5,7 @@
 
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import { testConnection, iniciarKeepAlive } from './config/db.js';
 import { verificarToken } from './middlewares/authMiddleware.js';
 import { tenantMiddleware, invalidar } from './middlewares/tenantMiddleware.js';
@@ -51,6 +52,15 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // --- Middlewares globales ---
+// helmet setea los headers de seguridad estándar (X-Content-Type-Options,
+// X-Frame-Options, HSTS, Referrer-Policy, etc.) en toda respuesta. Va primero
+// en la cadena para cubrir también los errores tempranos (CORS, 404). Los
+// defaults alcanzan: la API sirve solo JSON sobre HTTPS, no necesita CSP custom.
+app.use(helmet());
+// Express agrega "X-Powered-By: Express" por defecto — disclosure innecesaria
+// del stack. helmet ya lo remueve, pero deshabilitarlo explícito no depende de él.
+app.disable('x-powered-by');
+
 const esDesarrollo = process.env.NODE_ENV !== 'production';
 app.use(cors({
   origin: (origin, callback) => {

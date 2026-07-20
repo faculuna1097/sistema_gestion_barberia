@@ -12,7 +12,7 @@
 // sin romper este diseño.
 
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import { firmarToken } from '../config/jwt.js';
 import { query } from '../config/db.js';
 
 /**
@@ -69,11 +69,7 @@ export async function loginOperativo(req, res) {
     // tenant al cambiar la password operativa: adminOperativo incrementa
     // operativo_token_version, y authMiddleware rechaza cualquier token con
     // tv distinto al actual.
-    const token = jwt.sign(
-      { tenant_id, rol: 'operativo', tv: operativo_token_version },
-      process.env.JWT_SECRET,
-      { expiresIn: '30d' }
-    );
+    const token = firmarToken({ tenant_id, rol: 'operativo', tv: operativo_token_version });
 
     console.log('[authOperativo] loginOperativo completado | tenant:', tenant_id);
     return res.json({ token });
