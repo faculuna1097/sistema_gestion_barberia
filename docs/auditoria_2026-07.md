@@ -368,16 +368,19 @@ concurrencia es muy bajo y es un objetivo trivial. Mitigar: rate limiting (3.1),
 `statement_timeout` en las queries, y monitorear saturación del pool. Subir `max`
 depende del plan de Supabase.
 
-> **RESUELTO (tanda 2):** dos piezas. (a) Backstop global de rate limiting en
-> `index.js` (`limiterGlobal`, 300 req/min/IP) que corta el goteo masivo desde
-> una IP antes de que toque el pool. (b) `statement_timeout=5000` en el Pool de
-> `config/db.js`, pasado como parámetro de startup (`options: '-c
-> statement_timeout=5000'`) — compatible con el modo sesión del pooler (conexión
-> dedicada por sesión), sin `SET` suelto. `max: 3` no se tocó (límite del plan).
-> La compatibilidad del parámetro `options` con el pooler de Supabase no se
-> pudo confirmar en frío: si lo rechazara, `testConnection()` falla al boot y
-> se ve en el primer deploy — parte del smoke-test pendiente. Monitorear
-> saturación del pool sigue abierto como mejora operativa.
+> **RESUELTO (tanda 2, corregido):** dos piezas. (a) Backstop global de rate
+> limiting en `index.js` (`limiterGlobal`, 300 req/min/IP) que corta el goteo
+> masivo desde una IP antes de que toque el pool. (b) `statement_timeout=5000` en
+> `config/db.js`. **Nota de corrección:** la implementación original vía parámetro
+> de startup (`options: '-c statement_timeout=5000'`) resultó ser un **no-op** —
+> se verificó en frío con un script (`SHOW statement_timeout` quedaba en el default
+> de `2min`) que el pooler de Supabase (Supavisor) **descarta** los parámetros
+> `options`. Se corrigió a un `SET statement_timeout` a nivel SQL vía
+> `pool.on('connect')`, verificado end-to-end (un `pg_sleep(10)` se cancela a ~2s
+> con SQLSTATE 57014). `max: 3` no se tocó (límite del plan). Nota adicional: el
+> default de Supabase ya era 120s (no era "sin timeout"), pero 120s con 3
+> conexiones es una ventana de DoS amplia; 5s la cierra. Monitorear saturación del
+> pool sigue abierto como mejora operativa.
 
 #### 4.2 [MEDIO] UPDATEs relativos no idempotentes + retry-once pueden doble-aplicar ante un blip de conexión
 Los contadores de stock se actualizan de forma **relativa**: `UPDATE producto SET

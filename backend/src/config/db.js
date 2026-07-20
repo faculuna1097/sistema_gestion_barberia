@@ -19,24 +19,33 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD,
   ssl: { rejectUnauthorized: false }, // requerido por Supabase Session Pooler — no usar certificado autofirmado
   max: 3,                             // máximo 3 conexiones simultáneas (límite plan gratuito Supabase)
-  // statement_timeout [auditoría 4.1]: Postgres aborta cualquier sentencia que
-  // supere 5s, liberando la conexión — sin esto, un puñado de queries lentas
-  // (o mantenidas abiertas a propósito) retiene las 3 conexiones del pool y
-  // estanca toda la API. 5s es holgado: las queries más pesadas del sistema
-  // (agregaciones mensuales de planilla/balances) corren en cientos de ms.
-  // Se pasa como parámetro de STARTUP de la conexión (`options`), no como un
-  // `SET` suelto por query — en el Session Pooler cada cliente tiene su
-  // conexión dedicada mientras dura la sesión, así que el parámetro de startup
-  // aplica a toda la vida de esa conexión. Verificación en frío pendiente: si
-  // el pooler de Supabase rechazara el parámetro `options`, testConnection()
-  // falla al boot con un error de startup y se vería en el primer deploy.
-  options: '-c statement_timeout=5000',
   idleTimeoutMillis: 30000,           // cierra conexiones inactivas después de 30s
   connectionTimeoutMillis: 5000,      // falla si no conecta en 5s (evita colgar el servidor)
   keepAlive: true,                    // TCP keep-alive a nivel socket: evita que un NAT/firewall corte la conexión ociosa (complementa el SELECT 1 periódico de iniciarKeepAlive)
 });
 
 pool.on('error', (err) => console.error('[db] ❌ Error inesperado en pool:', err));
+
+// statement_timeout [auditoría 4.1]: Postgres aborta cualquier sentencia que
+// supere este límite y libera la conexión. Sin esto, un puñado de queries lentas
+// (o mantenidas abiertas a propósito) retiene las 3 conexiones del pool y estanca
+// toda la API; además aprieta el default de Supabase (120s), demasiado holgado
+// para 3 conexiones. 5s sobra: las queries más pesadas (agregaciones mensuales de
+// planilla/balances) corren en cientos de ms.
+//
+// Se aplica por SQL en cada conexión nueva, NO como parámetro de startup `options`:
+// el pooler de Supabase (Supavisor) DESCARTA `options` (verificado en frío — la
+// sesión quedaba en el default de 2min), pero sí deja pasar un `SET`. En modo
+// sesión cada conexión es dedicada, así que el SET vale para toda su vida. El
+// handler encola el SET antes de que el pool entregue la conexión al primer query
+// y node-postgres procesa la cola FIFO, así que el timeout ya está activo. El
+// valor es una constante hardcodeada (no input de usuario), seguro de interpolar.
+const STATEMENT_TIMEOUT_MS = 5000;
+pool.on('connect', (client) => {
+  client.query(`SET statement_timeout = ${STATEMENT_TIMEOUT_MS}`).catch((err) => {
+    console.error('[db] no se pudo aplicar statement_timeout en una conexión nueva:', err.message);
+  });
+});
 
 // Códigos de error de RED de Node (no son SQLSTATE de Postgres) ante los que
 // vale reintentar: el problema es el socket, no la query.
