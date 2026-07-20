@@ -15,6 +15,7 @@ CREATE TABLE public.tenant (
   operativo_usuario text,
   operativo_password_hash text,
   operativo_token_version integer NOT NULL DEFAULT 0,
+  admin_token_version integer NOT NULL DEFAULT 0,
   telefono text,
   direccion text,
   CONSTRAINT tenant_pkey PRIMARY KEY (id)
@@ -29,6 +30,7 @@ CREATE TABLE public.barbero (
   activo boolean DEFAULT true,
   created_at timestamp with time zone DEFAULT now(),
   email text,
+  token_version integer NOT NULL DEFAULT 0,
   CONSTRAINT barbero_pkey PRIMARY KEY (id),
   CONSTRAINT barbero_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
 );

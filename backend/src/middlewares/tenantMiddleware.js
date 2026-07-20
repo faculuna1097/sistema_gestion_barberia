@@ -2,11 +2,14 @@
 // Lee el subdominio del header X-Tenant-Subdomain enviado por el frontend,
 // busca el tenant en DB (con caché en memoria), e inyecta req.tenant_id.
 //
-// El caché guarda, por subdominio, un objeto { tenant_id, operativo_token_version }.
+// El caché guarda, por subdominio, un objeto
+// { tenant_id, operativo_token_version, admin_token_version }.
 // Se popula la primera vez que se ve un subdominio y vive hasta que se reinicia
-// el server o hasta que se llama invalidar(subdominio). Guardar también la
-// versión de token operativa permite que authMiddleware valide la revocación
-// de tokens operativos sin un SELECT por request (la lee de acá).
+// el server o hasta que se llama invalidar(subdominio). Guardar también las
+// versiones de token (operativa y admin) permite que authMiddleware valide la
+// revocación de esos tokens sin un SELECT por request (las lee de acá).
+// La versión de token del barbero NO vive acá: es por barbero (no por tenant),
+// así que authMiddleware la resuelve con su propia query.
 //
 // LIMITACIÓN CONOCIDA (multi-instancia): el caché es por proceso. Si algún día
 // Railway corre más de una instancia, invalidar en una NO limpia las otras
@@ -15,7 +18,7 @@
 
 import { query } from '../config/db.js';
 
-// Caché en memoria: { [subdominio]: { tenant_id, operativo_token_version } }
+// Caché en memoria: { [subdominio]: { tenant_id, operativo_token_version, admin_token_version } }
 const tenantCache = {};
 
 /**
@@ -26,7 +29,7 @@ const tenantCache = {};
  * la reusan para no duplicarla.
  *
  * @param {string} subdominio - subdominio del tenant (header X-Tenant-Subdomain).
- * @returns {Promise<{tenant_id: string, operativo_token_version: number}|null>}
+ * @returns {Promise<{tenant_id: string, operativo_token_version: number, admin_token_version: number}|null>}
  *          La entrada de caché, o null si no existe un tenant activo con ese subdominio.
  */
 async function resolverPorSubdominio(subdominio) {
@@ -35,7 +38,7 @@ async function resolverPorSubdominio(subdominio) {
   }
 
   const resultado = await query(
-    'SELECT id, operativo_token_version FROM tenant WHERE subdominio = $1 AND activo = true',
+    'SELECT id, operativo_token_version, admin_token_version FROM tenant WHERE subdominio = $1 AND activo = true',
     [subdominio]
   );
 
@@ -46,6 +49,7 @@ async function resolverPorSubdominio(subdominio) {
   const entrada = {
     tenant_id: resultado.rows[0].id,
     operativo_token_version: resultado.rows[0].operativo_token_version ?? 0,
+    admin_token_version: resultado.rows[0].admin_token_version ?? 0,
   };
   tenantCache[subdominio] = entrada;
   return entrada;
@@ -55,8 +59,9 @@ async function resolverPorSubdominio(subdominio) {
  * invalidar
  * Borra la entrada de caché de un subdominio. Idempotente: invalidar algo que no
  * está cacheado es un no-op exitoso. Sincrónico (es un delete en memoria).
- * Reutilizada por el endpoint de plataforma y por adminOperativo al rotar la
- * password operativa (que bumpea operativo_token_version y deja el caché stale).
+ * Reutilizada por el endpoint de plataforma, por adminOperativo al rotar la
+ * password operativa y por gestion.cambiarPinAdmin al rotar el PIN admin
+ * (ambos bumpean su token_version y dejan el caché stale).
  *
  * @param {string} subdominio - subdominio cuya entrada se descarta del caché.
  * @returns {void}
@@ -66,10 +71,11 @@ export function invalidar(subdominio) {
 }
 
 /**
- * leerTokenVersionOperativo
- * Devuelve el operativo_token_version vigente para el tenant del request,
- * leyéndolo del caché (sin SELECT por request en producción). En el primer miss
- * lo resuelve reusando resolverPorSubdominio (misma query que tenantMiddleware).
+ * leerTokenVersion (interna)
+ * Devuelve la versión de token vigente de una columna de `tenant` para el
+ * tenant del request, leyéndola del caché (sin SELECT por request en
+ * producción). En el primer miss la resuelve reusando resolverPorSubdominio
+ * (misma query que tenantMiddleware).
  *
  * Caso dev local: si no llega subdominio (fallback a TENANT_ID), no hay clave de
  * caché posible, así que cae a un SELECT directo por id. Inofensivo (1 dev, 1
@@ -77,23 +83,48 @@ export function invalidar(subdominio) {
  *
  * Preserva el comportamiento previo: tenant inexistente / columna NULL ⇒ 0.
  *
- * @param {Request} req - Express request (se usan headers y req.tenant_id).
- * @returns {Promise<number>} la versión de token operativa vigente.
+ * @param {Request} req     - Express request (se usan headers y req.tenant_id).
+ * @param {string}  columna - 'operativo_token_version' | 'admin_token_version'.
+ *                            Constante interna, NUNCA input del usuario (se
+ *                            interpola en el SQL del fallback).
+ * @returns {Promise<number>} la versión de token vigente.
  */
-export async function leerTokenVersionOperativo(req) {
+async function leerTokenVersion(req, columna) {
   const subdominio = req.headers['x-tenant-subdomain'];
 
   if (subdominio) {
     const entrada = await resolverPorSubdominio(subdominio);
-    return entrada ? entrada.operativo_token_version : 0;
+    return entrada ? entrada[columna] : 0;
   }
 
   // Fallback dev local (sin subdominio): no hay clave de caché, resolver por id.
   const resultado = await query(
-    'SELECT operativo_token_version FROM tenant WHERE id = $1',
+    `SELECT ${columna} FROM tenant WHERE id = $1`,
     [req.tenant_id]
   );
-  return resultado.rows[0]?.operativo_token_version ?? 0;
+  return resultado.rows[0]?.[columna] ?? 0;
+}
+
+/**
+ * leerTokenVersionOperativo
+ * Versión de token operativa vigente del tenant del request (para que
+ * authMiddleware valide la revocación de tokens operativos).
+ * @param {Request} req - Express request.
+ * @returns {Promise<number>}
+ */
+export async function leerTokenVersionOperativo(req) {
+  return leerTokenVersion(req, 'operativo_token_version');
+}
+
+/**
+ * leerTokenVersionAdmin
+ * Versión de token admin vigente del tenant del request (para que
+ * authMiddleware valide la revocación de tokens admin).
+ * @param {Request} req - Express request.
+ * @returns {Promise<number>}
+ */
+export async function leerTokenVersionAdmin(req) {
+  return leerTokenVersion(req, 'admin_token_version');
 }
 
 /**

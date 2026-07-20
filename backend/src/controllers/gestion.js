@@ -7,6 +7,7 @@
 import { query } from '../config/db.js';
 import bcrypt from 'bcrypt';
 import { pinColisiona } from '../utils/pin.js';
+import { invalidar } from '../middlewares/tenantMiddleware.js';
 
 const SALT_ROUNDS = 10;
 
@@ -83,6 +84,11 @@ export const crearBarbero = async (req, res) => {
  * editarBarbero
  * Edita nombre, comision_valor y/o activo de un barbero.
  * Si se envía un nuevo PIN, lo hashea antes de guardar.
+ * Cambio de PIN o desactivación bumpean barbero.token_version → revocación
+ * inmediata de las sesiones activas de ese barbero (authMiddleware rechaza los
+ * tokens con tv viejo). El bump al desactivar es en rigor redundante (el check
+ * de activo=false ya corta la sesión), pero es explícito y cubre la
+ * reactivación: al volver a activarlo, los tokens pre-desactivación ya no sirven.
  * @param {string}  req.params.id          - UUID del barbero
  * @param {string}  req.tenant_id          - Inyectado por verificarToken
  * @param {string}  req.body.nombre        - Nombre del barbero
@@ -116,17 +122,22 @@ export const editarBarbero = async (req, res) => {
         return res.status(409).json({ error: 'Ese PIN ya está en uso por otro barbero o por el admin' });
       }
       const pinHash = await bcrypt.hash(pin, SALT_ROUNDS);
+      // PIN nuevo ⇒ siempre bump de token_version (revoca sesiones del barbero).
       result = await query(
         `UPDATE barbero
-         SET nombre = $1, comision_valor = $2, activo = $3, pin = $4
+         SET nombre = $1, comision_valor = $2, activo = $3, pin = $4,
+             token_version = token_version + 1
          WHERE id = $5 AND tenant_id = $6
          RETURNING id, nombre, comision_tipo, comision_valor, activo`,
         [nombre.trim(), comision, activo, pinHash, id, req.tenant_id]
       );
     } else {
+      // Sin PIN nuevo: bump solo si se está desactivando. Fragmento fijo, sin
+      // input del usuario (mismo patrón que los setClauses de adminOperativo).
+      const bumpTv = activo === false ? ', token_version = token_version + 1' : '';
       result = await query(
         `UPDATE barbero
-         SET nombre = $1, comision_valor = $2, activo = $3
+         SET nombre = $1, comision_valor = $2, activo = $3${bumpTv}
          WHERE id = $4 AND tenant_id = $5
          RETURNING id, nombre, comision_tipo, comision_valor, activo`,
         [nombre.trim(), comision, activo, id, req.tenant_id]
@@ -403,6 +414,12 @@ export const editarNegocio = async (req, res) => {
 /**
  * cambiarPinAdmin
  * Verifica el PIN actual con bcrypt y guarda el nuevo PIN hasheado.
+ * En el mismo UPDATE bumpea tenant.admin_token_version → revocación inmediata
+ * de todos los tokens admin emitidos antes del cambio (authMiddleware rechaza
+ * los tv viejos), incluida la sesión que hizo el cambio: el admin re-loguea
+ * con su PIN nuevo. Como authMiddleware lee la versión del caché del
+ * tenantMiddleware, hay que invalidar la entrada del tenant tras el UPDATE
+ * (mismo patrón que adminOperativo al rotar la password operativa).
  * @param {string} req.tenant_id        - Inyectado por verificarToken
  * @param {string} req.body.pin_actual  - PIN actual para verificación
  * @param {string} req.body.pin_nuevo   - Nuevo PIN de 4 dígitos
@@ -441,9 +458,17 @@ export const cambiarPinAdmin = async (req, res) => {
 
     const nuevoPinHash = await bcrypt.hash(pin_nuevo, SALT_ROUNDS);
     await query(
-      `UPDATE tenant SET pin_admin = $1 WHERE id = $2`,
+      `UPDATE tenant
+       SET pin_admin = $1,
+           admin_token_version = admin_token_version + 1
+       WHERE id = $2`,
       [nuevoPinHash, req.tenant_id]
     );
+
+    // El caché del tenantMiddleware guarda admin_token_version por subdominio;
+    // sin invalidarlo, el próximo request seguiría leyendo la versión vieja y
+    // la revocación no sería inmediata.
+    invalidar(req.headers['x-tenant-subdomain']);
 
     console.log('[gestion] cambiarPinAdmin completado');
     res.json({ ok: true });

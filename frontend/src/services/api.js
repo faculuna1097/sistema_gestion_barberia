@@ -54,6 +54,12 @@ try {
 // apiFetchOperativo cuando el backend devuelve 401.
 let onUnauthorizedOperativo = null;
 
+// Callback análogo para el token admin (cubre también al barbero que entra al
+// panel por PIN: ambos roles usan authToken/apiFetch). Disparado desde apiFetch
+// cuando el backend devuelve 401 — token expirado o revocado (cambio de PIN,
+// barbero desactivado). App.jsx lo usa para volver al login del panel.
+let onUnauthorizedAdmin = null;
+
 /**
  * setAuthToken
  * Guarda el JWT admin en el módulo para que apiFetch() lo incluya en los headers.
@@ -115,10 +121,25 @@ export const setOnUnauthorizedOperativo = (fn) => {
 };
 
 /**
+ * setOnUnauthorizedAdmin
+ * Registra un callback que apiFetch ejecuta cuando el backend devuelve 401
+ * (token admin/barbero-del-panel expirado o revocado). App.jsx lo usa para
+ * limpiar su estado local y redirigir al login del panel.
+ * @param {Function|null} fn - función sin argumentos, o null para desregistrar
+ */
+export const setOnUnauthorizedAdmin = (fn) => {
+  onUnauthorizedAdmin = fn;
+};
+
+/**
  * apiFetch
  * Wrapper sobre fetch() que construye la URL completa a partir del path
  * y agrega automáticamente el header Authorization cuando hay un token disponible.
  * Usar en todos los componentes del panel admin en reemplazo del fetch() directo.
+ * Si el backend devuelve 401, limpia el token automáticamente y dispara el
+ * callback registrado con setOnUnauthorizedAdmin (redirección al login del
+ * panel). Devuelve la Response normal para que el caller pueda mostrar su
+ * propio mensaje de error antes de que ocurra la redirección.
  *
  * @param {string} path    - Path del endpoint sin BASE_URL (ej: '/caja/movimientos-dia')
  * @param {Object} options - Opciones de fetch (method, body, etc.) — opcional
@@ -129,7 +150,7 @@ export const setOnUnauthorizedOperativo = (fn) => {
  *   apiFetch(`/caja/movimientos/corte/${id}`, { method: 'DELETE' })
  *   apiFetch('/admin/barberos', { method: 'POST', body: JSON.stringify(datos) })
  */
-export const apiFetch = (path, options = {}) => {
+export const apiFetch = async (path, options = {}) => {
   const url = `${BASE_URL}${path}`;
   const headers = {
     'Content-Type': 'application/json',
@@ -137,7 +158,13 @@ export const apiFetch = (path, options = {}) => {
     ...(subdominio ? { 'X-Tenant-Subdomain': subdominio } : {}),
     ...(options.headers || {}),
   };
-  return fetch(url, { ...options, headers });
+  const response = await fetch(url, { ...options, headers });
+  if (response.status === 401) {
+    console.warn('[api] apiFetch — 401 | path:', path, '| limpiando token y notificando a la app');
+    clearAuthToken();
+    if (onUnauthorizedAdmin) onUnauthorizedAdmin();
+  }
+  return response;
 };
 
 /**

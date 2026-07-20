@@ -6,7 +6,8 @@
 // para que los controllers puedan scopear la respuesta según el consumidor.
 
 import { verificarFirmaToken } from '../config/jwt.js';
-import { leerTokenVersionOperativo } from './tenantMiddleware.js';
+import { leerTokenVersionOperativo, leerTokenVersionAdmin } from './tenantMiddleware.js';
+import { query } from '../config/db.js';
 
 /**
  * verificarToken
@@ -48,19 +49,46 @@ export const verificarToken = async (req, res, next) => {
     req.rol        = payload.rol;
     req.barbero_id = payload.barbero_id; // solo presente si rol === 'barbero'
 
-    // Token version check para tokens operativos. operativo_token_version sale
-    // del caché del tenantMiddleware (poblado por subdominio), NO de un SELECT
-    // por request. Al rotar la password operativa, adminOperativo incrementa la
-    // versión e invalida esa entrada de caché; así el próximo request re-lee la
-    // versión nueva y cualquier token emitido antes (con tv menor) queda
-    // rechazado al instante, sin esperar al reinicio del server ni a su
-    // expiración natural de 30 días. Tokens viejos sin tv en el payload se
-    // tratan como tv=0 para no romper sesiones existentes mientras nadie haya
-    // rotado la password.
+    // Token version check por rol — revocación anticipada de sesiones sin
+    // esperar la expiración natural de 30 días. En los tres casos, un token
+    // viejo sin tv en el payload se trata como tv=0 para no romper sesiones
+    // vigentes mientras nadie haya rotado su credencial.
+    const tvToken = payload.tv ?? 0;
+
+    // Operativo y admin: la versión vive en `tenant` y sale del caché del
+    // tenantMiddleware (poblado por subdominio), NO de un SELECT por request.
+    // Al rotar la credencial (password operativa / PIN admin), el controller
+    // incrementa la versión e invalida esa entrada de caché; el próximo
+    // request re-lee la versión nueva y cualquier token emitido antes (con tv
+    // menor) queda rechazado al instante.
     if (payload.rol === 'operativo') {
       const tvActual = await leerTokenVersionOperativo(req);
-      const tvToken  = payload.tv ?? 0;
       if (tvToken !== tvActual) {
+        return res.status(401).json({ error: 'Token inválido o expirado' });
+      }
+    }
+
+    if (payload.rol === 'admin') {
+      const tvActual = await leerTokenVersionAdmin(req);
+      if (tvToken !== tvActual) {
+        return res.status(401).json({ error: 'Token inválido o expirado' });
+      }
+    }
+
+    // Barbero: la versión es POR BARBERO (barbero.token_version), no por
+    // tenant, así que no entra en el caché por subdominio — se resuelve con
+    // UNA query por request que trae versión Y estado activo. Esto también
+    // corta la sesión de un barbero desactivado (activo=false) al instante.
+    // A este volumen (pocos barberos, requests esporádicos) la query por
+    // request es aceptable; si algún día pesa, cachear por barbero_id con
+    // invalidación desde editarBarbero (mismo patrón que el caché de tenant).
+    if (payload.rol === 'barbero') {
+      const barberoRes = await query(
+        'SELECT token_version, activo FROM barbero WHERE id = $1 AND tenant_id = $2',
+        [payload.barbero_id, req.tenant_id]
+      );
+      const barbero = barberoRes.rows[0];
+      if (!barbero || !barbero.activo || tvToken !== (barbero.token_version ?? 0)) {
         return res.status(401).json({ error: 'Token inválido o expirado' });
       }
     }

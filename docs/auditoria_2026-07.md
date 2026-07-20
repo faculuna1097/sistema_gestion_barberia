@@ -100,6 +100,23 @@ admin en `tenant`), incluida en el payload al firmar y chequeada en
 `verificarToken`; se bumpea al desactivar el barbero o cambiarle el PIN. Mismo
 patrón que ya existe para operativo.
 
+> **RESUELTO (tanda 3):** replicado el patrón operativo para ambos roles.
+> Columnas nuevas: `barbero.token_version` y `tenant.admin_token_version`
+> (integer NOT NULL DEFAULT 0 — **requieren migración SQL antes del deploy**).
+> Al firmar, `authPanel` (ambos paths) y `authBarbero` incluyen `tv` en el
+> payload. Al verificar (`authMiddleware`): el admin se chequea contra el
+> caché del `tenantMiddleware` (extendido con `admin_token_version`, sin
+> SELECT por request); el barbero, con UNA query por request que trae
+> `token_version` Y `activo` — rechaza 401 si el tv no coincide **o** si el
+> barbero está desactivado (esto cierra directamente el "barbero desactivado
+> mantiene acceso"; la opción de cachear por barbero_id queda anotada en el
+> código para cuando el volumen lo amerite). Bumps: `cambiarPinAdmin`
+> incrementa `admin_token_version` en el mismo UPDATE e invalida el caché del
+> tenant; `editarBarbero` incrementa `barbero.token_version` al cambiar el PIN
+> o desactivar. Tokens viejos sin `tv` se tratan como 0 (no rompe sesiones
+> vigentes hasta la primera rotación). Flujo real de revocación pendiente de
+> smoke-test post-migración + deploy.
+
 #### 1.2 [MEDIO] PIN de 4 dígitos + sin rate limiting = fuerza bruta viable
 Ya registrado como deuda conocida (rate limiting ausente). Se refuerza: 10.000
 combinaciones, sin bloqueo tras N intentos, sin captcha. Los `console.warn` de
@@ -585,6 +602,16 @@ un error genérico (`throw new Error('Error al obtener…')`); la app barbero
 **Fix:** centralizar el manejo de 401 en `apiFetch` y en el wrapper de la app
 barbero, con el mismo patrón que `apiFetchOperativo` (limpiar token + callback de
 redirección). Es prerequisito natural del fix de 1.1.
+
+> **RESUELTO (tanda 3):** mismo patrón que `apiFetchOperativo` en ambos fronts.
+> Panel de gestión: `apiFetch` intercepta el 401, limpia `authToken` y dispara
+> el callback registrado con `setOnUnauthorizedAdmin`; `App.jsx` resetea el
+> estado del panel (token, rol, barberoSesion) y vuelve a la pantalla de login
+> del panel. Cubre tanto al admin como al barbero que entra al panel por PIN
+> (comparten `apiFetch`). App barbero: ídem con `setOnUnauthorized`; ahí el
+> token vive solo en memoria (useState + módulo — **no** en localStorage, la
+> nota de 7.3 es inexacta en ese punto), así que la limpieza es de estado y
+> React renderiza el Login. Comportamiento en vivo pendiente de smoke-test.
 
 #### 7.2 [BAJO — ya documentado] Divergencia en la extracción de subdominio (panel de gestión)
 `frontend/src/services/api.js` usa la heurística vieja `partes.length >= 3 ?
