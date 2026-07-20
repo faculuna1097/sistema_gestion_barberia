@@ -10,6 +10,7 @@ import { testConnection, iniciarKeepAlive } from './config/db.js';
 import { verificarToken } from './middlewares/authMiddleware.js';
 import { tenantMiddleware, invalidar } from './middlewares/tenantMiddleware.js';
 import { verificarClavePlataforma } from './middlewares/plataformaAuthMiddleware.js';
+import { limiterGlobal, limiterLogin } from './middlewares/rateLimitMiddleware.js';
 import { sanitizarObjeto } from './utils/sanitizarLogs.js';
 
 // --- Importación de rutas ---
@@ -51,6 +52,18 @@ console.log('[index] Iniciando Barbershop Manager API...');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// trust proxy — la API corre detrás del proxy de Railway (el cliente no llega
+// directo: Railway termina TLS y reenvía agregando X-Forwarded-For). Con el
+// valor 1, Express toma como req.ip el ÚLTIMO salto del X-Forwarded-For (la IP
+// que escribió el proxy de Railway = la IP real del cliente) e ignora lo que
+// venga antes en el header, que es falsificable por el cliente. Sin esto,
+// req.ip sería la IP interna del proxy para TODOS los requests y el rate
+// limiting colapsaría a una sola clave (bloquearía a todo el mundo junto).
+// No usar `true` (confía en todo el header → el atacante elige su IP con un
+// X-Forwarded-For inventado; express-rate-limit lo rechaza con
+// ERR_ERL_PERMISSIVE_TRUST_PROXY). Debe setearse antes de montar los limiters.
+app.set('trust proxy', 1);
+
 // --- Middlewares globales ---
 // helmet setea los headers de seguridad estándar (X-Content-Type-Options,
 // X-Frame-Options, HSTS, Referrer-Policy, etc.) en toda respuesta. Va primero
@@ -77,6 +90,12 @@ app.use(cors({
   },
   credentials: true,
 }));
+// Backstop global de rate limiting [auditoría 4.1] — holgado, última red de
+// seguridad para el pool de 3 conexiones. Va DESPUÉS de cors (si respondiera
+// antes, el 429 saldría sin headers CORS y el navegador no dejaría leerlo) y
+// ANTES de express.json (a un cliente ya bloqueado ni le parseamos el body).
+// Los límites finos de login y reserva se montan en sus rutas, más abajo.
+app.use(limiterGlobal);
 app.use(express.json());
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -138,10 +157,12 @@ app.get('/api/health', (req, res) => {
 //      (barberos, servicios, disponibilidad). La app del barbero consume
 //      /api/turnero/barberos en su selector pre-PIN.
 // ─────────────────────────────────────────────────────────────────────────────
-app.use('/api/auth/operativo', authOperativoRoutes);
-app.use('/api/auth/barbero',   authBarberoRoutes);
+// Los 3 logins llevan limiterLogin [auditoría 1.2]: montado ANTES del router,
+// corta la fuerza bruta de PIN/credenciales sin llegar al controller (ni a bcrypt).
+app.use('/api/auth/operativo', limiterLogin, authOperativoRoutes);
+app.use('/api/auth/barbero',   limiterLogin, authBarberoRoutes);
 // Login unificado del panel (resuelve rol admin/barbero según el PIN).
-app.use('/api/auth/panel',     authPanelRoutes);
+app.use('/api/auth/panel',     limiterLogin, authPanelRoutes);
 app.use('/api/turnero',    turneroRoutes);
 // GET /api/negocio — datos públicos del negocio (nombre, booking_url).
 // Lo consume App.jsx antes del login para el nombre; el logo viene de /negocio/imagenes.

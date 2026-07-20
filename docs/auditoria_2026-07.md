@@ -107,6 +107,16 @@ login fallido registran el abuso pero no lo frenan. El costo de N bcrypt por
 intento lo hace lento pero no imposible. Recomendación: subir su prioridad
 apenas haya más de un tenant en producción.
 
+> **RESUELTO (tanda 2):** los 3 logins (`/api/auth/panel`, `/api/auth/barbero`,
+> `/api/auth/operativo`) montan `limiterLogin`
+> (`middlewares/rateLimitMiddleware.js`): 10 intentos **fallidos** por IP cada
+> 15 min, compartido entre los tres endpoints (rotar de endpoint no multiplica
+> el presupuesto). Los logins exitosos no consumen cupo
+> (`skipSuccessfulRequests`), así una barbería detrás de un mismo router no se
+> bloquea sola. Respuesta 429 con mensaje genérico. Requiere el
+> `app.set('trust proxy', 1)` agregado en `index.js` (proxy de Railway).
+> Comportamiento en vivo pendiente de smoke-test en el primer deploy.
+
 #### 1.3 [BAJO] El algoritmo del JWT no está fijado en `jwt.verify`
 Se llama `jwt.verify(token, secret)` sin `{ algorithms: ['HS256'] }`. Con
 secreto simétrico el riesgo real es bajo (jsonwebtoken v9 ya rechaza `alg: none`
@@ -298,6 +308,17 @@ superficie pública de escritura no está cubierta y es más expuesta (no requie
 credenciales). **Fix:** rate limit por IP + por (tenant, email/teléfono),
 captcha/turnstile en el turnero, y un tope de reservas activas por cliente.
 
+> **RESUELTO (tanda 2):** `POST /api/turnero/turnos` monta doble limiter por IP
+> (`middlewares/rateLimitMiddleware.js`): anti-ráfaga 3/min + techo 10/hora.
+> Los GET del turnero quedan sin límite propio (el wizard navega con muchas
+> lecturas) — los cubre el backstop global de 300 req/min/IP. **Follow-ups
+> deliberadamente fuera de esta tanda:** captcha/Turnstile (requiere cuenta
+> externa + widget en el front; solo si el abuso persiste), límite por
+> (tenant, email/teléfono), tope de reservas activas por cliente, y manejo del
+> 429 en la UI del turnero (hoy mostraría un error genérico en vez de
+> "demasiados intentos"). Comportamiento en vivo pendiente de smoke-test en el
+> primer deploy.
+
 #### 3.2 [MEDIO] Validación de inputs públicos débil o ausente
 En `crearTurno`: `nombre` y `telefono` **no tienen validación** de longitud ni
 formato (texto libre sin tope), y `REGEX_EMAIL` es `/.+@.+\..+/` — extremadamente
@@ -346,6 +367,17 @@ conexiones y **encola/estanca toda la API para todos los tenants**. El techo de
 concurrencia es muy bajo y es un objetivo trivial. Mitigar: rate limiting (3.1),
 `statement_timeout` en las queries, y monitorear saturación del pool. Subir `max`
 depende del plan de Supabase.
+
+> **RESUELTO (tanda 2):** dos piezas. (a) Backstop global de rate limiting en
+> `index.js` (`limiterGlobal`, 300 req/min/IP) que corta el goteo masivo desde
+> una IP antes de que toque el pool. (b) `statement_timeout=5000` en el Pool de
+> `config/db.js`, pasado como parámetro de startup (`options: '-c
+> statement_timeout=5000'`) — compatible con el modo sesión del pooler (conexión
+> dedicada por sesión), sin `SET` suelto. `max: 3` no se tocó (límite del plan).
+> La compatibilidad del parámetro `options` con el pooler de Supabase no se
+> pudo confirmar en frío: si lo rechazara, `testConnection()` falla al boot y
+> se ve en el primer deploy — parte del smoke-test pendiente. Monitorear
+> saturación del pool sigue abierto como mejora operativa.
 
 #### 4.2 [MEDIO] UPDATEs relativos no idempotentes + retry-once pueden doble-aplicar ante un blip de conexión
 Los contadores de stock se actualizan de forma **relativa**: `UPDATE producto SET
