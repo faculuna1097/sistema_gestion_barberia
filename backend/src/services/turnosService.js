@@ -92,6 +92,15 @@ export const insertarTurno = async ({
       slotError.code = 'SLOT_OCUPADO';
       throw slotError;
     }
+    // Backstop de carrera: FK compuesto (tenant_id, barbero_id|servicio_id)
+    // violado. El controller ya valida barbero y servicio antes del insert, pero
+    // si una carrera se escapa, traducimos la violación cruda (23503) a un error
+    // tipado que el controller mapea a 404 en vez de 500. (Auditoría 2.1.)
+    if (err.code === '23503') {
+      const refError = new Error('El barbero o servicio indicado no existe en este negocio');
+      refError.code = 'REFERENCIA_INVALIDA';
+      throw refError;
+    }
     throw err;
   }
 };

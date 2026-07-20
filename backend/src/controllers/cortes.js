@@ -5,6 +5,8 @@
 // valida el body y se mapean los errores tipados del service a respuestas HTTP.
 
 import { registrarCorte } from '../services/cortesService.js';
+import { barberoActivoEnTenant } from '../services/barberosService.js';
+import { calcularDuracionServicio } from '../services/turnosService.js';
 import { esMontoValido } from '../utils/validarNumero.js';
 
 /**
@@ -37,6 +39,20 @@ export const createCorte = async (req, res) => {
   }
 
   try {
+    // ── Validar ownership de barbero y servicio (auditoría 2.1) ──────────────
+    // Ambos ids llegan del body (client-controlled en el flujo del iPad). El FK
+    // compuesto (tenant_id, X) ya lo garantiza a nivel DB; esto lo convierte en
+    // un 404 limpio en vez de una violación de FK cruda (500) y documenta la
+    // intención en el entry point. completarTurnoConCorte NO pasa por acá: su
+    // barbero sale del turno (autoritativo) y no re-valida activo, para no romper
+    // el completado de un turno cuyo barbero/servicio se desactivó después.
+    if (!(await barberoActivoEnTenant(barbero_id, req.tenant_id))) {
+      return res.status(404).json({ error: 'Barbero no encontrado o inactivo' });
+    }
+    if ((await calcularDuracionServicio(servicio_id, req.tenant_id)) === null) {
+      return res.status(404).json({ error: 'Servicio no encontrado o inactivo' });
+    }
+
     const { corte_id, monto_total } = await registrarCorte({
       tenantId: req.tenant_id,
       barberoId: barbero_id,
@@ -54,6 +70,12 @@ export const createCorte = async (req, res) => {
     });
 
   } catch (err) {
+    // Backstop de carrera: el FK compuesto rechazó barbero/servicio de otro
+    // tenant entre la validación de arriba y el insert (registrarCorte los
+    // traduce a errores tipados). Mismo status que la validación pre-insert.
+    if (err.code === 'BARBERO_INVALIDO' || err.code === 'SERVICIO_INVALIDO') {
+      return res.status(404).json({ error: err.message });
+    }
     if (err.code === 'TURNO_YA_VINCULADO') {
       return res.status(409).json({ error: err.message });
     }

@@ -10,6 +10,7 @@ import {
   notificarConfirmacion, cambiarEstado, completarTurnoConCorte,
   cancelarTurnoPorId, inicioPosteriorAhora,
 } from '../services/turnosService.js';
+import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { existeFeriado } from '../services/feriadosService.js';
 import { TZ } from '../utils/constantes.js';
@@ -88,6 +89,15 @@ export const crearTurnoAdmin = async (req, res) => {
     if (duracionMin === null) {
       return res.status(404).json({ error: 'Servicio no encontrado o inactivo' });
     }
+
+    // ── Validar que el barbero pertenezca al tenant y esté activo ────────────
+    // Para rol=barbero el barbero_id viene forzado del token (mismo tenant), así
+    // que pasa trivialmente; el chequeo real es para admin, cuyo barbero_id llega
+    // del body. Red de seguridad app sobre el FK compuesto (tenant_id, barbero_id).
+    if (!(await barberoActivoEnTenant(barbero_id, req.tenant_id))) {
+      console.warn('[turnos] crearTurnoAdmin — barbero no pertenece al tenant o inactivo | barbero_id:', barbero_id);
+      return res.status(404).json({ error: 'Barbero no encontrado o inactivo' });
+    }
     const finDT = inicioDT.plus({ minutes: duracionMin });
 
     // ── Validar que el turno caiga dentro del horario de atención ───────────
@@ -121,6 +131,10 @@ export const crearTurnoAdmin = async (req, res) => {
       if (err.code === 'SLOT_OCUPADO') {
         console.warn('[turnos] crearTurnoAdmin — slot ya reservado');
         return res.status(409).json({ error: err.message });
+      }
+      if (err.code === 'REFERENCIA_INVALIDA') {
+        console.warn('[turnos] crearTurnoAdmin — barbero/servicio inexistente (FK 23503)');
+        return res.status(404).json({ error: err.message });
       }
       throw err;
     }

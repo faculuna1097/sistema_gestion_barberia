@@ -16,6 +16,7 @@ import {
   armarLinkGestion, sincronizarCalendarCreacion, notificarConfirmacion,
   inicioPosteriorAhora,
 } from '../services/turnosService.js';
+import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { obtenerHorarioCrudo, validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { obtenerFeriados, existeFeriado } from '../services/feriadosService.js';
 import { TZ } from '../utils/constantes.js';
@@ -257,6 +258,16 @@ export const crearTurno = async (req, res) => {
     if (duracionMin === null) {
       return res.status(404).json({ error: 'Servicio no encontrado o inactivo' });
     }
+
+    // ── Validar que el barbero pertenezca al tenant y esté activo ────────────
+    // Red de seguridad app sobre el FK compuesto (tenant_id, barbero_id): sin
+    // esto, un barbero_id de otro tenant (UUID público vía GET /barberos) pasaría
+    // el FK viejo y bloquearía la agenda del tenant víctima (DoS cross-tenant).
+    // El servicio ya quedó validado arriba vía calcularDuracionServicio. (2.1.)
+    if (!(await barberoActivoEnTenant(barbero_id, req.tenant_id))) {
+      console.warn('[turnero] crearTurno — barbero no pertenece al tenant o inactivo | barbero_id:', barbero_id);
+      return res.status(404).json({ error: 'Barbero no encontrado o inactivo' });
+    }
     const finDT = inicioDT.plus({ minutes: duracionMin });
 
     // ── Validar que el turno caiga dentro del horario de atención ───────────
@@ -290,6 +301,10 @@ export const crearTurno = async (req, res) => {
       if (err.code === 'SLOT_OCUPADO') {
         console.warn('[turnero] crearTurno — slot ya reservado (constraint 23P01)');
         return res.status(409).json({ error: err.message });
+      }
+      if (err.code === 'REFERENCIA_INVALIDA') {
+        console.warn('[turnero] crearTurno — barbero/servicio inexistente (FK 23503)');
+        return res.status(404).json({ error: err.message });
       }
       throw err;
     }

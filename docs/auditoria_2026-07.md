@@ -269,6 +269,25 @@ Esto hace que la DB **rechace estructuralmente** cualquier referencia cross-tena
 sin depender de validación en cada handler. Alternativa mínima: un `SELECT 1 FROM
 barbero WHERE id=$1 AND tenant_id=$2 AND activo=true` antes de cada insert.
 
+> **RESUELTO (tanda 4, 2026-07).** Se aplicó la defensa **estructural + red de
+> seguridad app**:
+> - **DB:** `UNIQUE (tenant_id, id)` en `barbero`, `servicio` y `turno`; FK
+>   compuestos `(tenant_id, barbero_id)` y `(tenant_id, servicio_id)` en `turno` y
+>   `corte`, más `(tenant_id, turno_id)` en `corte` (MATCH SIMPLE → walk-ins con
+>   `turno_id` NULL no se rompen). Migración aplicada en demo y prod tras confirmar
+>   0 referencias cross-tenant preexistentes. El EXCLUDE global por `barbero_id` se
+>   dejó intacto: ya no es explotable porque el turno cross-tenant no puede
+>   insertarse. Constraints nuevos reflejados en `SQL_Schema.md`.
+> - **App:** `barberosService.barberoActivoEnTenant` (helper centralizado) valida
+>   el barbero (tenant + activo) antes del insert en `crearTurno`, `crearTurnoAdmin`
+>   y `createCorte`; el servicio se valida vía `calcularDuracionServicio`. Los INSERT
+>   de turno/corte mapean la violación de FK (23503) a 4xx limpio como backstop de
+>   carrera (`insertarTurno` → `REFERENCIA_INVALIDA` → 404; `registrarCorte` →
+>   `BARBERO_INVALIDO`/`SERVICIO_INVALIDO`/`TURNO_INEXISTENTE` por `err.constraint`).
+> - **No incluido (defensa en profundidad opcional):** FK compuesto de
+>   `turno.cliente_id` — `cliente_id` nunca es client-controlled (sale de
+>   `upsertCliente`, scopeado por tenant), así que no aporta superficie.
+
 #### 2.2 [BAJO] Mutaciones por `id` sin `tenant_id` redundante (defensa en profundidad)
 Varias UPDATE/DELETE operan por PK (`WHERE id = $1`) confiando en que el `id`
 vino de un SELECT scopeado previo. Es correcto hoy, pero frágil ante un refactor
