@@ -116,6 +116,17 @@ patrón que ya existe para operativo.
 > o desactivar. Tokens viejos sin `tv` se tratan como 0 (no rompe sesiones
 > vigentes hasta la primera rotación). Flujo real de revocación pendiente de
 > smoke-test post-migración + deploy.
+>
+> **Addendum (tanda 3):** endurecido `verificarToken` para que un fallo de DB no
+> desloguee. Antes, un solo `try` envolvía la verificación de firma **y** las
+> queries de versión/activo, y el `catch` respondía 401 ante cualquier error —
+> así un blip de conexión (la query del barbero corre en cada request) expulsaba
+> al usuario al login. Ahora son dos etapas: (1) firma/expiración en su propio
+> try → 401 (auth real); (2) lectura de versión/activo en otro try → cualquier
+> throw de la DB es 500 (recuperable), y solo un mismatch de `tv` o `activo=false`
+> da 401 explícito. Verificado en frío (`node --check` + round-trip: firma
+> inválida→401, tenant cruzado→403, barbero/admin con DB caída→500, sin llamar a
+> `next()`).
 
 #### 1.2 [MEDIO] PIN de 4 dígitos + sin rate limiting = fuerza bruta viable
 Ya registrado como deuda conocida (rate limiting ausente). Se refuerza: 10.000
