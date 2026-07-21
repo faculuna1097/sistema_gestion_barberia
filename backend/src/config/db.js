@@ -3,11 +3,18 @@
 // Usa variables de entorno separadas para evitar problemas con caracteres especiales.
 
 import pg from 'pg';
+import fs from 'fs';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const { Pool } = pg;
+
+// CA de Supabase (certificado público, commiteado en config/) para validar el
+// certificado del servidor con `rejectUnauthorized: true` [auditoría 4.3]. Se lee
+// relativo a este módulo (no al cwd) con import.meta.url. Verificado en frío que
+// el pooler valida limpio con esta CA (hostname + cadena) antes de activarlo.
+const supabaseCA = fs.readFileSync(new URL('./supabase-ca.crt', import.meta.url), 'utf8');
 
 console.log(`[db] Inicializando pool — host: ${process.env.DB_HOST} | port: ${process.env.DB_PORT} | db: ${process.env.DB_NAME} | user: ${process.env.DB_USER}`);
 
@@ -17,7 +24,7 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   user:     process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  ssl: { rejectUnauthorized: false }, // requerido por Supabase Session Pooler — no usar certificado autofirmado
+  ssl: { ca: supabaseCA, rejectUnauthorized: true }, // [auditoría 4.3] valida el cert del server contra la CA de Supabase (cierra el MITM del rejectUnauthorized:false)
   max: 3,                             // máximo 3 conexiones simultáneas (límite plan gratuito Supabase)
   idleTimeoutMillis: 30000,           // cierra conexiones inactivas después de 30s
   connectionTimeoutMillis: 5000,      // falla si no conecta en 5s (evita colgar el servidor)
