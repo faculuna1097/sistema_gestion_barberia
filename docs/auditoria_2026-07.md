@@ -506,6 +506,32 @@ npm). Exploitabilidad acotada (lo usa un admin autenticado sobre datos del propi
 tenant), pero es una HIGH sin ruta de parche. **Fix:** migrar a la distribución
 oficial de SheetJS (su CDN propio) o cambiar a `exceljs`.
 
+> **RESUELTO (tanda 6, 2026-07) — opción (a), distribución oficial del CDN:**
+> se migró `xlsx` de `^0.18.5` (registro de npm, vulnerable) a `0.20.3` desde el
+> tarball oficial de SheetJS: `npm i https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz`.
+> El paquete se sigue llamando `xlsx` y la API es idéntica, así que **ningún
+> `import('xlsx')` ni call-site cambió** (los 6 usan solo `utils.book_new`,
+> `utils.json_to_sheet`, `utils.book_append_sheet` y `writeFile` — puro camino de
+> escritura, verificado presente en el build 0.20.3). Se eligió (a) sobre `exceljs`
+> porque la superficie de API usada es mínima y homogénea: reescribir los 6
+> handlers a la API async de `exceljs` (bundle más pesado) no se justifica cuando
+> el cambio a la versión parcheada es de una línea en `package.json`. Efecto
+> colateral: el build del CDN es autocontenido, así que el lockfile **removió 8
+> transitivas** (`adler-32`, `cfb`, `codepage`, `crc-32`, `frac`, `ssf`, `wmf`,
+> `word`) sin agregar ninguna.
+>
+> **Estado en `npm audit`:** `xlsx` **ya no aparece** — mejor que el falso positivo
+> anticipado. Como el paquete resuelve desde una URL (tarball del CDN) y no desde
+> el registro de npm, `npm audit` no lo evalúa contra la base de advisories de
+> GitHub, así que ni siquiera lo lista. Las **2 HIGH del hallazgo (Prototype
+> Pollution GHSA-4r6h-8v6p-xvw6 + ReDoS GHSA-5pgg-2g8v-p4x9) están cerradas** en la
+> versión instalada (0.20.3, parcheada). Nota: ambas vulns viven en el **parseo**
+> de archivos no confiables (`sheet_to_json` / lectura) — que este panel nunca
+> ejerce, solo genera. Los `npm audit` de `/frontend` reportan ahora 5 vulns
+> restantes (`@babel/core`, `brace-expansion`, `esbuild`, `js-yaml`, `vite`), todas
+> **toolchain de build/dev-only** ajenas a este cambio → categoría del hallazgo 5.4,
+> no van al bundle de producción.
+
 #### 5.2 [MEDIO] Faltan headers de seguridad en la API (`helmet` ausente)
 `index.js` no usa `helmet` ni `app.disable('x-powered-by')`. La API responde sin
 `X-Content-Type-Options: nosniff`, `X-Frame-Options`/`frame-ancestors`, HSTS, ni
