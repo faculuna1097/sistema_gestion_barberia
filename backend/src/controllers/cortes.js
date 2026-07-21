@@ -8,6 +8,7 @@ import { registrarCorte } from '../services/cortesService.js';
 import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { calcularDuracionServicio } from '../services/turnosService.js';
 import { esMontoValido } from '../utils/validarNumero.js';
+import { esFormaPagoValida } from '../utils/validarPago.js';
 
 /**
  * createCorte
@@ -30,6 +31,9 @@ export const createCorte = async (req, res) => {
     return res.status(400).json({
       error: 'Faltan campos requeridos: barbero_id, servicio_id, precio, forma_pago'
     });
+  }
+  if (!esFormaPagoValida(forma_pago)) {
+    return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });
   }
   if (!esMontoValido(precio)) {
     return res.status(400).json({ error: 'precio es requerido y debe ser un número >= 0' });

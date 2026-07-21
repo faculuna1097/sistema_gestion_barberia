@@ -20,12 +20,10 @@ import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { obtenerHorarioCrudo, validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { obtenerFeriados, existeFeriado } from '../services/feriadosService.js';
 import { TZ } from '../utils/constantes.js';
+import { validarContacto } from '../utils/validarTexto.js';
 
 // Regex YYYY-MM-DD para validar el query param ?fecha.
 const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
-
-// Regex mínimo de email — solo formato superficial.
-const REGEX_EMAIL = /.+@.+\..+/;
 
 /**
  * getTenant
@@ -232,16 +230,20 @@ export const getDiasDisponibles = async (req, res) => {
  * @returns {JSON} 201 { turno_id, token_gestion }
  */
 export const crearTurno = async (req, res) => {
-  const { servicio_id, barbero_id, inicio, nombre, telefono, email } = req.body;
+  const { servicio_id, barbero_id, inicio } = req.body;
 
-  // ── Validaciones de presencia ─────────────────────────────────────────────
-  if (!servicio_id || !barbero_id || !inicio || !nombre || !telefono || !email) {
+  // ── Validaciones de presencia (ids + inicio) ──────────────────────────────
+  if (!servicio_id || !barbero_id || !inicio) {
     return res.status(400).json({
-      error: 'servicio_id, barbero_id, inicio, nombre, telefono y email son requeridos',
+      error: 'servicio_id, barbero_id e inicio son requeridos',
     });
   }
-  if (!REGEX_EMAIL.test(email)) {
-    return res.status(400).json({ error: 'Email con formato inválido' });
+  // ── Validar y normalizar contacto (nombre/telefono/email). En el turnero
+  //    público los tres son obligatorios; el helper aplica tope de longitud y
+  //    formato de email (auditoría 3.2). ──────────────────────────────────────
+  const contacto = validarContacto(req.body, true);
+  if (contacto.error) {
+    return res.status(400).json({ error: contacto.error });
   }
 
   const inicioDT = DateTime.fromISO(inicio, { zone: TZ });
@@ -287,8 +289,8 @@ export const crearTurno = async (req, res) => {
       return res.status(422).json({ codigo: 'feriado', mensaje: 'El negocio está cerrado por feriado ese día' });
     }
 
-    // ── Upsert cliente ──────────────────────────────────────────────────────
-    const cliente_id = await upsertCliente(req.tenant_id, { nombre, telefono, email });
+    // ── Upsert cliente (datos ya normalizados por validarContacto) ──────────
+    const cliente_id = await upsertCliente(req.tenant_id, contacto);
 
     // ── INSERT turno ────────────────────────────────────────────────────────
     let resultado;
@@ -416,8 +418,8 @@ export const cancelarTurno = async (req, res) => {
          SET estado = 'cancelado',
              cancelado_en = now(),
              cancelado_por = 'cliente'
-       WHERE id = $1`,
-      [r.id]
+       WHERE id = $1 AND tenant_id = $2`,
+      [r.id, req.tenant_id]
     );
     console.log('[turnero] cancelarTurno — turno cancelado | turno_id:', r.id);
 
@@ -508,8 +510,8 @@ export const reprogramarTurno = async (req, res) => {
     // ── UPDATE con captura de 23P01 ────────────────────────────────────────
     try {
       await query(
-        `UPDATE turno SET inicio = $1, fin = $2 WHERE id = $3`,
-        [inicioDT.toISO(), finDT.toISO(), r.id]
+        `UPDATE turno SET inicio = $1, fin = $2 WHERE id = $3 AND tenant_id = $4`,
+        [inicioDT.toISO(), finDT.toISO(), r.id, req.tenant_id]
       );
     } catch (err) {
       if (err.code === '23P01') {

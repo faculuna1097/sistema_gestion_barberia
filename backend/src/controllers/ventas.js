@@ -1,9 +1,9 @@
 // /backend/src/controllers/ventas.js
 import { query } from '../config/db.js';
 import { esMontoValido, esCantidadValida } from '../utils/validarNumero.js';
+import { esFormaPagoValida } from '../utils/validarPago.js';
 import { aplicarMutacionesStock } from '../utils/stock.js';
-
-const TZ = 'America/Argentina/Buenos_Aires';
+import { TZ } from '../utils/constantes.js';
 
 export const createVenta = async (req, res) => {
   const { producto_id, cantidad, precio_unitario, forma_pago } = req.body;
@@ -12,6 +12,9 @@ export const createVenta = async (req, res) => {
     return res.status(400).json({
       error: 'Faltan campos requeridos: producto_id, cantidad, precio_unitario, forma_pago'
     });
+  }
+  if (!esFormaPagoValida(forma_pago)) {
+    return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });
   }
   if (!esCantidadValida(cantidad)) {
     return res.status(400).json({ error: 'cantidad es requerida y debe ser un entero >= 1' });
@@ -53,7 +56,7 @@ export const createVenta = async (req, res) => {
     // Descuento de stock vía helper central (auditoría 6.2/4.2): escritura relativa
     // no idempotente (no reintenta). Si falla, el catch de abajo borra la venta ya
     // insertada — el cleanup compensatorio original de createVenta.
-    await aplicarMutacionesStock([{ producto_id, delta: -cantidad }]);
+    await aplicarMutacionesStock([{ producto_id, delta: -cantidad }], req.tenant_id);
 
     console.log('[ventas] createVenta completado | venta_id:', ventaId);
     res.status(201).json({
@@ -155,12 +158,22 @@ export const deleteVenta = async (req, res) => {
     // borramos la venta DESPUÉS. Si el DELETE falla, revertimos el restore (delta
     // conocido) — no hace falta reconstruir la fila de venta para compensar. Al
     // revés (borrar y luego restaurar) un fallo dejaría el stock corto sin arreglo.
-    const revertirStock = await aplicarMutacionesStock([{ producto_id, delta: cantidad }]);
+    const revertirStock = await aplicarMutacionesStock([{ producto_id, delta: cantidad }], req.tenant_id);
+    let delRes;
     try {
-      await query('DELETE FROM venta WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
+      delRes = await query('DELETE FROM venta WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
     } catch (err) {
       await revertirStock();
       throw err;
+    }
+
+    // Si el DELETE no borró nada, la fila desapareció entre el SELECT y el DELETE
+    // (borrado concurrente). El otro borrado ya restauró el stock, así que el
+    // restore que acabamos de aplicar sobra → lo revertimos para no doble-sumar.
+    if (delRes.rowCount === 0) {
+      await revertirStock();
+      console.warn('[ventas] deleteVenta — venta ya no existía al borrar (carrera) | id:', id);
+      return res.status(404).json({ error: 'Venta no encontrada' });
     }
 
     console.log('[ventas] deleteVenta completado | venta_id:', id);
@@ -188,8 +201,7 @@ export const updateVenta = async (req, res) => {
   if (!esMontoValido(precio_unitario)) {
     return res.status(400).json({ error: 'precio_unitario es requerido y debe ser un número >= 0' });
   }
-
-  if (!['efectivo', 'mercado_pago'].includes(forma_pago)) {
+  if (!esFormaPagoValida(forma_pago)) {
     return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });
   }
 
@@ -240,7 +252,7 @@ export const updateVenta = async (req, res) => {
     // Stock primero; la fila de venta al final. Si el UPDATE de la fila falla,
     // compensamos el stock (deltas conocidos) antes de propagar — así no hace
     // falta reconstruir la fila para revertir.
-    const revertirStock = await aplicarMutacionesStock(mutaciones);
+    const revertirStock = await aplicarMutacionesStock(mutaciones, req.tenant_id);
     try {
       await query(
         `UPDATE venta

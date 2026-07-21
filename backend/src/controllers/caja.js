@@ -1,8 +1,7 @@
 // /backend/src/controllers/caja.js
 import { query } from '../config/db.js';
 import { aplicarMutacionesStock } from '../utils/stock.js';
-
-const TZ = 'America/Argentina/Buenos_Aires';
+import { TZ } from '../utils/constantes.js';
 
 /**
  * getMovimientosDia
@@ -174,18 +173,32 @@ export const eliminarMovimiento = async (req, res) => {
 
       // Restaurar stock primero (helper con compensación) y borrar la venta
       // después; si el DELETE falla, revertimos el restore (auditoría 6.2).
-      const revertirStock = await aplicarMutacionesStock([{ producto_id, delta: cantidad }]);
+      const revertirStock = await aplicarMutacionesStock([{ producto_id, delta: cantidad }], req.tenant_id);
       console.log('[caja] eliminarMovimiento — stock restaurado | producto_id:', producto_id, '| cantidad:', cantidad);
+      let ventaDelRes;
       try {
-        await query('DELETE FROM venta WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
+        ventaDelRes = await query('DELETE FROM venta WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
       } catch (err) {
         await revertirStock();
         throw err;
       }
+      // Igual que deleteVenta: si el DELETE no borró nada (fila desaparecida entre
+      // el SELECT y el DELETE por un borrado concurrente), el restore que ya
+      // aplicamos sobra → lo revertimos para no doble-sumar el stock.
+      if (ventaDelRes.rowCount === 0) {
+        await revertirStock();
+        console.warn('[caja] eliminarMovimiento — venta ya no existía al borrar (carrera) | id:', id);
+        return res.status(404).json({ error: 'Venta no encontrada' });
+      }
       console.log('[caja] eliminarMovimiento — venta eliminada | id:', id);
 
     } else if (tipo === 'gasto') {
-      await query('DELETE FROM gasto WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
+      const gastoDelRes = await query('DELETE FROM gasto WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
+      // Contrato consistente con las ramas corte/venta: 404 si no borró nada
+      // (id inexistente o de otro tenant) en vez de un 200 engañoso.
+      if (gastoDelRes.rowCount === 0) {
+        return res.status(404).json({ error: 'Gasto no encontrado' });
+      }
       console.log('[caja] eliminarMovimiento — gasto eliminado | id:', id);
 
     } else {

@@ -75,7 +75,9 @@ export const registrarCorte = async ({
     // corte huérfano. (En los conflictos de INSERT de abajo corteId sigue null,
     // así que este guard es no-op para esos casos.)
     if (corteId) {
-      await query('DELETE FROM corte WHERE id = $1', [corteId]).catch((cleanupErr) => {
+      // tenant_id redundante (defensa en profundidad, auditoría 2.2): el corteId
+      // es el que acabamos de insertar bajo este tenant.
+      await query('DELETE FROM corte WHERE id = $1 AND tenant_id = $2', [corteId, tenantId]).catch((cleanupErr) => {
         console.error('[cortesService] registrarCorte — error en cleanup:', cleanupErr);
       });
     }

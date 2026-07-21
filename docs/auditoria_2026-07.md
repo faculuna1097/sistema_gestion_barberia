@@ -301,6 +301,26 @@ ambas defensas se refuerzan. Nota: el FK compuesto por sí solo ya cierra el
 agujero (un turno de A no puede referenciar un barbero de C); el `tenant_id` en
 el EXCLUDE es defensa en profundidad.
 
+> **RESUELTO (tanda 7a, 2026-07) — parte app (sin tocar el EXCLUDE, que es
+> cambio de schema).** Se agregó el filtro redundante `AND tenant_id = $N` a las
+> mutaciones que operaban por PK confiando en un SELECT scopeado previo:
+> - **Stock de producto:** `utils/stock.js` (`aplicarMutacionesStock` /
+>   `revertirMutaciones`) ahora recibe `tenantId` y filtra cada UPDATE de
+>   `producto` por `id AND tenant_id`. Threadeado desde los 4 call-sites
+>   (`createVenta`, `updateVenta`, `deleteVenta`, `caja.eliminarMovimiento`).
+> - **Turnos:** los UPDATE de estado/reprogramación por PK ahora llevan
+>   `AND tenant_id`: `turnero.cancelarTurno`, `turnero.reprogramarTurno`,
+>   `turnosService.cambiarEstado`, `turnosService.cancelarTurnoPorId`.
+> - **Otros:** cleanup del corte huérfano (`cortesService.registrarCorte`) y
+>   UPDATE de reemplazo de imagen (`imagenes.postImagen`).
+>
+> No cambia comportamiento observable (el `id` ya provenía de un SELECT del
+> propio tenant); elimina la dependencia implícita ante un futuro refactor.
+> **Pendiente (opcional):** `tenant_id` en el constraint EXCLUDE y en el UPDATE de
+> `google_event_id` de `sincronizarCalendarCreacion` (requeriría threadear
+> `tenantId`; marginal, el turno recién se insertó bajo ese tenant) — ambos como
+> defensa en profundidad, no accionables sin más valor.
+
 #### 2.3 [BAJO — doc] Comentario stale en `turnosOperativo.js`
 La cabecera dice "Sin auth — solo tenantMiddleware", pero en `index.js` la ruta
 `/api/turnos` está protegida con `verificarToken + requiereRol('operativo',
@@ -374,6 +394,21 @@ de body en Express (ver Fase 5), un `nombre` puede pesar megabytes y guardarse e
 la DB. **Fix:** topes de longitud (`nombre` ≤ 80, `telefono` ≤ 30), regex de
 email más estricta o validación real, y `express.json({ limit: '...' })`.
 
+> **RESUELTO (tanda 7a, 2026-07).** Creado `utils/validarTexto.js` con
+> `validarContacto({nombre, telefono, email}, contactoRequerido)`: fuerza tipo
+> string, recorta (trim), aplica topes (`MAX_NOMBRE=80`, `MAX_TELEFONO=30` → 400 si
+> exceden) y valida el email con una regex más estricta
+> (`/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/`, TLD alfabético ≥2, sin espacios ni `@`
+> extra) que reemplaza la vieja `/.+@.+\..+/`. Devuelve los valores ya normalizados
+> o `{error}`. Aplicado en `crearTurno` (turnero público, `contactoRequerido=true`)
+> y `crearTurnoAdmin` (backoffice, `false` → telefono/email opcionales pero igual
+> acotados/validados si vienen); ambos pasan los valores normalizados a
+> `upsertCliente`. Verificado con 27 casos borde vía `node -e`. **Nota:** el tope
+> de body de Express ya estaba acotado (default 100kb de `express.json`, ver Fase 5
+> "Body acotado"), así que no se agregó `limit` explícito — el vector de "nombre de
+> megabytes" ya no aplicaba; lo que faltaba era el tope semántico (80/30) y la
+> regex, ahora cerrados.
+
 #### 3.3 [BAJO] PII del cliente accesible al portador del `token_gestion` (token en la URL)
 `GET .../gestionar/:token` devuelve `cliente.email` y `cliente.telefono`. El
 token viaja en el **path de la URL** (`/turnos/gestionar/:token`), y las URLs se
@@ -382,6 +417,21 @@ la PII del cliente. Es inherente al diseño "gestión por link" y de bajo riesgo
 pero conviene: no incluir la PII completa en esa respuesta si la pantalla no la
 necesita, y evitar que el token termine en `Referer` hacia terceros
 (`Referrer-Policy`).
+
+> **MITIGADO (tanda 7a, 2026-07) — la fuga vía `Referer` ya está cerrada.**
+> `helmet@8.3.0` (instalado en tanda 1, hallazgo 5.2) emite
+> `Referrer-Policy: no-referrer` por default (helmet lo setea desde v4). Verificado
+> contra `package.json` (`helmet ^8.3.0`) y el comentario de `index.js` ya lo lista
+> entre los headers que aplica. Con `no-referrer`, el token del path **no** sale en
+> el header `Referer` hacia terceros → el canal de fuga principal de este hallazgo
+> queda anulado sin cambios de código.
+>
+> **No accionado (opcional, bajo riesgo):** recortar `cliente.email`/`telefono` de
+> la respuesta de `getTurnoPorToken`. Se dejó **sin tocar** a propósito: no se
+> pudo confirmar en frío que la pantalla de gestión del turnero no los use, y
+> removerlos podría romper esa UI. Queda como follow-up a validar contra
+> `frontend-turnero` antes de recortar. El riesgo residual (portador del link ve
+> la PII del propio cliente del turno) es inherente al diseño "gestión por link".
 
 **Prioridad de ataque en esta fase:** 3.1 primero (se combina con el CRÍTICO
 2.1 y ataca un activo real, la entregabilidad), luego 3.2, después 3.3.
@@ -470,6 +520,18 @@ estándar y hoy está explícitamente desactivado.
 está en las deudas de `estado_actual.md` (fue una de las causas del crash-loop
 del go-live). Se reafirma: init perezoso + fallo puntual de Storage en vez de
 tumbar el arranque. Cross-ref, no hallazgo nuevo.
+
+> **RESUELTO (tanda 7a, 2026-07).** `config/supabase.js` ya no crea el cliente al
+> importar el módulo: expone `getSupabase()`, que lo construye en el **primer uso**
+> y lo cachea. Si faltan `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`, ahora **lanza
+> dentro del handler** (no al boot) → `storageService` lo propaga y el controller
+> de imágenes responde un **500 puntual**, en vez de tumbar el arranque de toda la
+> API (la causa del crash-loop del go-live). Antes el `console.error` de credencial
+> faltante no frenaba el `createClient(undefined, undefined)` a nivel de módulo, que
+> podía reventar el import. `storageService.js` (único consumidor) se refactorizó a
+> `getSupabase().storage...` en sus 3 funciones (`urlPublica`, `subirImagen`,
+> `eliminarImagen`). Verificado en frío (`node --check`); el fallo real de Storage
+> no se ejercitó (requiere bootear sin credenciales).
 
 **Prioridad de ataque en esta fase:** 4.1 y 4.2 son los accionables (el resto es
 hardening / ya documentado). 4.1 se cierra en gran parte con el mismo rate
@@ -658,6 +720,41 @@ resuelve con el mismo validador numérico central.
 
 > **RESUELTO (tanda 1):** cerrado junto con 6.1 — el validador central acepta
 > `0` como monto legítimo y rechaza negativos/no-números.
+
+#### 6.4 [Tanda 7a — bugs/contrato de bajo nivel encontrados y resueltos]
+Barrido de limpieza y hardening del backend (tanda 7a). Bugs y deudas de contrato
+que no tenían hallazgo propio, resueltos en el mismo pase:
+
+- **`forma_pago` sin validar el enum en `createVenta` y `createCorte`** — solo
+  chequeaban presencia (truthy), no el valor. `updateVenta`, `createGasto`,
+  `updateGasto` y `completarTurno` sí validaban, pero repetían el literal
+  `['efectivo','mercado_pago']`. Se centralizó en `utils/validarPago.js`
+  (`FORMAS_PAGO` + `esFormaPagoValida`) y se aplicó/reemplazó en los 6 writes.
+- **UUID mal formado → 500 (22P02)** — `calcularDuracionServicio` no capturaba
+  `22P02`, así que un `servicio_id` con formato inválido en
+  `crearTurno`/`crearTurnoAdmin`/`createCorte` escapaba como 500. Ahora lo trata
+  como "no encontrado" (`null` → 404), mismo criterio que `barberoActivoEnTenant`.
+- **`deleteVenta` doble-restore de stock** — restauraba stock y borraba sin chequear
+  `rowCount`: si la fila desaparecía entre el SELECT y el DELETE (borrado
+  concurrente), el restore quedaba aplicado sobre un stock que el otro borrado ya
+  había restaurado → doble suma. Ahora, si `rowCount===0`, revierte el restore y
+  devuelve 404. **Mismo bug encontrado y corregido en la rama venta de
+  `caja.eliminarMovimiento`.**
+- **`caja.eliminarMovimiento` rama gasto — 200 en delete no-op** — devolvía 200
+  aunque el DELETE no borrara nada (id inexistente/otro tenant). Ahora 404 si
+  `rowCount===0`, consistente con las ramas corte/venta.
+- **`editarNegocio` — 500 en vez de 404** — guardaba `result.rows[0]` sin chequear
+  vacío; un `tenant_id` inexistente reventaba en el `console.log`. Ahora 404 si no
+  matcheó. Se le agregó también el docstring que le faltaba.
+- **Dead code** — se quitó el `forma_pago ?? null` de `createGasto` (redundante:
+  `forma_pago` ya está validado truthy + enum arriba).
+- **`TZ` redeclarada local** — `ventas.js`, `gastos.js` y `caja.js` redeclaraban
+  `const TZ = 'America/...'` al tope; ahora importan de `utils/constantes.js`
+  (convención §4). Cierra parcialmente la deuda de "archivos previos con TZ local".
+
+Todos verificados en frío (`node --check`) + los validadores nuevos con `node -e`
+(27 casos). Los flujos HTTP reales no se ejercitaron (requieren bootear); los
+caminos de fallo se razonaron paso a paso.
 
 **Prioridad de ataque en esta fase:** 6.1 primero (integridad de datos con vector
 accidental muy plausible), 6.2 después (consistencia de stock; se entrelaza con

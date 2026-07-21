@@ -34,11 +34,11 @@ const OPCIONES_STOCK = { reintentar: false };
  * @param {Array<{producto_id: string, delta: number}>} aplicadas
  * @returns {Promise<void>}
  */
-const revertirMutaciones = async (aplicadas) => {
+const revertirMutaciones = async (aplicadas, tenantId) => {
   for (const m of aplicadas) {
     await query(
-      'UPDATE producto SET stock_actual = stock_actual - $1 WHERE id = $2',
-      [m.delta, m.producto_id],
+      'UPDATE producto SET stock_actual = stock_actual - $1 WHERE id = $2 AND tenant_id = $3',
+      [m.delta, m.producto_id, tenantId],
       OPCIONES_STOCK
     ).catch((err) => {
       console.error(
@@ -61,25 +61,28 @@ const revertirMutaciones = async (aplicadas) => {
  *
  * @param {Array<{producto_id: string, delta: number}>} mutaciones - ajustes a aplicar
  *   (delta > 0 repone, delta < 0 descuenta). Puede venir vacío (no-op).
+ * @param {string} tenantId - tenant del request; se agrega como filtro redundante
+ *   `AND tenant_id` a cada UPDATE (defensa en profundidad, auditoría 2.2). El
+ *   producto_id ya proviene de un SELECT scopeado por tenant en el llamador.
  * @returns {Promise<() => Promise<void>>} revertir() — deshace lo aplicado (best-effort)
  * @throws relanza el error de la primera mutación que falle (tras revertir las previas)
  */
-export const aplicarMutacionesStock = async (mutaciones) => {
+export const aplicarMutacionesStock = async (mutaciones, tenantId) => {
   const aplicadas = [];
   try {
     for (const m of mutaciones) {
       await query(
-        'UPDATE producto SET stock_actual = stock_actual + $1 WHERE id = $2',
-        [m.delta, m.producto_id],
+        'UPDATE producto SET stock_actual = stock_actual + $1 WHERE id = $2 AND tenant_id = $3',
+        [m.delta, m.producto_id, tenantId],
         OPCIONES_STOCK
       );
       aplicadas.push(m);
     }
   } catch (err) {
     // Falló una mutación a mitad: revertimos las previas y propagamos.
-    await revertirMutaciones(aplicadas);
+    await revertirMutaciones(aplicadas, tenantId);
     throw err;
   }
   // Éxito: entregamos el revertidor para compensar si un paso posterior falla.
-  return () => revertirMutaciones(aplicadas);
+  return () => revertirMutaciones(aplicadas, tenantId);
 };

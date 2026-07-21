@@ -389,6 +389,14 @@ export const getNegocio = async (req, res) => {
   }
 };
 
+/**
+ * editarNegocio
+ * Actualiza nombre_negocio y booking_url del tenant.
+ * @param {string}  req.tenant_id           - Inyectado por verificarToken
+ * @param {string}  req.body.nombre_negocio - Nombre del negocio (requerido, se recorta)
+ * @param {string} [req.body.booking_url]   - URL de reservas (opcional, se recorta; null si vacío)
+ * @returns {JSON} { nombre_negocio, booking_url } | 404 si el tenant no existe
+ */
 export const editarNegocio = async (req, res) => {
   const { nombre_negocio, booking_url } = req.body;
 
@@ -405,6 +413,11 @@ export const editarNegocio = async (req, res) => {
        RETURNING nombre_negocio, booking_url`,
       [nombre_negocio.trim(), booking_url ? booking_url.trim() : null, req.tenant_id]
     );
+    // Sin esta guarda, un tenant_id inexistente devolvía rows vacío y el log de
+    // abajo (result.rows[0].nombre_negocio) tiraba un 500 en vez de un 404 limpio.
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Tenant no encontrado' });
+    }
     console.log('[gestion] editarNegocio completado | nombre:', result.rows[0].nombre_negocio);
     res.json(result.rows[0]);
   } catch (err) {
