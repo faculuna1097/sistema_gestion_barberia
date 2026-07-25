@@ -65,7 +65,6 @@ export default function FlujoGasto({ onVolver, categorias, imagenLocal }) {
       descripcion,
       monto: montoFinal,
       forma_pago: formaPago,
-      usuario_registro: null,
     };
     setEnviando(true);
     setError(null);

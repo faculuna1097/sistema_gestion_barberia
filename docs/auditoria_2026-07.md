@@ -32,33 +32,104 @@ de recordatorios con claim atómico, validación cruzada de tenant en el JWT). L
 hallazgos se concentran en **escrituras que confían en el cliente** y en **falta
 de límites/hardening**, no en fugas de datos entre tenants por lectura.
 
-**Conteo:** 1 crítico · 3 altos · 6 medios · 7 bajos.
+> **Cierre (2026-07):** la auditoría fue de solo lectura; la remediación se
+> completó después en 8 tandas sobre `fix/auditoria-2026-07`. **Todos los hallazgos
+> quedaron en estado final** (resuelto / mitigado / diferido-con-rationale) — ver la
+> sección **"Estado final de remediación"** abajo. Cero hallazgos abiertos.
 
-### Orden de ataque recomendado
+**Conteo original:** 1 crítico · 3 altos · 6 medios · 7 bajos.
 
-| # | Hallazgo | Sev. | Esfuerzo | Por qué en este orden |
+### Estado final de remediación (cerrado — tandas 1–7b, 2026-07)
+
+> **La auditoría fue de solo lectura; la remediación se ejecutó después en 8
+> tandas** (branch `fix/auditoria-2026-07`), cada una con su verificación en frío.
+> Esta tabla es el registro de cierre: **todos los hallazgos quedan en un estado
+> final explícito**. El detalle de cada fix vive en el bloque `> RESUELTO/MITIGADO`
+> bajo el hallazgo correspondiente, más abajo. **Nada quedó sin resolver o sin
+> rationale de diferimiento.**
+
+| # | Hallazgo | Sev. original | Estado final | Dónde |
 |---|---|---|---|---|
-| **2.1** | `barbero_id`/`servicio_id` sin validar ownership → DoS de agenda cross-tenant | 🔴 Crítico | Medio (FK compuesto + migración) | Único que rompe aislamiento entre tenants; explotable sin auth con UUIDs públicos |
-| **3.1** | Sin rate limiting en la reserva pública → email bombing + spam + agota agenda | 🟠 Alto | Medio (rate limit + captcha) | Ataca la entregabilidad (activo real) y amplifica 2.1 y 4.1 |
-| **1.1** | Sesión de barbero/admin no revocable (30 días) | 🟠 Alto | Medio (token_version + 7.1) | Empleados rotan; hoy no hay corte de acceso. Requiere 7.1 en el front |
-| **7.1** | Front no maneja 401 (admin/barbero) | 🟡 Medio | Bajo | Prerequisito de 1.1; hacerlos juntos |
-| **6.1** | Montos sin validar (negativos/no numéricos) | 🟡 Medio | Bajo (validador central) | Corrupción silenciosa de balances por typo |
-| **5.2** | Falta `helmet` / headers de seguridad | 🟡 Medio | Bajo (2 líneas) | Hardening barato; ayuda con 3.3 |
-| **4.1** | Pool de 3 conexiones sin rate limiting → DoS | 🟡 Medio | Bajo | Se cierra en gran parte con 3.1 |
-| **6.2** | Updates de stock multi-paso sin compensación | 🟡 Medio | Medio | Consistencia de inventario; se entrelaza con 4.2 |
-| **5.1** | `xlsx` HIGH sin fix por npm | 🟡 Medio | Medio (migrar lib) | Planificar cambio a SheetJS oficial / exceljs |
-| — | Bajos: 1.3, 2.2, 2.3, 3.2, 3.3, 4.2, 4.3, 4.4, 5.3, 5.4, 6.3, 7.2, 7.3 | 🟢 Bajo | Varía | Hardening y limpieza; atacar por oportunidad |
+| **2.1** | `barbero_id`/`servicio_id` sin validar ownership → DoS agenda cross-tenant | 🔴 Crítico | ✅ **RESUELTO** | FK compuestos `(tenant_id, X)` + validación app (tanda 4) |
+| **1.1** | Sesión admin/barbero no revocable (30 días) | 🟠 Alto | ✅ **RESUELTO** | `token_version` por rol + 401 en front (tandas 3 + 7.1) |
+| **3.1** | Sin rate limiting en reserva pública → email bombing / agota agenda | 🟠 Alto | ✅ **RESUELTO** (follow-ups opcionales diferidos) | Doble limiter por IP (tanda 2); captcha/límite por email → diferido |
+| **1.2** | PIN 4 dígitos sin rate limiting → fuerza bruta | 🟡 Medio | ✅ **RESUELTO** | `limiterLogin` en los 3 logins (tanda 2) |
+| **7.1** | Front no maneja 401 (admin/barbero) | 🟡 Medio | ✅ **RESUELTO** | 401 centralizado en `apiFetch` + app barbero (tanda 3) |
+| **6.1** | Montos sin validar (negativos/no numéricos) | 🟡 Medio | ✅ **RESUELTO** | `utils/validarNumero.js` en los writes financieros (tanda 1) |
+| **5.2** | Falta `helmet` / headers de seguridad | 🟡 Medio | ✅ **RESUELTO** | `helmet@8` + `x-powered-by` off (tanda 1) |
+| **4.1** | Pool de 3 conexiones sin rate limiting → DoS | 🟡 Medio | ✅ **RESUELTO** (monitoreo de pool = mejora operativa) | Backstop global 300 req/min + `statement_timeout=5s` (tanda 2) |
+| **4.2** | UPDATEs relativos no idempotentes + retry → doble-apply | 🟡 Medio | ⚠️ **MITIGADO** (stock cerrado; idempotency keys **diferido**) | `{reintentar:false}` en writes de stock (tanda 5); INSERT no idempotentes → diferido |
+| **6.2** | Updates de stock multi-paso sin compensación | 🟡 Medio | ✅ **RESUELTO** (función almacenada = mejora futura) | `utils/stock.js` con compensación (tanda 5) |
+| **5.1** | `xlsx` HIGH sin fix por npm | 🟡 Medio | ✅ **RESUELTO** | Migrado a distribución oficial SheetJS 0.20.3 (tanda 6) |
+| **1.3** | Algoritmo JWT no fijado en `verify` | 🟢 Bajo | ✅ **RESUELTO** | `config/jwt.js` fija HS256 (tanda 1) |
+| **1.4** | `JWT_SECRET` sin validación al boot | 🟢 Bajo | ✅ **RESUELTO** | `config/jwt.js` valida al arranque (tanda 1) |
+| **2.2** | Mutaciones por `id` sin `tenant_id` redundante | 🟢 Bajo | ✅ **RESUELTO** (parte app; `tenant_id` en EXCLUDE = defensa en profundidad **diferida**) | Filtro `AND tenant_id` en writes por PK (tanda 7a) |
+| **2.3** | Comentario stale en `turnosOperativo.js` | 🟢 Bajo | ✅ **RESUELTO** | Cabecera corregida (tanda 1) |
+| **3.2** | Validación de inputs públicos débil | 🟢 Bajo (era MEDIO) | ✅ **RESUELTO** | `utils/validarTexto.js` en `crearTurno`/`crearTurnoAdmin` (tanda 7a) |
+| **3.3** | PII del cliente al portador del `token_gestion` (token en URL) | 🟢 Bajo | ⚠️ **MITIGADO** (recorte de PII opcional **diferido**) | `Referrer-Policy: no-referrer` vía helmet cierra la fuga por `Referer` (tanda 7a) |
+| **4.3** | `ssl: rejectUnauthorized:false` (cert DB no validado) | 🟢 Bajo | ✅ **RESUELTO** | CA de Supabase pinneada, `rejectUnauthorized:true` (fix 4.3) |
+| **4.4** | Cliente de Supabase Storage con init eager | 🟢 Bajo | ✅ **RESUELTO** | `getSupabase()` perezoso (tanda 7a) |
+| **5.3** | `qs` (backend) DoS moderada | 🟢 Bajo | ✅ **RESUELTO** | `npm audit fix` → 0 vulns backend (tanda 1) |
+| **5.4** | Vulns dev-only del toolchain (vite/esbuild/babel) en frontends | 🟢 Bajo | ✅ **RESUELTO** | `npm audit fix` sin `--force`, bumps dentro de major → **0 vulns en los 4 frontends** (tanda 7b) |
+| **5.5** | `frontend-landing` no auditado | 🟢 Bajo | ✅ **RESUELTO** | Auditado; 0 vulns tras `audit fix` (Fase 7 + tanda 7b) |
+| **6.3** | Guardas `!monto`/`!cantidad` rechazan 0, aceptan negativos | 🟢 Bajo | ✅ **RESUELTO** | Cerrado con el validador central de 6.1 (tanda 1) |
+| **6.4** | Bugs/contrato de bajo nivel (forma_pago, UUID→500, doble-restore, etc.) | 🟢 Bajo | ✅ **RESUELTO** | Barrido de hardening backend (tanda 7a) |
+| **7.2** | Divergencia en extracción de subdominio (panel gestión) | 🟢 Bajo | ✅ **RESUELTO** | Heurística alineada a `.barbermanager.app` (tanda 7b) |
+| **7.3** | Token en `localStorage` (nota de diseño) | 🟢 Bajo | ✅ **RESUELTO** (aclarado + aceptado con rationale) | Corregido: **sólo el operativo** en `localStorage`; aceptable mientras no haya sinks de XSS (tanda 7b) |
+| — | `usuario_registro: null` muerto en el payload de venta/gasto (front) | — limpieza | ✅ **RESUELTO** | Quitado de `FlujoVenta`/`FlujoGasto` (tanda 7b) |
 
-**Combos que conviene resolver juntos:**
-- **1.1 + 7.1** — revocación de sesión + manejo de 401 en el front (uno necesita
-  al otro).
-- **3.1 + 4.1** — un rate limiter cierra el abuso público y el DoS de pool a la vez.
-- **6.1 + 6.2** — un validador de montos + un helper de stock con compensación
-  cubren ambos.
-- **2.1 (FK compuesto)** cierra estructuralmente el CRÍTICO sin tocar cada handler.
+**Resultado:** **0 hallazgos abiertos.** El crítico y los tres altos, cerrados;
+todos los medios y bajos, resueltos o mitigados. Lo que queda **diferido lleva
+rationale explícito** (abajo) — no es trabajo olvidado, es deuda evaluada y aceptada.
 
-**Nota:** este documento es de auditoría (solo lectura). Ninguna corrección se
-aplicó todavía; cada fix merece su propio branch/chat con su testing.
+### Deudas diferidas (aceptadas con rationale — no accionadas en esta serie)
+
+1. **TOCTOU sistémico (SELECT-luego-escribe sin lock).** El patrón general de
+   validar con un `SELECT` y luego escribir sin transacción/lock deja una ventana
+   de carrera. **Por qué se difiere:** la restricción de "sin transacciones" del
+   Session Pooler (§6 convenciones) hace que la atomicidad dura requiera mover los
+   writes críticos a **funciones almacenadas** (cambio de schema, una sola DB de
+   prod). **Mitigación vigente:** los constraints de DB (EXCLUDE GIST global por
+   barbero, FK compuestos `(tenant_id, X)`) rechazan estructuralmente los estados
+   inválidos que más importan (doble turno, referencia cross-tenant), y el helper
+   de stock compensa best-effort. El residual es corrupción improbable bajo carrera
+   estrecha, no fuga ni DoS.
+2. **Idempotency keys para los INSERT no idempotentes (residual de 4.2).** `turno`,
+   `venta` y `gasto` se insertan sin clave de idempotencia; un retry tras un ack
+   perdido podría duplicar la fila. **Por qué se difiere:** el turno ya está
+   protegido por el constraint `23P01` (no hay doble turno); venta/gasto producen
+   una **fila visible** que el usuario detecta y borra, no corrupción silenciosa de
+   contador (esa clase, la de stock, sí se cerró en tanda 5 con `{reintentar:false}`).
+   El fix duro (idempotency key end-to-end) es la deuda arquitectónica mayor, ya
+   anotada para `/turnos`.
+3. **Defensa en profundidad de multi-tenancy (parte de 2.2).** `tenant_id` en el
+   constraint `EXCLUDE` y FK compuesto sobre `turno.cliente_id`. **Por qué se
+   difiere:** el FK compuesto de `barbero_id`/`servicio_id` (tanda 4) ya cierra el
+   agujero real; esto es refuerzo marginal que requiere más cambio de schema.
+4. **Follow-ups anti-abuso del turnero público (parte de 3.1).** Captcha/Turnstile,
+   límite por `(tenant, email/teléfono)`, tope de reservas activas por cliente, y
+   manejo del 429 en la UI. **Por qué se difiere:** el doble rate-limit por IP ya
+   corta el abuso masivo; estos son defensa adicional a activar **si el abuso
+   aparece** (varios requieren cuenta externa + widget en el front).
+5. **Recorte de PII en `getTurnoPorToken` (parte de 3.3).** No devolver
+   `email`/`telefono` en la respuesta de gestión por token. **Por qué se difiere:**
+   la fuga por `Referer` ya está cerrada por helmet; recortar los campos exige
+   confirmar contra `frontend-turnero` que la pantalla no los use (no verificable en
+   frío). Riesgo residual inherente al diseño "gestión por link".
+6. **`DeprecationWarning` cosmético de pg (nota en 4.1).** El `SET
+   statement_timeout` en `pool.on('connect')` dispara un warning de pg que anticipa
+   un cambio en pg@9. **Por qué se difiere:** hoy es puramente cosmético (el timeout
+   se aplica correcto, verificado); resolver antes de subir a pg@9.
+7. **Monitoreo de saturación del pool (mejora operativa de 4.1).** Instrumentar
+   alertas de saturación de las 3 conexiones. Mejora de observabilidad, no un fix.
+8. **Función almacenada para atomicidad dura de stock (mejora futura de 6.2).** La
+   compensación best-effort actual cubre el caso; la atomicidad server-side es la
+   evolución natural cuando el volumen lo amerite (cambio de schema).
+
+**Combos con los que se resolvió** (registro histórico): 1.1 + 7.1 (revocación +
+401); 3.1 + 4.1 (un rate limiter cierra abuso público y DoS de pool); 6.1 + 6.2
+(validador de montos + helper de stock); 2.1 vía FK compuesto (cierra el CRÍTICO
+estructuralmente sin tocar cada handler).
 
 ---
 
@@ -389,10 +460,14 @@ captcha/turnstile en el turnero, y un tope de reservas activas por cliente.
 #### 3.2 [MEDIO] Validación de inputs públicos débil o ausente
 En `crearTurno`: `nombre` y `telefono` **no tienen validación** de longitud ni
 formato (texto libre sin tope), y `REGEX_EMAIL` es `/.+@.+\..+/` — extremadamente
-permisivo (acepta espacios, markup, direcciones inválidas). Sin límite de tamaño
-de body en Express (ver Fase 5), un `nombre` puede pesar megabytes y guardarse en
-la DB. **Fix:** topes de longitud (`nombre` ≤ 80, `telefono` ≤ 30), regex de
-email más estricta o validación real, y `express.json({ limit: '...' })`.
+permisivo (acepta espacios, markup, direcciones inválidas). El body sí está
+acotado por el default de `express.json` (~100 kb, ver Fase 5 "Body acotado"), así
+que el vector no es de "megabytes"; pero **falta el tope semántico**: un `nombre`
+de hasta ~100 kb (grande, aunque acotado) igual se guardaría en la DB sin límite de
+longitud ni validación de formato. **Fix:** topes de longitud (`nombre` ≤ 80,
+`telefono` ≤ 30) y regex de email más estricta o validación real. (El `limit`
+explícito de `express.json` no hace falta: el default de 100 kb ya cierra el
+extremo del body.)
 
 > **RESUELTO (tanda 7a, 2026-07).** Creado `utils/validarTexto.js` con
 > `validarContacto({nombre, telefono, email}, contactoRequerido)`: fuerza tipo
@@ -478,6 +553,19 @@ depende del plan de Supabase.
 > default de Supabase ya era 120s (no era "sin timeout"), pero 120s con 3
 > conexiones es una ventana de DoS amplia; 5s la cierra. Monitorear saturación del
 > pool sigue abierto como mejora operativa.
+
+> **Issue menor conocido (tanda 7b) — `DeprecationWarning` cosmético de pg.** El
+> `SET statement_timeout` se aplica en `pool.on('connect')` (`config/db.js`), que
+> encola el `SET` sobre la conexión recién creada **en paralelo** con el primer
+> query del caller (node-postgres procesa la cola FIFO, así que el timeout igual
+> queda activo antes de ese query). Ese patrón de "query dentro del handler de
+> `connect` sin await del ciclo de checkout" dispara un `DeprecationWarning` de pg
+> en versiones recientes, anticipando un cambio de comportamiento en **pg@9**. Hoy
+> es **puramente cosmético**: el timeout se aplica correcto (verificado end-to-end
+> en 4.1 — un `pg_sleep(10)` se corta a ~5s con SQLSTATE 57014). Queda anotado como
+> deuda de mantenimiento a resolver antes de subir a pg@9 (ej. mover el `SET` a un
+> wrapper de checkout de conexión o a la config de arranque de sesión). No
+> accionable en esta serie: no afecta funcionalidad ni seguridad.
 
 #### 4.2 [MEDIO] UPDATEs relativos no idempotentes + retry-once pueden doble-aplicar ante un blip de conexión
 Los contadores de stock se actualizan de forma **relativa**: `UPDATE producto SET
@@ -813,13 +901,20 @@ partes[0] : undefined`, mientras turnero/barbero usan
 solo en dev local (una IP `192.168.x` computa `subdominio = '192'`). Cross-ref, no
 hallazgo nuevo. En producción ambas heurísticas coinciden.
 
-#### 7.3 [BAJO — nota de diseño] Tokens en `localStorage`
-Los tokens operativo y barbero viven en `localStorage` (decisión documentada:
-sobrevivir al reload del iPad). Es aceptable **hoy** porque no hay ningún sink de
-XSS (ver arriba), pero implica un acoplamiento: cualquier XSS futuro = robo total
-del token (a diferencia de una cookie `httpOnly`). **Mantener la propiedad
-"sin sinks de XSS"** es lo que sostiene la seguridad de esta decisión — vigilar
-que no se introduzca `dangerouslySetInnerHTML` ni scripts de terceros sin control.
+#### 7.3 [BAJO — nota de diseño] Token operativo en `localStorage`
+**Corrección (tanda 7b):** sólo el token **operativo** vive en `localStorage`
+(clave `token_operativo`, decisión documentada: sobrevivir al reload del iPad del
+local). El token del **barbero NO** está en `localStorage` — vive en memoria del
+módulo (`let authToken` en `api.js` de `frontend-barbero`), igual que el admin, y
+se pierde en cada reload (re-login por PIN). Verificado por lectura del código; la
+redacción original de este hallazgo (y de `estado_actual.md`) era inexacta en ese
+punto. El token operativo en `localStorage` es aceptable **hoy** porque no hay
+ningún sink de XSS (ver arriba), pero implica un acoplamiento: cualquier XSS futuro
+= robo del token operativo (a diferencia de una cookie `httpOnly`). El riesgo se
+acota a **ese único token**; admin y barbero, al estar en memoria, no son robables
+por un XSS persistente entre reloads. **Mantener la propiedad "sin sinks de XSS"**
+es lo que sostiene la seguridad de esta decisión — vigilar que no se introduzca
+`dangerouslySetInnerHTML` ni scripts de terceros sin control.
 
 **Prioridad de ataque en esta fase:** 7.1 (hacerlo junto con 1.1, es su
 prerequisito de frontend); 7.2 y 7.3 quedan como cross-refs de bajo riesgo.
