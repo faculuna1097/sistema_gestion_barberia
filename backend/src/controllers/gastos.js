@@ -1,16 +1,19 @@
 // /backend/src/controllers/gastos.js
 import { query } from '../config/db.js';
-
-const TZ = 'America/Argentina/Buenos_Aires';
+import { esMontoValido } from '../utils/validarNumero.js';
+import { esFormaPagoValida } from '../utils/validarPago.js';
+import { TZ } from '../utils/constantes.js';
 
 export const createGasto = async (req, res) => {
   const { categoria_id, descripcion, monto, forma_pago } = req.body;
 
-  if (!categoria_id || !descripcion || !monto || !forma_pago) {
+  if (!categoria_id || !descripcion || !forma_pago) {
     return res.status(400).json({ error: 'Faltan campos requeridos: categoria_id, descripcion, monto, forma_pago' });
   }
-
-  if (!['efectivo', 'mercado_pago'].includes(forma_pago)) {
+  if (!esMontoValido(monto)) {
+    return res.status(400).json({ error: 'monto es requerido y debe ser un número >= 0' });
+  }
+  if (!esFormaPagoValida(forma_pago)) {
     return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });
   }
 
@@ -19,7 +22,7 @@ export const createGasto = async (req, res) => {
       `INSERT INTO gasto (tenant_id, categoria_id, descripcion, monto, forma_pago)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [req.tenant_id, categoria_id, descripcion, monto, forma_pago ?? null]
+      [req.tenant_id, categoria_id, descripcion, monto, forma_pago]
     );
 
     const gastoCreado = resultado.rows[0];
@@ -118,13 +121,15 @@ export const updateGasto = async (req, res) => {
 
   const { categoria_id, descripcion, monto, forma_pago } = req.body;
 
-  if (!categoria_id || !descripcion || !monto || !forma_pago) {
+  if (!categoria_id || !descripcion || !forma_pago) {
     return res.status(400).json({
       error: 'Faltan campos requeridos: categoria_id, descripcion, monto, forma_pago'
     });
   }
-
-  if (!['efectivo', 'mercado_pago'].includes(forma_pago)) {
+  if (!esMontoValido(monto)) {
+    return res.status(400).json({ error: 'monto es requerido y debe ser un número >= 0' });
+  }
+  if (!esFormaPagoValida(forma_pago)) {
     return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });
   }
 

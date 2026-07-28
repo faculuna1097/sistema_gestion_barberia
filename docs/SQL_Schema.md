@@ -15,6 +15,7 @@ CREATE TABLE public.tenant (
   operativo_usuario text,
   operativo_password_hash text,
   operativo_token_version integer NOT NULL DEFAULT 0,
+  admin_token_version integer NOT NULL DEFAULT 0,
   telefono text,
   direccion text,
   CONSTRAINT tenant_pkey PRIMARY KEY (id)
@@ -29,8 +30,12 @@ CREATE TABLE public.barbero (
   activo boolean DEFAULT true,
   created_at timestamp with time zone DEFAULT now(),
   email text,
+  token_version integer NOT NULL DEFAULT 0,
   CONSTRAINT barbero_pkey PRIMARY KEY (id),
-  CONSTRAINT barbero_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
+  CONSTRAINT barbero_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  -- Target de los FK compuestos (tenant_id, barbero_id) de turno y corte.
+  -- Trivialmente satisfacible: id ya es PK (único por sí solo).
+  CONSTRAINT barbero_tenant_id_id_key UNIQUE (tenant_id, id)
 );
 CREATE TABLE public.servicio (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -41,7 +46,9 @@ CREATE TABLE public.servicio (
   created_at timestamp with time zone DEFAULT now(),
   cantidad_slots integer NOT NULL DEFAULT 1 CHECK (cantidad_slots > 0 AND cantidad_slots <= 20),
   CONSTRAINT servicio_pkey PRIMARY KEY (id),
-  CONSTRAINT servicio_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
+  CONSTRAINT servicio_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  -- Target de los FK compuestos (tenant_id, servicio_id) de turno y corte.
+  CONSTRAINT servicio_tenant_id_id_key UNIQUE (tenant_id, id)
 );
 CREATE TABLE public.producto (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -68,9 +75,13 @@ CREATE TABLE public.corte (
   turno_id uuid,
   CONSTRAINT corte_pkey PRIMARY KEY (id),
   CONSTRAINT corte_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
-  CONSTRAINT corte_barbero_id_fkey FOREIGN KEY (barbero_id) REFERENCES public.barbero(id),
-  CONSTRAINT corte_servicio_id_fkey FOREIGN KEY (servicio_id) REFERENCES public.servicio(id),
-  CONSTRAINT corte_turno_id_fkey FOREIGN KEY (turno_id) REFERENCES public.turno(id)
+  -- FK compuestos con tenant_id: hacen imposible que un corte referencie un
+  -- barbero/servicio/turno de OTRO tenant (aislamiento estructural, auditoría 2.1).
+  CONSTRAINT corte_barbero_tenant_fkey  FOREIGN KEY (tenant_id, barbero_id)  REFERENCES public.barbero(tenant_id, id),
+  CONSTRAINT corte_servicio_tenant_fkey FOREIGN KEY (tenant_id, servicio_id) REFERENCES public.servicio(tenant_id, id),
+  -- turno_id es nullable (walk-ins): con MATCH SIMPLE (default) el FK no se
+  -- chequea si turno_id es NULL, así que los walk-ins no se rompen.
+  CONSTRAINT corte_turno_tenant_fkey    FOREIGN KEY (tenant_id, turno_id)    REFERENCES public.turno(tenant_id, id)
 );
 CREATE TABLE public.venta (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -174,8 +185,12 @@ CREATE TABLE public.turno (
   CONSTRAINT turno_pkey PRIMARY KEY (id),
   CONSTRAINT turno_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
   CONSTRAINT turno_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.cliente(id),
-  CONSTRAINT turno_barbero_id_fkey FOREIGN KEY (barbero_id) REFERENCES public.barbero(id),
-  CONSTRAINT turno_servicio_id_fkey FOREIGN KEY (servicio_id) REFERENCES public.servicio(id)
+  -- FK compuestos con tenant_id (auditoría 2.1): impiden que un turno referencie
+  -- un barbero/servicio de otro tenant. Cierran el DoS de agenda cross-tenant.
+  CONSTRAINT turno_barbero_tenant_fkey  FOREIGN KEY (tenant_id, barbero_id)  REFERENCES public.barbero(tenant_id, id),
+  CONSTRAINT turno_servicio_tenant_fkey FOREIGN KEY (tenant_id, servicio_id) REFERENCES public.servicio(tenant_id, id),
+  -- Target del FK compuesto (tenant_id, turno_id) de corte.
+  CONSTRAINT turno_tenant_id_id_key UNIQUE (tenant_id, id)
 );
 CREATE TABLE public.tenant_horario_atencion (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),

@@ -25,6 +25,11 @@ const publicHeaders = {
 // Variable de módulo — persiste mientras la app está viva
 let authToken = null;
 
+// Callback que App.jsx registra para reaccionar a un 401 (token expirado o
+// revocado: cambio de PIN o barbero desactivado). Disparado desde apiFetch;
+// típicamente limpia el estado y redirige al login.
+let onUnauthorized = null;
+
 /**
  * setAuthToken
  * Guarda el JWT en el módulo para que apiFetch lo incluya en los headers.
@@ -43,13 +48,27 @@ export const clearAuthToken = () => {
 };
 
 /**
+ * setOnUnauthorized
+ * Registra un callback que apiFetch ejecuta cuando el backend devuelve 401.
+ * App.jsx lo usa para limpiar su estado local y volver al login.
+ * @param {Function|null} fn - función sin argumentos, o null para desregistrar
+ */
+export const setOnUnauthorized = (fn) => {
+  onUnauthorized = fn;
+};
+
+/**
  * apiFetch
  * Wrapper sobre fetch que agrega Authorization y X-Tenant-Subdomain.
+ * Si el backend devuelve 401, limpia el token automáticamente y dispara el
+ * callback registrado con setOnUnauthorized (redirección al login). Devuelve
+ * la Response normal para que el caller pueda mostrar su propio mensaje de
+ * error antes de que ocurra la redirección.
  * @param {string} path - path relativo (ej: '/admin/turnos?fecha=2026-05-13')
  * @param {Object} options - opciones de fetch (method, body, etc.)
  * @returns {Promise<Response>}
  */
-export const apiFetch = (path, options = {}) => {
+export const apiFetch = async (path, options = {}) => {
   const url = `${BASE_URL}${path}`;
   const headers = {
     'Content-Type': 'application/json',
@@ -57,7 +76,13 @@ export const apiFetch = (path, options = {}) => {
     ...(subdominio ? { 'X-Tenant-Subdomain': subdominio } : {}),
     ...(options.headers || {}),
   };
-  return fetch(url, { ...options, headers });
+  const response = await fetch(url, { ...options, headers });
+  if (response.status === 401) {
+    console.warn('[api] apiFetch — 401 | path:', path, '| limpiando token y notificando a la app');
+    clearAuthToken();
+    if (onUnauthorized) onUnauthorized();
+  }
+  return response;
 };
 
 // ─── RUTAS PÚBLICAS (sin auth) ───────────────────────────────────────────────

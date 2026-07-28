@@ -11,7 +11,7 @@
 // GET /api/barberos), el barbero toca el suyo, y entonces ingresa el PIN.
 
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import { firmarToken } from '../config/jwt.js';
 import { query } from '../config/db.js';
 
 /**
@@ -31,7 +31,7 @@ export async function loginBarbero(req, res) {
 
   try {
     const resultado = await query(
-      `SELECT id, nombre, pin
+      `SELECT id, nombre, pin, token_version
          FROM barbero
         WHERE id = $1 AND tenant_id = $2 AND activo = true`,
       [barbero_id, tenant_id]
@@ -43,7 +43,7 @@ export async function loginBarbero(req, res) {
       return res.status(401).json({ error: 'Usuario o PIN incorrecto' });
     }
 
-    const { id, nombre, pin: pinHasheado } = resultado.rows[0];
+    const { id, nombre, pin: pinHasheado, token_version } = resultado.rows[0];
     const pinCorrecto = await bcrypt.compare(pin, pinHasheado);
 
     if (!pinCorrecto) {
@@ -51,11 +51,10 @@ export async function loginBarbero(req, res) {
       return res.status(401).json({ error: 'Usuario o PIN incorrecto' });
     }
 
-    const token = jwt.sign(
-      { tenant_id, rol: 'barbero', barbero_id: id },
-      process.env.JWT_SECRET,
-      { expiresIn: '30d' }
-    );
+    // tv por barbero: editarBarbero incrementa barbero.token_version al
+    // cambiarle el PIN o desactivarlo, y authMiddleware rechaza los tokens
+    // con tv distinto al actual (revocación de sesión individual).
+    const token = firmarToken({ tenant_id, rol: 'barbero', barbero_id: id, tv: token_version });
 
     console.log('[authBarbero] loginBarbero completado | barbero_id:', id);
     return res.json({ token, barbero: { id, nombre } });

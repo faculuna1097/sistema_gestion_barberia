@@ -100,7 +100,6 @@ export default function FlujoVenta({ onVolver, productos, imagenLocal }) {
       cantidad,
       precio_unitario: productoSeleccionado.precio,
       forma_pago: formaPago,
-      usuario_registro: null,
     };
     setEnviando(true);
     setError(null);

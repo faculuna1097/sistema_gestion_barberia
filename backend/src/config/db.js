@@ -3,11 +3,18 @@
 // Usa variables de entorno separadas para evitar problemas con caracteres especiales.
 
 import pg from 'pg';
+import fs from 'fs';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const { Pool } = pg;
+
+// CA de Supabase (certificado público, commiteado en config/) para validar el
+// certificado del servidor con `rejectUnauthorized: true` [auditoría 4.3]. Se lee
+// relativo a este módulo (no al cwd) con import.meta.url. Verificado en frío que
+// el pooler valida limpio con esta CA (hostname + cadena) antes de activarlo.
+const supabaseCA = fs.readFileSync(new URL('./supabase-ca.crt', import.meta.url), 'utf8');
 
 console.log(`[db] Inicializando pool — host: ${process.env.DB_HOST} | port: ${process.env.DB_PORT} | db: ${process.env.DB_NAME} | user: ${process.env.DB_USER}`);
 
@@ -17,7 +24,7 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   user:     process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  ssl: { rejectUnauthorized: false }, // requerido por Supabase Session Pooler — no usar certificado autofirmado
+  ssl: { ca: supabaseCA, rejectUnauthorized: true }, // [auditoría 4.3] valida el cert del server contra la CA de Supabase (cierra el MITM del rejectUnauthorized:false)
   max: 3,                             // máximo 3 conexiones simultáneas (límite plan gratuito Supabase)
   idleTimeoutMillis: 30000,           // cierra conexiones inactivas después de 30s
   connectionTimeoutMillis: 5000,      // falla si no conecta en 5s (evita colgar el servidor)
@@ -25,6 +32,27 @@ const pool = new Pool({
 });
 
 pool.on('error', (err) => console.error('[db] ❌ Error inesperado en pool:', err));
+
+// statement_timeout [auditoría 4.1]: Postgres aborta cualquier sentencia que
+// supere este límite y libera la conexión. Sin esto, un puñado de queries lentas
+// (o mantenidas abiertas a propósito) retiene las 3 conexiones del pool y estanca
+// toda la API; además aprieta el default de Supabase (120s), demasiado holgado
+// para 3 conexiones. 5s sobra: las queries más pesadas (agregaciones mensuales de
+// planilla/balances) corren en cientos de ms.
+//
+// Se aplica por SQL en cada conexión nueva, NO como parámetro de startup `options`:
+// el pooler de Supabase (Supavisor) DESCARTA `options` (verificado en frío — la
+// sesión quedaba en el default de 2min), pero sí deja pasar un `SET`. En modo
+// sesión cada conexión es dedicada, así que el SET vale para toda su vida. El
+// handler encola el SET antes de que el pool entregue la conexión al primer query
+// y node-postgres procesa la cola FIFO, así que el timeout ya está activo. El
+// valor es una constante hardcodeada (no input de usuario), seguro de interpolar.
+const STATEMENT_TIMEOUT_MS = 5000;
+pool.on('connect', (client) => {
+  client.query(`SET statement_timeout = ${STATEMENT_TIMEOUT_MS}`).catch((err) => {
+    console.error('[db] no se pudo aplicar statement_timeout en una conexión nueva:', err.message);
+  });
+});
 
 // Códigos de error de RED de Node (no son SQLSTATE de Postgres) ante los que
 // vale reintentar: el problema es el socket, no la query.
@@ -83,15 +111,26 @@ const esErrorDeConexion = (err) => {
  * el doble turno); el residual es un caso raro a endurecer luego con idempotency
  * key en /turnos. Ver docs/estado_actual.md.
  *
+ * Excepción (auditoría 4.2): las escrituras RELATIVAS de stock
+ * (`stock_actual = stock_actual ± $1`) NO son idempotentes — un reintento tras un
+ * ack perdido doble-aplicaría el ajuste y corrompería el inventario en silencio.
+ * Esas se llaman con `{ reintentar: false }` (ver utils/stock.js): preferimos un
+ * fallo visible raro (el usuario reintenta) a una corrupción silenciosa. Las demás
+ * (lecturas, y writes idempotentes como SET de valor fijo o DELETE) siguen
+ * reintentando por default.
+ *
  * @param {string} text - La query SQL con placeholders ($1, $2, ...)
  * @param {Array} params - Los valores que reemplazan los placeholders
+ * @param {Object} [opciones] - { reintentar?: boolean } — reintentar default true;
+ *   pasar false para sentencias no idempotentes que no deben reejecutarse.
  * @returns {Promise} Resultado con rows, rowCount, etc.
  */
-export const query = async (text, params) => {
+export const query = async (text, params, opciones = {}) => {
+  const { reintentar = true } = opciones;
   try {
     return await pool.query(text, params);
   } catch (err) {
-    if (!esErrorDeConexion(err)) throw err;
+    if (!reintentar || !esErrorDeConexion(err)) throw err;
     console.warn('[db] query falló por error de conexión, reintentando una vez:', err.message);
     await new Promise((resolve) => setTimeout(resolve, 200)); // respiro corto para que el pool entregue/establezca un socket sano
     return pool.query(text, params);

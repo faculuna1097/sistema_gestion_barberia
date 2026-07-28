@@ -7,6 +7,7 @@
 import { query } from '../config/db.js';
 import bcrypt from 'bcrypt';
 import { pinColisiona } from '../utils/pin.js';
+import { invalidar } from '../middlewares/tenantMiddleware.js';
 
 const SALT_ROUNDS = 10;
 
@@ -83,6 +84,11 @@ export const crearBarbero = async (req, res) => {
  * editarBarbero
  * Edita nombre, comision_valor y/o activo de un barbero.
  * Si se envía un nuevo PIN, lo hashea antes de guardar.
+ * Cambio de PIN o desactivación bumpean barbero.token_version → revocación
+ * inmediata de las sesiones activas de ese barbero (authMiddleware rechaza los
+ * tokens con tv viejo). El bump al desactivar es en rigor redundante (el check
+ * de activo=false ya corta la sesión), pero es explícito y cubre la
+ * reactivación: al volver a activarlo, los tokens pre-desactivación ya no sirven.
  * @param {string}  req.params.id          - UUID del barbero
  * @param {string}  req.tenant_id          - Inyectado por verificarToken
  * @param {string}  req.body.nombre        - Nombre del barbero
@@ -116,17 +122,22 @@ export const editarBarbero = async (req, res) => {
         return res.status(409).json({ error: 'Ese PIN ya está en uso por otro barbero o por el admin' });
       }
       const pinHash = await bcrypt.hash(pin, SALT_ROUNDS);
+      // PIN nuevo ⇒ siempre bump de token_version (revoca sesiones del barbero).
       result = await query(
         `UPDATE barbero
-         SET nombre = $1, comision_valor = $2, activo = $3, pin = $4
+         SET nombre = $1, comision_valor = $2, activo = $3, pin = $4,
+             token_version = token_version + 1
          WHERE id = $5 AND tenant_id = $6
          RETURNING id, nombre, comision_tipo, comision_valor, activo`,
         [nombre.trim(), comision, activo, pinHash, id, req.tenant_id]
       );
     } else {
+      // Sin PIN nuevo: bump solo si se está desactivando. Fragmento fijo, sin
+      // input del usuario (mismo patrón que los setClauses de adminOperativo).
+      const bumpTv = activo === false ? ', token_version = token_version + 1' : '';
       result = await query(
         `UPDATE barbero
-         SET nombre = $1, comision_valor = $2, activo = $3
+         SET nombre = $1, comision_valor = $2, activo = $3${bumpTv}
          WHERE id = $4 AND tenant_id = $5
          RETURNING id, nombre, comision_tipo, comision_valor, activo`,
         [nombre.trim(), comision, activo, id, req.tenant_id]
@@ -335,7 +346,11 @@ export const editarProducto = async (req, res) => {
            stock_actual = stock_actual + $5
        WHERE id = $6 AND tenant_id = $7
        RETURNING id, nombre, precio, stock_actual, stock_minimo, activo`,
-      [nombre.trim(), Number(precio), Number(stock_minimo ?? 0), activo, delta, id, req.tenant_id]
+      [nombre.trim(), Number(precio), Number(stock_minimo ?? 0), activo, delta, id, req.tenant_id],
+      // Escritura relativa de stock (stock_actual + agregar_stock): no idempotente,
+      // no reintentar (auditoría 4.2) — un retry doble-sumaría el restock. Es un
+      // único UPDATE, sin compensación multi-paso (6.2 no aplica).
+      { reintentar: false }
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
@@ -374,6 +389,14 @@ export const getNegocio = async (req, res) => {
   }
 };
 
+/**
+ * editarNegocio
+ * Actualiza nombre_negocio y booking_url del tenant.
+ * @param {string}  req.tenant_id           - Inyectado por verificarToken
+ * @param {string}  req.body.nombre_negocio - Nombre del negocio (requerido, se recorta)
+ * @param {string} [req.body.booking_url]   - URL de reservas (opcional, se recorta; null si vacío)
+ * @returns {JSON} { nombre_negocio, booking_url } | 404 si el tenant no existe
+ */
 export const editarNegocio = async (req, res) => {
   const { nombre_negocio, booking_url } = req.body;
 
@@ -390,6 +413,11 @@ export const editarNegocio = async (req, res) => {
        RETURNING nombre_negocio, booking_url`,
       [nombre_negocio.trim(), booking_url ? booking_url.trim() : null, req.tenant_id]
     );
+    // Sin esta guarda, un tenant_id inexistente devolvía rows vacío y el log de
+    // abajo (result.rows[0].nombre_negocio) tiraba un 500 en vez de un 404 limpio.
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Tenant no encontrado' });
+    }
     console.log('[gestion] editarNegocio completado | nombre:', result.rows[0].nombre_negocio);
     res.json(result.rows[0]);
   } catch (err) {
@@ -403,6 +431,12 @@ export const editarNegocio = async (req, res) => {
 /**
  * cambiarPinAdmin
  * Verifica el PIN actual con bcrypt y guarda el nuevo PIN hasheado.
+ * En el mismo UPDATE bumpea tenant.admin_token_version → revocación inmediata
+ * de todos los tokens admin emitidos antes del cambio (authMiddleware rechaza
+ * los tv viejos), incluida la sesión que hizo el cambio: el admin re-loguea
+ * con su PIN nuevo. Como authMiddleware lee la versión del caché del
+ * tenantMiddleware, hay que invalidar la entrada del tenant tras el UPDATE
+ * (mismo patrón que adminOperativo al rotar la password operativa).
  * @param {string} req.tenant_id        - Inyectado por verificarToken
  * @param {string} req.body.pin_actual  - PIN actual para verificación
  * @param {string} req.body.pin_nuevo   - Nuevo PIN de 4 dígitos
@@ -441,9 +475,17 @@ export const cambiarPinAdmin = async (req, res) => {
 
     const nuevoPinHash = await bcrypt.hash(pin_nuevo, SALT_ROUNDS);
     await query(
-      `UPDATE tenant SET pin_admin = $1 WHERE id = $2`,
+      `UPDATE tenant
+       SET pin_admin = $1,
+           admin_token_version = admin_token_version + 1
+       WHERE id = $2`,
       [nuevoPinHash, req.tenant_id]
     );
+
+    // El caché del tenantMiddleware guarda admin_token_version por subdominio;
+    // sin invalidarlo, el próximo request seguiría leyendo la versión vieja y
+    // la revocación no sería inmediata.
+    invalidar(req.headers['x-tenant-subdomain']);
 
     console.log('[gestion] cambiarPinAdmin completado');
     res.json({ ok: true });

@@ -12,10 +12,15 @@ const BASE_URL = import.meta.env.VITE_API_URL
   : 'http://localhost:3001/api';
 
 // Extraer subdominio del hostname actual.
-// En localhost devuelve undefined → el backend usa el fallback del .env
+// Solo se considera subdominio si estamos en el dominio de producción. En
+// localhost o en una IP de red local (ej. 192.168.x.x) devuelve undefined → el
+// backend usa el fallback de TENANT_ID del .env. Alineado con la heurística de
+// frontend-turnero/frontend-barbero: la vieja `partes.length >= 3` computaba
+// mal el subdominio en dev sobre IP (una IP como 192.168.0.5 daba '192').
 const hostname = window.location.hostname;
-const partes = hostname.split('.');
-const subdominio = partes.length >= 3 ? partes[0] : undefined;
+const subdominio = hostname.endsWith('.barbermanager.app')
+  ? hostname.split('.')[0]
+  : undefined;
 
 // Headers base para rutas públicas — incluye el subdominio si está disponible
 const publicHeaders = {
@@ -53,6 +58,12 @@ try {
 // (típicamente limpiar estado y redirigir al login). Disparado desde
 // apiFetchOperativo cuando el backend devuelve 401.
 let onUnauthorizedOperativo = null;
+
+// Callback análogo para el token admin (cubre también al barbero que entra al
+// panel por PIN: ambos roles usan authToken/apiFetch). Disparado desde apiFetch
+// cuando el backend devuelve 401 — token expirado o revocado (cambio de PIN,
+// barbero desactivado). App.jsx lo usa para volver al login del panel.
+let onUnauthorizedAdmin = null;
 
 /**
  * setAuthToken
@@ -115,10 +126,25 @@ export const setOnUnauthorizedOperativo = (fn) => {
 };
 
 /**
+ * setOnUnauthorizedAdmin
+ * Registra un callback que apiFetch ejecuta cuando el backend devuelve 401
+ * (token admin/barbero-del-panel expirado o revocado). App.jsx lo usa para
+ * limpiar su estado local y redirigir al login del panel.
+ * @param {Function|null} fn - función sin argumentos, o null para desregistrar
+ */
+export const setOnUnauthorizedAdmin = (fn) => {
+  onUnauthorizedAdmin = fn;
+};
+
+/**
  * apiFetch
  * Wrapper sobre fetch() que construye la URL completa a partir del path
  * y agrega automáticamente el header Authorization cuando hay un token disponible.
  * Usar en todos los componentes del panel admin en reemplazo del fetch() directo.
+ * Si el backend devuelve 401, limpia el token automáticamente y dispara el
+ * callback registrado con setOnUnauthorizedAdmin (redirección al login del
+ * panel). Devuelve la Response normal para que el caller pueda mostrar su
+ * propio mensaje de error antes de que ocurra la redirección.
  *
  * @param {string} path    - Path del endpoint sin BASE_URL (ej: '/caja/movimientos-dia')
  * @param {Object} options - Opciones de fetch (method, body, etc.) — opcional
@@ -129,7 +155,7 @@ export const setOnUnauthorizedOperativo = (fn) => {
  *   apiFetch(`/caja/movimientos/corte/${id}`, { method: 'DELETE' })
  *   apiFetch('/admin/barberos', { method: 'POST', body: JSON.stringify(datos) })
  */
-export const apiFetch = (path, options = {}) => {
+export const apiFetch = async (path, options = {}) => {
   const url = `${BASE_URL}${path}`;
   const headers = {
     'Content-Type': 'application/json',
@@ -137,7 +163,13 @@ export const apiFetch = (path, options = {}) => {
     ...(subdominio ? { 'X-Tenant-Subdomain': subdominio } : {}),
     ...(options.headers || {}),
   };
-  return fetch(url, { ...options, headers });
+  const response = await fetch(url, { ...options, headers });
+  if (response.status === 401) {
+    console.warn('[api] apiFetch — 401 | path:', path, '| limpiando token y notificando a la app');
+    clearAuthToken();
+    if (onUnauthorizedAdmin) onUnauthorizedAdmin();
+  }
+  return response;
 };
 
 /**

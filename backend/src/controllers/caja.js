@@ -1,7 +1,7 @@
 // /backend/src/controllers/caja.js
 import { query } from '../config/db.js';
-
-const TZ = 'America/Argentina/Buenos_Aires';
+import { aplicarMutacionesStock } from '../utils/stock.js';
+import { TZ } from '../utils/constantes.js';
 
 /**
  * getMovimientosDia
@@ -118,24 +118,48 @@ export const eliminarMovimiento = async (req, res) => {
       }
       const { turno_id } = corteResult.rows[0];
 
-      await query('DELETE FROM corte WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
-      console.log('[caja] eliminarMovimiento — corte eliminado | id:', id);
-
-      // Si el corte completaba un turno, lo devolvemos a 'reservado'. El guard
-      // estado = 'completado' hace el revert defensivo (espejo del registro, que
-      // solo completa turnos 'reservado'): nunca toca turnos cancelados/no_asistio.
+      // Orden con compensación (auditoría 6.2): revertimos el turno PRIMERO y
+      // borramos el corte DESPUÉS. Si el DELETE del corte falla, devolvemos el
+      // turno a 'completado' (compensación con delta de estado conocido). Al revés
+      // (borrar corte y luego revertir turno) un fallo dejaría un turno 'completado'
+      // huérfano sin corte, y compensarlo exigiría reconstruir la fila del corte.
+      //
+      // El guard estado = 'completado' hace el revert defensivo (espejo del
+      // registro, que solo completa turnos 'reservado'): nunca toca turnos
+      // cancelados/no_asistio. Estas escrituras son de VALOR FIJO (idempotentes),
+      // así que el retry-once de query() es seguro (no aplica la excepción de 4.2).
+      let turnoRevertido = false;
       if (turno_id) {
         const turnoResult = await query(
           `UPDATE turno SET estado = 'reservado'
            WHERE id = $1 AND tenant_id = $2 AND estado = 'completado'`,
           [turno_id, req.tenant_id]
         );
-        if (turnoResult.rowCount === 0) {
+        turnoRevertido = turnoResult.rowCount > 0;
+        if (!turnoRevertido) {
           console.warn('[caja] eliminarMovimiento — turno no revertido (no existe, otro tenant, o no estaba completado) | turno_id:', turno_id);
         } else {
           console.log('[caja] eliminarMovimiento — turno revertido a reservado | turno_id:', turno_id);
         }
       }
+
+      try {
+        await query('DELETE FROM corte WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
+      } catch (err) {
+        // Compensa el revert del turno si el borrado del corte falló. El guard
+        // estado = 'reservado' evita pisar un cambio concurrente.
+        if (turnoRevertido) {
+          await query(
+            `UPDATE turno SET estado = 'completado'
+             WHERE id = $1 AND tenant_id = $2 AND estado = 'reservado'`,
+            [turno_id, req.tenant_id]
+          ).catch((compErr) => {
+            console.error('[caja] eliminarMovimiento — error compensando revert de turno (best-effort) | turno_id:', turno_id, '| error:', compErr);
+          });
+        }
+        throw err;
+      }
+      console.log('[caja] eliminarMovimiento — corte eliminado | id:', id);
 
     } else if (tipo === 'venta') {
       const ventaResult = await query(
@@ -146,16 +170,35 @@ export const eliminarMovimiento = async (req, res) => {
         return res.status(404).json({ error: 'Venta no encontrada' });
       }
       const { producto_id, cantidad } = ventaResult.rows[0];
-      await query(
-        'UPDATE producto SET stock_actual = stock_actual + $1 WHERE id = $2',
-        [cantidad, producto_id]
-      );
+
+      // Restaurar stock primero (helper con compensación) y borrar la venta
+      // después; si el DELETE falla, revertimos el restore (auditoría 6.2).
+      const revertirStock = await aplicarMutacionesStock([{ producto_id, delta: cantidad }], req.tenant_id);
       console.log('[caja] eliminarMovimiento — stock restaurado | producto_id:', producto_id, '| cantidad:', cantidad);
-      await query('DELETE FROM venta WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
+      let ventaDelRes;
+      try {
+        ventaDelRes = await query('DELETE FROM venta WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
+      } catch (err) {
+        await revertirStock();
+        throw err;
+      }
+      // Igual que deleteVenta: si el DELETE no borró nada (fila desaparecida entre
+      // el SELECT y el DELETE por un borrado concurrente), el restore que ya
+      // aplicamos sobra → lo revertimos para no doble-sumar el stock.
+      if (ventaDelRes.rowCount === 0) {
+        await revertirStock();
+        console.warn('[caja] eliminarMovimiento — venta ya no existía al borrar (carrera) | id:', id);
+        return res.status(404).json({ error: 'Venta no encontrada' });
+      }
       console.log('[caja] eliminarMovimiento — venta eliminada | id:', id);
 
     } else if (tipo === 'gasto') {
-      await query('DELETE FROM gasto WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
+      const gastoDelRes = await query('DELETE FROM gasto WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
+      // Contrato consistente con las ramas corte/venta: 404 si no borró nada
+      // (id inexistente o de otro tenant) en vez de un 200 engañoso.
+      if (gastoDelRes.rowCount === 0) {
+        return res.status(404).json({ error: 'Gasto no encontrado' });
+      }
       console.log('[caja] eliminarMovimiento — gasto eliminado | id:', id);
 
     } else {

@@ -21,15 +21,24 @@ import { registrarCorte } from './cortesService.js';
  * @returns {Promise<number|null>} duracion en minutos, o null si no existe
  */
 export const calcularDuracionServicio = async (servicioId, tenantId) => {
-  const result = await query(
-    `SELECT (t.duracion_slot_minutos * s.cantidad_slots) AS duracion_minutos
-     FROM servicio s
-     JOIN tenant t ON t.id = s.tenant_id
-     WHERE s.id = $1 AND s.tenant_id = $2 AND s.activo = true`,
-    [servicioId, tenantId]
-  );
-  if (result.rows.length === 0) return null;
-  return result.rows[0].duracion_minutos;
+  try {
+    const result = await query(
+      `SELECT (t.duracion_slot_minutos * s.cantidad_slots) AS duracion_minutos
+       FROM servicio s
+       JOIN tenant t ON t.id = s.tenant_id
+       WHERE s.id = $1 AND s.tenant_id = $2 AND s.activo = true`,
+      [servicioId, tenantId]
+    );
+    if (result.rows.length === 0) return null;
+    return result.rows[0].duracion_minutos;
+  } catch (err) {
+    // UUID con formato inválido (22P02): un servicio_id mal formado no puede
+    // referenciar a ningún servicio real → lo tratamos como "no encontrado"
+    // (null → el caller responde 404) en vez de dejar escapar un 500. Mismo
+    // criterio que barberoActivoEnTenant. Ver auditoría (hallazgo UUID 22P02).
+    if (err.code === '22P02') return null;
+    throw err;
+  }
 };
 
 /**
@@ -91,6 +100,15 @@ export const insertarTurno = async ({
       const slotError = new Error('El slot elegido ya no está disponible');
       slotError.code = 'SLOT_OCUPADO';
       throw slotError;
+    }
+    // Backstop de carrera: FK compuesto (tenant_id, barbero_id|servicio_id)
+    // violado. El controller ya valida barbero y servicio antes del insert, pero
+    // si una carrera se escapa, traducimos la violación cruda (23503) a un error
+    // tipado que el controller mapea a 404 en vez de 500. (Auditoría 2.1.)
+    if (err.code === '23503') {
+      const refError = new Error('El barbero o servicio indicado no existe en este negocio');
+      refError.code = 'REFERENCIA_INVALIDA';
+      throw refError;
     }
     throw err;
   }
@@ -317,9 +335,12 @@ export const cambiarEstado = async (turnoId, nuevoEstado, tenantId, barberoId) =
     throw err;
   }
 
+  // tenant_id redundante (defensa en profundidad, auditoría 2.2): el turnoId ya
+  // vino del lookup scopeado por tenant de arriba, pero explicitarlo elimina la
+  // dependencia implícita ante un futuro refactor que separe ambas queries.
   await query(
-    `UPDATE turno SET estado = $1 WHERE id = $2`,
-    [nuevoEstado, turnoId]
+    `UPDATE turno SET estado = $1 WHERE id = $2 AND tenant_id = $3`,
+    [nuevoEstado, turnoId, tenantId]
   );
 
   return { id: turnoId, estado: nuevoEstado };
@@ -463,13 +484,15 @@ export const cancelarTurnoPorId = async (turnoId, canceladoPor, tenantId, barber
     throw err;
   }
 
+  // tenant_id redundante (defensa en profundidad, auditoría 2.2): el turnoId ya
+  // salió del lookup scopeado por tenant de arriba.
   await query(
     `UPDATE turno
        SET estado = 'cancelado',
            cancelado_en = now(),
            cancelado_por = $1
-     WHERE id = $2`,
-    [canceladoPor, turnoId]
+     WHERE id = $2 AND tenant_id = $3`,
+    [canceladoPor, turnoId, tenantId]
   );
   console.log('[turnosService] cancelarTurnoPorId — turno cancelado | turno_id:', turnoId);
 

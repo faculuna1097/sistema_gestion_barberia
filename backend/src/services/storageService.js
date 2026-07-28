@@ -4,7 +4,7 @@
 // controller solo conoce estas funciones, no el cliente de Storage.
 
 import { randomUUID } from 'crypto';
-import { supabase, BUCKET_IMAGENES } from '../config/supabase.js';
+import { getSupabase, BUCKET_IMAGENES } from '../config/supabase.js';
 
 /**
  * construirPath
@@ -26,7 +26,7 @@ export const construirPath = (tenantId, tipo) =>
  * @returns {string} URL pública absoluta
  */
 export const urlPublica = (storagePath) =>
-  supabase.storage.from(BUCKET_IMAGENES).getPublicUrl(storagePath).data.publicUrl;
+  getSupabase().storage.from(BUCKET_IMAGENES).getPublicUrl(storagePath).data.publicUrl;
 
 /**
  * subirImagen
@@ -37,7 +37,7 @@ export const urlPublica = (storagePath) =>
  * @throws {Error} si Storage rechaza la subida
  */
 export const subirImagen = async (storagePath, buffer) => {
-  const { error } = await supabase.storage
+  const { error } = await getSupabase().storage
     .from(BUCKET_IMAGENES)
     // cacheControl: 1 año (en segundos). La URL es content-addressed por UUID
     // (ver construirPath) → la imagen de esa ruta nunca cambia, así que es seguro
@@ -56,7 +56,7 @@ export const subirImagen = async (storagePath, buffer) => {
  * @returns {Promise<void>}
  */
 export const eliminarImagen = async (storagePath) => {
-  const { error } = await supabase.storage
+  const { error } = await getSupabase().storage
     .from(BUCKET_IMAGENES)
     .remove([storagePath]);
   if (error) console.error('[storageService] No se pudo borrar el archivo:', error.message);

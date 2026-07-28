@@ -10,9 +10,12 @@ import {
   notificarConfirmacion, cambiarEstado, completarTurnoConCorte,
   cancelarTurnoPorId, inicioPosteriorAhora,
 } from '../services/turnosService.js';
+import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { existeFeriado } from '../services/feriadosService.js';
 import { TZ } from '../utils/constantes.js';
+import { validarContacto } from '../utils/validarTexto.js';
+import { esFormaPagoValida } from '../utils/validarPago.js';
 
 const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -61,17 +64,24 @@ export const getTurnos = async (req, res) => {
  * @returns {JSON} 201 { turno_id, token_gestion }
  */
 export const crearTurnoAdmin = async (req, res) => {
-  const { servicio_id, inicio, nombre, telefono, email } = req.body;
+  const { servicio_id, inicio } = req.body;
 
   // barbero_id: si es barbero, forzar el propio (anti escalada horizontal)
   const barbero_id = req.rol === 'barbero' ? req.barbero_id : req.body.barbero_id;
   const origen_creacion = req.rol === 'barbero' ? 'barbero' : 'admin';
 
-  // ── Validaciones de presencia ─────────────────────────────────────────────
-  if (!servicio_id || !barbero_id || !inicio || !nombre) {
+  // ── Validaciones de presencia (ids + inicio) ──────────────────────────────
+  if (!servicio_id || !barbero_id || !inicio) {
     return res.status(400).json({
-      error: 'servicio_id, barbero_id, inicio y nombre son requeridos',
+      error: 'servicio_id, barbero_id e inicio son requeridos',
     });
+  }
+  // ── Validar y normalizar contacto. En el backoffice telefono y email son
+  //    opcionales (contactoRequerido=false); igual se les aplica tope de
+  //    longitud y, si viene email, formato válido (auditoría 3.2). ────────────
+  const contacto = validarContacto(req.body, false);
+  if (contacto.error) {
+    return res.status(400).json({ error: contacto.error });
   }
 
   const inicioDT = DateTime.fromISO(inicio, { zone: TZ });
@@ -87,6 +97,15 @@ export const crearTurnoAdmin = async (req, res) => {
     const duracionMin = await calcularDuracionServicio(servicio_id, req.tenant_id);
     if (duracionMin === null) {
       return res.status(404).json({ error: 'Servicio no encontrado o inactivo' });
+    }
+
+    // ── Validar que el barbero pertenezca al tenant y esté activo ────────────
+    // Para rol=barbero el barbero_id viene forzado del token (mismo tenant), así
+    // que pasa trivialmente; el chequeo real es para admin, cuyo barbero_id llega
+    // del body. Red de seguridad app sobre el FK compuesto (tenant_id, barbero_id).
+    if (!(await barberoActivoEnTenant(barbero_id, req.tenant_id))) {
+      console.warn('[turnos] crearTurnoAdmin — barbero no pertenece al tenant o inactivo | barbero_id:', barbero_id);
+      return res.status(404).json({ error: 'Barbero no encontrado o inactivo' });
     }
     const finDT = inicioDT.plus({ minutes: duracionMin });
 
@@ -107,8 +126,8 @@ export const crearTurnoAdmin = async (req, res) => {
       return res.status(422).json({ codigo: 'feriado', mensaje: 'El negocio está cerrado por feriado ese día' });
     }
 
-    // ── Upsert cliente ──────────────────────────────────────────────────────
-    const cliente_id = await upsertCliente(req.tenant_id, { nombre, telefono, email });
+    // ── Upsert cliente (datos ya normalizados por validarContacto) ──────────
+    const cliente_id = await upsertCliente(req.tenant_id, contacto);
 
     // ── INSERT turno ────────────────────────────────────────────────────────
     let resultado;
@@ -121,6 +140,10 @@ export const crearTurnoAdmin = async (req, res) => {
       if (err.code === 'SLOT_OCUPADO') {
         console.warn('[turnos] crearTurnoAdmin — slot ya reservado');
         return res.status(409).json({ error: err.message });
+      }
+      if (err.code === 'REFERENCIA_INVALIDA') {
+        console.warn('[turnos] crearTurnoAdmin — barbero/servicio inexistente (FK 23503)');
+        return res.status(404).json({ error: err.message });
       }
       throw err;
     }
@@ -197,8 +220,7 @@ export const completarTurno = async (req, res) => {
   const { forma_pago, precio, propina, servicio_id } = req.body;
 
   // ── Validaciones de input ──────────────────────────────────────────────────
-  const formasValidas = ['efectivo', 'mercado_pago'];
-  if (!forma_pago || !formasValidas.includes(forma_pago)) {
+  if (!esFormaPagoValida(forma_pago)) {
     return res.status(400).json({ error: "forma_pago es requerida y debe ser 'efectivo' o 'mercado_pago'" });
   }
   if (precio === undefined || Number.isNaN(Number(precio)) || Number(precio) < 0) {

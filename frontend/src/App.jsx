@@ -26,6 +26,7 @@ import {
   clearAuthToken,
   clearAuthTokenOperativo,
   setOnUnauthorizedOperativo,
+  setOnUnauthorizedAdmin,
 } from "./services/api";
 
 // Lee el tokenOperativo guardado en localStorage al boot.
@@ -172,6 +173,21 @@ export default function App() {
       setCurrentScreen("loginOperativo");
     });
     return () => setOnUnauthorizedOperativo(null);
+  }, []);
+
+  // Ídem para el token del panel (admin o barbero logueado por PIN): un 401 de
+  // apiFetch significa token expirado o revocado (cambio de PIN admin, barbero
+  // desactivado o con PIN nuevo). api.js ya limpió su copia del token; acá se
+  // resetea el estado de React y se vuelve al login del panel para re-loguear.
+  useEffect(() => {
+    setOnUnauthorizedAdmin(() => {
+      console.warn('[app] 401 del panel detectado — redirigiendo al login del panel');
+      setToken(null);
+      setRolPanel('admin');
+      setBarberoSesion(null);
+      setCurrentScreen("loginAdmin");
+    });
+    return () => setOnUnauthorizedAdmin(null);
   }, []);
 
   /**

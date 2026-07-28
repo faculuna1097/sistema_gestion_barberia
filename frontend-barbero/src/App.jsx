@@ -6,7 +6,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { CalendarDays, CalendarRange, ClipboardList, MoreHorizontal } from 'lucide-react';
 
-import { setAuthToken, clearAuthToken, getTenant, getImagenesNegocio } from './services/api.js';
+import { setAuthToken, clearAuthToken, setOnUnauthorized, getTenant, getImagenesNegocio } from './services/api.js';
 import { PageContainer, BottomNav, EmptyState } from './components/ui';
 
 import Login from './components/Login.jsx';
@@ -67,6 +67,20 @@ function App() {
   const [token, setToken] = useState(null);
   const [barbero, setBarbero] = useState(null);
   const [seccion, setSeccion] = useState(SECCION.DASHBOARD);
+
+  // Registra el handler que api.js dispara cuando apiFetch recibe 401 (token
+  // expirado o revocado: cambio de PIN o barbero desactivado). El token del
+  // módulo ya fue limpiado por api.js; acá solo se resetea el estado de React,
+  // lo que hace render del Login (el guard `if (!token)` de abajo).
+  useEffect(() => {
+    setOnUnauthorized(() => {
+      console.warn('[App] 401 detectado — redirigiendo al login');
+      setToken(null);
+      setBarbero(null);
+      setSeccion(SECCION.DASHBOARD);
+    });
+    return () => setOnUnauthorized(null);
+  }, []);
 
   // Branding del tab (título = nombre del tenant, favicon = su logo). Va acá y
   // no en Login porque si el barbero ya tiene sesión el Login no se renderiza.

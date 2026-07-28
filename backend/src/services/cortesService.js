@@ -75,7 +75,9 @@ export const registrarCorte = async ({
     // corte huérfano. (En los conflictos de INSERT de abajo corteId sigue null,
     // así que este guard es no-op para esos casos.)
     if (corteId) {
-      await query('DELETE FROM corte WHERE id = $1', [corteId]).catch((cleanupErr) => {
+      // tenant_id redundante (defensa en profundidad, auditoría 2.2): el corteId
+      // es el que acabamos de insertar bajo este tenant.
+      await query('DELETE FROM corte WHERE id = $1 AND tenant_id = $2', [corteId, tenantId]).catch((cleanupErr) => {
         console.error('[cortesService] registrarCorte — error en cleanup:', cleanupErr);
       });
     }
@@ -88,12 +90,32 @@ export const registrarCorte = async ({
       e.code = 'TURNO_YA_VINCULADO';
       throw e;
     }
-    // FK violation: turno_id no existe en la tabla turno.
-    if (err.code === '23503' && err.message.includes('turno_id')) {
-      console.warn('[cortesService] registrarCorte — turno_id inexistente | turno_id:', turnoId);
-      const e = new Error('El turno_id proporcionado no existe');
-      e.code = 'TURNO_INEXISTENTE';
-      throw e;
+    // FK compuesto (tenant_id, X) violado (23503): la referencia no existe en
+    // este tenant. Con los FK compuestos de la auditoría 2.1, el nombre del
+    // constraint identifica cuál referencia falló — más robusto que parsear el
+    // mensaje. Backstop de carrera: el controller (createCorte) ya valida barbero
+    // y servicio antes; en completarTurnoConCorte el barbero sale del turno y el
+    // servicio está validado, así que en la práctica esto casi nunca dispara.
+    if (err.code === '23503') {
+      if (err.constraint === 'corte_turno_tenant_fkey') {
+        console.warn('[cortesService] registrarCorte — turno_id inexistente o de otro tenant | turno_id:', turnoId);
+        const e = new Error('El turno_id proporcionado no existe');
+        e.code = 'TURNO_INEXISTENTE';
+        throw e;
+      }
+      if (err.constraint === 'corte_barbero_tenant_fkey') {
+        console.warn('[cortesService] registrarCorte — barbero inexistente o de otro tenant | barbero_id:', barberoId);
+        const e = new Error('El barbero no existe o no pertenece a este negocio');
+        e.code = 'BARBERO_INVALIDO';
+        throw e;
+      }
+      if (err.constraint === 'corte_servicio_tenant_fkey') {
+        console.warn('[cortesService] registrarCorte — servicio inexistente o de otro tenant | servicio_id:', servicioId);
+        const e = new Error('El servicio no existe o no pertenece a este negocio');
+        e.code = 'SERVICIO_INVALIDO';
+        throw e;
+      }
+      // Otro FK inesperado → se propaga crudo abajo.
     }
     // UUID con formato inválido.
     if (err.code === '22P02') {

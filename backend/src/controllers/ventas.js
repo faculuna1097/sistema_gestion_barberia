@@ -1,15 +1,26 @@
 // /backend/src/controllers/ventas.js
 import { query } from '../config/db.js';
-
-const TZ = 'America/Argentina/Buenos_Aires';
+import { esMontoValido, esCantidadValida } from '../utils/validarNumero.js';
+import { esFormaPagoValida } from '../utils/validarPago.js';
+import { aplicarMutacionesStock } from '../utils/stock.js';
+import { TZ } from '../utils/constantes.js';
 
 export const createVenta = async (req, res) => {
   const { producto_id, cantidad, precio_unitario, forma_pago } = req.body;
 
-  if (!producto_id || !cantidad || !precio_unitario || !forma_pago) {
+  if (!producto_id || !forma_pago) {
     return res.status(400).json({
       error: 'Faltan campos requeridos: producto_id, cantidad, precio_unitario, forma_pago'
     });
+  }
+  if (!esFormaPagoValida(forma_pago)) {
+    return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });
+  }
+  if (!esCantidadValida(cantidad)) {
+    return res.status(400).json({ error: 'cantidad es requerida y debe ser un entero >= 1' });
+  }
+  if (!esMontoValido(precio_unitario)) {
+    return res.status(400).json({ error: 'precio_unitario es requerido y debe ser un número >= 0' });
   }
 
   let ventaId = null;
@@ -42,10 +53,10 @@ export const createVenta = async (req, res) => {
 
     ventaId = ventaResult.rows[0].id;
 
-    await query(
-      `UPDATE producto SET stock_actual = stock_actual - $1 WHERE id = $2`,
-      [cantidad, producto_id]
-    );
+    // Descuento de stock vía helper central (auditoría 6.2/4.2): escritura relativa
+    // no idempotente (no reintenta). Si falla, el catch de abajo borra la venta ya
+    // insertada — el cleanup compensatorio original de createVenta.
+    await aplicarMutacionesStock([{ producto_id, delta: -cantidad }], req.tenant_id);
 
     console.log('[ventas] createVenta completado | venta_id:', ventaId);
     res.status(201).json({
@@ -143,11 +154,27 @@ export const deleteVenta = async (req, res) => {
 
     const { producto_id, cantidad } = ventaResult.rows[0];
 
-    await query('DELETE FROM venta WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
-    await query(
-      'UPDATE producto SET stock_actual = stock_actual + $1 WHERE id = $2',
-      [cantidad, producto_id]
-    );
+    // Orden con compensación (auditoría 6.2): restauramos el stock PRIMERO y
+    // borramos la venta DESPUÉS. Si el DELETE falla, revertimos el restore (delta
+    // conocido) — no hace falta reconstruir la fila de venta para compensar. Al
+    // revés (borrar y luego restaurar) un fallo dejaría el stock corto sin arreglo.
+    const revertirStock = await aplicarMutacionesStock([{ producto_id, delta: cantidad }], req.tenant_id);
+    let delRes;
+    try {
+      delRes = await query('DELETE FROM venta WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
+    } catch (err) {
+      await revertirStock();
+      throw err;
+    }
+
+    // Si el DELETE no borró nada, la fila desapareció entre el SELECT y el DELETE
+    // (borrado concurrente). El otro borrado ya restauró el stock, así que el
+    // restore que acabamos de aplicar sobra → lo revertimos para no doble-sumar.
+    if (delRes.rowCount === 0) {
+      await revertirStock();
+      console.warn('[ventas] deleteVenta — venta ya no existía al borrar (carrera) | id:', id);
+      return res.status(404).json({ error: 'Venta no encontrada' });
+    }
 
     console.log('[ventas] deleteVenta completado | venta_id:', id);
     return res.status(200).json({ eliminado: true, id });
@@ -163,13 +190,18 @@ export const updateVenta = async (req, res) => {
 
   const { producto_id, cantidad, precio_unitario, forma_pago } = req.body;
 
-  if (!producto_id || !cantidad || !precio_unitario || !forma_pago) {
+  if (!producto_id || !forma_pago) {
     return res.status(400).json({
       error: 'Faltan campos requeridos: producto_id, cantidad, precio_unitario, forma_pago'
     });
   }
-
-  if (!['efectivo', 'mercado_pago'].includes(forma_pago)) {
+  if (!esCantidadValida(cantidad)) {
+    return res.status(400).json({ error: 'cantidad es requerida y debe ser un entero >= 1' });
+  }
+  if (!esMontoValido(precio_unitario)) {
+    return res.status(400).json({ error: 'precio_unitario es requerido y debe ser un número >= 0' });
+  }
+  if (!esFormaPagoValida(forma_pago)) {
     return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });
   }
 
@@ -206,22 +238,32 @@ export const updateVenta = async (req, res) => {
       });
     }
 
-    await query(
-      `UPDATE producto SET stock_actual = stock_actual + $1 WHERE id = $2`,
-      [cantidadVieja, productoIdViejo]
-    );
+    // Ajuste de stock como mutaciones netas (auditoría 6.2): en vez de
+    // restaurar-viejo + descontar-nuevo (2 writes siempre), si el producto no
+    // cambió lo colapsamos a un solo UPDATE por el delta neto (menos ventana de
+    // inconsistencia). Con producto distinto, dos productos → dos mutaciones.
+    const mutaciones = mismoProducto
+      ? (cantidadVieja === cantidad ? [] : [{ producto_id, delta: cantidadVieja - cantidad }])
+      : [
+          { producto_id: productoIdViejo, delta: cantidadVieja }, // restaurar viejo
+          { producto_id, delta: -cantidad },                      // descontar nuevo
+        ];
 
-    await query(
-      `UPDATE venta
-       SET producto_id = $1, cantidad = $2, precio_unitario = $3, forma_pago = $4
-       WHERE id = $5 AND tenant_id = $6`,
-      [producto_id, cantidad, precio_unitario, forma_pago, id, req.tenant_id]
-    );
-
-    await query(
-      `UPDATE producto SET stock_actual = stock_actual - $1 WHERE id = $2`,
-      [cantidad, producto_id]
-    );
+    // Stock primero; la fila de venta al final. Si el UPDATE de la fila falla,
+    // compensamos el stock (deltas conocidos) antes de propagar — así no hace
+    // falta reconstruir la fila para revertir.
+    const revertirStock = await aplicarMutacionesStock(mutaciones, req.tenant_id);
+    try {
+      await query(
+        `UPDATE venta
+         SET producto_id = $1, cantidad = $2, precio_unitario = $3, forma_pago = $4
+         WHERE id = $5 AND tenant_id = $6`,
+        [producto_id, cantidad, precio_unitario, forma_pago, id, req.tenant_id]
+      );
+    } catch (err) {
+      await revertirStock();
+      throw err;
+    }
 
     console.log('[ventas] updateVenta completado | venta_id:', id);
     return res.status(200).json({ id, producto_id, cantidad, precio_unitario, forma_pago });

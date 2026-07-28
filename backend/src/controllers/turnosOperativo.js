@@ -1,6 +1,7 @@
 // /backend/src/controllers/turnosOperativo.js
-// Controller del recurso "turnos" para el flujo operativo público (modo iPad).
-// Sin auth — solo tenantMiddleware. Expone los turnos reservados del día de un
+// Controller del recurso "turnos" para el flujo operativo (modo iPad).
+// Protegido: en index.js la ruta /api/turnos se monta con verificarToken +
+// requiereRol('operativo', 'admin'). Expone los turnos reservados del día de un
 // barbero para que FlujoCorte permita registrar un corte vinculado al turno.
 // Cobertura: plan_turnero_v2.md sección 9.4 (pantalla "registrar corte").
 

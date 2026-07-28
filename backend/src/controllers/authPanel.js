@@ -18,7 +18,7 @@
 // (datos sin sanear), se responde 401 genérico sin adivinar a quién loguear.
 
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import { firmarToken } from '../config/jwt.js';
 import { query } from '../config/db.js';
 import { evaluarSuscripcion } from '../utils/suscripcion.js';
 
@@ -42,7 +42,7 @@ export async function loginPanel(req, res) {
   try {
     // ── Path admin ────────────────────────────────────────────────────────
     const tenantRes = await query(
-      'SELECT pin_admin, suscripcion_vigente_hasta FROM tenant WHERE id = $1 AND activo = true',
+      'SELECT pin_admin, suscripcion_vigente_hasta, admin_token_version FROM tenant WHERE id = $1 AND activo = true',
       [tenant_id]
     );
 
@@ -53,7 +53,7 @@ export async function loginPanel(req, res) {
       return res.status(401).json({ error: 'PIN incorrecto' });
     }
 
-    const { pin_admin: pinAdmin, suscripcion_vigente_hasta } = tenantRes.rows[0];
+    const { pin_admin: pinAdmin, suscripcion_vigente_hasta, admin_token_version } = tenantRes.rows[0];
 
     if (pinAdmin && await bcrypt.compare(pin, pinAdmin)) {
       // El PIN es el del admin → evaluar suscripción antes de emitir el token.
@@ -64,11 +64,10 @@ export async function loginPanel(req, res) {
         return res.status(402).json({ error: 'suscripcion_vencida' });
       }
 
-      const token = jwt.sign(
-        { tenant_id, rol: 'admin' },
-        process.env.JWT_SECRET,
-        { expiresIn: '30d' }
-      );
+      // tv (token version) permite invalidar los tokens admin del tenant al
+      // cambiar el PIN admin: cambiarPinAdmin incrementa admin_token_version,
+      // y authMiddleware rechaza cualquier token con tv distinto al actual.
+      const token = firmarToken({ tenant_id, rol: 'admin', tv: admin_token_version });
 
       console.log('[authPanel] loginPanel completado | rol: admin | tenant:', tenant_id);
       return res.json({ token, rol: 'admin', aviso_pago });
@@ -78,7 +77,7 @@ export async function loginPanel(req, res) {
     // No matcheó el admin: buscar entre los barberos ACTIVOS del tenant.
     // El path barbero NO chequea suscripción (D2): el bloqueo apunta al dueño.
     const barberosRes = await query(
-      `SELECT id, nombre, pin
+      `SELECT id, nombre, pin, token_version
          FROM barbero
         WHERE tenant_id = $1 AND activo = true`,
       [tenant_id]
@@ -99,12 +98,11 @@ export async function loginPanel(req, res) {
     }
 
     if (matches.length === 1) {
-      const { id, nombre } = matches[0];
-      const token = jwt.sign(
-        { tenant_id, rol: 'barbero', barbero_id: id },
-        process.env.JWT_SECRET,
-        { expiresIn: '30d' }
-      );
+      const { id, nombre, token_version } = matches[0];
+      // tv por barbero: editarBarbero incrementa barbero.token_version al
+      // cambiarle el PIN o desactivarlo, y authMiddleware rechaza los tokens
+      // con tv distinto al actual (revocación de sesión individual).
+      const token = firmarToken({ tenant_id, rol: 'barbero', barbero_id: id, tv: token_version });
 
       console.log('[authPanel] loginPanel completado | rol: barbero | barbero_id:', id);
       return res.json({ token, rol: 'barbero', barbero: { id, nombre } });

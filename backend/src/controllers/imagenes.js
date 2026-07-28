@@ -86,9 +86,9 @@ export const postImagen = async (req, res) => {
       // Reemplazo: actualizar la fila y borrar el archivo viejo de Storage.
       const result = await query(
         `UPDATE tenant_imagen SET storage_path = $1
-          WHERE id = $2
+          WHERE id = $2 AND tenant_id = $3
         RETURNING id, tipo, orden, storage_path`,
-        [nuevoPath, existente.rows[0].id]
+        [nuevoPath, existente.rows[0].id, req.tenant_id]
       );
       fila = result.rows[0];
       await eliminarImagen(existente.rows[0].storage_path);
