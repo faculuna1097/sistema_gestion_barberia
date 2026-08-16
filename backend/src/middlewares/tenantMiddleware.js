@@ -153,6 +153,21 @@ export const tenantMiddleware = async (req, res, next) => {
     const entrada = await resolverPorSubdominio(subdominio);
 
     if (!entrada) {
+      // Evento de seguridad/operación (convención de logs §1.4: "tenant no
+      // encontrado" va con console.warn). Es el ÚNICO log de este middleware:
+      // la convención prohíbe loguear la entrada/salida de middlewares que
+      // corren en cada request, pero este camino es el rechazo, no el flujo
+      // normal. Señal alta y volumen bajo — un subdominio que no resuelve es
+      // o un tenant dado de baja, o un subdominio mal escrito, o (como pasó
+      // acá) una fila de `tenant` editada a mano que dejó la URL de producción
+      // apuntando a la nada. Sin este log, el síntoma en el front es un
+      // genérico "Tenant no encontrado" imposible de rastrear.
+      //
+      // El camino del 400 (sin header) NO se loguea a propósito: la convención
+      // excluye las validaciones de input faltante, y el dominio de la API
+      // recibe escaneo automatizado constante que lo convertiría en ruido. El
+      // log de acceso global ya deja constancia de esos requests.
+      console.warn('[tenantMiddleware] tenantMiddleware — subdominio no resuelve a un tenant activo | subdominio:', subdominio);
       return res.status(404).json({ error: 'Tenant no encontrado' });
     }
 

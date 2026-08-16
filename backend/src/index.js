@@ -111,8 +111,8 @@ app.use(express.json());
 // edición directa de operativo_token_version/activo) el caché en memoria del
 // tenantMiddleware queda stale; este endpoint lo limpia sin redeploy.
 //
-// Queda antes del logger global de abajo (que corre tras tenantMiddleware), así
-// que no aparece en el log de acceso HTTP: por eso loguea su propio evento.
+// Queda antes del logger global de abajo, así que no aparece en el log de
+// acceso HTTP: por eso loguea su propio evento.
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/plataforma/cache/invalidate', verificarClavePlataforma, (req, res) => {
   const { subdominio } = req.body || {};
@@ -124,14 +124,15 @@ app.post('/api/plataforma/cache/invalidate', verificarClavePlataforma, (req, res
   return res.json({ ok: true, subdominio });
 });
 
-// tenantMiddleware — corre en TODAS las rutas antes que cualquier controller.
-// Resuelve el tenant desde el header X-Tenant-Subdomain (producción)
-// o desde TENANT_ID en .env (desarrollo local).
-app.use(tenantMiddleware);
-
 // Middleware de logging global — loguea cada request que llega al servidor.
 // El body se sanitiza antes de loguear para no filtrar credenciales (PINs,
 // passwords) a los logs de Railway. Ver /utils/sanitizarLogs.js.
+//
+// Va ANTES de tenantMiddleware a propósito: montado después, todo request que
+// el middleware rechaza (400 sin header de subdominio, 404 subdominio que no
+// resuelve) moría sin dejar UNA SOLA línea en Railway. Ese punto ciego hizo que
+// un cambio de subdominio en la tabla `tenant` se viviera como "el login dejó de
+// andar", sin nada en los logs que lo explicara.
 app.use((req, res, next) => {
   const bodyLog = req.body && Object.keys(req.body).length
     ? `— body: ${JSON.stringify(sanitizarObjeto(req.body))}`
@@ -141,9 +142,20 @@ app.use((req, res, next) => {
 });
 
 // --- Ruta de salud (health check) ---
+// Va ANTES de tenantMiddleware: un health check tiene que poder responder sin
+// ningún contexto. Montado después exigía el header X-Tenant-Subdomain y le
+// respondía 400 "Tenant no identificado" a cualquier sonda (el healthcheck de
+// Railway, un uptime monitor, un curl), o sea que nunca sirvió para lo único
+// que existe. Es además la ruta que se usa para distinguir "backend caído" de
+// "backend vivo que rechaza el request", así que no puede depender del tenant.
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// tenantMiddleware — corre en TODAS las rutas antes que cualquier controller.
+// Resuelve el tenant desde el header X-Tenant-Subdomain (producción)
+// o desde TENANT_ID en .env (desarrollo local).
+app.use(tenantMiddleware);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS PÚBLICAS — accesibles sin token

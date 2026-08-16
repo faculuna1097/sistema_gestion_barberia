@@ -353,6 +353,55 @@ export const getImagenesNegocio = async () => {
 };
 
 /**
+ * mensajeDeErrorDeLogin
+ * Traduce una respuesta HTTP fallida de cualquier endpoint de login al mensaje
+ * que se le muestra al usuario.
+ *
+ * Centralizado porque los tres logins (operativo, panel, barbero) comparten
+ * exactamente los mismos modos de falla, y porque el patrón anterior
+ * —`data.error || 'Credenciales inválidas'` y `throw new Error('PIN incorrecto')`—
+ * le atribuía a las credenciales CUALQUIER error: un backend caído, un rate
+ * limit o un subdominio que no resuelve se mostraban como "credenciales
+ * inválidas". Eso mandó un diagnóstico entero por el camino equivocado: el
+ * problema real era que la fila de `tenant` tenía otro subdominio, y la pantalla
+ * decía que estaban mal el usuario y la contraseña.
+ *
+ * @param {Response} response             - la Response fallida (response.ok === false)
+ * @param {string}   mensajeCredenciales  - qué decir ante un 401, que es el
+ *                                          único caso que SÍ es culpa de lo
+ *                                          que tipeó el usuario (varía por
+ *                                          login: PIN vs usuario+contraseña)
+ * @returns {Promise<string>} el mensaje a mostrar
+ */
+const mensajeDeErrorDeLogin = async (response, mensajeCredenciales) => {
+  // 5xx: el cuerpo puede no ser JSON (un 502 de Railway devuelve HTML), así que
+  // ni se intenta interpretar. Es el caso que antes se leía como credenciales
+  // mal cuando en realidad el backend estaba caído.
+  if (response.status >= 500) {
+    return 'El servidor no está respondiendo. Probá de nuevo en unos minutos.';
+  }
+
+  const data = await response.json().catch(() => ({}));
+
+  switch (response.status) {
+    // 400/404 vienen de tenantMiddleware ("Tenant no identificado" / "Tenant no
+    // encontrado"). Son correctos como contrato de la API pero no le dicen nada
+    // a quien está parado frente al iPad, así que se traducen: el problema está
+    // en la dirección web, no en las credenciales.
+    case 400:
+      return 'No se pudo identificar el local desde esta dirección web.';
+    case 404:
+      return 'Este local no existe en esta dirección web. Verificá la URL.';
+    case 429:
+      return data.error || 'Demasiados intentos. Esperá unos minutos y probá de nuevo.';
+    case 401:
+      return mensajeCredenciales;
+    default:
+      return data.error || mensajeCredenciales;
+  }
+};
+
+/**
  * loginPanel
  * Envía el PIN al backend para el login unificado del panel (admin o barbero).
  * El backend resuelve el rol según qué PIN matchea: primero compara contra el
@@ -378,7 +427,7 @@ export const loginPanel = async (pin) => {
     throw err;
   }
 
-  if (!response.ok) throw new Error('PIN incorrecto');
+  if (!response.ok) throw new Error(await mensajeDeErrorDeLogin(response, 'PIN incorrecto'));
   return response.json(); // { token, rol, aviso_pago, barbero }
 };
 
@@ -400,8 +449,7 @@ export const loginOperativo = async (usuario, password) => {
     body: JSON.stringify({ usuario, password }),
   });
   if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(data.error || 'Credenciales inválidas');
+    throw new Error(await mensajeDeErrorDeLogin(response, 'Credenciales inválidas'));
   }
   const { token } = await response.json();
   setAuthTokenOperativo(token);
