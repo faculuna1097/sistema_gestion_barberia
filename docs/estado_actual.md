@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-Última actualización: 2026-06-15. **Go-live del turnero mergeado a `main` y en producción** (`kingsai.barbermanager.app`): turnero del cliente, app del barbero, acceso de barberos al panel, horario de atención + feriados y rediseño del panel de gestión, todo live. Backend fijado a **Node 22** en Railway (supabase-js v2 necesita WebSocket nativo — ver post-mortem en [`postmortem_golive_turnero.md`](./postmortem_golive_turnero.md)). El mailer de Resend está activo tanto en el web service como en el cron. **(2026-06-15) Landing de marketing en producción** en `barbermanager.app` (apex canónico, `www` redirige). Quedan solo residuales operativos/time-gated de entregabilidad de mail — ver Pendientes.
+Última actualización: 2026-08-16 (rename del subdominio de producción a `kingsaistudio` — ver §Tenants). **Go-live del turnero mergeado a `main` y en producción** (`kingsaistudio.barbermanager.app`): turnero del cliente, app del barbero, acceso de barberos al panel, horario de atención + feriados y rediseño del panel de gestión, todo live. Backend fijado a **Node 22** en Railway (supabase-js v2 necesita WebSocket nativo — ver post-mortem en [`postmortem_golive_turnero.md`](./postmortem_golive_turnero.md)). El mailer de Resend está activo tanto en el web service como en el cron. **(2026-06-15) Landing de marketing en producción** en `barbermanager.app` (apex canónico, `www` redirige). Quedan solo residuales operativos/time-gated de entregabilidad de mail — ver Pendientes.
 
 Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convenciones_tecnicas.md).
 
@@ -46,7 +46,7 @@ necesita `vercel.json`**. Configuración de dominio:
 - El apex estaba libre (404 `DEPLOYMENT_NOT_FOUND`) antes de este deploy. Asignar
   `www` explícitamente al proyecto del landing **sobrescribe el wildcard
   `*.barbermanager.app`** del proyecto de gestión (un dominio exacto le gana al
-  wildcard en Vercel) — `kingsai` y los demás subdominios de tenant siguen
+  wildcard en Vercel) — `kingsaistudio` y los demás subdominios de tenant siguen
   resolviendo al panel, sin regresión.
 - El `og:url` del `index.html` ya apunta al apex, así que coincide con el canónico.
 - **Pendiente:** falta el `og:image` (ver Pendientes).
@@ -62,7 +62,7 @@ Los rewrites de `/turnos/*` y `/barbero/*` aplican a **todos los tenants**: el
 `has` condition que durante la fase placeholder los limitaba a
 `demo.barbermanager.app` se removió en el go-live (commit `19c3642`). Las apps
 de turnero/barbero resuelven el tenant desde `window.location.hostname` (el
-rewrite de Vercel es transparente), así que kingsai y futuros tenants funcionan
+rewrite de Vercel es transparente), así que kingsaistudio y futuros tenants funcionan
 sin tocar nada.
 
 `VITE_API_URL = https://sistemagestionbarberia-production.up.railway.app`
@@ -105,10 +105,19 @@ Para abrir el turnero o la app del barbero desde un celular en la misma WiFi:
 
 | Tenant | Tipo | Subdominio | UUID |
 |---|---|---|---|
-| Kingsai Studio | Producción | `kingsai` | `a1b2c3d4-0000-0000-0000-000000000001` |
+| Kingsai Studio | Producción | `kingsaistudio` | `a1b2c3d4-0000-0000-0000-000000000001` |
 | Demo | Desarrollo | `demo` | `aaaaaaaa-0000-0000-0000-000000000002` |
 
-URL de producción: `kingsai.barbermanager.app` ✅ funcionando.
+URL de producción: `kingsaistudio.barbermanager.app` ✅ funcionando.
+
+> **(2026-08-16) El subdominio de producción pasó de `kingsai` a `kingsaistudio`.**
+> El iPad del local ya opera contra la URL nueva. **`kingsai.barbermanager.app`
+> quedó muerto**: el wildcard de Vercel lo sigue sirviendo, pero el backend
+> responde 404 "Tenant no encontrado" porque ese subdominio ya no existe en la
+> tabla `tenant`. Toda URL vieja en circulación (bookmarks, links de reserva
+> compartidos con clientes, `/turnos` y `/barbero`, que también resuelven el
+> tenant desde el hostname) apunta ahí. Redirección del subdominio viejo
+> pendiente — ver Pendientes.
 
 ### Setup de dev local para la integración con Google Calendar
 
@@ -215,14 +224,24 @@ El schema del turnero se ejecutó en Supabase el 2026-05-11 (decisiones en
 ### Sistema
 - Auth: bcrypt + JWT ✅ — `usuario_registro` eliminado del schema. `verificarToken` valida `tenant_id` cruzado (cierra agujero multi-tenant) e inyecta `req.rol` + `req.barbero_id`. JWT admin: `{ tenant_id, rol: 'admin' }` con 30d (login via `POST /api/auth/panel/login`, login unificado que resuelve rol admin/barbero según el PIN). JWT barbero: `{ tenant_id, rol: 'barbero', barbero_id }` con 30d (login via `POST /api/auth/barbero/login`). JWT operativo: `{ tenant_id, rol: 'operativo', tv }` con 30d (login via `POST /api/auth/operativo/login`); `tv` es la `operativo_token_version` del tenant al momento de firmar — `adminOperativo` la incrementa al cambiar la password operativa, y `verificarToken` rechaza con 401 cualquier token operativo cuyo `tv` no coincida con el actual (invalidación inmediata sin esperar a la expiración natural). Middleware `requiereRol(...roles)` aplicado en `/api/admin/barberos`, `/api/admin/servicios`, `/api/admin/productos`, `/api/admin/negocio`, `/api/admin/turnero/config` y `/api/admin/operativo`. Endpoints operativos (`/api/cortes`, `/api/turnos`, `POST /api/ventas`, `POST /api/gastos`) protegidos con `requiereRol('operativo', 'admin')`; `GET /mensual`, `PUT` y `DELETE` de ventas/gastos siguen requiriendo `requiereRol('admin')`. Frontend gestión: pantalla `PantallaLoginOperativo` precede al MainScreen cuando no hay `token_operativo` en localStorage; el helper `apiFetchOperativo` en `services/api.js` inyecta el token operativo y maneja 401 redirigiendo al login. Tab `Seguridad` en SeccionGestion permite cambiar PIN admin, usuario operativo y password operativa desde el panel (controllers `adminOperativo.js` con GET/PUT en `/api/admin/operativo/credenciales`).
 - Bloqueo/aviso por suscripción ✅ mergeado a `main`.
-- Multi-tenancy por subdominio ✅ en producción (`kingsai.barbermanager.app`).
+- Multi-tenancy por subdominio ✅ en producción (`kingsaistudio.barbermanager.app`).
 - Migración de schema `refactor/schema-corte` ✅ mergeado a `main`.
 
 ---
 
 ## Pendientes
 
-- **Landing — `og:image` faltante.** El `index.html` de `/frontend-landing`
+- **Redirigir `kingsai.barbermanager.app` → `kingsaistudio.barbermanager.app`.**
+  El subdominio viejo quedó vivo a nivel DNS (lo sirve el wildcard) pero muerto a
+  nivel aplicación: el backend responde 404 porque ya no existe en `tenant`. Todo
+  link viejo en circulación cae ahí — bookmarks del dueño y de los barberos, y
+  sobre todo **links de reserva compartidos con clientes**, que incluyen
+  `/turnos` (el turnero resuelve el tenant desde el hostname igual que el panel).
+  Un cliente que abre un link viejo no ve un error entendible: ve un local que no
+  existe, y no reserva. Se resuelve como se hizo con `www` → apex: asignar
+  `kingsai.barbermanager.app` como **dominio exacto** en Vercel con redirect 308
+  al nuevo (un dominio exacto le gana al wildcard, ver §Deploy). Mantenerlo
+  indefinidamente: no cuesta nada y los links compartidos no expiran.
   referencia `https://barbermanager.app/og-image.png`, pero ese archivo no existe
   en `public/` (solo está `favicon.svg` y el screenshot de planillas). Sin esa
   imagen, el preview al compartir el link (WhatsApp, el canal de conversión) sale
@@ -232,7 +251,7 @@ El schema del turnero se ejecutó en Supabase el 2026-05-11 (decisiones en
 - **Generación de QR de Mercado Pago** para cobro en el momento desde el iPad.
 - **Envío de planillas/datos por WhatsApp.**
 - **Entregabilidad de mail (time-gated, no bloquea nada):** Fase 6 DMARC — endurecer de `p=none` a `quarantine` y luego `reject` tras 1–2 semanas de reportes 100% alineados; re-test de Outlook tras warmup (hoy los mails con link caen a Junk por reputación de dominio nuevo); seguir MXToolbox + Google Postmaster. Detalle histórico en [`decisiones_mail_entregabilidad.md`](./decisiones_mail_entregabilidad.md).
-- **Recordatorio de turno — activación en kingsai (opt-in):** prender `configuracion.recordatorio = { "activo": true }` en el tenant cuando se decida. Ojo: los barberos de kingsai tienen `email = NULL` (no sincroniza Calendar), pero los clientes sí reciben el recordatorio → flip deliberado. (Opcional) índice parcial sobre `turno` y correr el lote 2×/día si crece el volumen. Detalle en [`decisiones_mail_recordatorio.md`](./decisiones_mail_recordatorio.md).
+- **Recordatorio de turno — activación en kingsaistudio (opt-in):** prender `configuracion.recordatorio = { "activo": true }` en el tenant cuando se decida. Ojo: los barberos de kingsaistudio tienen `email = NULL` (no sincroniza Calendar), pero los clientes sí reciben el recordatorio → flip deliberado. (Opcional) índice parcial sobre `turno` y correr el lote 2×/día si crece el volumen. Detalle en [`decisiones_mail_recordatorio.md`](./decisiones_mail_recordatorio.md).
 - **Validar en prod las optimizaciones de backend de performance** (ya implementadas, impacto a confirmar): keep-alive del pool (`db.js` + `index.js`) y `getTenant` paralelizado. Medir en frío contra Railway. Detalle en [`performance_frontends.md`](./performance_frontends.md).
 
 ---
