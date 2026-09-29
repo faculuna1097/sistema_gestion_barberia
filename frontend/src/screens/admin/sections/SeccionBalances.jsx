@@ -3,6 +3,8 @@
 // Sección Balances del panel de administrador.
 //   Tab 1 — Balance mensual: 3 KPI (ingresos / egresos / balance) + tabla por
 //   barbero (con toggle de comisiones) + tabla por categoría de gasto.
+//   La tabla por barbero lista a los activos aunque no hayan cortado (en 0),
+//   más los dados de baja que cortaron en el mes (regla en controllers/balances.js).
 //   Tab 2 — Histórico anual: tabla de los últimos 12 meses con variación %
 //   contra el mes anterior (BadgeVariacion primitivo).
 //
@@ -524,8 +526,12 @@ function ContenidoMensual({ datos, mostrarComisiones, mesSeleccionado }) {
     : datos.resumen.ingresos_brutos;
   const balance = balanceSegunModo(datos.resumen, mostrarComisiones, true);
 
+  // Solo si no hay nada que mostrar: con barberos activos, un mes sin cortes
+  // igual lista a todos en 0. Los productos también cuentan: un mes con solo
+  // ventas de productos no puede quedar oculto detrás del EmptyState.
   const sinMovimientos =
     datos.serviciosPorBarbero.length === 0 &&
+    datos.productos.detalle.length === 0 &&
     datos.gastos.porCategoria.length === 0;
 
   if (sinMovimientos) {

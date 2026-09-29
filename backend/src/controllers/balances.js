@@ -2,8 +2,7 @@
 // Controller para la sección Balances del panel de administrador.
 
 import { query } from '../config/db.js';
-
-const TZ = 'America/Argentina/Buenos_Aires';
+import { TZ } from '../utils/constantes.js';
 
 /**
  * redondear2
@@ -16,23 +15,31 @@ const redondear2 = (n) => Math.round(n * 100) / 100;
 // ─── GET /api/balances/mensual?mes=YYYY-MM ────────────────────────────────────
 /**
  * getBalanceMensual
- * Devuelve el balance completo de un mes dado.
+ * Devuelve el balance completo de un mes dado. `serviciosPorBarbero` incluye a
+ * los barberos activos que no cortaron en el mes, con sus montos en 0.
  * @param {string} req.query.mes - Mes en formato YYYY-MM (default: mes actual)
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
  */
 export const getBalanceMensual = async (req, res) => {
-  const mes = req.query.mes || new Date().toISOString().slice(0, 7);
+  const mes = req.query.mes || new Date().toLocaleDateString('sv-SE', { timeZone: TZ }).slice(0, 7);
 
   if (!/^\d{4}-\d{2}$/.test(mes)) {
     return res.status(400).json({ error: 'Formato de mes inválido. Usar YYYY-MM.' });
   }
 
-  const fechaInicio = `${mes}-01`;
-  const [anio, mesNum] = mes.split('-').map(Number);
-  const fechaFin = new Date(anio, mesNum, 1).toISOString().slice(0, 10);
-  const params = [req.tenant_id, fechaInicio, fechaFin];
+  // El mes se filtra en hora argentina, igual que ventas y gastos:
+  // TO_CHAR(timestamp AT TIME ZONE tz, 'YYYY-MM') = mes. Antes se comparaba el
+  // timestamp contra fechas sueltas, que Postgres interpreta en la zona de la
+  // sesión (UTC): el mes cortaba a las 21:00 hora argentina del último día.
+  const params = [req.tenant_id, mes, TZ];
 
   try {
+    // Arranca desde barbero con LEFT JOIN a corte para listar también a los que
+    // no cortaron en el mes (el filtro de fecha va en el ON: en el WHERE
+    // descartaría sus filas). Qué barberos aparecen, en el HAVING — misma regla
+    // que la planilla semanal (services/planillaService.js): los que cortaron en
+    // el mes, aunque hoy estén dados de baja, más los activos dados de alta a
+    // más tardar en ese mes.
     const queryServicios = `
       SELECT
         b.id                          AS barbero_id,
@@ -41,21 +48,23 @@ export const getBalanceMensual = async (req, res) => {
         b.comision_valor              AS comision_valor,
         COUNT(c.id)::int              AS cortes,
         COALESCE(SUM(c.precio), 0)    AS monto_servicios
-      FROM corte c
-      JOIN barbero b ON b.id = c.barbero_id
-      WHERE c.tenant_id = $1
-        AND c.timestamp >= $2
-        AND c.timestamp < $3
-      GROUP BY b.id, b.nombre, b.comision_tipo, b.comision_valor
-      ORDER BY b.nombre
+      FROM barbero b
+      LEFT JOIN corte c
+             ON c.barbero_id = b.id
+            AND c.tenant_id  = $1
+            AND TO_CHAR(c.timestamp AT TIME ZONE $3, 'YYYY-MM') = $2
+      WHERE b.tenant_id = $1
+      GROUP BY b.id, b.nombre, b.comision_tipo, b.comision_valor, b.activo, b.created_at
+      HAVING COUNT(c.id) > 0
+          OR (b.activo = true AND TO_CHAR(b.created_at AT TIME ZONE $3, 'YYYY-MM') <= $2)
+      ORDER BY b.nombre, b.id
     `;
 
     const queryPropinas = `
       SELECT COALESCE(SUM(propina), 0) AS total
       FROM corte
       WHERE tenant_id = $1
-        AND timestamp >= $2
-        AND timestamp < $3
+        AND TO_CHAR(timestamp AT TIME ZONE $3, 'YYYY-MM') = $2
     `;
 
     const queryProductos = `
@@ -66,8 +75,7 @@ export const getBalanceMensual = async (req, res) => {
       FROM venta v
       JOIN producto p ON p.id = v.producto_id
       WHERE v.tenant_id = $1
-        AND v.timestamp >= $2
-        AND v.timestamp < $3
+        AND TO_CHAR(v.timestamp AT TIME ZONE $3, 'YYYY-MM') = $2
       GROUP BY p.nombre
       ORDER BY total DESC
     `;
@@ -79,8 +87,7 @@ export const getBalanceMensual = async (req, res) => {
       FROM gasto g
       JOIN categoria_gasto cg ON cg.id = g.categoria_id
       WHERE g.tenant_id = $1
-        AND g.timestamp >= $2
-        AND g.timestamp < $3
+        AND TO_CHAR(g.timestamp AT TIME ZONE $3, 'YYYY-MM') = $2
       GROUP BY cg.nombre
       ORDER BY total DESC
     `;
@@ -154,12 +161,18 @@ export const getBalanceMensual = async (req, res) => {
 // ─── GET /api/balances/historico?cantidad=12 ──────────────────────────────────
 /**
  * getBalanceHistorico
- * Devuelve el resumen de los últimos N meses para la tabla de histórico anual.
+ * Devuelve el resumen de los últimos N meses para la tabla de histórico anual:
+ * el mes en curso + los N-1 anteriores completos, con los meses en hora argentina.
  * @param {number} req.query.cantidad - Cantidad de meses (default: 12, máx: 24)
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  */
 export const getBalanceHistorico = async (req, res) => {
   const cantidad = Math.min(parseInt(req.query.cantidad) || 12, 24);
+
+  // Borde inferior de la ventana: día 1 a las 00:00 (hora argentina) del mes
+  // más viejo, así entran exactamente `cantidad` meses. Antes restaba N meses a
+  // NOW() y comparaba contra la hora UTC: el mes más viejo salía parcial.
+  const params = [req.tenant_id, cantidad - 1];
 
   try {
     const queryServiciosMensuales = `
@@ -170,7 +183,7 @@ export const getBalanceHistorico = async (req, res) => {
       FROM corte c
       JOIN barbero b ON b.id = c.barbero_id
       WHERE c.tenant_id = $1
-        AND c.timestamp >= NOW() AT TIME ZONE '${TZ}' - INTERVAL '1 month' * $2
+        AND c.timestamp AT TIME ZONE '${TZ}' >= DATE_TRUNC('month', NOW() AT TIME ZONE '${TZ}') - INTERVAL '1 month' * $2
       GROUP BY DATE_TRUNC('month', c.timestamp AT TIME ZONE '${TZ}')
       ORDER BY DATE_TRUNC('month', c.timestamp AT TIME ZONE '${TZ}') DESC
     `;
@@ -181,7 +194,7 @@ export const getBalanceHistorico = async (req, res) => {
         COALESCE(SUM(cantidad * precio_unitario), 0)                             AS total_productos
       FROM venta
       WHERE tenant_id = $1
-        AND timestamp >= NOW() AT TIME ZONE '${TZ}' - INTERVAL '1 month' * $2
+        AND timestamp AT TIME ZONE '${TZ}' >= DATE_TRUNC('month', NOW() AT TIME ZONE '${TZ}') - INTERVAL '1 month' * $2
       GROUP BY DATE_TRUNC('month', timestamp AT TIME ZONE '${TZ}')
     `;
 
@@ -191,14 +204,14 @@ export const getBalanceHistorico = async (req, res) => {
         COALESCE(SUM(monto), 0)                                                  AS total_gastos
       FROM gasto
       WHERE tenant_id = $1
-        AND timestamp >= NOW() AT TIME ZONE '${TZ}' - INTERVAL '1 month' * $2
+        AND timestamp AT TIME ZONE '${TZ}' >= DATE_TRUNC('month', NOW() AT TIME ZONE '${TZ}') - INTERVAL '1 month' * $2
       GROUP BY DATE_TRUNC('month', timestamp AT TIME ZONE '${TZ}')
     `;
 
     const [resServicios, resProductos, resGastos] = await Promise.all([
-      query(queryServiciosMensuales, [req.tenant_id, cantidad]),
-      query(queryProductosMensuales, [req.tenant_id, cantidad]),
-      query(queryGastosMensuales,    [req.tenant_id, cantidad]),
+      query(queryServiciosMensuales, params),
+      query(queryProductosMensuales, params),
+      query(queryGastosMensuales,    params),
     ]);
 
     const mesesSet = new Set([
