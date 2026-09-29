@@ -204,11 +204,13 @@ app.use('/api/ventas',    verificarToken, ventaRoutes);
 app.use('/api/gastos',    verificarToken, gastoRoutes);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RUTAS PROTEGIDAS — solo accesibles desde el panel admin con JWT válido
+// RUTAS PROTEGIDAS — solo admin: las consumen únicamente secciones del panel
+// admin. requiereRol cierra el acceso a tokens de barbero y operativo (sin él,
+// cualquier token del tenant leía el balance y podía borrar movimientos de caja).
 // ─────────────────────────────────────────────────────────────────────────────
-app.use('/api/caja',      verificarToken, cajaRouter);
-app.use('/api/inicio',    verificarToken, inicioRoutes);
-app.use('/api/balances',  verificarToken, balancesRouter);
+app.use('/api/caja',      verificarToken, requiereRol('admin'), cajaRouter);
+app.use('/api/inicio',    verificarToken, requiereRol('admin'), inicioRoutes);
+app.use('/api/balances',  verificarToken, requiereRol('admin'), balancesRouter);
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS DEL BACKOFFICE — /api/admin/* (admin + barbero autenticados)
 // ─────────────────────────────────────────────────────────────────────────────

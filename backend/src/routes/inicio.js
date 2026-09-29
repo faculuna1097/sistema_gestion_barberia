@@ -1,5 +1,6 @@
 // backend/src/routes/inicio.js
 // Rutas para la sección Inicio del panel de administrador.
+// Solo admin: requiereRol('admin') se aplica en index.js.
 
 import { Router } from 'express';
 import { getResumenDia, getComparativoMes, getStockBajo } from '../controllers/inicio.js';
