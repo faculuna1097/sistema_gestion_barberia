@@ -1,5 +1,6 @@
 // /backend/src/routes/balances.js
 // Define las rutas del módulo Balances.
+// Solo admin: requiereRol('admin') se aplica en index.js.
 
 import { Router } from 'express';
 import { getBalanceMensual, getBalanceHistorico } from '../controllers/balances.js';

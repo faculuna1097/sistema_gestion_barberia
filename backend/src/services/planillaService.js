@@ -20,8 +20,20 @@ export const semanaDesde = (fechaStr) => {
   return { lunes: lunes.toISODate(), domingo: domingo.toISODate() };
 };
 
+// Regla de qué barberos aparecen en la planilla de una semana: los que tuvieron
+// cortes en ella (aunque hoy estén dados de baja: se les paga igual y el
+// desglose tiene que cuadrar con el total) + esta condición: activos y dados de
+// alta a más tardar el domingo (así no aparecen en semanas en que no existían).
+// La comparten detalleSemanal y resumenSemanal para devolver siempre el mismo
+// conjunto de barberos: el front cruza ambas respuestas por barbero_id.
+// Usa los placeholders comunes de las dos queries: $3 = domingo, $4 = TZ.
+// Balances aplica la misma regla por mes (controllers/balances.js).
+const BARBERO_VIGENTE_EN_SEMANA =
+  '(b.activo = true AND DATE(b.created_at AT TIME ZONE $4) <= $3)';
+
 /**
  * Detalle semanal de cortes, opcionalmente filtrado por barbero.
+ * Incluye a los barberos vigentes sin cortes en la semana, con `cortes: []`.
  * @param {Object} filtros - { tenantId, semana (YYYY-MM-DD), barberoId? }
  * @returns {Promise<Array>} agrupado por barbero
  */
@@ -31,10 +43,13 @@ export const detalleSemanal = async ({ tenantId, semana, barberoId }) => {
   const params = [tenantId, lunes, domingo, TZ];
   let filtroExtra = '';
   if (barberoId) {
-    filtroExtra = ' AND c.barbero_id = $5';
+    filtroExtra = ' AND b.id = $5';
     params.push(barberoId);
   }
 
+  // Arranca desde barbero con LEFT JOIN a corte: un barbero sin cortes en la
+  // semana llega como una sola fila con las columnas del corte en NULL. Por eso
+  // el filtro de fecha va en el ON — en el WHERE descartaría esa fila.
   const result = await query(
     `SELECT
        b.id                                                AS barbero_id,
@@ -48,15 +63,18 @@ export const detalleSemanal = async ({ tenantId, semana, barberoId }) => {
        c.forma_pago,
        c.id                                                AS corte_id,
        c.timestamp
-     FROM corte c
-     JOIN barbero b  ON b.id = c.barbero_id
-     JOIN servicio s ON s.id = c.servicio_id
-     LEFT JOIN turno   t  ON t.id = c.turno_id
-     LEFT JOIN cliente cl ON cl.id = t.cliente_id
-     WHERE c.tenant_id = $1
-       AND DATE(c.timestamp AT TIME ZONE $4) BETWEEN $2 AND $3
+     FROM barbero b
+     LEFT JOIN corte c
+            ON c.barbero_id = b.id
+           AND c.tenant_id  = $1
+           AND DATE(c.timestamp AT TIME ZONE $4) BETWEEN $2 AND $3
+     LEFT JOIN servicio s  ON s.id  = c.servicio_id
+     LEFT JOIN turno    t  ON t.id  = c.turno_id
+     LEFT JOIN cliente  cl ON cl.id = t.cliente_id
+     WHERE b.tenant_id = $1
+       AND (c.id IS NOT NULL OR ${BARBERO_VIGENTE_EN_SEMANA})
        ${filtroExtra}
-     ORDER BY b.nombre, c.timestamp`,
+     ORDER BY b.nombre, b.id, c.timestamp`,
     params
   );
 
@@ -69,6 +87,8 @@ export const detalleSemanal = async ({ tenantId, semana, barberoId }) => {
         cortes: [],
       });
     }
+    // Barbero vigente sin cortes: su única fila trae el corte en NULL.
+    if (row.corte_id === null) continue;
     mapa.get(row.barbero_id).cortes.push({
       corte_id: row.corte_id,
       fecha: row.fecha,
@@ -86,6 +106,7 @@ export const detalleSemanal = async ({ tenantId, semana, barberoId }) => {
 
 /**
  * Resumen semanal consolidado (una fila por barbero con totales y comisión).
+ * Incluye a los barberos vigentes sin cortes en la semana, con totales en 0.
  * @param {Object} filtros - { tenantId, semana (YYYY-MM-DD), barberoId? }
  * @returns {Promise<{ barberos: Array, totales: Object }>}
  */
@@ -95,10 +116,12 @@ export const resumenSemanal = async ({ tenantId, semana, barberoId }) => {
   const params = [tenantId, lunes, domingo, TZ];
   let filtroExtra = '';
   if (barberoId) {
-    filtroExtra = ' AND c.barbero_id = $5';
+    filtroExtra = ' AND b.id = $5';
     params.push(barberoId);
   }
 
+  // Mismo LEFT JOIN que detalleSemanal (filtro de fecha en el ON); acá la
+  // regla de visibilidad va en el HAVING porque la query agrega por barbero.
   const result = await query(
     `SELECT
        b.id                                      AS barbero_id,
@@ -108,13 +131,16 @@ export const resumenSemanal = async ({ tenantId, semana, barberoId }) => {
        COUNT(c.id)::int                          AS cantidad_cortes,
        COALESCE(SUM(c.precio), 0)                AS monto_servicios,
        COALESCE(SUM(c.propina), 0)               AS propinas
-     FROM corte c
-     JOIN barbero b ON b.id = c.barbero_id
-     WHERE c.tenant_id = $1
-       AND DATE(c.timestamp AT TIME ZONE $4) BETWEEN $2 AND $3
+     FROM barbero b
+     LEFT JOIN corte c
+            ON c.barbero_id = b.id
+           AND c.tenant_id  = $1
+           AND DATE(c.timestamp AT TIME ZONE $4) BETWEEN $2 AND $3
+     WHERE b.tenant_id = $1
        ${filtroExtra}
-     GROUP BY b.id, b.nombre, b.comision_tipo, b.comision_valor
-     ORDER BY b.nombre`,
+     GROUP BY b.id, b.nombre, b.comision_tipo, b.comision_valor, b.activo, b.created_at
+     HAVING COUNT(c.id) > 0 OR ${BARBERO_VIGENTE_EN_SEMANA}
+     ORDER BY b.nombre, b.id`,
     params
   );
 

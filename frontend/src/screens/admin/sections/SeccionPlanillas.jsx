@@ -16,6 +16,11 @@
 //   - Tabla consolidada por barbero con totales de la semana + columna
 //     Comisión opcional (toggle global).
 //
+// Qué barberos se listan lo decide el backend (planillaService): los activos,
+// aunque no hayan cortado (en 0), más los dados de baja que cortaron esa
+// semana. El EmptyState de cada tab queda solo para cuando no hay ningún
+// barbero que listar (ej. semanas anteriores al alta de todos).
+//
 // Comisión por día: comisión calculada sobre monto_servicios (nunca sobre
 // propinas), según comision_tipo del barbero ("porcentaje" o "fijo" por corte).
 //
@@ -82,6 +87,21 @@ function calcularComisionDia(montoServicios, tipo, valor, cantidadCortes) {
   return valor * cantidadCortes;
 }
 
+/**
+ * Elige el barbero seleccionado en el tab Detalle al cargar una semana.
+ * Mantiene el que ya estaba elegido si sigue en la lista (permite comparar un
+ * barbero entre semanas sin que el filtro salte a otro); si no, el primero con
+ * cortes; si nadie cortó, el primero de la lista.
+ * @param {Array} detalle - Respuesta de /admin/planilla (un item por barbero).
+ * @param {string|null} barberoPrevio - barbero_id elegido antes de la carga.
+ * @returns {string|null} barbero_id a seleccionar; null si la lista está vacía.
+ */
+function elegirBarberoInicial(detalle, barberoPrevio) {
+  if (detalle.some((b) => b.barbero_id === barberoPrevio)) return barberoPrevio;
+  const primeroConCortes = detalle.find((b) => b.cortes.length > 0);
+  return (primeroConCortes ?? detalle[0])?.barbero_id ?? null;
+}
+
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const TABS_PRINCIPALES = [
   { key: 'detalle', label: 'Detalle por barbero' },
@@ -133,7 +153,7 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
         if (cancelado) return;
         setDetalleData(detalle);
         setResumenData(resumen);
-        if (detalle.length > 0) setBarberoActivo(detalle[0].barbero_id);
+        setBarberoActivo((prev) => elegirBarberoInicial(detalle, prev));
         setDiasExpandidos(new Set([getFechaHoy()]));
       } catch (err) {
         console.error('[seccionPlanillas] Error en cargarDatos:', err.message);
@@ -178,19 +198,23 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
           });
         });
         if (mostrarComisiones && infoComision) {
-          const montoDelDia = cd.reduce((s, c) => s + c.monto_servicios, 0);
+          const montoDelDia   = cd.reduce((s, c) => s + c.monto_servicios, 0);
+          const propinaDelDia = cd.reduce((s, c) => s + c.propina, 0);
           const comisionDelDia = calcularComisionDia(
             montoDelDia,
             infoComision.comision_tipo,
             infoComision.comision_valor,
             cd.length,
           );
+          // La comisión del día suma las propinas (van siempre al barbero), igual
+          // que el "Pago" del día en pantalla y la comisión semanal del backend:
+          // así los subtotales de los días suman lo del subtotal de la semana.
           filas.push({
             Barbero: `Subtotal (${cd.length} cortes)`, Fecha: '', Hora: '', Servicio: '',
             'Monto ($)': montoDelDia,
-            'Propina ($)': cd.reduce((s, c) => s + c.propina, 0),
-            'Total ($)': montoDelDia + cd.reduce((s, c) => s + c.propina, 0),
-            'Comisión ($)': comisionDelDia, 'Forma de pago': '',
+            'Propina ($)': propinaDelDia,
+            'Total ($)': montoDelDia + propinaDelDia,
+            'Comisión ($)': comisionDelDia + propinaDelDia, 'Forma de pago': '',
           });
         }
       });
@@ -345,7 +369,9 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
               <EmptyState
                 glyph={<Scissors size={28} strokeWidth={1.5} />}
                 title="Sin cortes"
-                body="Este barbero no tiene cortes en la semana seleccionada."
+                body={modoBarbero
+                  ? 'No tenés cortes en la semana seleccionada.'
+                  : 'Este barbero no tiene cortes en la semana seleccionada.'}
               />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
