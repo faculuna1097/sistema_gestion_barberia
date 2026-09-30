@@ -26,6 +26,21 @@ export function esMontoValido(valor) {
 }
 
 /**
+ * esMontoPositivo
+ * Valida un monto que no puede ser 0: número finito > 0. Lo usan los
+ * movimientos extra, donde el monto es siempre positivo y el signo lo da el tipo.
+ * @param {*} valor - Valor recibido del body (number o string numérico).
+ * @returns {boolean} true si es un número finito > 0.
+ */
+export function esMontoPositivo(valor) {
+  if (valor === undefined || valor === null || valor === '' || typeof valor === 'boolean') {
+    return false;
+  }
+  const n = Number(valor);
+  return Number.isFinite(n) && n > 0;
+}
+
+/**
  * esCantidadValida
  * Valida una cantidad de unidades: entero >= 1. A diferencia de los montos,
  * una cantidad 0 o fraccionaria no tiene sentido de negocio.

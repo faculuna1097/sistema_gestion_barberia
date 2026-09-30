@@ -2,21 +2,38 @@
 import { query } from '../config/db.js';
 import { aplicarMutacionesStock } from '../utils/stock.js';
 import { TZ } from '../utils/constantes.js';
+import { esMontoPositivo } from '../utils/validarNumero.js';
+import { esFormaPagoValida } from '../utils/validarPago.js';
+import { esFechaISO, esFechaFutura, hoyISO } from '../utils/validarFecha.js';
+import {
+  TIPOS_MOVIMIENTO_EXTRA,
+  MAX_DESCRIPCION_MOVIMIENTO,
+  esTipoMovimientoExtra,
+  sentidoDeMovimiento,
+} from '../utils/movimientos.js';
+import { socioActivoEnTenant } from '../services/sociosService.js';
 
 /**
  * getMovimientosDia
- * Devuelve todos los movimientos del día (cortes, ventas y gastos) ordenados por timestamp.
+ * Devuelve todos los movimientos del día (cortes, ventas, gastos y movimientos
+ * extra) ordenados por timestamp descendente. Cada fila trae `sentido`
+ * ('entrada' | 'salida') ya resuelto, para que el front no decida por tipo, y
+ * `monto` como número.
  * @param {string} req.query.fecha - Fecha en formato YYYY-MM-DD (default: hoy en timezone AR)
  * @param {string} req.tenant_id  - Inyectado por tenantMiddleware
- * @returns {JSON} { movimientos: [...] }
+ * @returns {JSON} { movimientos: [...] } — 400 si `fecha` viene y no es una fecha válida
  */
 export const getMovimientosDia = async (req, res) => {
-  const fecha = req.query.fecha
-    || new Date().toLocaleDateString('sv-SE', { timeZone: TZ });
+  if (req.query.fecha && !esFechaISO(req.query.fecha)) {
+    return res.status(400).json({ error: 'fecha debe tener formato YYYY-MM-DD' });
+  }
+  const fecha = req.query.fecha || hoyISO();
 
   try {
+    // Las cuatro consultas son independientes: corren en paralelo.
+    const [cortesResult, ventasResult, gastosResult, extrasResult] = await Promise.all([
     // ── Query 1: Cortes del día ──────────────────────────────────────────────
-    const cortesResult = await query(
+    query(
       `SELECT
          c.id,
          c.timestamp,
@@ -35,10 +52,10 @@ export const getMovimientosDia = async (req, res) => {
          AND DATE(c.timestamp AT TIME ZONE $2) = $3::date
        ORDER BY c.timestamp ASC`,
       [req.tenant_id, TZ, fecha]
-    );
+    ),
 
     // ── Query 2: Ventas del día ──────────────────────────────────────────────
-    const ventasResult = await query(
+    query(
       `SELECT
          v.id,
          v.timestamp,
@@ -55,10 +72,10 @@ export const getMovimientosDia = async (req, res) => {
          AND DATE(v.timestamp AT TIME ZONE $2) = $3::date
        ORDER BY v.timestamp ASC`,
       [req.tenant_id, TZ, fecha]
-    );
+    ),
 
     // ── Query 3: Gastos del día ──────────────────────────────────────────────
-    const gastosResult = await query(
+    query(
       `SELECT
          g.id,
          g.timestamp,
@@ -75,14 +92,46 @@ export const getMovimientosDia = async (req, res) => {
          AND DATE(g.timestamp AT TIME ZONE $2) = $3::date
        ORDER BY g.timestamp ASC`,
       [req.tenant_id, TZ, fecha]
-    );
+    ),
 
-    // ── Merge y orden cronológico ────────────────────────────────────────────
+    // ── Query 4: Movimientos extra del día (aportes, retiros, otros ingresos) ─
+    // detalle: nombre del socio (+ ' — descripción' si la fila tiene); sin
+    // socio, la descripción. El join repite tenant_id como defensa en profundidad.
+    query(
+      `SELECT
+         me.id,
+         me.timestamp,
+         TO_CHAR(me.timestamp AT TIME ZONE $2, 'HH24:MI') AS hora,
+         NULL AS barbero_nombre,
+         CASE
+           WHEN s.nombre IS NULL THEN me.descripcion
+           WHEN me.descripcion IS NULL OR BTRIM(me.descripcion) = '' THEN s.nombre
+           ELSE s.nombre || ' — ' || me.descripcion
+         END AS detalle,
+         me.monto AS monto,
+         me.forma_pago,
+         NULL AS comision_valor,
+         me.tipo AS tipo
+       FROM movimiento_extra me
+       LEFT JOIN socio s ON s.id = me.socio_id AND s.tenant_id = me.tenant_id
+       WHERE me.tenant_id = $1
+         AND DATE(me.timestamp AT TIME ZONE $2) = $3::date
+       ORDER BY me.timestamp ASC`,
+      [req.tenant_id, TZ, fecha]
+    ),
+    ]);
+
+    // ── Merge, sentido y orden cronológico (más reciente primero) ────────────
+    // pg devuelve los NUMERIC como string: la API expone el monto como número,
+    // igual que el 201 de crearMovimientoExtra.
     const movimientos = [
       ...cortesResult.rows,
       ...ventasResult.rows,
       ...gastosResult.rows,
-    ].sort((b, a) => new Date(a.timestamp) - new Date(b.timestamp));
+      ...extrasResult.rows,
+    ]
+      .map((m) => ({ ...m, monto: Number(m.monto), sentido: sentidoDeMovimiento(m.tipo) }))
+      .sort((b, a) => new Date(a.timestamp) - new Date(b.timestamp));
 
     res.json({ movimientos });
 
@@ -93,14 +142,114 @@ export const getMovimientosDia = async (req, res) => {
 };
 
 /**
+ * crearMovimientoExtra
+ * Registra un aporte de capital, un retiro de socio u otro ingreso. Qué campos
+ * exige cada tipo sale de `requiereSocio` en TIPOS_MOVIMIENTO_EXTRA: los tipos
+ * con socio guardan descripcion = NULL y los demás socio_id = NULL (lo que
+ * venga de más en el body se ignora).
+ * @param {string} req.body.tipo          - 'aporte_capital' | 'retiro_socio' | 'otro_ingreso'
+ * @param {number|string} req.body.monto  - Número > 0 (el signo lo da el tipo)
+ * @param {string} req.body.forma_pago    - 'efectivo' | 'mercado_pago'
+ * @param {string} [req.body.socio_id]    - UUID del socio; requerido si el tipo lleva socio
+ * @param {string} [req.body.descripcion] - Requerida si el tipo no lleva socio (1 a 200 caracteres)
+ * @param {string} req.body.fecha         - YYYY-MM-DD, requerida y no futura (hora argentina)
+ * @param {string} req.tenant_id          - Inyectado por tenantMiddleware
+ * @returns {JSON} 201 { id, tipo, socio_id, descripcion, monto, forma_pago, timestamp } (monto como número)
+ *   400 si falla una validación; 404 si el socio no existe, es de otro tenant o está inactivo.
+ */
+export const crearMovimientoExtra = async (req, res) => {
+  const { tipo, monto, forma_pago, socio_id, descripcion, fecha } = req.body || {};
+
+  if (!esTipoMovimientoExtra(tipo)) {
+    return res.status(400).json({ error: "tipo debe ser 'aporte_capital', 'retiro_socio' u 'otro_ingreso'" });
+  }
+  if (!esMontoPositivo(monto)) {
+    return res.status(400).json({ error: 'monto es requerido y debe ser un número mayor a 0' });
+  }
+  if (!esFormaPagoValida(forma_pago)) {
+    return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });
+  }
+
+  const { requiereSocio } = TIPOS_MOVIMIENTO_EXTRA[tipo];
+  if (requiereSocio && !socio_id) {
+    return res.status(400).json({ error: 'socio_id es requerido para aportes y retiros' });
+  }
+
+  const descripcionLimpia = typeof descripcion === 'string' ? descripcion.trim() : '';
+  if (!requiereSocio
+      && (descripcionLimpia.length === 0 || descripcionLimpia.length > MAX_DESCRIPCION_MOVIMIENTO)) {
+    return res.status(400).json({
+      error: `descripcion es requerida en un otro ingreso (máximo ${MAX_DESCRIPCION_MOVIMIENTO} caracteres)`,
+    });
+  }
+
+  // fecha es obligatoria: el front la precarga con hoy, así que si llega
+  // vacía es porque se borró a mano. No se asume ninguna por defecto.
+  if (!esFechaISO(fecha)) {
+    return res.status(400).json({ error: 'fecha es requerida y debe tener formato YYYY-MM-DD' });
+  }
+  if (esFechaFutura(fecha)) {
+    return res.status(400).json({ error: 'fecha no puede ser futura' });
+  }
+
+  try {
+    // Única validación que consulta la base: va después de las que solo miran
+    // el body, para no gastar una query en un pedido mal formado.
+    if (requiereSocio && !(await socioActivoEnTenant(socio_id, req.tenant_id))) {
+      return res.status(404).json({ error: 'Socio no encontrado o inactivo' });
+    }
+
+    // timestamp: si la fecha es hoy, el instante real (NOW()); si es un día
+    // pasado, el mediodía de ese día en hora argentina.
+    const resultado = await query(
+      `INSERT INTO movimiento_extra (tenant_id, tipo, socio_id, descripcion, monto, forma_pago, "timestamp")
+       VALUES (
+         $1, $2, $3, $4, $5, $6,
+         CASE
+           WHEN $7::date = (NOW() AT TIME ZONE $8)::date THEN NOW()
+           ELSE ($7::date + TIME '12:00') AT TIME ZONE $8
+         END
+       )
+       RETURNING id, tipo, socio_id, descripcion, monto, forma_pago, "timestamp"`,
+      [
+        req.tenant_id,
+        tipo,
+        requiereSocio ? socio_id : null,
+        requiereSocio ? null : descripcionLimpia,
+        monto,
+        forma_pago,
+        fecha,
+        TZ,
+      ]
+    );
+
+    // pg devuelve los NUMERIC como string: la API expone el monto como número.
+    const movimientoCreado = { ...resultado.rows[0], monto: Number(resultado.rows[0].monto) };
+    console.log('[caja] crearMovimientoExtra completado | id:', movimientoCreado.id, '| tipo:', movimientoCreado.tipo);
+    return res.status(201).json(movimientoCreado);
+
+  } catch (err) {
+    // Red de seguridad del FK compuesto (tenant_id, socio_id): el socio se borró
+    // o cambió entre el chequeo y el INSERT.
+    if (err.code === '23503') {
+      return res.status(404).json({ error: 'Socio no encontrado o inactivo' });
+    }
+    console.error('[caja] Error en crearMovimientoExtra:', err);
+    return res.status(500).json({ error: 'Error interno al registrar el movimiento' });
+  }
+};
+
+/**
  * eliminarMovimiento
  * Elimina un registro del día por tipo e id.
  * - corte: borra el corte y, si completaba un turno, lo devuelve a 'reservado'
  * - venta: restaura stock_actual del producto, luego borra venta
  * - gasto: borra directo
- * @param {string} req.params.tipo - 'corte' | 'venta' | 'gasto'
+ * - aporte_capital / retiro_socio / otro_ingreso: borra directo de movimiento_extra
+ * @param {string} req.params.tipo - 'corte' | 'venta' | 'gasto' | 'aporte_capital' | 'retiro_socio' | 'otro_ingreso'
  * @param {string} req.params.id   - UUID del registro
  * @param {string} req.tenant_id   - Inyectado por tenantMiddleware
+ * @returns {JSON} { ok: true } — 404 si el registro no existe en el tenant; 400 si el tipo es inválido
  */
 export const eliminarMovimiento = async (req, res) => {
   const { tipo, id } = req.params;
@@ -200,6 +349,17 @@ export const eliminarMovimiento = async (req, res) => {
         return res.status(404).json({ error: 'Gasto no encontrado' });
       }
       console.log('[caja] eliminarMovimiento — gasto eliminado | id:', id);
+
+    } else if (esTipoMovimientoExtra(tipo)) {
+      // El filtro por tipo evita borrar, por ejemplo, un retiro desde la URL de un aporte.
+      const extraDelRes = await query(
+        'DELETE FROM movimiento_extra WHERE id = $1 AND tenant_id = $2 AND tipo = $3',
+        [id, req.tenant_id, tipo]
+      );
+      if (extraDelRes.rowCount === 0) {
+        return res.status(404).json({ error: 'Movimiento no encontrado' });
+      }
+      console.log('[caja] eliminarMovimiento — movimiento extra eliminado | id:', id, '| tipo:', tipo);
 
     } else {
       return res.status(400).json({ error: 'Tipo inválido' });

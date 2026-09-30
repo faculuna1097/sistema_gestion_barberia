@@ -162,7 +162,8 @@ Todas las rutas son solo admin. `/api/caja` y `/api/balances` ya se montan con
 200 → `[{ id, nombre }]`, solo activos, por nombre.
 
 ### 6.2 `POST /api/caja/movimientos`
-Body: `{ tipo, monto, forma_pago, socio_id?, descripcion?, fecha? }`. Validaciones, en este orden:
+Body: `{ tipo, monto, forma_pago, fecha, socio_id?, descripcion? }`. Validaciones, en este orden
+(primero las que solo miran el body; la única que consulta la base va al final):
 
 | Campo | Regla | Si falla |
 |---|---|---|
@@ -170,25 +171,31 @@ Body: `{ tipo, monto, forma_pago, socio_id?, descripcion?, fecha? }`. Validacion
 | `monto` | número (o string numérico) finito > 0 | 400 |
 | `forma_pago` | `efectivo` o `mercado_pago` | 400 |
 | `socio_id` | obligatorio si el tipo requiere socio | 400 |
-| `socio_id` | existe, es del tenant y está activo | 404 `Socio no encontrado o inactivo` |
 | `descripcion` | obligatoria en `otro_ingreso`: texto de 1 a 200 caracteres (tras trim) | 400 |
-| `fecha` | opcional; `YYYY-MM-DD` válida y no futura (hora argentina) | 400 |
+| `fecha` | **obligatoria**; `YYYY-MM-DD` válida | 400 `fecha es requerida y debe tener formato YYYY-MM-DD` |
+| `fecha` | no futura (hora argentina) | 400 `fecha no puede ser futura` |
+| `socio_id` | existe, es del tenant y está activo | 404 `Socio no encontrado o inactivo` |
 
+- `fecha` es obligatoria (decisión del usuario en el paso 2): el front la precarga con el día que
+  se está viendo; si llega vacía es porque se borró a mano, y no se asume ninguna.
 - En `otro_ingreso` se guarda `socio_id = NULL`; en aporte y retiro, `descripcion = NULL`
   (lo que venga en el body se ignora).
-- `fecha` ausente o de hoy → `timestamp = NOW()`. Día pasado → mediodía de ese día en hora
-  argentina: `($fecha::date + TIME '12:00') AT TIME ZONE $tz`.
-- 201 → `{ id, tipo, socio_id, descripcion, monto, forma_pago, timestamp }`.
+- `fecha` de hoy → `timestamp = NOW()`. Día pasado → mediodía de ese día en hora argentina:
+  `($fecha::date + TIME '12:00') AT TIME ZONE $tz`.
+- 201 → `{ id, tipo, socio_id, descripcion, monto, forma_pago, timestamp }`, con `monto` como número.
+- Un POST sin body responde 400 (no 500): el handler usa `req.body || {}`.
 - Violación del FK del socio (23503) → 404, como red de seguridad.
 - El INSERT usa el reintento por defecto de `query()`, igual que `gasto` (deuda diferida #2 de
   la auditoría: fila duplicada visible y borrable).
 
 ### 6.3 `GET /api/caja/movimientos-dia?fecha=YYYY-MM-DD`
-- `fecha` inválida → 400 (hoy da 500).
+- `fecha` es opcional (sin ella devuelve hoy); si viene y es inválida → 400 (antes daba 500).
 - Suma las filas de `movimiento_extra` del día. En esas filas: `tipo` es uno de los tres,
   `barbero_nombre` y `comision_valor` son `null`, y `detalle` es el nombre del socio (seguido de
   ` — descripción` si la fila tiene) o la descripción.
-- **Todas** las filas (también corte, venta y gasto) traen `sentido: 'entrada' | 'salida'`.
+- **Todas** las filas (también corte, venta y gasto) traen `sentido: 'entrada' | 'salida'` y
+  `monto` como número (antes era el string de pg).
+- Las cuatro consultas corren en paralelo.
 
 ### 6.4 `DELETE /api/caja/movimientos/:tipo/:id`
 Acepta los tres tipos nuevos. Borra por `id`, `tenant_id` y `tipo`. 404 si no borró nada.
@@ -222,7 +229,7 @@ extra también aparece.
 |---|---|---|
 | `utils/movimientos.js` (nuevo) | 2 | Mapa de §5 + `esTipoMovimientoExtra`, `sentidoDeMovimiento(tipo)` (cubre también corte, venta y gasto), `resumirMovimientosExtra(filas)`. |
 | `utils/validarNumero.js` | 2 | Sumar `esMontoPositivo`. |
-| `utils/validarFecha.js` (nuevo) | 2 | `esFechaISO(valor)`: formato + fecha real. |
+| `utils/validarFecha.js` (nuevo) | 2 | `esFechaISO(valor)` (formato + fecha real; rechaza el año 0000, que Postgres no tiene), `esFechaFutura(fechaISO)`, `hoyISO()`. |
 | `services/sociosService.js` (nuevo) | 2 | `socioActivoEnTenant`, espejo de `barberosService.barberoActivoEnTenant`. |
 | `controllers/socios.js`, `routes/adminSocios.js` (nuevos) | 2 | `getSocios`. |
 | `index.js` | 2 | Montar `/api/admin/socios`. |
@@ -249,7 +256,7 @@ consultas, y el filtro "Solo Barberos" de Caja.
 |---|---|---|---|
 | 0 | Branch `feature/movimientos-extra` | orquestador | ✅ |
 | 1 | Base de datos: tablas `socio` y `movimiento_extra`, carga de socios, `SQL_Schema.md` | orquestador | ✅ 2026-09-30 |
-| 2 | Backend de Caja y socios | chat aparte | 🔲 |
+| 2 | Backend de Caja y socios | chat aparte | ✅ 2026-09-30 |
 | 3 | Frontend de Caja | chat aparte | 🔲 |
 | 4 | Backend de Balances | chat aparte | 🔲 |
 | 5 | Frontend de Balances | chat aparte | 🔲 |
@@ -259,13 +266,42 @@ consultas, y el filtro "Solo Barberos" de Caja.
 Orden de deploy: las tablas antes que el código (si no, Caja y Balances dan 500); backend antes
 que frontend; la migración al final, con todo en producción.
 
-Decisiones de UI que se cierran antes de escribir el prompt de cada paso:
-- Paso 3: textos y colores de los pills, texto del botón, labels del formulario.
-- Paso 5: texto de la nota, totales por dueño, columna del histórico en pantalla o solo en el Excel.
+Decisiones de UI del paso 3 (cerradas con el usuario el 2026-09-30):
+- **Entrada:** un "+" discreto en la fila de las pestañas de Caja, a la derecha, solo en
+  "Movimientos del día". No es un botón de uso cotidiano.
+- **Formulario:** modal "Registrar movimiento", coherente con los demás modales del panel;
+  botones "Cancelar" y "Guardar".
+- **Campos, en orden:** Tipo; Dueño (aporte y retiro) o Descripción (otro ingreso); Monto;
+  Forma de pago; Fecha.
+- **Opciones como botones, no listas desplegables:** Tipo ("Retiro", "Aporte de capital",
+  "Otro ingreso"), Dueño y Forma de pago. Tipo y Forma de pago arrancan sin elegir. Dueño viene
+  elegido solo si hay uno.
+- **Fecha:** arranca en el día que se está viendo en Caja; no admite fechas futuras.
+- **Guardar** queda deshabilitado hasta que todo esté elegido y sea válido. Sin carteles de
+  aviso (tampoco si no hay dueños cargados).
+- **Etiquetas de tipo en la tabla:** "Aporte" y "Retiro" en gris neutro; "Otro ingreso" en
+  verde, como Corte. El retiro se distingue por el monto: con "−" y en rojo, como un gasto.
+- **Columnas:** Detalle muestra el dueño o la descripción; Barbero muestra "—".
+- **Al guardar:** se cierra el modal y la lista se recarga; si la fecha era otro día, Caja
+  salta a ese día.
+
+Decisiones de UI que se cierran antes de escribir el prompt del paso 5: texto de la nota,
+totales por dueño, columna del histórico en pantalla o solo en el Excel.
+
+Datos de prueba que quedaron en demo tras el paso 2 (sirven para probar los pasos 3 a 5; se
+pueden borrar desde Caja cuando exista el botón):
+- 2026-09-30: aporte de $50.000 (Dueño Demo 1), otro ingreso de $5.000 ("Alquiler de sillón"),
+  otro ingreso de $1 con una descripción de 200 caracteres, y retiro de $777 (Dueño Demo 1, con
+  la descripción "Retiro migrado (test)", como quedarían los retiros migrados).
+- 2026-09-29: otro ingreso de $1.500,50.
+- Un socio inactivo, "Socio Inactivo (test)": no debe aparecer en ningún selector.
 
 ### Cómo se ejecuta
 Un chat orquesta (diseño, prompts, revisión del diff) y cada paso de código se ejecuta en un
-chat aparte, en esta misma carpeta y branch. Al terminar, ese chat entrega un reporte con:
+chat aparte, en esta misma carpeta y branch. El chat que ejecuta puede leer los archivos que
+necesite. Las verificaciones de backend las corre ese mismo chat contra el tenant demo, llamando
+a los controllers con `req`/`res` simulados, sin levantar el servidor. Al terminar entrega un
+reporte con:
 
 1. Archivos creados y modificados.
 2. Desvíos respecto del prompt y por qué.
@@ -297,7 +333,8 @@ en el paso 7.
 
 Se arreglan de paso, porque se tocan esas mismas líneas:
 - `SeccionCaja` no chequea `res.ok` al cargar: un 500 se ve como "Sin movimientos" (paso 3).
-- `getMovimientosDia` no valida `fecha`: una fecha inválida da 500 en vez de 400 (paso 2).
+- `getMovimientosDia` no validaba `fecha`: una fecha inválida daba 500 en vez de 400
+  (resuelto en el paso 2).
 
 Se anotan:
 - `getCategorias` no filtra `activo`, aunque su comentario dice "activas".
@@ -309,6 +346,16 @@ Se anotan:
 - El borrado de gastos y ventas está implementado dos veces (`gastos.js`/`ventas.js` y `caja.js`).
 - `REGEX_FECHA` está copiada en 5 controllers.
 - El alta de un tenant no crea categorías de gasto y `onboarding.md` no las menciona (a verificar).
+- `req.body` sin fallback en Express 5: 27 handlers en 15 controllers desestructuran `req.body`
+  directo; un POST o PUT sin body tira `TypeError` y responde 500 en vez de 400. Arreglo de una
+  línea para todos: un middleware después de `express.json()` que haga `req.body ??= {}`.
+- Borrar con un `id` que no es UUID da 500 en todas las ramas de `eliminarMovimiento` (`22P02`
+  solo se maneja en los services).
+- Los montos salen como texto (NUMERIC de pg) en varias respuestas (`createGasto`, los listados
+  de gastos y ventas); `movimientos-dia`, el alta de movimientos y Balances ya devuelven
+  números. Falta una regla única.
+- Comentario viejo en `index.js`: el bloque "RUTAS DEL BACKOFFICE" dice "admin + barbero", pero
+  la mayoría de sus rutas son solo admin.
 - Menores: `gastos.js` sin JSDoc; comentario viejo en `SeccionGastos.jsx` ("id numérico");
   encabezado de `SelectorDia.jsx` con la ruta vieja; consultas secuenciales en
   `getGastosMensual` (las de `getMovimientosDia` se paralelizan en el paso 2).
