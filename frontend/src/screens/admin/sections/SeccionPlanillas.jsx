@@ -14,7 +14,9 @@
 //
 // Tab Resumen semanal:
 //   - Tabla consolidada por barbero con totales de la semana + columna
-//     Comisión opcional (toggle global).
+//     "A pagar" opcional (comisión + propinas; toggle global).
+//   - Al tocar un barbero se abre ModalDetalleBarbero: cifras de la semana,
+//     pago, total generado por día y por forma de pago. También en modo barbero.
 //
 // Qué barberos se listan lo decide el backend (planillaService): los activos,
 // aunque no hayan cortado (en 0), más los dados de baja que cortaron esa
@@ -23,6 +25,8 @@
 //
 // Comisión por día: comisión calculada sobre monto_servicios (nunca sobre
 // propinas), según comision_tipo del barbero ("porcentaje" o "fijo" por corte).
+// Hoy no hay barberos con comisión fija: siempre es porcentaje (ver la deuda
+// "Comisión: siempre porcentaje" en docs/estado_actual.md).
 //
 // Sistema de diseño: tokens + Geist + Lucide + onClick. Densidad compacta.
 // El fondo del contenedor lo da PanelAdmin (theme.surfaceAlt, D7 del plan).
@@ -30,7 +34,7 @@
 // <style> inline (excepción consciente §4.2, deuda #21).
 
 import { useState, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Scissors, RefreshCw } from 'lucide-react';
+import { ChevronRight, ChevronDown, Scissors, RefreshCw, ArrowRight } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
 import {
@@ -38,8 +42,10 @@ import {
   formatFechaCorta,
   getSemanaActual,
   semanaAFechaLunes,
+  semanaALabel,
+  desplazarDia,
 } from '../../../utils/fecha';
-import { fmtPesos, formatPago } from '../../../utils/formato';
+import { fmtPesos, formatPago, OPCIONES_FORMA_PAGO } from '../../../utils/formato';
 import { cargarChunk } from '../../../utils/cargarChunk';
 import {
   Tabs,
@@ -53,6 +59,10 @@ import {
   BotonExportarExcel,
   TogglePill,
   SelectorSemana,
+  Modal,
+  BotonIconoFila,
+  DesgloseMontos,
+  BarraProporcional,
 } from '../../../components/ui';
 import { theme } from '../../../theme/tokens.js';
 
@@ -75,7 +85,22 @@ function agruparPorDia(cortes) {
 }
 
 /**
+ * Suma los montos de una lista de cortes (un día, una semana, una forma de pago).
+ * @param {Array<{monto_servicios: number, propina: number}>} cortes
+ * @returns {{servicios: number, propinas: number, total: number}} Monto de
+ *   servicios, propinas y total generado (servicios + propinas).
+ */
+function sumarCortes(cortes) {
+  const servicios = cortes.reduce((s, c) => s + c.monto_servicios, 0);
+  const propinas  = cortes.reduce((s, c) => s + c.propina, 0);
+  return { servicios, propinas, total: servicios + propinas };
+}
+
+/**
  * Calcula la comisión del día sobre el monto de servicios.
+ * La rama `fijo` no se usa hoy (no hay barberos con comisión fija). Si
+ * volviera: los que llaman le suman las propinas en los dos tipos, y el
+ * backend no se las suma a `fijo` (deuda en docs/estado_actual.md).
  * @param {number} montoServicios
  * @param {'porcentaje'|'fijo'} tipo
  * @param {number} valor
@@ -133,6 +158,8 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
   // Fechas (YYYY-MM-DD) actualmente expandidas en el tab Detalle.
   // Por defecto solo el día de hoy arranca expandido al cargar la semana.
   const [diasExpandidos, setDiasExpandidos] = useState(new Set());
+  // barbero_id abierto en ModalDetalleBarbero (tab Resumen); null = cerrado.
+  const [barberoDetalle, setBarberoDetalle] = useState(null);
 
   // ── Carga de datos ────────────────────────────────────────────────────────
   // `intento` re-dispara el efecto al hacer "Reintentar". `cancelado` evita
@@ -184,7 +211,7 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
       filas.push({
         Barbero: `── ${barbero.barbero_nombre} ──`,
         Fecha: '', Hora: '', Servicio: '', 'Monto ($)': '', 'Propina ($)': '', 'Total ($)': '',
-        ...(mostrarComisiones ? { 'Comisión ($)': '' } : {}),
+        ...(mostrarComisiones ? { 'A pagar ($)': '' } : {}),
         'Forma de pago': '',
       });
       agruparPorDia(barbero.cortes).forEach(({ cortes: cd }) => {
@@ -193,13 +220,12 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
             Barbero: '', Fecha: formatFechaCorta(c.fecha), Hora: c.hora, Servicio: c.servicio_nombre,
             'Monto ($)': c.monto_servicios, 'Propina ($)': c.propina,
             'Total ($)': c.monto_servicios + c.propina,
-            ...(mostrarComisiones ? { 'Comisión ($)': '' } : {}),
+            ...(mostrarComisiones ? { 'A pagar ($)': '' } : {}),
             'Forma de pago': formatPago(c.forma_pago),
           });
         });
         if (mostrarComisiones && infoComision) {
-          const montoDelDia   = cd.reduce((s, c) => s + c.monto_servicios, 0);
-          const propinaDelDia = cd.reduce((s, c) => s + c.propina, 0);
+          const { servicios: montoDelDia, propinas: propinaDelDia, total: totalDelDia } = sumarCortes(cd);
           const comisionDelDia = calcularComisionDia(
             montoDelDia,
             infoComision.comision_tipo,
@@ -213,17 +239,16 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
             Barbero: `Subtotal (${cd.length} cortes)`, Fecha: '', Hora: '', Servicio: '',
             'Monto ($)': montoDelDia,
             'Propina ($)': propinaDelDia,
-            'Total ($)': montoDelDia + propinaDelDia,
-            'Comisión ($)': comisionDelDia + propinaDelDia, 'Forma de pago': '',
+            'Total ($)': totalDelDia,
+            'A pagar ($)': comisionDelDia + propinaDelDia, 'Forma de pago': '',
           });
         }
       });
-      const totalMonto   = barbero.cortes.reduce((s, c) => s + c.monto_servicios, 0);
-      const totalPropina = barbero.cortes.reduce((s, c) => s + c.propina, 0);
+      const { servicios: totalMonto, propinas: totalPropina, total: totalSemana } = sumarCortes(barbero.cortes);
       filas.push({
         Barbero: `Subtotal semana (${barbero.cortes.length} cortes)`, Fecha: '', Hora: '', Servicio: '',
-        'Monto ($)': totalMonto, 'Propina ($)': totalPropina, 'Total ($)': totalMonto + totalPropina,
-        ...(mostrarComisiones && infoComision ? { 'Comisión ($)': infoComision.comision } : {}),
+        'Monto ($)': totalMonto, 'Propina ($)': totalPropina, 'Total ($)': totalSemana,
+        ...(mostrarComisiones && infoComision ? { 'A pagar ($)': infoComision.comision } : {}),
         'Forma de pago': '',
       });
       filas.push({ Barbero: '', Fecha: '', Hora: '', Servicio: '', 'Monto ($)': '', 'Propina ($)': '', 'Total ($)': '', 'Forma de pago': '' });
@@ -249,14 +274,14 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
       Barbero: b.barbero_nombre, Cortes: b.cantidad_cortes,
       'Monto servicios ($)': b.monto_servicios, 'Propinas ($)': b.propinas,
       'Total generado ($)': b.total_generado,
-      ...(mostrarComisiones ? { 'Comisión ($)': b.comision } : {}),
+      ...(mostrarComisiones ? { 'A pagar ($)': b.comision } : {}),
     }));
     const t = resumenData.totales;
     filas.push({
       Barbero: 'TOTAL', Cortes: t.cantidad_cortes,
       'Monto servicios ($)': t.monto_servicios, 'Propinas ($)': t.propinas,
       'Total generado ($)': t.total_generado,
-      ...(mostrarComisiones ? { 'Comisión ($)': t.comision } : {}),
+      ...(mostrarComisiones ? { 'A pagar ($)': t.comision } : {}),
     });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Resumen semanal');
@@ -268,6 +293,10 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
   const barberoSeleccionado = detalleData.find((b) => b.barbero_id === barberoActivo);
   const diasDelBarbero      = barberoSeleccionado ? agruparPorDia(barberoSeleccionado.cortes) : [];
   const infoComisionActiva  = resumenData?.barberos.find((b) => b.barbero_id === barberoActivo);
+  // Datos del modal del Resumen: la fila del resumen y los cortes del detalle.
+  // El modal lee las dos respuestas (misma dependencia entre tabs que la #28).
+  const resumenDetalle = resumenData?.barberos.find((b) => b.barbero_id === barberoDetalle) ?? null;
+  const cortesDetalle  = detalleData.find((b) => b.barbero_id === barberoDetalle)?.cortes ?? [];
 
   /**
    * Alterna la expansión de un bloque de día.
@@ -288,6 +317,17 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
   const cambiarBarbero = (barberoId) => {
     setBarberoActivo(barberoId);
     setDiasExpandidos(new Set([hoy]));
+  };
+
+  /**
+   * Desde el modal del Resumen, cierra el modal y pasa al tab Detalle con ese
+   * barbero elegido (sus cortes de la semana, día por día).
+   * @param {string} barberoId
+   */
+  const verCortes = (barberoId) => {
+    setBarberoDetalle(null);
+    cambiarBarbero(barberoId);
+    setTabActiva('detalle');
   };
 
   // ── Early returns: loading / error ────────────────────────────────────────
@@ -402,9 +442,22 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
             body="No hay cortes registrados en la semana seleccionada."
           />
         ) : (
-          <TablaResumen resumenData={resumenData} mostrarComisiones={mostrarComisiones} />
+          <TablaResumen
+            resumenData={resumenData}
+            mostrarComisiones={mostrarComisiones}
+            onVerDetalle={setBarberoDetalle}
+          />
         )
       )}
+
+      <ModalDetalleBarbero
+        resumen={resumenDetalle}
+        cortes={cortesDetalle}
+        semana={semana}
+        mostrarComisiones={mostrarComisiones}
+        onClose={() => setBarberoDetalle(null)}
+        onVerCortes={verCortes}
+      />
     </div>
   );
 }
@@ -428,9 +481,7 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
  * @param {boolean} props.mostrarComisiones
  */
 function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisionActiva, mostrarComisiones }) {
-  const totalMonto   = cortesDelDia.reduce((s, c) => s + c.monto_servicios, 0);
-  const totalPropina = cortesDelDia.reduce((s, c) => s + c.propina, 0);
-  const totalGeneral = totalMonto + totalPropina;
+  const { servicios: totalMonto, propinas: totalPropina, total: totalGeneral } = sumarCortes(cortesDelDia);
   const comisionDelDia = infoComisionActiva
     ? calcularComisionDia(totalMonto, infoComisionActiva.comision_tipo, infoComisionActiva.comision_valor, cortesDelDia.length)
     : 0;
@@ -567,12 +618,16 @@ function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisi
 /**
  * TablaResumen
  * Tabla consolidada del tab Resumen. Una fila por barbero + fila TOTAL.
+ * Cada fila de barbero abre su detalle: click en cualquier parte de la fila y,
+ * para el teclado, el botón con chevron de la última celda (patrón de fila
+ * clickeable, sistema de diseño §4.4).
  *
  * @param {object} props
  * @param {{ barberos: Array, totales: object }} props.resumenData
  * @param {boolean} props.mostrarComisiones
+ * @param {(barberoId: string) => void} props.onVerDetalle - Abre el detalle del barbero.
  */
-function TablaResumen({ resumenData, mostrarComisiones }) {
+function TablaResumen({ resumenData, mostrarComisiones, onVerDetalle }) {
   const { barberos, totales } = resumenData;
   return (
     <div style={{
@@ -589,12 +644,20 @@ function TablaResumen({ resumenData, mostrarComisiones }) {
             <ThCelda alinear="right">Monto servicios</ThCelda>
             <ThCelda alinear="right">Propinas</ThCelda>
             <ThCelda alinear="right">Total generado</ThCelda>
-            {mostrarComisiones && <ThCelda alinear="right">Comisión</ThCelda>}
+            {/* "A pagar" y no "Comisión": el monto incluye las propinas (en
+                Balances, "comisión" no las incluye). */}
+            {mostrarComisiones && <ThCelda alinear="right">A pagar</ThCelda>}
+            <th aria-label="Detalle" style={{ width: 1, borderBottom: `1px solid ${theme.hairline}` }} />
           </tr>
         </thead>
         <tbody>
           {barberos.map((b) => (
-            <tr key={b.barbero_id} className="om-fila-hover">
+            <tr
+              key={b.barbero_id}
+              className="om-fila-hover"
+              onClick={() => onVerDetalle(b.barbero_id)}
+              style={{ cursor: 'pointer' }}
+            >
               <TdCelda bold>{b.barbero_nombre}</TdCelda>
               <TdCelda alinear="right">{b.cantidad_cortes}</TdCelda>
               <TdCelda alinear="right">{fmtPesos(b.monto_servicios)}</TdCelda>
@@ -611,10 +674,24 @@ function TablaResumen({ resumenData, mostrarComisiones }) {
                     marginLeft: 6,
                     letterSpacing: '0.02em',
                   }}>
-                    {b.comision_tipo === 'porcentaje' ? `${b.comision_valor}%` : `$${b.comision_valor}/c`}
+                    {/* Con `fijo` (hoy sin uso) el backend no suma propinas. */}
+                    {b.comision_tipo === 'porcentaje' ? `${b.comision_valor}% + prop` : `$${b.comision_valor}/c`}
                   </span>
                 </td>
               )}
+              {/* Padding vertical chico: el botón de 28px no agranda la fila. */}
+              <td style={{ ...tdBase, padding: '4px 14px 4px 0' }}>
+                <BotonIconoFila
+                  tono="accent"
+                  icono={<ChevronRight size={14} strokeWidth={1.75} />}
+                  ariaLabel={`Ver el detalle de ${b.barbero_nombre}`}
+                  onClick={(e) => {
+                    // Sin esto, el click también le llega al <tr>.
+                    e.stopPropagation();
+                    onVerDetalle(b.barbero_id);
+                  }}
+                />
+              </td>
             </tr>
           ))}
         </tbody>
@@ -632,10 +709,297 @@ function TablaResumen({ resumenData, mostrarComisiones }) {
                 {fmtPesos(totales.comision)}
               </td>
             )}
+            {/* Columna del botón de detalle: la fila TOTAL no abre nada. */}
+            <td style={tdTotalBase} />
           </tr>
         </tfoot>
       </table>
     </div>
+  );
+}
+
+// ─── Modal: detalle de un barbero en la semana ────────────────────────────────
+
+/**
+ * renglonesPago
+ * Renglones de "Pago de la semana": comisión, propinas y total a pagar. El
+ * total es `comision` del backend (ya incluye las propinas) y la comisión sola
+ * sale de restarle las propinas: el modal no repite la fórmula de comisión.
+ * Con `fijo` (hoy sin uso) el backend no suma propinas, así que la comisión va
+ * sin el renglón de propinas.
+ * @param {object} resumen - Fila del barbero en /admin/planilla/resumen.
+ * @returns {Array<object>} Renglones para DesgloseMontos.
+ */
+function renglonesPago(resumen) {
+  const total = {
+    operador: '=',
+    label: 'Total a pagar',
+    monto: resumen.comision,
+    variante: 'total',
+    tono: 'positivo',
+  };
+  if (resumen.comision_tipo !== 'porcentaje') {
+    return [
+      { label: `Comisión (${fmtPesos(resumen.comision_valor)} por corte)`, monto: resumen.comision },
+      total,
+    ];
+  }
+  return [
+    {
+      label: `Comisión (${resumen.comision_valor}% de servicios)`,
+      monto: resumen.comision - resumen.propinas,
+    },
+    { operador: '+', label: 'Propinas', monto: resumen.propinas },
+    total,
+  ];
+}
+
+/**
+ * filasPorDia
+ * Los siete días de la semana (lunes a domingo) con sus cortes y el total
+ * generado de cada uno. Los días sin cortes quedan con cantidad 0.
+ * @param {Array}  cortes - Cortes del barbero en la semana (/admin/planilla).
+ * @param {string} semana - Semana 'YYYY-WNN'.
+ * @returns {Array<{clave: string, label: string, cantidad: number, total: number}>}
+ *   Filas para ListaConBarras.
+ */
+function filasPorDia(cortes, semana) {
+  const lunes = semanaAFechaLunes(semana);
+  const cortesPorFecha = new Map(agruparPorDia(cortes).map((d) => [d.fecha, d.cortes]));
+  return Array.from({ length: 7 }, (_, i) => {
+    const fecha = desplazarDia(lunes, i);
+    const delDia = cortesPorFecha.get(fecha) ?? [];
+    return {
+      clave: fecha,
+      label: formatFechaCorta(fecha),
+      cantidad: delDia.length,
+      total: sumarCortes(delDia).total,
+    };
+  });
+}
+
+/**
+ * filasPorFormaPago
+ * Una fila por forma de pago del sistema, con sus cortes y el total generado
+ * (servicios + propinas) que entró por ella.
+ * @param {Array} cortes - Cortes del barbero en la semana (/admin/planilla).
+ * @returns {Array<{clave: string, label: string, cantidad: number, total: number}>}
+ *   Filas para ListaConBarras.
+ */
+function filasPorFormaPago(cortes) {
+  return OPCIONES_FORMA_PAGO.map(({ value, label }) => {
+    const deLaForma = cortes.filter((c) => c.forma_pago === value);
+    return {
+      clave: value,
+      label,
+      cantidad: deLaForma.length,
+      total: sumarCortes(deLaForma).total,
+    };
+  });
+}
+
+/**
+ * CifrasSemana
+ * Las cuatro cifras de la semana del barbero en recuadros: cortes, servicios,
+ * propinas y total generado. Salen tal cual del resumen del backend.
+ * @param {object} props.resumen - Fila del barbero en /admin/planilla/resumen.
+ * @returns {JSX.Element}
+ */
+function CifrasSemana({ resumen }) {
+  const cifras = [
+    { label: 'Cortes',         valor: resumen.cantidad_cortes },
+    { label: 'Servicios',      valor: fmtPesos(resumen.monto_servicios) },
+    { label: 'Propinas',       valor: fmtPesos(resumen.propinas) },
+    { label: 'Total generado', valor: fmtPesos(resumen.total_generado), color: theme.accent },
+  ];
+
+  // auto-fit: 4 columnas si entran; si no, pasan a 2.
+  return (
+    <dl style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+      gap: 8,
+      margin: 0,
+    }}>
+      {cifras.map((c) => (
+        <div
+          key={c.label}
+          style={{
+            border: `1px solid ${theme.hairline}`,
+            borderRadius: theme.radius,
+            padding: '8px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+          }}
+        >
+          <dt style={{
+            fontFamily: theme.mono,
+            fontSize: theme.sizeMicro,
+            fontWeight: theme.weightMedium,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: theme.muted,
+          }}>
+            {c.label}
+          </dt>
+          <dd style={{
+            margin: 0,
+            fontFamily: theme.body,
+            fontSize: theme.sizeHeading,
+            fontWeight: theme.weightHeading,
+            color: c.color ?? theme.ink,
+            letterSpacing: '-0.01em',
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            {c.valor}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/**
+ * ListaConBarras
+ * Lista de filas con la forma: rótulo · barra proporcional al total · cortes ·
+ * monto. Las filas sin cortes quedan en gris con "—" (así se ven los huecos).
+ * La usan "Total generado por día" y "Por forma de pago" del modal.
+ * @param {string} props.titulo - Eyebrow mono sobre la lista.
+ * @param {Array<{clave: string, label: string, cantidad: number, total: number}>} props.filas
+ * @param {number} [props.maximo] - Total que ocupa la barra entera. Default: la
+ *   fila más grande.
+ * @returns {JSX.Element}
+ */
+function ListaConBarras({ titulo, filas, maximo }) {
+  const tope = maximo ?? Math.max(0, ...filas.map((f) => f.total));
+
+  return (
+    <div>
+      <div style={{
+        marginBottom: 4,
+        fontFamily: theme.mono,
+        fontWeight: theme.weightHeading,
+        fontSize: theme.sizeMicro,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+        color: theme.inkSoft,
+      }}>
+        {titulo}
+      </div>
+
+      {/* role="list": Safari les saca la semántica de lista a las <ul> con
+          list-style none. */}
+      <ul role="list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+        {filas.map((f) => {
+          const vacio = f.cantidad === 0;
+          return (
+            <li
+              key={f.clave}
+              style={{
+                display: 'grid',
+                // Monto en 112px, igual que DesgloseMontos: los montos del
+                // modal quedan alineados entre secciones.
+                gridTemplateColumns: '120px minmax(0, 1fr) 72px 112px',
+                columnGap: 12,
+                alignItems: 'center',
+                padding: '8px 0',
+                fontFamily: theme.body,
+                fontSize: theme.sizeBody,
+              }}
+            >
+              <span style={{ color: vacio ? theme.muted : theme.ink }}>
+                {f.label}
+              </span>
+              <BarraProporcional segmentos={[{ valor: f.total, color: theme.accent }]} maximo={tope} />
+              <span style={{
+                textAlign: 'right',
+                color: vacio ? theme.mutedSoft : theme.muted,
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {vacio ? '—' : `${f.cantidad} corte${f.cantidad !== 1 ? 's' : ''}`}
+              </span>
+              <span style={{
+                textAlign: 'right',
+                color: vacio ? theme.mutedSoft : theme.ink,
+                fontWeight: theme.weightMedium,
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {vacio ? '—' : fmtPesos(f.total)}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * ModalDetalleBarbero
+ * Detalle de la semana de un barbero, desde el tab Resumen: las cuatro cifras
+ * de la semana, el pago (solo con comisiones), el total generado por día y por
+ * forma de pago. En modo barbero se ve igual: son sus propios números. No
+ * calcula comisiones: usa la fila del resumen y suma los cortes del detalle.
+ * @param {object|null} props.resumen - Fila del barbero en /admin/planilla/resumen;
+ *   null = cerrado.
+ * @param {Array}   props.cortes            - Cortes del barbero en la semana (/admin/planilla).
+ * @param {string}  props.semana            - Semana 'YYYY-WNN'.
+ * @param {boolean} props.mostrarComisiones - Estado del toggle de comisiones.
+ * @param {() => void} props.onClose        - Cierra el modal.
+ * @param {(barberoId: string) => void} props.onVerCortes - Pasa al tab Detalle con ese barbero.
+ * @returns {JSX.Element|null}
+ */
+function ModalDetalleBarbero({ resumen, cortes, semana, mostrarComisiones, onClose, onVerCortes }) {
+  if (!resumen) return null;
+
+  const sinCortes = resumen.cantidad_cortes === 0;
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={resumen.barbero_nombre}
+      subtitle={`Semana ${semanaALabel(semana)}`}
+      maxWidth={560}
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, width: '100%' }}>
+          <Button variant="ghost" full={false} onClick={onClose}>Cerrar</Button>
+          {!sinCortes && (
+            <Button variant="secondary" full={false} onClick={() => onVerCortes(resumen.barbero_id)}>
+              Ver los cortes
+              <ArrowRight size={16} strokeWidth={1.75} />
+            </Button>
+          )}
+        </div>
+      }
+    >
+      {sinCortes ? (
+        <EmptyState
+          glyph={<Scissors size={28} strokeWidth={1.5} />}
+          title="Sin cortes esta semana"
+          body="No hay cortes registrados en la semana seleccionada."
+        />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <CifrasSemana resumen={resumen} />
+          {mostrarComisiones && (
+            <DesgloseMontos
+              titulo="Pago de la semana"
+              renglones={renglonesPago(resumen)}
+              conBarras={false}
+            />
+          )}
+          <ListaConBarras titulo="Total generado por día" filas={filasPorDia(cortes, semana)} />
+          {/* Escala = total de la semana: cada barra muestra qué parte entró por esa forma. */}
+          <ListaConBarras
+            titulo="Por forma de pago"
+            filas={filasPorFormaPago(cortes)}
+            maximo={resumen.total_generado}
+          />
+        </div>
+      )}
+    </Modal>
   );
 }
 

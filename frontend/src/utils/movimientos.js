@@ -8,7 +8,7 @@
 //
 // `requiereSocio` y MAX_DESCRIPCION_MOVIMIENTO espejan a
 // backend/src/utils/movimientos.js: si cambian allá, cambian acá.
-// Ver docs/plan_movimientos_extra.md §5.
+// Ver docs/decisiones_movimientos_extra.md.
 
 // Label corto de cada tipo de movimiento (etiqueta de la tabla y Excel).
 const LABELS_TIPO_MOVIMIENTO = {

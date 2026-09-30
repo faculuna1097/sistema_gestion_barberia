@@ -11,6 +11,9 @@
 --   - corte: UNIQUE corte_turno_unico (turno_id) WHERE turno_id IS NOT NULL
 --     (un turno se vincula a un solo corte; violación → 23505).
 --   - barbero_suspension: índice (barbero_id, desde, hasta).
+--   - barbero.comision_tipo: el CHECK admite 'fijo', pero hoy no hay barberos con
+--     comisión fija: toda comisión es porcentaje (decisión de negocio; ver la deuda
+--     "Comisión: siempre porcentaje" en estado_actual.md).
 --   - Row Level Security ACTIVADO y sin policies en las 18 tablas (desde 2026-09-30).
 --     Cierra la API automática de Supabase (roles anon / authenticated); el backend
 --     entra como owner (postgres) y RLS no le aplica. Toda tabla nueva se crea con

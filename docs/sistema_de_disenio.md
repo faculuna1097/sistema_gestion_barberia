@@ -211,6 +211,16 @@ clickable, replicá el patrón:
 >
 ```
 
+**Filas de tabla clickeables** (ej. abrir un detalle): el `<tr>` lleva el
+`onClick` (mouse y toque, en cualquier parte de la fila) y `cursor: pointer`,
+**sin** `role="button"`, que le rompe la semántica de tabla a los lectores de
+pantalla. Para el teclado, la última celda lleva un `BotonIconoFila` con
+`ChevronRight` y `ariaLabel` (Enter/Espacio y foco visible vienen con el
+`<button>`), que además es la pista visual en el iPad, donde no hay hover. Su
+`onClick` hace `e.stopPropagation()` para que el click no le llegue también al
+`<tr>`. Ejemplos: `TablaHistorico` en `SeccionBalances` y `TablaResumen` en
+`SeccionPlanillas`.
+
 ### 4.5 Errores y empty states
 
 **Nunca** mostrar `<p>Cargando...</p>`, `<p>Error</p>`, ni `alert()`/`confirm()`
@@ -359,6 +369,14 @@ Propios del panel de gestión (`frontend/src/components/ui/`, no están en el
 turnero): `LoadingState` (spinner Lucide `Loader2`, excepción de §4.5) y `Toast`
 (§4.8), entre otros primitivos de tablas y formularios del admin.
 
+**Gráficos, sin librería.** El proyecto no tiene librería de gráficos: las
+barras se hacen con divs de ancho proporcional y los tokens del tema.
+`BarraProporcional` es la barra (partible en tramos de color, decorativa:
+el número va siempre como texto al lado) y `DesgloseMontos` la cuenta renglón
+por renglón (`+`, `−`, `=`, con barra y monto) de los modales de detalle de
+Balances y Planillas. Si algún día hace falta un gráfico de verdad (ejes,
+series temporales), se evalúa una librería cargada solo al usarla, como `xlsx`.
+
 ### 6.2 Específicas del wizard de reserva (NO usar en otros fronts)
 
 | Componente | Por qué es exclusivo |
@@ -493,7 +511,9 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-09-29 — auditoría de la documentación: §1 sin `esDomingo`; §6.1 con los 13 universales (`LoadingState`/`Toast` como propios del panel); deudas #1, #6 y #11 de §9 resueltas; #13 remite a `estado_actual.md` para el estado de lint.*
+*Última actualización: 2026-09-30 — §4.4 suma el patrón de fila de tabla clickeable; §6.1 suma los gráficos sin librería (`BarraProporcional`, `DesgloseMontos`).*
+
+*2026-09-29 — auditoría de la documentación: §1 sin `esDomingo`; §6.1 con los 13 universales (`LoadingState`/`Toast` como propios del panel); deudas #1, #6 y #11 de §9 resueltas; #13 remite a `estado_actual.md` para el estado de lint.*
 
 *2026-09-29 — deuda #13 de §9: la regla `set-state-in-effect` ya está activa también en el front de gestión (lint falla en `main`); postura unificada pendiente.*
 

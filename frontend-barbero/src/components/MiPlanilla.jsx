@@ -96,7 +96,8 @@ function agruparPorDia(cortes) {
  * Comisión del barbero por los cortes de un día. Replica EXACTO el cálculo del
  * backend (resumenSemanal): porcentaje = % sobre servicios + propinas; fijo =
  * monto por corte (sin propinas). Así la suma de los días da la comisión
- * semanal del Hero y los números cierran.
+ * semanal del Hero y los números cierran. La rama `fijo` no se usa hoy: no hay
+ * barberos con comisión fija, toda comisión es porcentaje (docs/estado_actual.md).
  * @param {Array} cortes - cortes del día
  * @param {'porcentaje'|'fijo'} tipo - comision_tipo del barbero
  * @param {number} valor - comision_valor del barbero
