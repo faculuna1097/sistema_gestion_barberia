@@ -13,7 +13,7 @@ import { Pencil, Trash2, Package, RefreshCw } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
 import { mesALabel, getMesActual } from '../../../utils/fecha';
-import { fmtPesos } from '../../../utils/formato';
+import { fmtPesos, OPCIONES_FORMA_PAGO } from '../../../utils/formato';
 import { cargarChunk } from '../../../utils/cargarChunk';
 import {
   ScreenHeader,
@@ -301,11 +301,6 @@ function TablaResumen({ totales, totalGeneral, cantidadTotal }) {
 }
 
 // ─── Modal de edición ─────────────────────────────────────────────────────────
-
-const OPCIONES_FORMA_PAGO = [
-  { value: 'efectivo',     label: 'Efectivo' },
-  { value: 'mercado_pago', label: 'Mercado Pago' },
-];
 
 /**
  * ModalEditarVenta

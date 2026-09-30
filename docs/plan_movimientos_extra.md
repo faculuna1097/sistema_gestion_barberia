@@ -257,7 +257,7 @@ consultas, y el filtro "Solo Barberos" de Caja.
 | 0 | Branch `feature/movimientos-extra` | orquestador | ✅ |
 | 1 | Base de datos: tablas `socio` y `movimiento_extra`, carga de socios, `SQL_Schema.md` | orquestador | ✅ 2026-09-30 |
 | 2 | Backend de Caja y socios | chat aparte | ✅ 2026-09-30 |
-| 3 | Frontend de Caja | chat aparte | 🔲 |
+| 3 | Frontend de Caja | chat aparte | ✅ 2026-09-30 (probado en el navegador) |
 | 4 | Backend de Balances | chat aparte | ✅ 2026-09-30 |
 | 5 | Frontend de Balances | chat aparte | 🔲 |
 | 6 | Migración de los retiros históricos | orquestador | 🔲 |
@@ -267,8 +267,9 @@ Orden de deploy: las tablas antes que el código (si no, Caja y Balances dan 500
 que frontend; la migración al final, con todo en producción.
 
 Decisiones de UI del paso 3 (cerradas con el usuario el 2026-09-30):
-- **Entrada:** un "+" discreto en la fila de las pestañas de Caja, a la derecha, solo en
-  "Movimientos del día". No es un botón de uso cotidiano.
+- **Entrada:** un "+" en la fila de las pestañas de Caja, a la derecha, solo en "Movimientos del
+  día". No es un botón de uso cotidiano. Lleva borde índigo de 2 px (pedido del usuario al ver la
+  pantalla, para que resalte); el ícono es gris y pasa a negro al pasar el mouse.
 - **Formulario:** modal "Registrar movimiento", coherente con los demás modales del panel;
   botones "Cancelar" y "Guardar".
 - **Campos, en orden:** Tipo; Dueño (aporte y retiro) o Descripción (otro ingreso); Monto;
@@ -291,19 +292,23 @@ Decisiones de UI del paso 5 (cerradas con el usuario el 2026-09-30):
 - **Bloque "Aportes y retiros":** debajo de "Egresos por categoría", una fila por dueño (Dueño,
   Aportes, Retiros). Solo si el mes tiene aportes o retiros. El detalle por movimiento queda en
   Caja y en el Excel.
-- **Cierre del bloque:** fila destacada "Queda en el negocio" (misma línea índigo de los totales).
+- **"Balance neto" pasa a llamarse "Ganancia del mes"** en la tarjeta, y "Balance" pasa a
+  "Ganancia" en la columna y el Excel del histórico. Así cada número dice lo que es: "Ganancia
+  del mes" (lo que generó el negocio) y "Queda en el negocio" (lo que quedó después de los
+  dueños). Solo cambia el texto; el campo de la API sigue siendo `balance_neto`.
+- **Cierre del bloque:** la cuenta completa, para que se vea de dónde sale el número: "Ganancia
+  del mes", "+ Aportes", "− Retiros" y la fila destacada "Queda en el negocio" (misma línea
+  índigo de los totales).
 - **Nota al pie del bloque:** "Los aportes y retiros no son ingresos ni gastos del negocio: no
-  cambian el Balance neto."
+  cambian la ganancia del mes."
 - **Colores:** aportes en negro, retiros en rojo; "Queda en el negocio" en índigo si es positivo
-  y en rojo si es negativo, como Balance neto.
+  y en rojo si es negativo, como la ganancia.
 - **Tarjetas de arriba:** las tres de hoy; "Ingresos del negocio" incluye los otros ingresos.
 - **Histórico en pantalla:** sin columnas nuevas; en el Excel se suman Otros ingresos, Aportes y
   Retiros. Se revisa después si hace falta una columna en pantalla.
 - **Excel del mes:** fila "Otros ingresos" en la hoja de ingresos; hoja "Aportes y retiros" con
   cada movimiento (fecha, dueño, tipo, descripción, forma de pago, monto) y el cierre; hoja con
   el detalle de los otros ingresos.
-- **Pendiente:** si "Balance neto" pasa a llamarse "Ganancia del mes" en pantalla y en el Excel,
-  para que no se confunda con "Queda en el negocio".
 
 Datos de prueba que quedaron en demo tras los pasos 2 y 4 (sirven para probar los pasos 3 y 5;
 se pueden borrar desde Caja):
@@ -389,6 +394,20 @@ Se anotan:
   responde `[]` en vez de 400 o del valor por defecto.
 - El mensual redondea la comisión por barbero y después suma; el histórico suma sin redondear.
   Pueden diferir en centavos.
+- Caja esconde todo mientras carga o si falla: el estado de carga y el de error reemplazan
+  también el selector de día y los totales. Si un día falla, solo queda "Reintentar" y no se
+  puede cambiar de día sin salir de la sección.
+- Los errores sin mensaje del servidor se muestran crudos en los modales de Caja, Gastos y
+  Ventas: "Failed to fetch" si no hay red, o el texto del parser si la respuesta no es JSON (un
+  502 del proxy). Arreglar los tres juntos con un mensaje genérico en español.
+- Una etiqueta neutra (`surfaceAlt`) sobre una fila con hover (`surfaceAlt`) pierde el fondo al
+  pasar el mouse: pasa con "Aporte" y "Retiro" en Caja y con `BadgeCategoria` en Gastos.
+- Tamaños escritos a mano: `fontSize: 13` en los bloques de error de Gastos y Ventas; 15 y 12 en
+  `Field`. Además, `Field` no acepta `maxLength`.
+- Los textos de las formas de pago viven en tres lugares (`formatPago`, `OPCIONES_FORMA_PAGO` y
+  `BadgeFormaPago`), y el Excel de Gastos usa un ternario propio.
+- `BotonFormaPago` de `SeccionTurnero` y `GrupoOpciones` de `SeccionCaja` son el mismo patrón
+  (con su rótulo `labelEyebrow` duplicado). Al unificarlos, promover `GrupoOpciones` a `/ui`.
 - Menores: `gastos.js` sin JSDoc; comentario viejo en `SeccionGastos.jsx` ("id numérico");
   encabezado de `SelectorDia.jsx` con la ruta vieja; consultas secuenciales en
   `getGastosMensual` (las de `getMovimientosDia` se paralelizan en el paso 2).
