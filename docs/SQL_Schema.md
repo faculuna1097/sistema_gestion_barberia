@@ -1,5 +1,16 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
+--
+-- El export de Supabase NO incluye índices, EXCLUDE ni extensiones. Existen además:
+--   - Extensión btree_gist.
+--   - turno: EXCLUDE GIST turno_no_solapamiento (mismo barbero, rangos [inicio, fin)
+--     solapados, solo estado = 'reservado'). Violación → SQLSTATE 23P01, el backend
+--     responde 409. 3 índices parciales sobre estado = 'reservado'.
+--   - cliente: UNIQUE (tenant_id, email) (admite múltiples NULL; lo usa el
+--     ON CONFLICT del find-or-create en turnosService).
+--   - corte: UNIQUE corte_turno_unico (turno_id) WHERE turno_id IS NOT NULL
+--     (un turno se vincula a un solo corte; violación → 23505).
+--   - barbero_suspension: índice (barbero_id, desde, hasta).
 
 CREATE TABLE public.tenant (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),

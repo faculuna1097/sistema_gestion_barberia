@@ -15,7 +15,7 @@ El criterio es simple: **se loguea solo lo que aporta señal cuando algo se romp
 - Los datos se separan con ` | `, key-value.
 - Nunca loguear arrays/objetos completos: solo `.length` o los campos relevantes.
 - Nunca loguear PINs, passwords, tokens JWT ni `req.body` que pueda contenerlos.
-- Si necesitás loguear `req.body`, pasalo por `sanitizarObjeto` (definido en `backend/src/index.js`) — enmascara campos sensibles.
+- Si necesitás loguear `req.body`, pasalo por `sanitizarObjeto` (`backend/src/utils/sanitizarLogs.js`) — enmascara campos sensibles.
 
 ### Backend — qué SÍ se loguea
 
@@ -140,7 +140,7 @@ aritmética de fechas (sumar minutos, comparar rangos).
 - En todos los controllers: `req.tenant_id` siempre. Nunca constante local hardcodeada.
 - `tenantMiddleware.js` lee el header `X-Tenant-Subdomain` enviado por el frontend, resuelve `tenant_id` desde DB con caché en memoria, y lo inyecta en `req.tenant_id`.
 - Fallback a `TENANT_ID` en `.env` solo para desarrollo local (localhost no tiene subdominio).
-- El frontend extrae el subdominio de `window.location.hostname` al arrancar.
+- El frontend extrae el subdominio de `window.location.hostname` al arrancar, y solo si el hostname termina en `.barbermanager.app`; cualquier otro host (localhost, una IP de red local) da `undefined` y cae al fallback de `TENANT_ID`.
 - `publicHeaders` en `api.js` incluye `X-Tenant-Subdomain` en todas las funciones públicas.
 - `apiFetch` incluye `X-Tenant-Subdomain` en todas las llamadas del panel admin.
 
@@ -151,8 +151,9 @@ aritmética de fechas (sumar minutos, comparar rangos).
 - **Nunca** `pool.connect()`.
 - **Nunca** `BEGIN` / `COMMIT` (incompatibilidad con PgBouncer free plan, IPv4-only).
 - Inserts secuenciales con cleanup manual si algo falla.
-- `db.js` exporta `{ query }` como named export.
-- Pool con `max: 3`, `ssl: { rejectUnauthorized: false }`.
+- `db.js` exporta como named exports `query` (lo que usa todo el código), `cerrarPool` (cierre limpio del cron), `testConnection` e `iniciarKeepAlive` (arranque). El pool crudo no se exporta.
+- Pool con `max: 3`, `ssl: { ca: <config/supabase-ca.crt>, rejectUnauthorized: true }` y `statement_timeout` de 5s por conexión.
+- `query()` reintenta **una vez** ante errores de conexión (no de SQL). Las escrituras no idempotentes que no deben reejecutarse (ajustes relativos de stock, `stock_actual = stock_actual ± $1`) van con `query(sql, params, { reintentar: false })` — ver `utils/stock.js`.
 
 ---
 
@@ -190,11 +191,7 @@ No se eliminan registros en ABMs. Se usa el campo `activo` (true/false) para pre
 
 ## 9. Stack y deploy (referencia)
 
-- **Frontend:** React + Vite, inline styles, tipografía **Geist**, acento único **indigo `#4F46E5`** (token `theme.accent`). *(El verde `#1a7a4a` y "DM Sans" eran el stack viejo pre-rediseño; la fuente de verdad visual es `sistema_de_disenio.md` + `theme/tokens.js`.)*
-- **Backend:** Node.js + Express, ES Modules (`import/export`).
-- **DB:** PostgreSQL via Supabase Session Pooler.
-- **Auth:** bcrypt + JWT (token en memoria, `useState` en `App.jsx`).
-- **Deploy:** Backend en Railway, Frontend en Vercel, dominio `barbermanager.app`.
+Stack y deploy viven en [`estado_actual.md`](estado_actual.md) §Stack y §Deploy. Lo visual, en [`sistema_de_disenio.md`](sistema_de_disenio.md).
 
 ---
 

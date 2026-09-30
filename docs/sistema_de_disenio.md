@@ -44,7 +44,7 @@ La implementación de referencia vive en **`frontend-turnero/src/`**:
 |---|---|
 | `theme/tokens.js` | Tokens (colores, tipo, spacing, radii). Una sola fuente. |
 | `utils/formato.js` | `fmtPesos`. |
-| `utils/fecha.js` | `fmtFechaCorta`, `fmtFechaLarga`, `fmtHora`, `fmtFechaHora`, `generarProximosDias`, `esHoy`, `esDomingo`, etc. |
+| `utils/fecha.js` | `fmtFechaCorta`, `fmtFechaLarga`, `fmtHora`, `fmtFechaHora`, `generarProximosDias`, `esHoy`, `diaSemana`, etc. |
 | `components/ui/` | Primitivos React reutilizables (ver inventario abajo). |
 | `index.css` | Reset + carga de Geist + `@keyframes`. |
 
@@ -354,7 +354,10 @@ pantalla.
 | `ConfirmDialog` | Modal de confirmación (ESC + click fuera + loading state). |
 | `AvatarIniciales` | Círculo con iniciales y tono determinístico por nombre. |
 | `SummaryRow` | Fila label/value con border-bottom sutil. |
-| `LoadingState` | Spinner centrado (Lucide `Loader2`). Para uso en admin como excepción a §4.5 (ver ahí). |
+
+Propios del panel de gestión (`frontend/src/components/ui/`, no están en el
+turnero): `LoadingState` (spinner Lucide `Loader2`, excepción de §4.5) y `Toast`
+(§4.8), entre otros primitivos de tablas y formularios del admin.
 
 ### 6.2 Específicas del wizard de reserva (NO usar en otros fronts)
 
@@ -471,26 +474,28 @@ reconciliarlo.
 Pendientes detectados durante el rediseño del turnero. **Si tomás alguno,
 actualizá este doc.**
 
-1. `App.jsx` del turnero — loading/error states pelados (`<p>Cargando...</p>`). *(parcialmente atacado en `b95ae89`)*
+1. ~~`App.jsx` del turnero — loading/error states pelados (`<p>Cargando...</p>`).~~ — **Resuelto**: la carga usa `Skeleton` y el error `EmptyState`.
 2. ~~`esDomingo` hardcodeado~~ — **Resuelto**: `MiniCalendario` grisa los días que el negocio no atiende y los feriados, leyendo `horario_atencion` + `feriados` de `GET /api/turnero/tenant`.
 3. ~~**Falta endpoint de disponibilidad por día (precisión por barbero).**~~ — **Resuelto**: el endpoint `GET /api/turnero/dias-disponibles` (`calcularDiasConDisponibilidad` en `disponibilidadService.js`) calcula, dado `barbero_id` + `servicio_id` + un rango de fechas, qué días tienen ≥1 slot reservable, con un set fijo de queries independiente del tamaño del rango. `MiniCalendario` ahora recibe `diasDisponibles` y grisa cualquier día que no esté en esa lista; se eliminó la lógica client-side de días cerrados/feriados (el backend pasó a ser la fuente única de qué día es reservable). Lo consumen `SeleccionFecha` y la reprogramación de `GestionTurno`.
 4. Cortes de turno (13:00 y 20:00) hardcodeados en `SeleccionHorario.jsx` — debería ser por tenant.
 5. ~~Validación de teléfono solo AR (10 dígitos) hardcodeada en `DatosCliente.jsx`.~~ — **Resuelto**: reemplazada por `libphonenumber-js`. `DatosCliente` ahora tiene un selector de país (Argentina default + limítrofes + EE.UU.), formatea el número a medida que se escribe (`AsYouType`), valida por país (`isValidPhoneNumber`) y guarda el teléfono en formato E.164 (`parsePhoneNumber`). El backend no valida formato de teléfono, así que el cambio de formato guardado es seguro. El campo compuesto `[select país | input]` vive en el componente local `CampoTelefono` (no extiende el primitivo universal `Field`).
-6. Catálogos (`servicios`, `barberos`) sin `ORDER BY` explícito en backend.
+6. ~~Catálogos (`servicios`, `barberos`) sin `ORDER BY` explícito en backend.~~ — **Resuelto**: servicios ordenan por precio y barberos por nombre (`controllers/turnero.js`, `barberos.js`, `servicios.js`).
 7. ~~`MiniCalendario` "2 semanas" hardcodeado~~ — **Resuelto**: el sublabel se deriva de `dias.length` como "N días".
 8. **Inline styles + `useState` para hover** (§4.1, §4.2) — validado solo para mobile/turnero. **Antes de arrancar el front de gestión**, revisar: las tablas densas con muchas filas hover-ables pueden hacer ruidoso el re-render. Considerar híbrido: tokens en JS + `:hover` puntual via `<style>` scoped donde la performance importe.
 9. **Contraste WCAG no verificado** — `mutedSoft` sobre `surfaceAlt`, `inkSoft` sobre `bg`, blanco sobre `accent`. Auditar con WebAIM antes de release público.
 10. ~~**Iconografía sin librería elegida**~~ — **Resuelto**: se eligió Lucide (`lucide-react`). Ver §3.7.
-11. **`<html lang="es">`** — verificar que esté en `index.html` de cada front. (Ya OK en `frontend-barbero`.)
+11. ~~**`<html lang="es">`** — verificar que esté en `index.html` de cada front.~~ — **Resuelto**: presente en los cuatro fronts (verificado 2026-09-29).
 12. **Focus visible global** — auditar que todos los primitivos tengan estilo de `:focus-visible`. Hoy `Card` y `Button` sí; el resto, sin verificar.
-13. **Regla ESLint `react-hooks/set-state-in-effect` desactivada en `frontend-barbero/eslint.config.js`.** Llegó por el scaffolding de Vite (`eslint-plugin-react-hooks` v7); los otros fronts usan versiones más viejas sin ella. En este código son falsos positivos sobre el patrón de fetching del proyecto (`setCargando(true)` al montar, cuando `cargando` ya es `true`). Si se actualiza react-hooks en los demás fronts, tomar una **postura unificada**: desactivarla en todos, o refactorizar el patrón de fetch a "sin setState síncrono en el efecto". **Actualización 2026-09-29:** eso ya pasó — los tres fronts tienen `eslint-plugin-react-hooks` v7. En el de gestión la regla está activa y `npm run lint` falla en `main` con 3 errores de esta regla (`App.jsx:231` y `:269`, `FondoLocal.jsx:106`); barbero (regla desactivada) y turnero pasan limpio. La postura unificada sigue pendiente; el resto de los errores de lint del front de gestión está en `estado_actual.md` → Deudas vivas del frontend del panel.
+13. **Regla ESLint `react-hooks/set-state-in-effect` desactivada en `frontend-barbero/eslint.config.js`.** Llegó por el scaffolding de Vite (`eslint-plugin-react-hooks` v7); los otros fronts usan versiones más viejas sin ella. En este código son falsos positivos sobre el patrón de fetching del proyecto (`setCargando(true)` al montar, cuando `cargando` ya es `true`). Si se actualiza react-hooks en los demás fronts, tomar una **postura unificada**: desactivarla en todos, o refactorizar el patrón de fetch a "sin setState síncrono en el efecto". **Actualización 2026-09-29:** eso ya pasó — los cuatro fronts tienen `eslint-plugin-react-hooks` v7 y la regla está activa en todos salvo barbero. La postura unificada sigue pendiente; el estado actual de lint de cada front (qué errores y dónde) está en `estado_actual.md` → Deudas vivas del frontend del panel.
 14. ~~**Rango horario del timeline hardcodeado**~~ — **Resuelto**: `Agenda.jsx` de `frontend-barbero` ya no usa `7:00`–`22:00` fijo. El rango se deriva por día con `calcularRangoHoras(horarioAtencion, fecha, turnos)`: trae `horario_atencion` del local (`getTenant()`, fetch best-effort una sola vez al montar) y muestra desde `apertura - 1h` hasta `cierre + 1h` del día visible (`floor`/`ceil` para líneas de hora prolijas con horarios no enteros como `10:30`). El rango se expande para que cualquier turno fuera de esa franja siga visible (clamp al min/max entre horario y turnos). Día cerrado: deriva de los turnos del día (±1h) o, sin turnos, cae al default `7`–`22` — mismo camino al que cae si `getTenant()` falla (red de seguridad). `HORA_INICIO`/`HORA_FIN`/`ALTO_TOTAL` pasaron de constantes de módulo a valores derivados por render que bajan por props a `Timeline`/`BloqueTurno`. (Emparenta con la deuda 4, aún abierta en el turnero.)
 15. **`getMisClientes` sin paginación** — la pantalla Clientes de `frontend-barbero` trae todos los clientes históricos del barbero y filtra en cliente. Con 500+ clientes, el render de cards con hover-state (ver deuda 8) puede sentirse lento. Mitigación: paginar el endpoint o virtualizar la lista.
 16. **Toast inline → flotante global.** El primitivo `Toast` es hoy inline / render-state (cada caller mantiene el estado y lo monta en su layout; ver §4.8). El **target** es un Toast **flotante, centrado y con auto-dismiss** servido por un provider global con API imperativa (`toast.show()`). Migrar implica: (1) crear el provider/portal + dispatcher; (2) migrar **todos** los call-sites inline actuales (`BloqueImagenes`, los 6 handlers de export de xlsx vía `errorExport`, y cualquier otro feedback efímero); (3) recién ahí poder centralizar el feedback de error de `cargarChunk`. Hasta entonces, el patrón vigente es el inline (§4.8).
 
 ---
 
-*Última actualización: 2026-09-29 — deuda #13 de §9: la regla `set-state-in-effect` ya está activa también en el front de gestión (lint falla en `main`); postura unificada pendiente.*
+*Última actualización: 2026-09-29 — auditoría de la documentación: §1 sin `esDomingo`; §6.1 con los 13 universales (`LoadingState`/`Toast` como propios del panel); deudas #1, #6 y #11 de §9 resueltas; #13 remite a `estado_actual.md` para el estado de lint.*
+
+*2026-09-29 — deuda #13 de §9: la regla `set-state-in-effect` ya está activa también en el front de gestión (lint falla en `main`); postura unificada pendiente.*
 
 *2026-06-10 — §4.8 nueva (Toasts / feedback efímero): documenta el patrón inline render-state vigente y la dirección futura a Toast flotante global; deuda #16 de §9 abierta para la migración.*
 

@@ -1,40 +1,33 @@
 # Ruta del proyecto - Sistema de Gestion de Barberia
 
-Mapa de rutas del repositorio actualizado al 2026-06-19.
+Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29.
 
-Este documento lista las carpetas y archivos principales del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP.
+Este documento lista las carpetas y archivos del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP. Para mantenerlo, regenerar los arboles desde `git ls-files` en vez de parchearlos a mano.
 
 ## Exclusiones
 
-No se listan rutas generadas o locales:
-
-- `node_modules/`
-- `.git/`
-- `dist/`
-- `build/`
-- `.next/`
-- `coverage/`
-- archivos `.env`
+Solo se listan archivos versionados. No aparecen rutas generadas o locales: `node_modules/`, `dist/`, `build/`, archivos `.env`, `.claude/` y `backend/scripts/` (scripts one-off, gitignored; no confundir con `backend/src/scripts/`).
 
 ## Vista general
 
 ```txt
 sistema-gestion-barberia/
 |-- backend/            API Node.js + Express
-|-- frontend/           Panel operativo/admin React + Vite
-|-- frontend-barbero/   App del barbero React + Vite
-|-- frontend-turnero/   Turnero publico React + Vite
-|-- docs/               Documentacion tecnica y planes
-|-- README.md
+|-- frontend/           Panel de gestion: modo operativo + admin (React + Vite)
+|-- frontend-barbero/   App del barbero (React + Vite, base /barbero/)
+|-- frontend-turnero/   Turnero publico del cliente (React + Vite, base /turnos/)
+|-- frontend-landing/   Landing de marketing (React + Vite, barbermanager.app)
+|-- docs/               Documentacion tecnica
+|-- .gitignore
 |-- CLAUDE.md
-`-- .gitignore
+`-- README.md
 ```
 
 ## Documentacion
 
 ```txt
 docs/
-|-- SQL_Schema.md
+|-- auditoria_2026-07.md
 |-- convenciones_tecnicas.md
 |-- decisiones_acceso_barberos.md
 |-- decisiones_horario_atencion.md
@@ -49,19 +42,24 @@ docs/
 |-- performance_frontends.md
 |-- postmortem_golive_turnero.md
 |-- ruta_proyecto.md
-`-- sistema_de_disenio.md
+|-- sistema_de_disenio.md
+`-- SQL_Schema.md
 ```
 
 ## Backend
 
 ```txt
 backend/
-|-- package.json
+|-- .env.example
+|-- .gitignore
 |-- package-lock.json
+|-- package.json
 `-- src/
     |-- index.js
     |-- config/
     |   |-- db.js
+    |   |-- jwt.js
+    |   |-- supabase-ca.crt
     |   `-- supabase.js
     |-- controllers/
     |   |-- adminOperativo.js
@@ -94,6 +92,8 @@ backend/
     |   `-- recordatorios.js
     |-- middlewares/
     |   |-- authMiddleware.js
+    |   |-- plataformaAuthMiddleware.js
+    |   |-- rateLimitMiddleware.js
     |   |-- requiereRolMiddleware.js
     |   `-- tenantMiddleware.js
     |-- routes/
@@ -127,6 +127,7 @@ backend/
     |   |-- turnosOperativo.js
     |   `-- ventas.js
     |-- scripts/
+    |   |-- backfillCacheControl.js
     |   |-- crearTenant.js
     |   |-- generarHashOperativo.js
     |   |-- hashearPinAdmin.js
@@ -135,6 +136,7 @@ backend/
     |   |-- probarRecordatorioMail.js
     |   `-- probarRecordatorios.js
     |-- services/
+    |   |-- barberosService.js
     |   |-- cortesService.js
     |   |-- disponibilidadService.js
     |   |-- feriadosService.js
@@ -147,14 +149,18 @@ backend/
     |   |-- suspensionesService.js
     |   |-- turnosService.js
     |   `-- mail/
-    |       |-- mailProvider.js
     |       |-- mailer.js
+    |       |-- mailProvider.js
     |       `-- resendProvider.js
     `-- utils/
         |-- constantes.js
         |-- pin.js
         |-- sanitizarLogs.js
-        `-- suscripcion.js
+        |-- stock.js
+        |-- suscripcion.js
+        |-- validarNumero.js
+        |-- validarPago.js
+        `-- validarTexto.js
 ```
 
 ### Rutas HTTP del backend
@@ -194,17 +200,19 @@ backend/src/routes/
 `-- adminOperativo.js         credenciales operativas
 ```
 
-## Frontend principal
+Los roles que exige cada ruta estan en `estado_actual.md` -> Estado funcional -> Sistema.
+
+## Frontend de gestion
 
 ```txt
 frontend/
-|-- README.md
-|-- package.json
-|-- package-lock.json
-|-- vite.config.js
-|-- vercel.json
+|-- .gitignore
 |-- eslint.config.js
 |-- index.html
+|-- package-lock.json
+|-- package.json
+|-- vercel.json
+|-- vite.config.js
 |-- public/
 |   |-- favicon.png
 |   |-- manifest.json
@@ -234,6 +242,7 @@ frontend/
     |       |-- Field.jsx
     |       |-- FondoLocal.jsx
     |       |-- IconoAlerta.jsx
+    |       |-- index.js
     |       |-- InputTiempo.jsx
     |       |-- LoadingState.jsx
     |       |-- LogoCirculo.jsx
@@ -252,43 +261,43 @@ frontend/
     |       |-- Toast.jsx
     |       |-- ToggleEstado.jsx
     |       |-- TogglePill.jsx
-    |       |-- TopBar.jsx
-    |       `-- index.js
+    |       `-- TopBar.jsx
     |-- screens/
     |   |-- MainScreen.jsx
     |   |-- PantallaLoginAdmin.jsx
     |   |-- PantallaLoginOperativo.jsx
-    |   |-- flows/
-    |   |   |-- FlujoCorte.jsx
-    |   |   |-- FlujoGasto.jsx
-    |   |   |-- FlujoVenta.jsx
-    |   |   `-- wizard.jsx
-    |   `-- admin/
-    |       |-- PanelAdmin.jsx
-    |       `-- sections/
-    |           |-- SeccionBalances.jsx
-    |           |-- SeccionCaja.jsx
-    |           |-- SeccionGastos.jsx
-    |           |-- SeccionGestion.jsx
-    |           |-- SeccionInicio.jsx
-    |           |-- SeccionPlanillas.jsx
-    |           |-- SeccionTurnero.jsx
-    |           |-- SeccionVentas.jsx
-    |           `-- gestion/
-    |               |-- BloqueFeriados.jsx
-    |               |-- BloqueHorarioAtencion.jsx
-    |               |-- BloqueImagenes.jsx
-    |               |-- TabBarberos.jsx
-    |               |-- TabNegocio.jsx
-    |               |-- TabProductos.jsx
-    |               |-- TabSeguridad.jsx
-    |               |-- TabServicios.jsx
-    |               `-- TabTurnero.jsx
+    |   |-- admin/
+    |   |   |-- PanelAdmin.jsx
+    |   |   `-- sections/
+    |   |       |-- SeccionBalances.jsx
+    |   |       |-- SeccionCaja.jsx
+    |   |       |-- SeccionGastos.jsx
+    |   |       |-- SeccionGestion.jsx
+    |   |       |-- SeccionInicio.jsx
+    |   |       |-- SeccionPlanillas.jsx
+    |   |       |-- SeccionTurnero.jsx
+    |   |       |-- SeccionVentas.jsx
+    |   |       `-- gestion/
+    |   |           |-- BloqueFeriados.jsx
+    |   |           |-- BloqueHorarioAtencion.jsx
+    |   |           |-- BloqueImagenes.jsx
+    |   |           |-- TabBarberos.jsx
+    |   |           |-- TabNegocio.jsx
+    |   |           |-- TabProductos.jsx
+    |   |           |-- TabSeguridad.jsx
+    |   |           |-- TabServicios.jsx
+    |   |           `-- TabTurnero.jsx
+    |   `-- flows/
+    |       |-- FlujoCorte.jsx
+    |       |-- FlujoGasto.jsx
+    |       |-- FlujoVenta.jsx
+    |       `-- wizard.jsx
     |-- services/
     |   `-- api.js
     |-- theme/
     |   `-- tokens.js
     `-- utils/
+        |-- cargarChunk.js
         |-- fecha.js
         `-- formato.js
 ```
@@ -297,12 +306,13 @@ frontend/
 
 ```txt
 frontend-barbero/
-|-- README.md
-|-- package.json
-|-- package-lock.json
-|-- vite.config.js
+|-- .gitignore
 |-- eslint.config.js
 |-- index.html
+|-- package-lock.json
+|-- package.json
+|-- vercel.json
+|-- vite.config.js
 |-- public/
 |   |-- favicon.png
 |   `-- icons.svg
@@ -327,6 +337,7 @@ frontend-barbero/
     |       |-- ConfirmDialog.jsx
     |       |-- EmptyState.jsx
     |       |-- Field.jsx
+    |       |-- index.js
     |       |-- KPI.jsx
     |       |-- PageContainer.jsx
     |       |-- ScreenHeader.jsx
@@ -336,8 +347,7 @@ frontend-barbero/
     |       |-- StickyFooter.jsx
     |       |-- SummaryRow.jsx
     |       |-- TopBar.jsx
-    |       |-- TurnoListItem.jsx
-    |       `-- index.js
+    |       `-- TurnoListItem.jsx
     |-- services/
     |   `-- api.js
     |-- theme/
@@ -351,12 +361,13 @@ frontend-barbero/
 
 ```txt
 frontend-turnero/
-|-- README.md
-|-- package.json
-|-- package-lock.json
-|-- vite.config.js
+|-- .gitignore
 |-- eslint.config.js
 |-- index.html
+|-- package-lock.json
+|-- package.json
+|-- vercel.json
+|-- vite.config.js
 |-- public/
 |   |-- favicon.png
 |   `-- icons.svg
@@ -378,6 +389,7 @@ frontend-turnero/
     |       |-- EmptyState.jsx
     |       |-- Field.jsx
     |       |-- IconoAlerta.jsx
+    |       |-- index.js
     |       |-- MiniCalendario.jsx
     |       |-- PageContainer.jsx
     |       |-- Progress.jsx
@@ -387,8 +399,7 @@ frontend-turnero/
     |       |-- StatusPill.jsx
     |       |-- StickyFooter.jsx
     |       |-- SummaryRow.jsx
-    |       |-- TopBar.jsx
-    |       `-- index.js
+    |       `-- TopBar.jsx
     |-- screens/
     |   |-- Confirmacion.jsx
     |   |-- DatosCliente.jsx
@@ -407,12 +418,77 @@ frontend-turnero/
         `-- formato.js
 ```
 
-## Archivos raiz
+## Frontend landing
 
 ```txt
-README.md
-CLAUDE.md
-.gitignore
+frontend-landing/
+|-- .gitignore
+|-- eslint.config.js
+|-- index.html
+|-- package-lock.json
+|-- package.json
+|-- vite.config.js
+|-- public/
+|   |-- favicon.png
+|   |-- logo.png
+|   |-- screenshots/
+|   |   `-- seccionPlanillas.jpg
+|   `-- videos/
+|       |-- barbero.jpg
+|       |-- barbero.mp4
+|       |-- corte.jpg
+|       |-- corte.mp4
+|       |-- turnero.jpg
+|       `-- turnero.mp4
+`-- src/
+    |-- App.jsx
+    |-- index.css
+    |-- main.jsx
+    |-- components/
+    |   |-- landing/
+    |   |   |-- Container.jsx
+    |   |   |-- CTAGroup.jsx
+    |   |   |-- Eyebrow.jsx
+    |   |   |-- FaqItem.jsx
+    |   |   |-- FeatureCard.jsx
+    |   |   |-- FeatureList.jsx
+    |   |   |-- FlowDiagram.jsx
+    |   |   |-- FreeMonthBadge.jsx
+    |   |   |-- LandingFooter.jsx
+    |   |   |-- LandingNav.jsx
+    |   |   |-- MetricCard.jsx
+    |   |   |-- MobileCtaBar.jsx
+    |   |   |-- PainCard.jsx
+    |   |   |-- Reveal.jsx
+    |   |   |-- ScreenshotFrame.jsx
+    |   |   |-- Section.jsx
+    |   |   |-- SplitFeature.jsx
+    |   |   |-- TestimonialCard.jsx
+    |   |   `-- VideoEmbed.jsx
+    |   |-- sections/
+    |   |   |-- AppBarberos.jsx
+    |   |   |-- ComoFunciona.jsx
+    |   |   |-- Comparacion.jsx
+    |   |   |-- CtaFinal.jsx
+    |   |   |-- FAQ.jsx
+    |   |   |-- Hero.jsx
+    |   |   |-- Plan.jsx
+    |   |   |-- Problema.jsx
+    |   |   |-- SistemaGestion.jsx
+    |   |   |-- Testimonios.jsx
+    |   |   `-- Turnero.jsx
+    |   `-- ui/
+    |       |-- Button.jsx
+    |       `-- Card.jsx
+    |-- config/
+    |   `-- landing.js
+    |-- hooks/
+    |   `-- useMediaQuery.js
+    |-- theme/
+    |   `-- tokens.js
+    `-- utils/
+        |-- contacto.js
+        `-- formato.js
 ```
 
 ## Notas rapidas
@@ -421,11 +497,13 @@ CLAUDE.md
 - Rutas HTTP: `backend/src/routes/`
 - Controllers: `backend/src/controllers/`
 - Servicios reutilizables: `backend/src/services/`
+- Cron de recordatorios: `backend/src/jobs/recordatorios.js`
 - Panel principal: `frontend/src/App.jsx`
 - Panel admin: `frontend/src/screens/admin/PanelAdmin.jsx`
 - Turnero publico: `frontend-turnero/src/App.jsx`
 - App barbero: `frontend-barbero/src/App.jsx`
+- Landing: `frontend-landing/src/App.jsx`
 
---- 
+---
 
 Fin del documento.

@@ -73,6 +73,7 @@ Excepción: podés leer los archivos `.md` de contexto general (los que están e
 | `/docs/decisiones_login_operativo.md` | **Archivado.** Núcleo de decisiones del login del modo operativo (credenciales en `tenant`, token operativo 30d, rationale de seguridad). En producción. |
 | `/docs/decisiones_acceso_barberos.md` | **Archivado.** Núcleo de decisiones del acceso de barberos al panel por PIN (unicidad de PIN, login unificado, vista reducida). En producción. |
 | `/docs/decisiones_redisenio_panel_gestion.md` | **Archivado.** Decisiones de diseño (D1–D16) del rediseño del panel de gestión al sistema "Luz". El sistema vigente vive en `sistema_de_disenio.md`. |
+| `/docs/auditoria_2026-07.md` | **Archivado.** Auditoría de seguridad y calidad (7 fases) y su remediación: 0 hallazgos abiertos. Conserva el rationale de las deudas diferidas (TOCTOU, idempotency keys, etc.), que `estado_actual.md` referencia. |
 | `/docs/postmortem_golive_turnero.md` | **Archivado.** Post-mortem del go-live del turnero: las 3 causas del crash-loop (env vars de Supabase, shared vars de Railway, Node 18 sin WebSocket). El SQL operativo (recordatorio opt-in, emails de barberos) está en `onboarding.md`. |
 
 
@@ -94,7 +95,7 @@ Si no hubo cambios de código en el chat, no hay commit. Igual va el resumen.
 
 ## 5. Comandos comunes
 
-*(Pendientes de definir — agregar acá los comandos que más uso: levantar backend local, levantar frontend, apuntar al tenant demo, etc.)*
+Los comandos de desarrollo local (levantar backend y cada frontend, con sus puertos) están en el [`README.md`](./README.md) de la raíz.
 
 ---
 

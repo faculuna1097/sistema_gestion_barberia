@@ -25,6 +25,7 @@ encadenadas** (cada una tapaba a la siguiente). Servicio restaurado tras pinear 
 **Lección de fondo (deuda en `estado_actual.md`):** que una credencial o incompatibilidad del
 **Storage de imágenes** voltee **todo el backend** al bootear es un acoplamiento indebido. Fix
 correcto: init **perezoso** del cliente de Supabase + que un fallo de Storage devuelva un 500
-puntual en vez de matar el proceso. Ver `backend/src/config/supabase.js`.
+puntual en vez de matar el proceso. Ver `backend/src/config/supabase.js`. *(Resuelto: auditoría
+2026-07, hallazgo 4.4 — `getSupabase()` perezoso.)*
 
 *— Fin del documento —*
