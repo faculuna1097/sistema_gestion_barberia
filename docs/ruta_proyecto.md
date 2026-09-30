@@ -1,6 +1,6 @@
 # Ruta del proyecto - Sistema de Gestion de Barberia
 
-Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29.
+Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y actualizado el 2026-09-30 (movimientos extra).
 
 Este documento lista las carpetas y archivos del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP. Para mantenerlo, regenerar los arboles desde `git ls-files` en vez de parchearlos a mano.
 
@@ -34,6 +34,7 @@ docs/
 |-- decisiones_login_operativo.md
 |-- decisiones_mail_entregabilidad.md
 |-- decisiones_mail_recordatorio.md
+|-- decisiones_movimientos_extra.md
 |-- decisiones_redisenio_panel_gestion.md
 |-- decisiones_turnero.md
 |-- deudas_tecnicas_frontend.md
@@ -82,6 +83,7 @@ backend/
     |   |-- planilla.js
     |   |-- productos.js
     |   |-- servicios.js
+    |   |-- socios.js
     |   |-- suspensiones.js
     |   |-- turnero.js
     |   |-- turneroConfig.js
@@ -105,6 +107,7 @@ backend/
     |   |-- adminOperativo.js
     |   |-- adminProductos.js
     |   |-- adminServicios.js
+    |   |-- adminSocios.js
     |   |-- adminTurneroConfig.js
     |   |-- authBarbero.js
     |   |-- authOperativo.js
@@ -145,6 +148,7 @@ backend/
     |   |-- horariosService.js
     |   |-- planillaService.js
     |   |-- recordatoriosService.js
+    |   |-- sociosService.js
     |   |-- storageService.js
     |   |-- suspensionesService.js
     |   |-- turnosService.js
@@ -154,10 +158,12 @@ backend/
     |       `-- resendProvider.js
     `-- utils/
         |-- constantes.js
+        |-- movimientos.js
         |-- pin.js
         |-- sanitizarLogs.js
         |-- stock.js
         |-- suscripcion.js
+        |-- validarFecha.js
         |-- validarNumero.js
         |-- validarPago.js
         `-- validarTexto.js
@@ -197,6 +203,7 @@ backend/src/routes/
 |-- adminHorarioAtencion.js   horario semanal del tenant
 |-- adminFeriados.js          feriados del tenant
 |-- adminImagenes.js          imagenes del negocio
+|-- adminSocios.js            socios (duenos) del negocio
 `-- adminOperativo.js         credenciales operativas
 ```
 
@@ -299,7 +306,8 @@ frontend/
     `-- utils/
         |-- cargarChunk.js
         |-- fecha.js
-        `-- formato.js
+        |-- formato.js
+        `-- movimientos.js
 ```
 
 ## Frontend barbero

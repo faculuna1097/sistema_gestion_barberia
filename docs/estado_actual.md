@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-Última actualización: 2026-09-29 (auditoría de la documentación). **Go-live del turnero mergeado a `main` y en producción** (`kingsaistudio.barbermanager.app`): turnero del cliente, app del barbero, acceso de barberos al panel, horario de atención + feriados y rediseño del panel de gestión, todo live. Backend fijado a **Node 22** en Railway (supabase-js v2 necesita WebSocket nativo — ver post-mortem en [`postmortem_golive_turnero.md`](./postmortem_golive_turnero.md)). El mailer de Resend está activo tanto en el web service como en el cron. **(2026-06-15) Landing de marketing en producción** en `barbermanager.app` (apex canónico, `www` redirige). Quedan solo residuales operativos/time-gated de entregabilidad de mail — ver Pendientes.
+Última actualización: 2026-09-30 (movimientos extra: aportes, retiros y otros ingresos; RLS en todas las tablas). **Go-live del turnero mergeado a `main` y en producción** (`kingsaistudio.barbermanager.app`): turnero del cliente, app del barbero, acceso de barberos al panel, horario de atención + feriados y rediseño del panel de gestión, todo live. Backend fijado a **Node 22** en Railway (supabase-js v2 necesita WebSocket nativo — ver post-mortem en [`postmortem_golive_turnero.md`](./postmortem_golive_turnero.md)). El mailer de Resend está activo tanto en el web service como en el cron. **(2026-06-15) Landing de marketing en producción** en `barbermanager.app` (apex canónico, `www` redirige). Quedan solo residuales operativos/time-gated de entregabilidad de mail — ver Pendientes.
 
 Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convenciones_tecnicas.md).
 
@@ -180,12 +180,12 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
 
 ### Panel admin
 - Inicio ✅
-- Caja — Tab 1 (Movimientos del día) ✅
+- Caja — Tab 1 (Movimientos del día) ✅, con el alta de aportes, retiros y otros ingresos (el "+" de la fila de pestañas)
 - Caja — Tabs 2 y 3 (Cierre + Historial) ⏸️ postergado, ver pendientes
 - Planillas ✅
 - Gastos ✅
 - Ventas ✅
-- Balances ✅
+- Balances ✅: "Ganancia del mes" con los otros ingresos; aportes y retiros aparte, cerrando en "Queda en el negocio". Decisiones en [`decisiones_movimientos_extra.md`](./decisiones_movimientos_extra.md).
 - Turnero (vista global de turnos del día) ✅
 - Gestión (6 tabs) ✅
 
@@ -207,7 +207,7 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
   | `/api/ventas`, `/api/gastos` (rol por método, dentro del router) | `POST`: operativo, admin · `GET /mensual`, `PUT`, `DELETE`: admin |
   | `/api/caja`, `/api/inicio`, `/api/balances` | admin |
   | `/api/admin/{turnos, horarios, suspensiones, clientes, planilla}` | admin, barbero (el controller scopea por barbero) |
-  | `/api/admin/{barberos, servicios, productos, negocio, turnero/config, operativo, feriados, imagenes}` | admin |
+  | `/api/admin/{barberos, servicios, productos, negocio, turnero/config, operativo, feriados, imagenes, socios}` | admin |
   | `/api/admin/horario-atencion` (dentro del router) | `GET`: admin, barbero · `PUT`: admin |
   | `POST /api/plataforma/cache/invalidate` | fuera de tenant/JWT; header `X-Platform-Key` |
 
@@ -220,6 +220,7 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
 
 ## Pendientes
 
+- **Movimientos extra — migrar los retiros históricos de Kingsai.** Hasta el 2026-09-30 los retiros de los dueños se cargaban como gasto (categoría "Otros"). Hay que pasarlos a `movimiento_extra` con su dueño, con la feature ya deployada: filas elegidas a mano, `INSERT … SELECT` + `DELETE` en una sola ejecución del SQL editor, con respaldo en CSV. Hasta entonces, la ganancia de esos meses sigue descontando los retiros. Detalle en [`decisiones_movimientos_extra.md`](./decisiones_movimientos_extra.md).
 - **Landing — `og:image` faltante.** El `index.html` de `/frontend-landing`
   referencia `https://barbermanager.app/og-image.png`, pero ese archivo no existe
   en `public/`. Sin esa
@@ -268,6 +269,23 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
 
 - **(2026-09-29) — `barbero.activo` y `barbero.created_at` aceptan NULL** (y también `activo` en `servicio`, `producto` y `categoria_gasto`: `boolean DEFAULT true` sin `NOT NULL`). Un NULL no entra ni en `activo = true` ni en `activo = false`, y la regla de qué barberos listan Planillas y Balances usa las dos columnas de `barbero`. Verificado 2026-09-29: no hay NULLs en `barbero` (las otras tablas no se revisaron). Fix: `ALTER TABLE ... ALTER COLUMN ... SET NOT NULL`, que va directo a producción (hay una sola DB). Baja prioridad.
 
+Deudas detectadas durante la feature de movimientos extra (2026-09-30), verificadas contra los docs:
+
+- **`req.body` sin fallback (Express 5).** 27 handlers en 15 controllers desestructuran `req.body` directo; en Express 5 `req.body` es `undefined` si no llega body, así que un POST o PUT sin body tira `TypeError` y responde 500 en vez de 400. Arreglo para todos: un middleware después de `express.json()` que haga `req.body ??= {}`. Hoy solo `crearMovimientoExtra` y el endpoint de plataforma usan `req.body || {}`.
+- **Borrar con un `id` que no es UUID da 500** en todas las ramas de `caja.eliminarMovimiento`: el `22P02` solo se maneja en los services.
+- **`getCategorias` no filtra `activo`** (`controllers/categorias.js`), aunque su comentario dice "activas": desactivar una categoría no la saca del iPad. Ojo al arreglarlo: `categoria_gasto.activo` acepta NULL (ver la deuda de columnas nullables).
+- **Gasto sin categoría:** Gastos usa `LEFT JOIN categoria_gasto` ("Sin categoría"), pero Balances mensual y Caja usan `JOIN` y lo pierden, y el histórico no hace join: los totales pueden no coincidir. Hoy el alta exige categoría, así que solo afecta filas viejas o cargadas a mano.
+- **`gasto.categoria_id` no se valida contra el tenant** en `createGasto` / `updateGasto` (la auditoría cubrió barbero, servicio y producto). Riesgo bajo: hace falta conocer el UUID de una categoría ajena.
+- **La comisión no queda guardada en el corte:** Balances y Planillas usan el % actual del barbero, así que cambiar el % de un barbero cambia los balances de meses pasados.
+- **El borrado de gastos y ventas está implementado dos veces** (`gastos.js` / `ventas.js` y `caja.eliminarMovimiento`); la auditoría ya tuvo que arreglar el mismo bug en los dos lados.
+- **`REGEX_FECHA` copiada en 5 controllers** (feriados, turnero, turnosOperativo, turnos, planilla). El código nuevo usa `esFechaISO` de `utils/validarFecha.js`; falta migrar esas copias.
+- **Montos como texto:** varias respuestas viejas devuelven el `NUMERIC` de pg como string (`createGasto`, los listados de gastos y ventas); las de Caja, movimientos extra y Balances devuelven número. La regla quedó en `convenciones_tecnicas.md` §4; falta migrar las viejas.
+- **`getBalanceHistorico` acepta `cantidad` negativa:** `?cantidad=-5` deja la ventana en el futuro y responde `[]` en vez de 400 o del valor por defecto.
+- **Redondeo de comisiones distinto:** el mensual redondea la comisión por barbero y después suma; el histórico suma sin redondear. Pueden diferir en centavos.
+- **Categorías de gasto por tenant, cargadas a mano.** `crearTenant.js` no crea categorías: se cargan por SQL (ver `onboarding.md`, Paso 2c), así que cada tenant tiene su propia copia de la misma lista base. Idea del usuario: una lista base común más categorías propias por cliente. El schema ya tiene `tenant_id` nullable y `es_default`, pero `getCategorias` solo trae las del tenant. Recomendación (2026-09-30): sembrar la lista base en cada tenant al crearlo (desde `crearTenant.js`) en vez de filas globales con `tenant_id` NULL. Las filas globales obligan a casos especiales en cada consulta, y no dejan que un cliente renombre u oculte una categoría base sin otro mecanismo. Sembrar por tenant mantiene las consultas en `tenant_id = $1` y permite un FK compuesto que cierra la deuda de `categoria_id`. Decidir en su propio chat.
+- Menores: `gastos.js` sin JSDoc; `getGastosMensual` corre sus dos consultas en serie; el comentario del bloque "RUTAS DEL BACKOFFICE" de `index.js` dice "admin + barbero", pero la mayoría de sus rutas son solo admin.
+- **Propias de movimientos extra:** sin edición (corregir es borrar y volver a cargar) y sin pantalla de alta de socios (se cargan por SQL, ver `onboarding.md`).
+
 ### Deudas vivas del frontend del panel (consolidadas del registro archivado)
 
 El rediseño del panel de gestión cerró todas sus deudas accionables; quedan estas, **todas de prioridad baja**. Historia completa de cómo se resolvió cada deuda del rediseño en [`deudas_tecnicas_frontend.md`](./deudas_tecnicas_frontend.md) (archivado). Se conservan los números `#NN` originales para las referencias cruzadas en commits y docs.
@@ -283,4 +301,13 @@ El rediseño del panel de gestión cerró todas sus deudas accionables; quedan e
 - **(nueva, 2026-09-29) — `npm run lint` del front de gestión falla en `main`** (7 errores + 1 warning, ninguno funcional; los fronts de barbero y turnero pasan limpio): 2 falsos positivos `'Icon' is defined but never used` (`PanelAdmin.jsx:114` y `KpiCard` en `SeccionBalances.jsx`: el parámetro renombrado `icon: Icon` solo se usa como JSX y `no-unused-vars` no lo ve; se resolvería sumando `argsIgnorePattern: '^[A-Z_]'` a la regla, igual que el `varsIgnorePattern` que ya tiene), 3 de `react-hooks/set-state-in-effect` (`App.jsx:231` y `:269`, `FondoLocal.jsx:106`; ver deuda #13 de [`sistema_de_disenio.md`](./sistema_de_disenio.md)), `token` asignado y sin usar (`App.jsx:136`), `react-refresh/only-export-components` (`screens/flows/wizard.jsx:356`) y el warning `exhaustive-deps` del efecto del histórico en `SeccionBalances`. El landing también falla, con 2 errores de `set-state-in-effect` (`components/landing/Reveal.jsx:26`, `hooks/useMediaQuery.js:32`). Tarea sugerida: "lint en verde en los cuatro fronts".
 - **(pendiente de producto) — ¿`ScreenHeader` en todo el admin?** Se sacaron de Gestión, Turnero, Planillas, Balances y Caja (decisión D15 en [`decisiones_redisenio_panel_gestion.md`](./decisiones_redisenio_panel_gestion.md)); quedan solo en `SeccionVentas` y `SeccionGastos` (verificado 2026-09-29). Falta decidir si se sacan también de ahí o se conservan.
 - **(nueva, 2026-09-29) — `SeccionInicio.jsx:423` usa `.then(r => r.json())`** dentro del `Promise.all`, contra convenciones §3 (nunca `.then()`). Pasarlo a `async/await` la próxima vez que se toque Inicio.
+- **(nueva, 2026-09-30) — El "vs anterior" del histórico ignora el botón de comisiones.** El porcentaje viene del backend calculado con comisiones; en "Sin comisiones" la columna Ganancia cambia y el porcentaje no.
+- **(nueva, 2026-09-30) — Caja esconde todo mientras carga o si falla.** El estado de carga y el de error reemplazan también el selector de día y los totales: si un día falla, solo queda "Reintentar" y no se puede cambiar de día sin salir de la sección.
+- **(nueva, 2026-09-30) — Errores sin mensaje del servidor se muestran crudos** en los modales de Caja, Gastos y Ventas: "Failed to fetch" si no hay red, o el texto del parser si la respuesta no es JSON (un 502 del proxy). Arreglar los tres juntos con un mensaje genérico en español.
+- **(nueva, 2026-09-30) — Etiqueta neutra sobre fila con hover.** "Aporte" y "Retiro" (Caja) y `BadgeCategoria` (Gastos) usan `surfaceAlt`, igual que el hover de la fila, y pierden el fondo al pasar el mouse.
+- **(nueva, 2026-09-30) — Tamaños escritos a mano:** `fontSize: 13` en los bloques de error de Gastos y Ventas; 15 y 12 en `Field`. Además, `Field` no acepta `maxLength`.
+- **(nueva, 2026-09-30) — Formas de pago en tres lugares** (`formatPago`, `OPCIONES_FORMA_PAGO` y `BadgeFormaPago`); el Excel de Gastos usa un ternario propio.
+- **(nueva, 2026-09-30) — `BotonFormaPago` (SeccionTurnero) y `GrupoOpciones` (SeccionCaja) son el mismo patrón**, con su rótulo `labelEyebrow` duplicado. Al unificarlos, promover `GrupoOpciones` a `/ui` (§7.1 del sistema de diseño).
+- **(nueva, 2026-09-30) — Menores:** comentario viejo en `SeccionGastos.jsx` ("las categorías traen id numérico"; son UUID); encabezado de `SelectorDia.jsx` con la ruta vieja.
+
 *— Fin del documento —*

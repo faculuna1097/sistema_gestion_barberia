@@ -107,6 +107,11 @@ Para comparar como string, convertir siempre con:
 new Date(fecha).toISOString().slice(0, 10)
 ```
 
+### Fechas que llegan del cliente
+Las fechas de calendario (`'YYYY-MM-DD'`) que llegan por query o body se validan con
+`esFechaISO` de `utils/validarFecha.js` (formato + fecha real: `2026-02-31` es inválida), y "hoy"
+en hora argentina sale de `hoyISO()`. No redeclarar un regex de fecha en cada controller.
+
 ### Normalización canónica vs presentación
 Son dos capas distintas; no mezclarlas:
 
@@ -116,7 +121,8 @@ Son dos capas distintas; no mezclarlas:
   que debería conocer que un `TIME` llega `'HH:MM:SS'` o que un `DATE` llega como
   objeto `Date`. La API expone el valor ya canónico (`'HH:MM'`, `'YYYY-MM-DD'`),
   nunca el crudo de pg → ningún cliente (gestión, barbero, turnero, scripts)
-  reimplementa el recorte.
+  reimplementa el recorte. Lo mismo con los montos: pg entrega los `NUMERIC` como
+  string y la API los expone como número.
 - **Presentación** — convertir lo canónico a algo para un humano (`"9 de junio,
   14:30hs"`). Depende de locale/contexto → va en el **borde de render del
   frontend**, lo más tarde posible. Nunca guardar un string de presentación
@@ -153,6 +159,7 @@ aritmética de fechas (sumar minutos, comparar rangos).
 - Inserts secuenciales con cleanup manual si algo falla.
 - `db.js` exporta como named exports `query` (lo que usa todo el código), `cerrarPool` (cierre limpio del cron), `testConnection` e `iniciarKeepAlive` (arranque). El pool crudo no se exporta.
 - Pool con `max: 3`, `ssl: { ca: <config/supabase-ca.crt>, rejectUnauthorized: true }` y `statement_timeout` de 5s por conexión.
+- Toda tabla nueva se crea con RLS activado y sin policies (`ALTER TABLE ... ENABLE ROW LEVEL SECURITY`): cierra la API automática de Supabase, y el backend entra igual porque se conecta como dueño de las tablas. El SQL editor no lo activa solo. Ver `estado_actual.md` → RLS.
 - `query()` reintenta **una vez** ante errores de conexión (no de SQL). Las escrituras no idempotentes que no deben reejecutarse (ajustes relativos de stock, `stock_actual = stock_actual ± $1`) van con `query(sql, params, { reintentar: false })` — ver `utils/stock.js`.
 
 ---

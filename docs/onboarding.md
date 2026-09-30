@@ -23,9 +23,10 @@ Antes de arrancar, tener:
 1. El cliente acuerda contratar el sistema y te pasa: nombre del negocio, subdominio deseado, PIN inicial y las credenciales operativas que quiere.
 2. Corrés `crearTenant.js` para dar de alta el tenant en la DB.
 3. Corrés `generarHashOperativo.js` para cargarle las credenciales del modo operativo.
-4. Verificás que el subdominio responde, el login operativo entra y el PIN funciona.
-5. Le entregás al cliente la URL, las credenciales operativas y el PIN. Le mandás el manual por separado.
-6. (Opcional, cuando llegue) Cargás el logo y las imágenes del cliente desde el panel (Gestión → Negocio).
+4. Cargás los dueños del negocio (tabla `socio`) y las categorías de gasto, por SQL.
+5. Verificás que el subdominio responde, el login operativo entra y el PIN funciona.
+6. Le entregás al cliente la URL, las credenciales operativas y el PIN. Le mandás el manual por separado.
+7. (Opcional, cuando llegue) Cargás el logo y las imágenes del cliente desde el panel (Gestión → Negocio).
 
 ---
 
@@ -86,6 +87,52 @@ desde el panel (Gestión → Seguridad).
 
 ---
 
+## Paso 2b — Dueños del negocio (socios)
+
+Los aportes y retiros que se cargan en Caja van contra un dueño elegido de una lista (tabla
+`socio`). Sin dueños cargados, el formulario no deja guardarlos. No hay pantalla de alta: se
+cargan por SQL (Supabase → SQL Editor).
+
+```sql
+-- Dueño que no corta (o cuyos barberos todavía no están cargados):
+INSERT INTO socio (tenant_id, nombre) VALUES ('<tenant_uuid>', '<Nombre>');
+
+-- Dueños que también cortan, vinculados a su fila de barbero:
+INSERT INTO socio (tenant_id, nombre, barbero_id)
+SELECT tenant_id, nombre, id FROM barbero
+WHERE tenant_id = '<tenant_uuid>' AND id IN ('<barbero_id>', '<barbero_id>');
+
+-- Vincular después un dueño a su barbero:
+UPDATE socio SET barbero_id = '<barbero_id>'
+WHERE id = '<socio_id>' AND tenant_id = '<tenant_uuid>';
+```
+
+- El vínculo con `barbero` es opcional y hoy no lo lee ningún código.
+- Un dueño no se borra: se desactiva con `UPDATE socio SET activo = false WHERE id = '<socio_id>'`.
+  Sus movimientos lo siguen referenciando.
+- Comisión 100% no implica ser dueño: un barbero que alquila el sillón también la tiene.
+
+---
+
+## Paso 2c — Categorías de gasto
+
+`crearTenant.js` no crea categorías de gasto, y sin ellas el flujo de gasto del iPad queda
+vacío. Hoy se cargan a mano por SQL, con la misma lista base que usa Kingsai:
+
+```sql
+INSERT INTO categoria_gasto (tenant_id, nombre) VALUES
+  ('<tenant_uuid>', 'Alquiler'),
+  ('<tenant_uuid>', 'Impuestos'),
+  ('<tenant_uuid>', 'Otros'),
+  ('<tenant_uuid>', 'Productos'),
+  ('<tenant_uuid>', 'Servicios');
+```
+
+La categoría "Productos" dispara en el iPad el recordatorio de actualizar el stock. Hay una
+deuda abierta para automatizar esta carga (ver `estado_actual.md`).
+
+---
+
 ## Paso 3 — Verificación
 
 Tres checks rápidos antes de entregar el sistema al cliente.
@@ -128,6 +175,8 @@ Pasarle al cliente:
 
 - [ ] Tenant creado en DB con UUID conocido.
 - [ ] Credenciales operativas cargadas y probadas.
+- [ ] Dueños cargados en `socio` (vinculados a su barbero si cortan).
+- [ ] Categorías de gasto cargadas.
 - [ ] Subdominio responde correctamente.
 - [ ] PIN entra al panel admin.
 - [ ] Suscripción vigente hasta fin del mes actual (default automático del script).
