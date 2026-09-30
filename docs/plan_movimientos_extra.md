@@ -258,7 +258,7 @@ consultas, y el filtro "Solo Barberos" de Caja.
 | 1 | Base de datos: tablas `socio` y `movimiento_extra`, carga de socios, `SQL_Schema.md` | orquestador | ✅ 2026-09-30 |
 | 2 | Backend de Caja y socios | chat aparte | ✅ 2026-09-30 |
 | 3 | Frontend de Caja | chat aparte | 🔲 |
-| 4 | Backend de Balances | chat aparte | 🔲 |
+| 4 | Backend de Balances | chat aparte | ✅ 2026-09-30 |
 | 5 | Frontend de Balances | chat aparte | 🔲 |
 | 6 | Migración de los retiros históricos | orquestador | 🔲 |
 | 7 | Documentación final | orquestador | 🔲 |
@@ -285,16 +285,45 @@ Decisiones de UI del paso 3 (cerradas con el usuario el 2026-09-30):
 - **Al guardar:** se cierra el modal y la lista se recarga; si la fecha era otro día, Caja
   salta a ese día.
 
-Decisiones de UI que se cierran antes de escribir el prompt del paso 5: texto de la nota,
-totales por dueño, columna del histórico en pantalla o solo en el Excel.
+Decisiones de UI del paso 5 (cerradas con el usuario el 2026-09-30):
+- **Otros ingresos:** una fila con el total en "Ingresos por barbero", igual que "Productos
+  vendidos". Solo si hay.
+- **Bloque "Aportes y retiros":** debajo de "Egresos por categoría", una fila por dueño (Dueño,
+  Aportes, Retiros). Solo si el mes tiene aportes o retiros. El detalle por movimiento queda en
+  Caja y en el Excel.
+- **Cierre del bloque:** fila destacada "Queda en el negocio" (misma línea índigo de los totales).
+- **Nota al pie del bloque:** "Los aportes y retiros no son ingresos ni gastos del negocio: no
+  cambian el Balance neto."
+- **Colores:** aportes en negro, retiros en rojo; "Queda en el negocio" en índigo si es positivo
+  y en rojo si es negativo, como Balance neto.
+- **Tarjetas de arriba:** las tres de hoy; "Ingresos del negocio" incluye los otros ingresos.
+- **Histórico en pantalla:** sin columnas nuevas; en el Excel se suman Otros ingresos, Aportes y
+  Retiros. Se revisa después si hace falta una columna en pantalla.
+- **Excel del mes:** fila "Otros ingresos" en la hoja de ingresos; hoja "Aportes y retiros" con
+  cada movimiento (fecha, dueño, tipo, descripción, forma de pago, monto) y el cierre; hoja con
+  el detalle de los otros ingresos.
+- **Pendiente:** si "Balance neto" pasa a llamarse "Ganancia del mes" en pantalla y en el Excel,
+  para que no se confunda con "Queda en el negocio".
 
-Datos de prueba que quedaron en demo tras el paso 2 (sirven para probar los pasos 3 a 5; se
-pueden borrar desde Caja cuando exista el botón):
+Datos de prueba que quedaron en demo tras los pasos 2 y 4 (sirven para probar los pasos 3 y 5;
+se pueden borrar desde Caja):
 - 2026-09-30: aporte de $50.000 (Dueño Demo 1), otro ingreso de $5.000 ("Alquiler de sillón"),
   otro ingreso de $1 con una descripción de 200 caracteres, y retiro de $777 (Dueño Demo 1, con
   la descripción "Retiro migrado (test)", como quedarían los retiros migrados).
 - 2026-09-29: otro ingreso de $1.500,50.
+- 2026-08-31: otro ingreso de $2.000 ("Borde de mes (test paso 4)"), aporte de $3.000 por
+  Mercado Pago (Dueño Demo 2) y retiro de $500 (Dueño Demo 1).
+- 2026-02-15: retiro de $1.234 (Dueño Demo 2). Es un mes que solo tiene este movimiento.
 - Un socio inactivo, "Socio Inactivo (test)": no debe aparecer en ningún selector.
+
+Con esos datos, Balances de demo da: septiembre, otros ingresos 6.501,50, aportes 50.000,
+retiros 777; agosto, otros ingresos 2.000, aportes 3.000, retiros 500; febrero, retiros 1.234.
+
+A tener en cuenta en el paso 5:
+- En `capital.detalle`, `descripcion` viene `null` en los aportes y retiros cargados desde Caja
+  y con texto en los migrados.
+- Un mes que solo tiene aportes o retiros aparece en el histórico con `balance_neto` 0, y el mes
+  siguiente queda con `variacion_vs_anterior` en `null`.
 
 ### Cómo se ejecuta
 Un chat orquesta (diseño, prompts, revisión del diff) y cada paso de código se ejecuta en un
@@ -356,6 +385,10 @@ Se anotan:
   números. Falta una regla única.
 - Comentario viejo en `index.js`: el bloque "RUTAS DEL BACKOFFICE" dice "admin + barbero", pero
   la mayoría de sus rutas son solo admin.
+- `getBalanceHistorico` acepta `cantidad` negativa: `?cantidad=-5` deja la ventana en el futuro y
+  responde `[]` en vez de 400 o del valor por defecto.
+- El mensual redondea la comisión por barbero y después suma; el histórico suma sin redondear.
+  Pueden diferir en centavos.
 - Menores: `gastos.js` sin JSDoc; comentario viejo en `SeccionGastos.jsx` ("id numérico");
   encabezado de `SelectorDia.jsx` con la ruta vieja; consultas secuenciales en
   `getGastosMensual` (las de `getMovimientosDia` se paralelizan en el paso 2).
