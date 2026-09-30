@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-Última actualización: 2026-09-29 (auditoría de la documentación). **Go-live del turnero mergeado a `main` y en producción** (`kingsai.barbermanager.app`): turnero del cliente, app del barbero, acceso de barberos al panel, horario de atención + feriados y rediseño del panel de gestión, todo live. Backend fijado a **Node 22** en Railway (supabase-js v2 necesita WebSocket nativo — ver post-mortem en [`postmortem_golive_turnero.md`](./postmortem_golive_turnero.md)). El mailer de Resend está activo tanto en el web service como en el cron. **(2026-06-15) Landing de marketing en producción** en `barbermanager.app` (apex canónico, `www` redirige). Quedan solo residuales operativos/time-gated de entregabilidad de mail — ver Pendientes.
+Última actualización: 2026-09-29 (auditoría de la documentación). **Go-live del turnero mergeado a `main` y en producción** (`kingsaistudio.barbermanager.app`): turnero del cliente, app del barbero, acceso de barberos al panel, horario de atención + feriados y rediseño del panel de gestión, todo live. Backend fijado a **Node 22** en Railway (supabase-js v2 necesita WebSocket nativo — ver post-mortem en [`postmortem_golive_turnero.md`](./postmortem_golive_turnero.md)). El mailer de Resend está activo tanto en el web service como en el cron. **(2026-06-15) Landing de marketing en producción** en `barbermanager.app` (apex canónico, `www` redirige). Quedan solo residuales operativos/time-gated de entregabilidad de mail — ver Pendientes.
 
 Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convenciones_tecnicas.md).
 
@@ -46,7 +46,7 @@ necesita `vercel.json`**. Configuración de dominio:
 - El apex estaba libre (404 `DEPLOYMENT_NOT_FOUND`) antes de este deploy. Asignar
   `www` explícitamente al proyecto del landing **sobrescribe el wildcard
   `*.barbermanager.app`** del proyecto de gestión (un dominio exacto le gana al
-  wildcard en Vercel) — `kingsai` y los demás subdominios de tenant siguen
+  wildcard en Vercel) — `kingsaistudio` y los demás subdominios de tenant siguen
   resolviendo al panel, sin regresión.
 - El `og:url` del `index.html` ya apunta al apex, así que coincide con el canónico.
 - **Pendiente:** falta el `og:image` (ver Pendientes).
@@ -105,10 +105,10 @@ Para abrir el turnero o la app del barbero desde un celular en la misma WiFi:
 
 | Tenant | Tipo | Subdominio | UUID |
 |---|---|---|---|
-| Kingsai Studio | Producción | `kingsai` | `a1b2c3d4-0000-0000-0000-000000000001` |
+| Kingsai Studio | Producción | `kingsaistudio` | `a1b2c3d4-0000-0000-0000-000000000001` |
 | Demo | Desarrollo | `demo` | `aaaaaaaa-0000-0000-0000-000000000002` |
 
-URL de producción: `kingsai.barbermanager.app` ✅ funcionando.
+URL de producción: `kingsaistudio.barbermanager.app` ✅ funcionando.
 
 ### Setup de dev local para la integración con Google Calendar
 
@@ -138,6 +138,15 @@ La convención (header `X-Tenant-Subdomain`, fallback `TENANT_ID`, extracción d
 - **Caché del middleware:** las entradas resueltas se guardan en memoria como `{ tenant_id, operativo_token_version, admin_token_version }` por subdominio (query única `resolverPorSubdominio`, reusada por todo). Se invalidan al reiniciar **o** vía invalidación explícita: automática al rotar la password operativa (`adminOperativo`) o el PIN admin (`gestion.cambiarPinAdmin`) — ambos llaman `invalidar(subdominio)` en proceso → preserva la revocación inmediata de esos tokens — y manual con el endpoint de plataforma `POST /api/plataforma/cache/invalidate` (para baja / cambio de subdominio editados a mano en la DB). Ver `onboarding.md` → "Baja de un tenant".
 
 La estructura del panel admin y el scroll global son convenciones: ver [`convenciones_tecnicas.md`](./convenciones_tecnicas.md) §8.
+
+### RLS activado en todas las tablas (2026-09-30)
+Las 18 tablas de `public` tienen Row Level Security activado y **sin policies**. Supabase expone `public` por su API automática (Data API) y los roles `anon` / `authenticated` tienen todos los permisos sobre las tablas; con RLS activado y sin policies, por esa API no se lee ni se escribe nada. El backend no se ve afectado: se conecta por el pooler como `postgres`, que es el dueño de las tablas, y al dueño RLS no le aplica. Ningún frontend usa Supabase (solo el backend, para Storage, con la `service_role`).
+
+- Hasta esa fecha solo lo tenían `tenant_feriado`, `tenant_horario_atencion` y `tenant_imagen`; las otras 13 estaban abiertas para quien tuviera la anon key (que no está publicada en ningún front).
+- **Regla:** toda tabla nueva se crea con `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`. El SQL editor no lo activa solo; el editor de tablas de Supabase sí.
+- **Gotcha:** si el backend (o el cron) se conectara con un rol que no es el dueño, RLS no da error: devuelve cero filas y la app se ve vacía. Se revierte con `ALTER TABLE ... DISABLE ROW LEVEL SECURITY`.
+- **Mejora opcional pendiente:** apagar la Data API desde la configuración del proyecto de Supabase, ya que la app no la usa. RLS no cubre `TRUNCATE`, pero esa API no lo expone.
+- Verificado en producción el mismo día: el panel de gestión funciona igual con RLS activado en todas las tablas.
 
 ---
 
@@ -204,7 +213,7 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
 
   Frontend gestión: `PantallaLoginOperativo` precede al MainScreen cuando no hay `token_operativo` en localStorage; `apiFetchOperativo` (`services/api.js`) inyecta el token operativo y ante 401 redirige al login. El tab `Seguridad` de SeccionGestion cambia PIN admin, usuario operativo y password operativa.
 - Bloqueo/aviso por suscripción ✅ mergeado a `main`.
-- Multi-tenancy por subdominio ✅ en producción (`kingsai.barbermanager.app`).
+- Multi-tenancy por subdominio ✅ en producción (`kingsaistudio.barbermanager.app`).
 - Migración de schema `refactor/schema-corte` ✅ mergeado a `main`.
 
 ---
