@@ -56,10 +56,10 @@ const agruparCapitalPorSocio = (detalle) => {
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
  * @returns {JSON} {
  *   mes, serviciosPorBarbero, productos, gastos, propinas,
- *   otrosIngresos: { total, detalle: [{ id, fecha, descripcion, monto, forma_pago }] },
+ *   otrosIngresos: { total, detalle: [{ id, fecha, descripcion, monto, forma_pago, sentido }] },
  *   capital: {
  *     aportes, retiros,
- *     detalle:  [{ id, fecha, tipo, socio_id, socio_nombre, descripcion, monto, forma_pago }],
+ *     detalle:  [{ id, fecha, tipo, socio_id, socio_nombre, descripcion, monto, forma_pago, sentido }],
  *     porSocio: [{ socio_id, nombre, aportes, retiros }]
  *   },
  *   resumen: { ingresos_brutos, total_comisiones, ingresos_netos, egresos, balance_neto,
@@ -189,17 +189,21 @@ export const getBalanceMensual = async (req, res) => {
     const totalesExtra = resumirMovimientosExtra(
       resExtras.rows.map((m) => ({ tipo: m.tipo, total: m.monto }))
     );
+    // Cada fila lleva `sentido` resuelto, igual que las de Caja: el front no
+    // decide por nombre de tipo si un movimiento suma o resta.
     const detalleOtrosIngresos = [];
     const detalleCapital       = [];
     for (const m of resExtras.rows) {
       const monto = Number(m.monto);
-      if (TIPOS_MOVIMIENTO_EXTRA[m.tipo].afectaResultado) {
+      const { afectaResultado, sentido } = TIPOS_MOVIMIENTO_EXTRA[m.tipo];
+      if (afectaResultado) {
         detalleOtrosIngresos.push({
           id:          m.id,
           fecha:       m.fecha,
           descripcion: m.descripcion,
           monto,
           forma_pago:  m.forma_pago,
+          sentido,
         });
       } else {
         detalleCapital.push({
@@ -211,6 +215,7 @@ export const getBalanceMensual = async (req, res) => {
           descripcion:  m.descripcion,
           monto,
           forma_pago:   m.forma_pago,
+          sentido,
         });
       }
     }

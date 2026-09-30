@@ -204,10 +204,10 @@ Acepta los tres tipos nuevos. Borra por `id`, `tenant_id` y `tipo`. 404 si no bo
 Campos nuevos (los existentes no cambian de forma):
 
 ```
-otrosIngresos: { total, detalle: [{ id, fecha, descripcion, monto, forma_pago }] }
+otrosIngresos: { total, detalle: [{ id, fecha, descripcion, monto, forma_pago, sentido }] }
 capital: {
   aportes, retiros,
-  detalle:  [{ id, fecha, tipo, socio_id, socio_nombre, descripcion, monto, forma_pago }],
+  detalle:  [{ id, fecha, tipo, socio_id, socio_nombre, descripcion, monto, forma_pago, sentido }],
   porSocio: [{ socio_id, nombre, aportes, retiros }]
 }
 resumen: { …los de hoy, otros_ingresos, aportes, retiros }
@@ -259,7 +259,7 @@ consultas, y el filtro "Solo Barberos" de Caja.
 | 2 | Backend de Caja y socios | chat aparte | ✅ 2026-09-30 |
 | 3 | Frontend de Caja | chat aparte | ✅ 2026-09-30 (probado en el navegador) |
 | 4 | Backend de Balances | chat aparte | ✅ 2026-09-30 |
-| 5 | Frontend de Balances | chat aparte | 🔲 |
+| 5 | Frontend de Balances | chat aparte | ✅ 2026-09-30 (probado en el navegador) |
 | 6 | Migración de los retiros históricos | orquestador | 🔲 |
 | 7 | Documentación final | orquestador | 🔲 |
 
@@ -323,6 +323,11 @@ se pueden borrar desde Caja):
 
 Con esos datos, Balances de demo da: septiembre, otros ingresos 6.501,50, aportes 50.000,
 retiros 777; agosto, otros ingresos 2.000, aportes 3.000, retiros 500; febrero, retiros 1.234.
+
+Las pruebas del paso 3 en el navegador sumaron en septiembre un otro ingreso de $450.000 por
+Mercado Pago el 2026-09-29 ("Venta Espejo"), además de cortes y gastos. Al revisar el paso 5,
+septiembre daba: otros ingresos 456.501,50; ganancia del mes (con comisiones) 411.001,50;
+aportes 50.000; retiros 777; queda en el negocio 460.224,50.
 
 A tener en cuenta en el paso 5:
 - En `capital.detalle`, `descripcion` viene `null` en los aportes y retiros cargados desde Caja
