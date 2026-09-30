@@ -47,7 +47,7 @@ turnos del día con nombres de clientes. Aceptable como MVP con un solo tenant (
 
 ## Trabajo futuro (sigue abierto)
 
-- **Rate limiting** de logins (admin, barbero, operativo) — registrado como deuda en `estado_actual.md`.
+- **Rate limiting** de logins (admin, barbero, operativo) — registrado como deuda en `estado_actual.md`. *(Resuelto: auditoría 2026-07, hallazgo 1.2.)*
 - **Multiusuario operativo** (uno por empleado, con trazabilidad) → tabla `usuario_operativo`.
 
 *— Fin del documento (archivado: núcleo de decisiones) —*

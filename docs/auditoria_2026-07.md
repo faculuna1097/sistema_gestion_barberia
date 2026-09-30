@@ -1,5 +1,9 @@
 # Auditoría del proyecto — 2026-07
 
+> Documento **archivado** (cerrado: 0 hallazgos abiertos). Es el registro histórico de la
+> auditoría y su remediación. Las deudas vigentes viven en [`estado_actual.md`](estado_actual.md);
+> las **deudas diferidas** de esta auditoría siguen documentadas acá (§Deudas diferidas).
+
 Repaso sistemático del proyecto buscando puntos débiles, mejoras y riesgos de
 seguridad. Auditoría de **solo lectura** (no se modificó código durante el
 relevamiento). Cada hallazgo lleva severidad: **crítico / alto / medio / bajo**.

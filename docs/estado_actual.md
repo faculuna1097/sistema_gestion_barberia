@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-Última actualización: 2026-06-15. **Go-live del turnero mergeado a `main` y en producción** (`kingsai.barbermanager.app`): turnero del cliente, app del barbero, acceso de barberos al panel, horario de atención + feriados y rediseño del panel de gestión, todo live. Backend fijado a **Node 22** en Railway (supabase-js v2 necesita WebSocket nativo — ver post-mortem en [`postmortem_golive_turnero.md`](./postmortem_golive_turnero.md)). El mailer de Resend está activo tanto en el web service como en el cron. **(2026-06-15) Landing de marketing en producción** en `barbermanager.app` (apex canónico, `www` redirige). Quedan solo residuales operativos/time-gated de entregabilidad de mail — ver Pendientes.
+Última actualización: 2026-09-29 (auditoría de la documentación). **Go-live del turnero mergeado a `main` y en producción** (`kingsai.barbermanager.app`): turnero del cliente, app del barbero, acceso de barberos al panel, horario de atención + feriados y rediseño del panel de gestión, todo live. Backend fijado a **Node 22** en Railway (supabase-js v2 necesita WebSocket nativo — ver post-mortem en [`postmortem_golive_turnero.md`](./postmortem_golive_turnero.md)). El mailer de Resend está activo tanto en el web service como en el cron. **(2026-06-15) Landing de marketing en producción** en `barbermanager.app` (apex canónico, `www` redirige). Quedan solo residuales operativos/time-gated de entregabilidad de mail — ver Pendientes.
 
 Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convenciones_tecnicas.md).
 
@@ -8,10 +8,10 @@ Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convencio
 
 ## Stack
 
-- **Frontend:** React + Vite, inline styles + módulo `theme` (design tokens), fuente Geist, acento indigo. Los tres fronts (gestión, turnero, barbero) migrados al sistema de diseño "Luz" (ver `docs/sistema_de_disenio.md`). El verde `#1a7a4a` + DM Sans del scaffold original quedaron deprecados con el rediseño.
+- **Frontend:** React + Vite, inline styles + módulo `theme` (design tokens), fuente Geist, acento indigo. Los cuatro fronts (gestión, turnero, barbero, landing) usan el sistema de diseño "Luz" (ver `docs/sistema_de_disenio.md`). El verde `#1a7a4a` + DM Sans del scaffold original quedaron deprecados con el rediseño.
 - **Backend:** Node.js + Express, ES Modules (`import/export`).
 - **DB:** PostgreSQL via Supabase Session Pooler.
-- **Auth:** bcrypt + JWT. Token admin en memoria (`useState` en `App.jsx`). Token operativo en `localStorage` con clave `token_operativo` (sobrevive al reload del iPad). Token barbero **en memoria** (módulo `api.js` de `frontend-barbero`, `let authToken`) — no persiste en `localStorage`, así que un reload obliga a re-loguear por PIN. Único token en `localStorage`: el operativo.
+- **Auth:** bcrypt + JWT. Token del panel (admin o barbero) en memoria (`let authToken` en `frontend/src/services/api.js`; `App.jsx` lo setea con `setAuthToken`). Token operativo en `localStorage` con clave `token_operativo` (sobrevive al reload del iPad). Token barbero **en memoria** (módulo `api.js` de `frontend-barbero`, `let authToken`) — no persiste en `localStorage`, así que un reload obliga a re-loguear por PIN. Único token en `localStorage`: el operativo.
 
 ---
 
@@ -21,7 +21,7 @@ Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convencio
 - URL: `https://sistemagestionbarberia-production.up.railway.app`
 - Root Directory: `/backend`
 - Start command: `node src/index.js`
-- Variables de entorno: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `NODE_ENV=production`, `PORT=3000`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_EMAIL`, `RESEND_API_KEY`, `MAIL_FROM`. **`PLATFORM_ADMIN_KEY`** (opcional) habilita el endpoint de plataforma `POST /api/plataforma/cache/invalidate`; **sin setear por ahora a propósito** → el endpoint responde 503 (fail-safe). Setearla recién al usar el endpoint en prod (dispara autodeploy; hacerlo en momento de poco tráfico).
+- Variables de entorno: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `NODE_ENV=production`, `PORT=3000`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_EMAIL`, `RESEND_API_KEY`, `MAIL_FROM`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (Storage de imágenes, `config/supabase.js`). **`PLATFORM_ADMIN_KEY`** (opcional) habilita el endpoint de plataforma `POST /api/plataforma/cache/invalidate`; **sin setear por ahora a propósito** → el endpoint responde 503 (fail-safe). Setearla recién al usar el endpoint en prod (dispara autodeploy; hacerlo en momento de poco tráfico).
 - **Dos servicios Railway:** el **web service** (esta API) y un **servicio cron** de recordatorios (`node src/jobs/recordatorios.js`), ambos deployando de `main`. `RESEND_API_KEY` + `MAIL_FROM` están como **shared variables** referenciadas en los dos, así que el mailer de Resend está activo en ambos.
 - `TENANT_ID` eliminado de Railway — ya no se usa en producción.
 - Las cuatro `GOOGLE_*` corresponden a la cuenta central `turnos.barbermanager@gmail.com` (organizador de eventos del turnero), consumidas por `services/googleCalendar.js`. El refresh token es estable (app publicada en Google Cloud, no expira por inactividad).
@@ -88,14 +88,14 @@ producción esa rama no aplica y el CORS sigue tan estricto como antes.
 Para abrir el turnero o la app del barbero desde un celular en la misma WiFi:
 
 1. **`vite.config.js` de cada frontend** tiene `server: { host: true, port: N }`
-   — `5173` turnero, `5174` barbero. El `host: true` expone el dev server a la
+   — `5173` gestión, `5174` barbero, `5175` turnero, `5176` landing. El `host: true` expone el dev server a la
    red local; los puertos fijos hacen las URLs predecibles.
 2. **`VITE_API_URL`** debe apuntar a la IP de red local de la PC (no a
    `localhost`, que para el celular sería el celular mismo). Se setea en el
    `.env` de cada frontend (gitignored): `VITE_API_URL=http://<IP-PC>:3001`.
    La IP se obtiene con `ipconfig`; es DHCP, puede cambiar.
 3. Backend corriendo localmente (`node src/index.js`), `NODE_ENV=development`.
-4. En el celular: `http://<IP-PC>:5173/turnos/` y `http://<IP-PC>:5174/barbero/`
+4. En el celular: `http://<IP-PC>:5175/turnos/` y `http://<IP-PC>:5174/barbero/`
    (con la barra final del `base` path, sin ella da 404).
 5. Firewall de Windows debe permitir el acceso de Node a la red privada.
 
@@ -130,47 +130,14 @@ generaría invitaciones de Google que ellos no entenderían.
 
 ---
 
-## Schema del turnero (ejecutado; backend y frontends en producción)
-
-El schema del turnero se ejecutó en Supabase el 2026-05-11 (decisiones en
-`decisiones_turnero.md`). Resumen de cambios:
-
-### Tablas nuevas
-- **`cliente`** — `id, tenant_id, nombre, telefono?, email?, created_at`. UNIQUE `(tenant_id, email)` (permite múltiples NULL).
-- **`barbero_horario`** — `id, tenant_id, barbero_id, dia_semana (0–6), hora_inicio, hora_fin`. Múltiples bloques por día permitidos (para pausas).
-- **`barbero_suspension`** — `id, tenant_id, barbero_id, desde, hasta, motivo?, origen ('admin'|'barbero'|'whatsapp'), created_at`. Índice `(barbero_id, desde, hasta)`.
-- **`turno`** — schema completo con `inicio/fin`, `estado`, `origen_creacion`, `token_gestion` UNIQUE, `google_event_id?`, trazabilidad de cancelación. **EXCLUDE GIST `turno_no_solapamiento`** validado funcionalmente (PostgreSQL bloquea dos turnos solapados del mismo barbero a nivel DB, código `23P01` → el backend lo mapeará a HTTP 409). 3 índices parciales sobre `estado='reservado'`. Extensión `btree_gist` habilitada.
-
-### Modificaciones a tablas existentes
-- **`tenant.duracion_slot_minutos`** integer NOT NULL default 30. Kingsai y Demo heredaron 30. Si Kingsai necesita slots de otra duración, se ajusta a mano más adelante.
-- **`servicio.cantidad_slots`** integer NOT NULL default 1. Los 7 servicios existentes quedaron con 1 slot (= 30 min). Idem ajuste manual si hace falta.
-- **`barbero.email`** text nullable. Los 8 barberos quedaron con `email = NULL`; sus turnos no se sincronizarán con Google Calendar hasta que se les cargue.
-- **`corte.turno_id`** uuid nullable, FK a `turno`. Índice `UNIQUE corte_turno_unico WHERE turno_id IS NOT NULL` (previene doble vínculo). Los 606 cortes históricos quedaron con `turno_id = NULL` (walk-ins).
-
-### Postergado del plan original
-- **`gasto.created_at`** — el DROP del Paso 1.9 se postergó. Cuando se retome, decidir qué hacer con esa columna (eliminarla, renombrarla, o asignarle un propósito definido).
-
----
-
 ## Decisiones arquitecturales
 
 ### Multi-tenancy por subdominio
-- `tenantMiddleware.js` lee el header `X-Tenant-Subdomain`, resuelve `tenant_id` desde DB con caché en memoria, e inyecta `req.tenant_id`.
-- Fallback a `TENANT_ID` en `.env` para desarrollo local (localhost no tiene subdominio).
-- El frontend extrae el subdominio de `window.location.hostname` al arrancar: solo lo considera subdominio si el hostname termina en `.barbermanager.app`; cualquier otro host (localhost, una IP de red local) devuelve `undefined` y cae al fallback de `TENANT_ID`. La heurística anterior ("≥3 partes separadas por punto") tomaba un octeto de una IP como subdominio.
-- `publicHeaders` en `api.js` incluye `X-Tenant-Subdomain` en todas las funciones públicas.
-- `apiFetch` incluye `X-Tenant-Subdomain` en todas las llamadas del panel admin.
-- **Caché del middleware:** las entradas resueltas se guardan en memoria como `{ tenant_id, operativo_token_version }` por subdominio (query única `resolverPorSubdominio`, reusada por todo). Se invalidan al reiniciar **o** vía invalidación explícita: automática al rotar la password operativa (`adminOperativo` llama `invalidar(subdominio)` en proceso → preserva la revocación inmediata de tokens operativos) y manual con el endpoint de plataforma `POST /api/plataforma/cache/invalidate` (para baja / cambio de subdominio editados a mano en la DB). Ver `onboarding.md` → "Baja de un tenant". (commit `0fa087a`)
+La convención (header `X-Tenant-Subdomain`, fallback `TENANT_ID`, extracción del subdominio en el front) está en [`convenciones_tecnicas.md`](./convenciones_tecnicas.md) §5. El schema vive en [`SQL_Schema.md`](./SQL_Schema.md).
 
-### Estructura del panel admin
-- Cada `SeccionXxx` es autónoma y carga sus datos en `useEffect([])`.
-- `PanelAdmin` solo maneja layout. No hay precarga global del panel.
-- `App.jsx`: `precargarDatos` como `useCallback`, se llama al arrancar y al cerrar sesión admin (para que los flujos reflejen cambios de Gestión sin reiniciar la app).
+- **Caché del middleware:** las entradas resueltas se guardan en memoria como `{ tenant_id, operativo_token_version, admin_token_version }` por subdominio (query única `resolverPorSubdominio`, reusada por todo). Se invalidan al reiniciar **o** vía invalidación explícita: automática al rotar la password operativa (`adminOperativo`) o el PIN admin (`gestion.cambiarPinAdmin`) — ambos llaman `invalidar(subdominio)` en proceso → preserva la revocación inmediata de esos tokens — y manual con el endpoint de plataforma `POST /api/plataforma/cache/invalidate` (para baja / cambio de subdominio editados a mano en la DB). Ver `onboarding.md` → "Baja de un tenant".
 
-### Scroll global del panel
-- `contenidoWrapper` (flex column) contiene `BannerAviso` + `main`.
-- El `main` tiene `flex: 1` y `overflow: auto`.
-- Las secciones no tienen overflow propio.
+La estructura del panel admin y el scroll global son convenciones: ver [`convenciones_tecnicas.md`](./convenciones_tecnicas.md) §8.
 
 ---
 
@@ -182,9 +149,10 @@ El schema del turnero se ejecutó en Supabase el 2026-05-11 (decisiones en
 - Columna en tabla `tenant`: `suscripcion_vigente_hasta date`.
 - Para renovar un cliente: `UPDATE tenant SET suscripcion_vigente_hasta = 'YYYY-MM-DD'`.
 
-### Comportamiento por días desde el vencimiento
-- **Días 1–4:** sin aviso, sin bloqueo.
-- **Días 5–10:** banner amarillo en el panel si `suscripcion_vigente_hasta < primer día del mes`.
+### Comportamiento según el día del mes actual
+Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anterior al primer día del mes actual). Lógica en `backend/src/utils/suscripcion.js`.
+- **Días 1–4 del mes:** sin aviso, sin bloqueo.
+- **Días 5–10:** banner amarillo en el panel.
 - **Día 11+:** bloqueo total del panel (HTTP 402). Modo operativo (cortes/ventas/gastos) **no se bloquea**.
 
 ### Implementación
@@ -213,7 +181,28 @@ El schema del turnero se ejecutó en Supabase el 2026-05-11 (decisiones en
 - Gestión (6 tabs) ✅
 
 ### Sistema
-- Auth: bcrypt + JWT ✅ — `usuario_registro` eliminado del schema. `verificarToken` valida `tenant_id` cruzado (cierra agujero multi-tenant) e inyecta `req.rol` + `req.barbero_id`. JWT admin: `{ tenant_id, rol: 'admin' }` con 30d (login via `POST /api/auth/panel/login`, login unificado que resuelve rol admin/barbero según el PIN). JWT barbero: `{ tenant_id, rol: 'barbero', barbero_id }` con 30d (login via `POST /api/auth/barbero/login`). JWT operativo: `{ tenant_id, rol: 'operativo', tv }` con 30d (login via `POST /api/auth/operativo/login`); `tv` es la `operativo_token_version` del tenant al momento de firmar — `adminOperativo` la incrementa al cambiar la password operativa, y `verificarToken` rechaza con 401 cualquier token operativo cuyo `tv` no coincida con el actual (invalidación inmediata sin esperar a la expiración natural). Middleware `requiereRol(...roles)` aplicado en `/api/admin/barberos`, `/api/admin/servicios`, `/api/admin/productos`, `/api/admin/negocio`, `/api/admin/turnero/config` y `/api/admin/operativo`. Desde 2026-09-29 también `/api/caja`, `/api/inicio` y `/api/balances` llevan `requiereRol('admin')` en `index.js` (antes solo pedían token: un token de barbero u operativo podía leer el balance y borrar movimientos de caja; la auditoría 2026-07 verificó la autenticación de todas las rutas, no el rol de estas tres). Endpoints operativos (`/api/cortes`, `/api/turnos`, `POST /api/ventas`, `POST /api/gastos`) protegidos con `requiereRol('operativo', 'admin')`; `GET /mensual`, `PUT` y `DELETE` de ventas/gastos siguen requiriendo `requiereRol('admin')`. Frontend gestión: pantalla `PantallaLoginOperativo` precede al MainScreen cuando no hay `token_operativo` en localStorage; el helper `apiFetchOperativo` en `services/api.js` inyecta el token operativo y maneja 401 redirigiendo al login. Tab `Seguridad` en SeccionGestion permite cambiar PIN admin, usuario operativo y password operativa desde el panel (controllers `adminOperativo.js` con GET/PUT en `/api/admin/operativo/credenciales`).
+- Auth: bcrypt + JWT ✅. `verificarToken` (`middlewares/authMiddleware.js`) valida la firma (HS256, `config/jwt.js`), cruza el `tenant_id` del token contra el del subdominio (403 si difieren) e inyecta `req.rol` + `req.barbero_id`. Todos los JWT duran 30d y llevan `tv` (token version) para revocación inmediata:
+
+  | Rol | Login | Payload | Revocación (`tv` distinto → 401) |
+  |---|---|---|---|
+  | admin | `POST /api/auth/panel/login` (unificado: resuelve admin/barbero según el PIN) | `{ tenant_id, rol, tv }` | `tenant.admin_token_version`, se incrementa al cambiar el PIN admin |
+  | barbero | `POST /api/auth/panel/login` o `POST /api/auth/barbero/login` | `{ tenant_id, rol, barbero_id, tv }` | `barbero.token_version` (lo incrementa `editarBarbero`); además 401 si el barbero quedó `activo = false` |
+  | operativo | `POST /api/auth/operativo/login` | `{ tenant_id, rol, tv }` | `tenant.operativo_token_version`, se incrementa al cambiar la password operativa |
+
+  Roles por ruta (`requiereRol`, montado en `index.js` salvo donde se indica):
+
+  | Rutas | Roles |
+  |---|---|
+  | `/api/auth/*`, `/api/turnero/*`, `GET /api/negocio`, `GET /api/negocio/imagenes` | públicas (los logins con `limiterLogin`) |
+  | `/api/cortes`, `/api/turnos`, `/api/barberos`, `/api/servicios`, `/api/productos`, `/api/categorias` | operativo, admin |
+  | `/api/ventas`, `/api/gastos` (rol por método, dentro del router) | `POST`: operativo, admin · `GET /mensual`, `PUT`, `DELETE`: admin |
+  | `/api/caja`, `/api/inicio`, `/api/balances` | admin |
+  | `/api/admin/{turnos, horarios, suspensiones, clientes, planilla}` | admin, barbero (el controller scopea por barbero) |
+  | `/api/admin/{barberos, servicios, productos, negocio, turnero/config, operativo, feriados, imagenes}` | admin |
+  | `/api/admin/horario-atencion` (dentro del router) | `GET`: admin, barbero · `PUT`: admin |
+  | `POST /api/plataforma/cache/invalidate` | fuera de tenant/JWT; header `X-Platform-Key` |
+
+  Frontend gestión: `PantallaLoginOperativo` precede al MainScreen cuando no hay `token_operativo` en localStorage; `apiFetchOperativo` (`services/api.js`) inyecta el token operativo y ante 401 redirige al login. El tab `Seguridad` de SeccionGestion cambia PIN admin, usuario operativo y password operativa.
 - Bloqueo/aviso por suscripción ✅ mergeado a `main`.
 - Multi-tenancy por subdominio ✅ en producción (`kingsai.barbermanager.app`).
 - Migración de schema `refactor/schema-corte` ✅ mergeado a `main`.
@@ -224,7 +213,7 @@ El schema del turnero se ejecutó en Supabase el 2026-05-11 (decisiones en
 
 - **Landing — `og:image` faltante.** El `index.html` de `/frontend-landing`
   referencia `https://barbermanager.app/og-image.png`, pero ese archivo no existe
-  en `public/` (solo está `favicon.svg` y el screenshot de planillas). Sin esa
+  en `public/`. Sin esa
   imagen, el preview al compartir el link (WhatsApp, el canal de conversión) sale
   sin imagen. Resolver: sumar una imagen 1200×630 a `public/og-image.png`.
 - **Caja — Tabs 2 y 3 (Cierre de caja + Historial):** postergado. No hay plan escrito; si se retoma, branch sugerido `feature/cierre-caja` (implicaría `ALTER TABLE cierre_caja` con columnas de saldo inicial — `efectivo_inicial`, `mp_inicial`, etc.).
@@ -234,34 +223,33 @@ El schema del turnero se ejecutó en Supabase el 2026-05-11 (decisiones en
 - **Entregabilidad de mail (time-gated, no bloquea nada):** Fase 6 DMARC — endurecer de `p=none` a `quarantine` y luego `reject` tras 1–2 semanas de reportes 100% alineados; re-test de Outlook tras warmup (hoy los mails con link caen a Junk por reputación de dominio nuevo); seguir MXToolbox + Google Postmaster. Detalle histórico en [`decisiones_mail_entregabilidad.md`](./decisiones_mail_entregabilidad.md).
 - **Recordatorio de turno — activación en kingsai (opt-in):** prender `configuracion.recordatorio = { "activo": true }` en el tenant cuando se decida. Ojo: los barberos de kingsai tienen `email = NULL` (no sincroniza Calendar), pero los clientes sí reciben el recordatorio → flip deliberado. (Opcional) índice parcial sobre `turno` y correr el lote 2×/día si crece el volumen. Detalle en [`decisiones_mail_recordatorio.md`](./decisiones_mail_recordatorio.md).
 - **Validar en prod las optimizaciones de backend de performance** (ya implementadas, impacto a confirmar): keep-alive del pool (`db.js` + `index.js`) y `getTenant` paralelizado. Medir en frío contra Railway. Detalle en [`performance_frontends.md`](./performance_frontends.md).
-- **Auditoría de la documentación (2026-09-29).** Pasada dedicada, en un chat propio, para contrastar los docs contra el código y el árbol real. Hallazgos ya conocidos para arrancar:
-  - `ruta_proyecto.md` ("actualizado al 2026-06-19") no lista ~50 archivos: en backend `config/jwt.js`, `config/supabase-ca.crt`, `middlewares/plataformaAuthMiddleware.js`, `middlewares/rateLimitMiddleware.js`, `scripts/backfillCacheControl.js`, `services/barberosService.js`, `utils/stock.js`, `utils/validarNumero.js`, `utils/validarPago.js` y `utils/validarTexto.js`; `docs/auditoria_2026-07.md`; `frontend/src/utils/cargarChunk.js`; y el front entero `frontend-landing/`.
-  - Este doc: la deuda "Lógica de subdominio y helpers de UI duplicados" nombra `fechas.js`/`formatos.js` en gestión (hoy son `fecha.js`/`formato.js`), y la deuda "Sin rate limiting en los endpoints de login" ya está resuelta (auditoría 2026-07, 1.2: `limiterLogin` en los tres logins, más `limiterGlobal`).
-  - `convenciones_tecnicas.md` §6 dice `ssl: { rejectUnauthorized: false }`; desde la auditoría 4.3 es `rejectUnauthorized: true` con la CA de Supabase pineada (`config/supabase-ca.crt`).
-  - `CLAUDE.md`: el mapa de documentos no incluye `docs/auditoria_2026-07.md`.
 
 ---
 
 ## Deudas técnicas conocidas
 
-- **Columna `tenant.configuracion`:** se setea por default con `{"ciudad": "Buenos Aires", "moneda": "ARS"}` en `crearTenant.js` para mantener consistencia con los tenants existentes, pero falta verificar si efectivamente se usa en algún controller. Si no se usa, evaluar si conviene eliminarla o si es para uso futuro.
+- **Claves sin uso en `tenant.configuracion`:** la columna sí se usa (`recordatoriosService.js` lee `configuracion.recordatorio.activo`), pero las claves `ciudad` y `moneda` que `crearTenant.js` setea por default no las lee ningún código. Evaluar si se eliminan del default o si son para uso futuro.
+- **`crearTenant.js` no crea las credenciales operativas.** Un tenant recién creado no puede pasar `PantallaLoginOperativo` hasta que se corre `generarHashOperativo.js`, que tiene tenant/usuario/password como constantes a editar a mano (ver `onboarding.md` → Paso 2). Fix: que `crearTenant.js` reciba usuario/password operativos, o que el script tome argumentos.
+- **`gasto.created_at` redundante con `gasto.timestamp`:** el DROP que planeaba el schema del turnero (2026-05) se postergó. Cuando se retome, decidir si se elimina, se renombra o se le asigna un propósito.
 - **Evaluar separar credenciales del tenant a una tabla `tenant_credenciales` (1:1).** Hoy la tabla `tenant` mezcla datos públicos (nombre, contacto) con secretos: `pin_admin`, `operativo_usuario`, `operativo_password_hash`, `operativo_token_version`. Un `SELECT *` o un endpoint que devuelva el tenant arrastra esos secretos a cualquier consulta general — riesgo de fuga. La idea es mover esas 4 columnas a una tabla `tenant_credenciales` con FK 1:1, de modo que las queries públicas no las toquen nunca. No es por tamaño de la tabla (es normal) sino por higiene de seguridad. Refactor con impacto en backend (auth, middleware operativo): merece su propio branch/chat.
-- **Sin rate limiting en los endpoints de login** (`/api/auth/panel/login`, `/api/auth/barbero/login`, `/api/auth/operativo/login`). Nada limita los intentos → un ataque de fuerza bruta contra un PIN o usuario/password es posible. Aceptado para el MVP; sumar rate limiting (por IP y/o tenant) cuando crezca el número de tenants. Prioridad media.
 - **Duplicación parcial de endpoints `/api/barberos` y `/api/turnero/barberos`:** ambos devuelven `{id, nombre}` filtrados por tenant. El primero es operativo (JWT), el segundo público para el wizard del cliente y el selector pre-PIN de la app del barbero. La duplicación es aceptable porque cada uno sirve una audiencia distinta (autenticada vs anónima). Si en el futuro el endpoint público gana campos extra (foto, especialidad) que no quieran exponerse autenticadamente, la separación se justifica sola. `/api/servicios`, `/api/productos` y `/api/categorias` ya no tienen contraparte pública — quedaron limpios.
 - **Mailing del turnero — migrado a Resend (API HTTP vía `fetch`), dominio propio autenticado (SPF/DKIM/MX) y DMARC `p=none` publicado; en producción.** Capa de proveedor en `services/mail/`. Decisiones y rationale en [`decisiones_mail_entregabilidad.md`](./decisiones_mail_entregabilidad.md); residuales time-gated (endurecer DMARC, re-test Outlook) en Pendientes.
-- **`POST /api/turnero/turnos`, `/reprogramar` y `POST /api/admin/turnos` no validan que `inicio` caiga en un slot real.** Confían en `/api/turnero/disponibilidad` + el frontend para elegir solo slots válidos. El constraint EXCLUDE GIST protege contra solapamientos con otros turnos, pero un `inicio` fuera de bloque horario o sobre una suspensión se aceptaría si no choca con otro turno reservado. Blindar requeriría reejecutar el algoritmo en cada POST. Postergado.
+- **`POST /api/turnero/turnos`, `/reprogramar` y `POST /api/admin/turnos` no validan que `inicio` caiga en un slot real.** Sí validan el horario de atención del local y los feriados (`validarTurnoEnHorario` + `existeFeriado`), pero no el bloque horario del barbero, sus suspensiones ni la grilla de slots: para eso confían en `/api/turnero/disponibilidad` + el frontend. El constraint EXCLUDE GIST protege contra solapamientos con otros turnos, pero un `inicio` fuera del bloque del barbero o sobre una suspensión se aceptaría si no choca con otro turno reservado. Blindar requeriría reejecutar el algoritmo en cada POST. Postergado.
 - **(2026-06-11) — `POST /api/turnero/turnos` sin idempotency key — turno huérfano posible en el reintento de conexión (raro).** El helper `query()` (`config/db.js`) reintenta una vez ante errores de conexión (ver commit de esta fecha). En la ventana angosta en que un socket muere *después* de que la DB commitea el INSERT del turno pero *antes* de entregar el resultado, el reintento reejecuta el INSERT → choca con el constraint EXCLUDE GIST (`23P01`) → el cliente recibe 409 "slot ocupado" aunque su turno **sí** quedó creado (sin mail de confirmación ni evento de Calendar, porque el 409 corta antes del best-effort). **Integridad intacta** (el constraint impide el doble turno); es CX confuso, no corrupción. Pasa igual sin el reintento (el usuario reintentaría a mano y caería en el mismo 409), así que el reintento no lo empeora. **Fix pro:** idempotency key por intento de reserva (el front manda un id único, el back devuelve el mismo turno en vez de reintentar el INSERT). Bajo riesgo en prod (conexiones rápidas y estables, salto corto Railway↔Supabase — ver `performance_frontends.md`). Postergado.
 - **Upsert de cliente pisa `nombre/telefono`** con los últimos datos enviados. Aceptado para MVP, pantalla de unificación de clientes pendiente.
-- **Título del evento de Google Calendar** está hardcodeado como `${servicio.nombre} — ${cliente.nombre}` en `services/googleCalendar.js#armarCuerpoEvento`. Pedido cambiarlo a solo `cliente.nombre` en el chat aparte de reescritura de templates de mail.
+- **Título del evento de Google Calendar** está hardcodeado como `${cliente.nombre} — ${servicio.nombre}` en `services/googleCalendar.js#armarCuerpoEvento`. Pedido cambiarlo a solo `cliente.nombre` (pendiente).
 - **`adminOperativo.actualizarCredencialesOperativas` no chequea `rowCount`.** El UPDATE devuelve 204 incluso si el `tenant_id` no existe (en la práctica `tenantMiddleware` ya lo blinda, pero el endpoint sería más honesto con un `rowCount === 0 → 404`). Cosmético.
-- **(2026-07-20) RESUELTO — `JWT_SECRET` centralizado en `config/jwt.js`** (branch `fix/auditoria-2026-07`, hallazgos 1.3/1.4 de la auditoría). Antes se accedía a `process.env.JWT_SECRET` directo en `authOperativo.js`, `authMiddleware.js` y `controllers/auth*.js`. Nota de diagnóstico: la redacción original decía que sin la env var "firma con `undefined` sin error" — inexacto: `jwt.sign`/`jwt.verify` **lanzan** si el secreto falta (falla cerrado, pero tarde y con error críptico). Ahora `config/jwt.js` valida al boot (en producción aborta el arranque si falta) y fija el algoritmo en `HS256` para firmar y verificar.
-- **(2026-06-12) — Cliente de Supabase Storage = dependencia dura de arranque del backend.** `backend/src/config/supabase.js` crea el cliente al cargar el módulo; una credencial faltante o una incompatibilidad del runtime (p. ej. Node sin `WebSocket` nativo) tumba **toda** la API al bootear — fue el crash-loop del go-live del turnero. Fix: init **perezoso** del cliente (construirlo en el primer uso de Storage, no al importar) + que un fallo de Storage devuelva un 500 puntual en vez de `process.exit`/crash. Prioridad media. Post-mortem completo (las 3 causas encadenadas: env vars de Supabase faltantes, shared variables de Railway no inyectadas, Node 18 sin WebSocket) en [`postmortem_golive_turnero.md`](./postmortem_golive_turnero.md).
 - **El path `/turnos/gestionar/` está hardcodeado en tres lugares.** Backend (`turnosService.js#armarLinkGestion`), `frontend-turnero/src/App.jsx` (regex `extraerTokenDeURL`) y `frontend-turnero/src/screens/Confirmacion.jsx` (redirección post-reserva). Si la ruta cambia hay que tocar dos repos. Origen: un fix de 2026-05-20 — `armarLinkGestion` generaba `/turnos/:token` pero el frontend solo monta la pantalla de gestión con `/turnos/gestionar/:token`, así que el mail caía al wizard de reserva. Bajo riesgo, queda anotado.
 - **La restricción "no completar turnos futuros" es solo client-side.** `frontend-barbero` oculta las acciones "completar"/"no asistió" para turnos cuyo `inicio` todavía no pasó, pero `PATCH /api/admin/turnos/:id/estado` no valida la antelación: una request directa podría marcar `completado` un turno futuro. Blindar requeriría un check de `inicio <= now()` en `turnosService`. Bajo riesgo (la UI ya lo previene), pero queda anotado.
 - **Unificación / duplicación funcional en `/api/admin/horarios|suspensiones|clientes` (abierto).** (a) `barbero_horario` tiene dos escritores (`horariosService` y la cascada de `horarioAtencionService`); (b) el idiom de scoping `req.rol === 'barbero' ? req.barbero_id : <param>` está duplicado en ~6 handlers → candidato a centralizar en un helper/middleware; (c) la lectura de clientes (`clientes.js`) y el find-or-create del turnero (`turnosService.js`) viven separadas. La escalada horizontal (barbero↔barbero) y la vertical (operativo→admin) ya fueron auditadas/resueltas (commit `ca2fc96`).
 - **Logger estructurado a futuro.** Hoy todo el logging del backend usa `console.log/warn/error` directo contra stdout, y Railway lo indexa así como está. Funciona porque el sistema es chico (1 backend, pocos tenants en producción). Cuando el volumen crezca — varios tenants activos, necesidad de filtrar por nivel/tenant/request_id, o integración con una plataforma de observability tipo Sentry/Datadog — corresponde migrar a un logger estructurado (Pino es la opción senior por performance; Winston si se prioriza ecosistema). Disparadores sugeridos: ≥3 tenants en producción, o contratación de Sentry/equivalente. No es convención, es decisión postergada hasta tener el problema real.
-- **Extracción del subdominio inconsistente entre los tres frontends (el de gestión quedó con la heurística vieja).** `frontend-turnero` y `frontend-barbero` resuelven el tenant con `hostname.endsWith('.barbermanager.app') ? hostname.split('.')[0] : undefined` (`*/src/services/api.js`). El **frontend de gestión** (`frontend/src/services/api.js`) todavía usa la heurística vieja `partes.length >= 3 ? partes[0] : undefined`. Esto **contradice** lo que ya documenta §Decisiones arquitecturales → Multi-tenancy por subdominio, que dice que esa heurística fue reemplazada justamente porque "tomaba un octeto de una IP como subdominio": el cambio se aplicó a turnero/barbero pero **no** al de gestión. Consecuencia concreta: probando el panel desde una IP de red local (ej. `192.168.0.5`) el gestión computa `subdominio = '192'` y manda un `X-Tenant-Subdomain` espurio (el flujo de "probar frontends en la red local" documentado más arriba lo dispara). Bajo riesgo en producción (en `*.barbermanager.app` ambas heurísticas dan lo mismo), pero es un bug latente en dev. Fix: alinear el de gestión con el `endsWith`.
-- **Lógica de subdominio y helpers de UI duplicados en los tres frontends.** La extracción de subdominio, `theme/tokens.js`, los helpers de fecha (`fecha.js` en turnero/barbero, `fechas.js` en gestión) y de formato (`formato.js` vs `formatos.js`), `index.css` y los 13 primitivos universales están copiados en cada app Vite. Es el costo conocido de tener tres proyectos separados sin paquete compartido. La deuda anterior es síntoma directo: una copia se actualizó y las otras no. Evaluar un workspace / paquete compartido si la divergencia se vuelve recurrente; por ahora queda anotado.
+- **Lógica de subdominio y helpers de UI duplicados en los frontends.** La extracción de subdominio, `theme/tokens.js`, `utils/fecha.js`, `utils/formato.js`, `index.css` y los primitivos universales están copiados en cada app Vite. Es el costo conocido de tener proyectos separados sin paquete compartido; ya pasó que una copia se actualizó y las otras no (la heurística de subdominio del panel, resuelta en la auditoría 2026-07, 7.2). Evaluar un workspace / paquete compartido si la divergencia se vuelve recurrente; por ahora queda anotado.
+- **Deudas diferidas de la auditoría 2026-07** (TOCTOU sistémico, idempotency keys para `venta`/`gasto`, defensa en profundidad de multi-tenancy, anti-abuso extra del turnero, recorte de PII en `getTurnoPorToken`, warning de pg@9, monitoreo del pool, función almacenada de stock): aceptadas con rationale; el detalle vive en [`auditoria_2026-07.md`](./auditoria_2026-07.md) §Deudas diferidas.
+- **(2026-09-29) — `TZ` redeclarada localmente** en `controllers/inicio.js:6` y `services/googleCalendar.js:9`, contra convenciones §4 (importar de `utils/constantes.js`). Mismo valor, sin impacto funcional. Migrarlas al import la próxima vez que se toquen.
+- **(2026-09-29) — Comentarios de código que citan secciones inexistentes de `performance_frontends.md`:** `config/db.js` (`iniciarKeepAlive`, "§5-bis") e `index.js` (`startServer`, "§7 #1"). El doc se resumió y esas secciones ya no existen. Cambiar la cita al nombre del doc sin sección.
+- **(2026-09-29) — Default de `PUBLIC_BASE_URL` apunta al puerto equivocado.** `turnosService.js` (`construirLinkGestion`, `armarLinkTurnero`) usa `http://localhost:5173` cuando el request no trae subdominio (solo pasa en dev), pero 5173 es el panel de gestión; el turnero corre en 5175. En dev, los links de los mails caen en la app equivocada salvo que se setee `PUBLIC_BASE_URL`. Sin impacto en producción. Fix: default `http://localhost:5175`.
+- **SELECT enriquecido de turno casi duplicado en tres lugares** (ex DT-2 de `decisiones_mail_recordatorio.md`): `enriquecerTurno`, el lookup de `cancelarTurnoPorId` y la query del recordatorio comparten casi las mismas columnas/JOINs. Candidato a centralizar (fragmento o vista). No bloqueante.
+- **`cancelarTurnoPorId` no selecciona `tn.direccion`** (ex DT-3; `turnosService.js`, verificado 2026-09-29): `construirContextoMail` arma `tenant.direccion` desde `fila.tenant_direccion`, que en ese camino llega `undefined`. Hoy no rompe (`filaDireccion` devuelve null), pero el mail de cancelación sale sin dirección y el contrato es frágil. Fix: sumar la columna al SELECT.
 
 - **(2026-06-11) — Rebote de overscroll de iOS asoma el fondo por detrás del footer del turnero (cosmético).** En Safari iOS, cuando el contenido supera el alto del viewport y el usuario hace overscroll en el **borde inferior**, el rebote elástico deja asomar el fondo de la app (`theme.bg`, casi blanco) por detrás del `StickyFooter` (`position: sticky; bottom: 0`), recortando visualmente el CTA. Reproducido en el turnero: `Landing` con la tabla de horarios desplegada y `GestionTurno` con el panel de reprogramar abierto (ambos casos en que el contenido se hace más alto que la pantalla). **Mitigación aplicada (commit de esta fecha):** `overscroll-behavior: none` en `html, body` (`frontend-turnero/src/index.css`) — desactivó el **pull-to-refresh** (objetivo principal: evitar que un arrastre accidental recargue y pierda el progreso del wizard) pero **no suprime del todo el rebote del borde inferior** en iOS (limitación conocida de `overscroll-behavior` sobre el scroll de documento en Safari). En la misma tanda, `PageContainer` pasó de `100vh` a `100dvh` para que el footer no quede tapado por la toolbar dinámica de Safari. **Estado:** queda como glitch cosmético menor, **sin pérdida de datos**. **Fix definitivo:** layout "app-shell" (el documento no scrollea; solo scrollea una zona interna; el footer es hijo fijo, no `sticky`). Descartado por ahora por el riesgo de regresión en las pantallas con formulario (el teclado de iOS y los scrollers internos se llevan mal) — retomar en una pasada deliberada de "sensación nativa" con testeo de las pantallas de formulario.
 
@@ -283,6 +271,7 @@ El rediseño del panel de gestión cerró todas sus deudas accionables; quedan e
 - **#45 (aceptada) — Bloque del barbero en un día que el local cerró después no se valida** (`TabBarberos`). Si el local cierra un día donde un barbero ya tenía un bloque cargado, ese bloque se sigue mostrando editable pero `validarHorario` no lo marca inválido (no hay rango del local contra el cual validar: `horarioLocal[dia]` es `undefined`). Caso de borde poco frecuente, dejado fuera de alcance al resolver #40. Si se quiere endurecer: marcar inválido todo bloque en día cerrado del local (con `horarioLocal != null`).
 - **(nueva, 2026-06-10) — Fallo de DELETE silencioso en las secciones de movimientos** (`SeccionVentas`, `SeccionGastos` y `SeccionCaja`→`TabMovimientos`). El handler `confirmarEliminar` de las tres traga el error en el `catch` con solo `console.error` (sin feedback al usuario) y cierra el `ConfirmDialog` igual: si el DELETE falla (red/servidor), la fila reaparece al recargar pero el usuario no se entera de que no se borró. Detectado al cablear el Toast de export (helper `cargarChunk`, 2026-06-10). Fix natural: surfacear el error con el mismo patrón `<Toast tone="danger">` que ya se usa para el export (estado de feedback local) — o, mejor, esperar al Toast flotante global ([`sistema_de_disenio.md`](./sistema_de_disenio.md) §9 deuda #16) y migrar los tres a la vez. Bajo riesgo, anotado.
 - **(nueva, 2026-09-29) — Fórmula de comisión repetida en tres lugares.** `planillaService.resumenSemanal` (backend), `SeccionPlanillas.calcularComisionDia` (panel) y `MiPlanilla.calcularComisionDia` (`frontend-barbero`) calculan la comisión cada uno por su lado. Ya divergieron una vez: el Excel del Detalle de Planillas ponía la comisión de cada día sin propinas mientras la semanal las incluía (resuelto el 2026-09-29: el subtotal del día ahora suma las propinas, igual que el "Pago" en pantalla). Reglas de negocio vigentes (2026-09-29): la comisión es siempre porcentaje y las propinas van siempre al barbero. Fix de fondo: que el backend devuelva también la comisión por día y los fronts dejen de calcularla.
-- **(nueva, 2026-09-29) — `npm run lint` del front de gestión falla en `main`** (7 errores + 1 warning, ninguno funcional; los fronts de barbero y turnero pasan limpio): 2 falsos positivos `'Icon' is defined but never used` (`PanelAdmin.jsx:114` y `KpiCard` en `SeccionBalances.jsx`: el parámetro renombrado `icon: Icon` solo se usa como JSX y `no-unused-vars` no lo ve; se resolvería sumando `argsIgnorePattern: '^[A-Z_]'` a la regla, igual que el `varsIgnorePattern` que ya tiene), 3 de `react-hooks/set-state-in-effect` (`App.jsx:231` y `:269`, `FondoLocal.jsx:106`; ver deuda #13 de [`sistema_de_disenio.md`](./sistema_de_disenio.md)), `token` asignado y sin usar (`App.jsx:136`), `react-refresh/only-export-components` (`screens/flows/wizard.jsx:356`) y el warning `exhaustive-deps` del efecto del histórico en `SeccionBalances`. Tarea sugerida: "lint en verde en los tres fronts".
+- **(nueva, 2026-09-29) — `npm run lint` del front de gestión falla en `main`** (7 errores + 1 warning, ninguno funcional; los fronts de barbero y turnero pasan limpio): 2 falsos positivos `'Icon' is defined but never used` (`PanelAdmin.jsx:114` y `KpiCard` en `SeccionBalances.jsx`: el parámetro renombrado `icon: Icon` solo se usa como JSX y `no-unused-vars` no lo ve; se resolvería sumando `argsIgnorePattern: '^[A-Z_]'` a la regla, igual que el `varsIgnorePattern` que ya tiene), 3 de `react-hooks/set-state-in-effect` (`App.jsx:231` y `:269`, `FondoLocal.jsx:106`; ver deuda #13 de [`sistema_de_disenio.md`](./sistema_de_disenio.md)), `token` asignado y sin usar (`App.jsx:136`), `react-refresh/only-export-components` (`screens/flows/wizard.jsx:356`) y el warning `exhaustive-deps` del efecto del histórico en `SeccionBalances`. El landing también falla, con 2 errores de `set-state-in-effect` (`components/landing/Reveal.jsx:26`, `hooks/useMediaQuery.js:32`). Tarea sugerida: "lint en verde en los cuatro fronts".
+- **(pendiente de producto) — ¿`ScreenHeader` en todo el admin?** Se sacaron de Gestión, Turnero, Planillas, Balances y Caja (decisión D15 en [`decisiones_redisenio_panel_gestion.md`](./decisiones_redisenio_panel_gestion.md)); quedan solo en `SeccionVentas` y `SeccionGastos` (verificado 2026-09-29). Falta decidir si se sacan también de ahí o se conservan.
 - **(nueva, 2026-09-29) — `SeccionInicio.jsx:423` usa `.then(r => r.json())`** dentro del `Promise.all`, contra convenciones §3 (nunca `.then()`). Pasarlo a `async/await` la próxima vez que se toque Inicio.
 *— Fin del documento —*
