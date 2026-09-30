@@ -7,15 +7,18 @@
 //   La tabla por barbero lista a los activos aunque no hayan cortado (en 0),
 //   más los dados de baja que cortaron en el mes (regla en controllers/balances.js).
 //   Tab 2 — Histórico anual: tabla de los últimos 12 meses con variación %
-//   contra el mes anterior (BadgeVariacion primitivo).
+//   contra el mes anterior (BadgeVariacion primitivo). Al tocar un mes se abre
+//   ModalDetalleMes con la cuenta de ese mes.
 //
 // El toggle "Con/Sin comisiones" recalcula los KPI, los totales por barbero y
 // el balance del histórico — la regla es: si "sin comisiones", el negocio se
 // queda con el bruto (ingresos_brutos − egresos), no se descuenta la comisión.
+// En el histórico también elige cuál de las dos variaciones que manda el
+// backend muestra el "vs anterior".
 //
 // Aportes y retiros de los dueños son capital, no resultado: no entran en la
 // ganancia del mes. Se muestran aparte, cerrando en "Queda en el negocio"
-// (ganancia + aportes − retiros). Ver docs/plan_movimientos_extra.md §5.
+// (ganancia + aportes − retiros). Ver docs/decisiones_movimientos_extra.md.
 
 import { useState, useEffect } from 'react';
 import {
@@ -25,6 +28,8 @@ import {
   Info,
   BarChart3,
   RefreshCw,
+  ChevronRight,
+  ArrowRight,
 } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
@@ -46,6 +51,9 @@ import {
   BotonExportarExcel,
   TogglePill,
   SelectorMes,
+  Modal,
+  BotonIconoFila,
+  DesgloseMontos,
 } from '../../../components/ui';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -73,11 +81,28 @@ function balanceSegunModo(fila, mostrarComisiones, usarBalancePrecalculado = fal
 }
 
 /**
+ * variacionSegunModo
+ * Variación % del histórico contra el mes anterior, según el toggle de
+ * comisiones. Las dos llegan calculadas del backend, cada una comparando la
+ * ganancia de su mismo modo.
+ * @param {object} fila - Fila del histórico.
+ * @param {boolean} mostrarComisiones - Estado del toggle de comisiones.
+ * @returns {number|null|undefined} % entero, o null si no hay con qué comparar.
+ *   undefined si el backend todavía no manda la variación sin comisiones (el
+ *   front puede terminar de deployar antes): BadgeVariacion lo muestra como "—".
+ */
+function variacionSegunModo(fila, mostrarComisiones) {
+  return mostrarComisiones
+    ? fila.variacion_vs_anterior
+    : fila.variacion_vs_anterior_sin_comisiones;
+}
+
+/**
  * quedaEnElNegocio
  * Lo que queda en el negocio después de los movimientos de los dueños:
  * ganancia del mes + aportes − retiros. Lo calcula el front porque la ganancia
- * depende del toggle de comisiones (plan §5). Se redondea a centavos para no
- * arrastrar errores de coma flotante al Excel.
+ * depende del toggle de comisiones (ver docs/decisiones_movimientos_extra.md).
+ * Se redondea a centavos para no arrastrar errores de coma flotante al Excel.
  *
  * @param {number} ganancia - Ganancia del mes (según el modo de comisiones).
  * @param {number} aportes  - Total de aportes de capital del período.
@@ -285,6 +310,9 @@ export default function SeccionBalances() {
   const [cargandoHistorico, setCargandoHistorico] = useState(false);
   const [errorHistorico, setErrorHistorico]       = useState(null);
   const [intentoHistorico, setIntentoHistorico]   = useState(0);
+  // Mes ('YYYY-MM') abierto en ModalDetalleMes; null = modal cerrado. Se guarda
+  // el mes y no la fila, así el modal siempre lee la fila vigente del histórico.
+  const [mesDetalle, setMesDetalle]               = useState(null);
 
   // ── Carga del balance mensual ──────────────────────────────────────────────
   useEffect(() => {
@@ -467,6 +495,19 @@ export default function SeccionBalances() {
     (tabActivo === 'mensual'   && datosMensual !== null) ||
     (tabActivo === 'historico' && datosHistorico !== null && datosHistorico.length > 0);
 
+  const filaDetalle = datosHistorico?.find((f) => f.mes === mesDetalle) ?? null;
+
+  /**
+   * verMesCompleto — desde el modal del histórico, abre ese mes en el tab
+   * "Balance mensual" (desglose por barbero, por categoría y por dueño).
+   * @param {string} mes - Mes 'YYYY-MM'.
+   */
+  const verMesCompleto = (mes) => {
+    setMesDetalle(null);
+    setMesSeleccionado(mes);
+    setTabActivo('mensual');
+  };
+
   // ─── Render ────────────────────────────────────────────────────────────────
   const contenedor = {
     padding: 24,
@@ -621,11 +662,19 @@ export default function SeccionBalances() {
               <TablaHistorico
                 filas={datosHistorico}
                 mostrarComisiones={mostrarComisiones}
+                onVerDetalle={setMesDetalle}
               />
             )
           )}
         </div>
       )}
+
+      <ModalDetalleMes
+        fila={filaDetalle}
+        mostrarComisiones={mostrarComisiones}
+        onClose={() => setMesDetalle(null)}
+        onVerMesCompleto={verMesCompleto}
+      />
     </div>
   );
 }
@@ -1073,11 +1122,18 @@ function TablaCapital({ capital, ganancia }) {
  * TablaHistorico
  * 12 filas (una por mes). La fila del mes actual se destaca con bg accentSoft
  * + pill "Actual" (mismo patrón visual que pill "HOY" de Planillas).
- * Aportes y retiros no tienen columna en pantalla: solo van al Excel.
+ * Aportes y retiros no tienen columna en pantalla: van al Excel y al modal
+ * del mes.
+ *
+ * Cada fila abre el detalle del mes: el click en cualquier parte de la fila
+ * (mouse o toque) y, para el teclado, el botón con chevron de la última celda
+ * (Enter/Espacio y foco visible del <button>). El <tr> no lleva role="button"
+ * para no romperle la semántica de tabla a los lectores de pantalla.
  * @param {Array<object>} props.filas             - Respuesta de GET /balances/historico.
  * @param {boolean}       props.mostrarComisiones - Estado del toggle de comisiones.
+ * @param {(mes: string) => void} props.onVerDetalle - Abre el detalle del mes 'YYYY-MM'.
  */
-function TablaHistorico({ filas, mostrarComisiones }) {
+function TablaHistorico({ filas, mostrarComisiones, onVerDetalle }) {
   const mesActual = getMesActual();
 
   return (
@@ -1096,6 +1152,7 @@ function TablaHistorico({ filas, mostrarComisiones }) {
             <th style={{ ...thStyle, textAlign: 'right' }}>Egresos</th>
             <th style={{ ...thStyle, textAlign: 'right' }}>Ganancia</th>
             <th style={{ ...thStyle, textAlign: 'center' }}>vs anterior</th>
+            <th style={{ ...thStyle, width: 1 }} aria-label="Detalle" />
           </tr>
         </thead>
         <tbody>
@@ -1107,7 +1164,11 @@ function TablaHistorico({ filas, mostrarComisiones }) {
               <tr
                 key={fila.mes}
                 className="om-fila-hover"
-                style={esActual ? { background: theme.accentSoft } : undefined}
+                onClick={() => onVerDetalle(fila.mes)}
+                style={{
+                  cursor: 'pointer',
+                  ...(esActual && { background: theme.accentSoft }),
+                }}
               >
                 <td style={{
                   ...tdStyle,
@@ -1180,8 +1241,21 @@ function TablaHistorico({ filas, mostrarComisiones }) {
                 </td>
                 <td style={{ ...tdStyle, textAlign: 'center' }}>
                   <BadgeVariacion
-                    pct={fila.variacion_vs_anterior}
+                    pct={variacionSegunModo(fila, mostrarComisiones)}
                     sinDatosLabel="—"
+                  />
+                </td>
+                {/* Padding vertical chico: el botón de 28px no agranda la fila. */}
+                <td style={{ ...tdStyle, padding: '6px 14px 6px 0' }}>
+                  <BotonIconoFila
+                    tono="accent"
+                    icono={<ChevronRight size={14} strokeWidth={1.75} />}
+                    ariaLabel={`Ver el detalle de ${mesALabel(fila.mes)}`}
+                    onClick={(e) => {
+                      // Sin esto, el click también le llega al <tr>.
+                      e.stopPropagation();
+                      onVerDetalle(fila.mes);
+                    }}
                   />
                 </td>
               </tr>
@@ -1190,5 +1264,156 @@ function TablaHistorico({ filas, mostrarComisiones }) {
         </tbody>
       </table>
     </BloqueTabla>
+  );
+}
+
+// ─── Modal: detalle de un mes del histórico ───────────────────────────────────
+
+/**
+ * renglonesResultado
+ * Renglones de la cuenta de la ganancia de un mes del histórico, según el
+ * toggle de comisiones. "Servicios y productos" y "Otros ingresos" van por
+ * separado solo si el mes tuvo otros ingresos; si no, la cuenta arranca en
+ * "Ingresos brutos". El histórico trae servicios y productos sumados, por eso
+ * van en un solo renglón (ingresos brutos − otros ingresos).
+ * @param {object}  fila              - Fila del histórico.
+ * @param {boolean} mostrarComisiones - Estado del toggle de comisiones.
+ * @returns {Array<object>} Renglones para DesgloseMontos.
+ */
+function renglonesResultado(fila, mostrarComisiones) {
+  const ganancia = balanceSegunModo(fila, mostrarComisiones);
+
+  const ingresos = fila.otros_ingresos > 0
+    ? [
+        { label: 'Servicios y productos', monto: fila.ingresos_brutos - fila.otros_ingresos },
+        { operador: '+', label: 'Otros ingresos', monto: fila.otros_ingresos },
+        { operador: '=', label: 'Ingresos brutos', monto: fila.ingresos_brutos, variante: 'subtotal' },
+      ]
+    : [{ label: 'Ingresos brutos', monto: fila.ingresos_brutos }];
+
+  const comisiones = mostrarComisiones
+    ? [
+        { operador: '−', label: 'Comisiones', monto: fila.total_comisiones, tono: 'negativo' },
+        {
+          operador: '=',
+          label: 'Ingresos netos',
+          monto: fila.ingresos_netos,
+          variante: 'subtotal',
+          tono: 'positivo',
+        },
+      ]
+    : [];
+
+  return [
+    ...ingresos,
+    ...comisiones,
+    { operador: '−', label: 'Egresos', monto: fila.egresos, tono: 'negativo' },
+    {
+      operador: '=',
+      label: 'Ganancia del mes',
+      monto: ganancia,
+      variante: 'total',
+      tono: ganancia >= 0 ? 'positivo' : 'negativo',
+    },
+  ];
+}
+
+/**
+ * renglonesCapital
+ * Renglones del cierre con aportes y retiros: Ganancia del mes + Aportes −
+ * Retiros = Queda en el negocio. Mismos colores que el cierre de TablaCapital.
+ * @param {object} fila     - Fila del histórico.
+ * @param {number} ganancia - Ganancia del mes según el toggle de comisiones.
+ * @returns {Array<object>} Renglones para DesgloseMontos.
+ */
+function renglonesCapital(fila, ganancia) {
+  const queda = quedaEnElNegocio(ganancia, fila.aportes, fila.retiros);
+  return [
+    { label: 'Ganancia del mes', monto: ganancia, tono: ganancia >= 0 ? 'neutro' : 'negativo' },
+    { operador: '+', label: 'Aportes', monto: fila.aportes },
+    { operador: '−', label: 'Retiros', monto: fila.retiros, tono: 'negativo' },
+    {
+      operador: '=',
+      label: 'Queda en el negocio',
+      monto: queda,
+      variante: 'total',
+      tono: queda >= 0 ? 'positivo' : 'negativo',
+    },
+  ];
+}
+
+/**
+ * ModalDetalleMes
+ * Detalle de un mes del histórico: la cuenta de la ganancia renglón por renglón,
+ * la variación contra el mes anterior y, si el mes los tuvo, los aportes y
+ * retiros hasta "Queda en el negocio". Muestra los números del modo activo del
+ * toggle de comisiones (lo dice el subtítulo) y no recalcula nada: usa los
+ * campos del histórico y los helpers de la sección.
+ * @param {object|null} props.fila              - Fila del histórico; null = cerrado.
+ * @param {boolean}     props.mostrarComisiones - Estado del toggle de comisiones.
+ * @param {() => void}  props.onClose           - Cierra el modal.
+ * @param {(mes: string) => void} props.onVerMesCompleto - Abre el mes en "Balance mensual".
+ * @returns {JSX.Element|null}
+ */
+function ModalDetalleMes({ fila, mostrarComisiones, onClose, onVerMesCompleto }) {
+  if (!fila) return null;
+
+  const ganancia = balanceSegunModo(fila, mostrarComisiones);
+  const variacion = variacionSegunModo(fila, mostrarComisiones);
+  const tieneCapital = fila.aportes > 0 || fila.retiros > 0;
+  const subtitulo = [
+    mostrarComisiones ? 'Con las comisiones descontadas' : 'Sin descontar las comisiones',
+    fila.mes === getMesActual() && 'mes en curso',
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={mesALabel(fila.mes)}
+      subtitle={subtitulo}
+      maxWidth={560}
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, width: '100%' }}>
+          <Button variant="ghost" full={false} onClick={onClose}>Cerrar</Button>
+          <Button variant="secondary" full={false} onClick={() => onVerMesCompleto(fila.mes)}>
+            Ver el mes completo
+            <ArrowRight size={16} strokeWidth={1.75} />
+          </Button>
+        </div>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div>
+          <DesgloseMontos
+            titulo="Resultado del mes"
+            renglones={renglonesResultado(fila, mostrarComisiones)}
+          />
+          {/* Sin mes anterior con qué comparar, la línea no aparece. */}
+          {variacion != null && (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              gap: 8,
+              marginTop: 4,
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              color: theme.muted,
+            }}>
+              <BadgeVariacion pct={variacion} />
+              vs el mes anterior
+            </div>
+          )}
+        </div>
+
+        {tieneCapital && (
+          <DesgloseMontos
+            titulo="Aportes y retiros"
+            renglones={renglonesCapital(fila, ganancia)}
+          />
+        )}
+      </div>
+    </Modal>
   );
 }

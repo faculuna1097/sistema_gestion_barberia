@@ -61,6 +61,7 @@ histórico caía cuando retiraban más.
 
 - Edición de movimientos extra.
 - Pantalla de alta de socios.
-- Columnas de aportes y retiros en el histórico en pantalla (están en el Excel).
+- Columnas de aportes y retiros en el histórico en pantalla (están en el Excel y en el modal
+  de detalle de cada mes).
 - Flujo en el iPad para registrar retiros.
 - Idempotency key en el alta (misma deuda diferida que venta y gasto; ver `auditoria_2026-07.md`).

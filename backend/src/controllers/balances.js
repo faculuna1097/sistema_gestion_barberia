@@ -1,6 +1,7 @@
 // /backend/src/controllers/balances.js
 // Controller para la sección Balances del panel de administrador.
 
+import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { TZ } from '../utils/constantes.js';
 import { TIPOS_MOVIMIENTO_EXTRA, resumirMovimientosExtra } from '../utils/movimientos.js';
@@ -12,6 +13,40 @@ import { TIPOS_MOVIMIENTO_EXTRA, resumirMovimientosExtra } from '../utils/movimi
  * @returns {number}
  */
 const redondear2 = (n) => Math.round(n * 100) / 100;
+
+/**
+ * variacionPorcentual
+ * Variación de un balance contra el del mes anterior, como % entero. Divide por
+ * el valor absoluto del anterior para que un anterior negativo no invierta el
+ * signo (pasar de −100 a 50 es una mejora: +150%).
+ * @param {number} actual - Balance del mes.
+ * @param {number|undefined} anterior - Balance del mes anterior; undefined si no hay.
+ * @returns {number|null} % entero, o null si no hay mes anterior o su balance es 0.
+ */
+const variacionPorcentual = (actual, anterior) => {
+  if (anterior === undefined || anterior === 0) return null;
+  return Math.round(((actual - anterior) / Math.abs(anterior)) * 100);
+};
+
+/**
+ * balanceSinComisiones
+ * Balance de una fila del histórico sin descontar comisiones: ingresos brutos −
+ * egresos. Es el número que muestra el panel con el botón en "Sin comisiones"
+ * (`balanceSegunModo` en SeccionBalances.jsx).
+ * @param {{ingresos_brutos: number, egresos: number}} fila - Fila del histórico.
+ * @returns {number} Balance redondeado a centavos.
+ */
+const balanceSinComisiones = (fila) => redondear2(fila.ingresos_brutos - fila.egresos);
+
+/**
+ * mesAnterior
+ * Mes calendario anterior a uno dado. En UTC para que ningún cambio de horario
+ * mueva la cuenta: es aritmética de calendario, no un instante.
+ * @param {string} mes - Mes 'YYYY-MM'.
+ * @returns {string} Mes anterior 'YYYY-MM' (enero → diciembre del año anterior).
+ */
+const mesAnterior = (mes) =>
+  DateTime.fromFormat(mes, 'yyyy-MM', { zone: 'utc' }).minus({ months: 1 }).toFormat('yyyy-MM');
 
 /**
  * agruparCapitalPorSocio
@@ -283,14 +318,18 @@ export const getBalanceMensual = async (req, res) => {
  * Devuelve el resumen de los últimos N meses para la tabla de histórico anual:
  * el mes en curso + los N-1 anteriores completos, con los meses en hora argentina.
  * Un mes aparece si tuvo al menos un corte, venta, gasto o movimiento extra.
- * `ingresos_brutos` incluye los otros ingresos; `balance_neto` y
- * `variacion_vs_anterior` no incluyen aportes ni retiros (son capital, no resultado).
+ * `ingresos_brutos` incluye los otros ingresos; `balance_neto` y las variaciones
+ * no incluyen aportes ni retiros (son capital, no resultado).
  * @param {number} req.query.cantidad - Cantidad de meses (default: 12, máx: 24)
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @returns {JSON} [{ mes, label, ingresos_brutos, total_comisiones, ingresos_netos, egresos,
- *   balance_neto, otros_ingresos, aportes, retiros, variacion_vs_anterior }], del mes más
- *   reciente al más viejo. `variacion_vs_anterior` es un % entero, o null si no hay mes
- *   anterior o su balance es 0.
+ *   balance_neto, otros_ingresos, aportes, retiros, variacion_vs_anterior,
+ *   variacion_vs_anterior_sin_comisiones }], del mes más reciente al más viejo.
+ *   Las dos variaciones comparan contra el mes calendario anterior y son un % entero, o
+ *   null si ese mes no tuvo movimientos (no está en la lista) o su balance es 0:
+ *   `variacion_vs_anterior` compara `balance_neto` (con comisiones) y
+ *   `variacion_vs_anterior_sin_comisiones` compara ingresos brutos − egresos, para el
+ *   botón "Sin comisiones" del panel.
  */
 export const getBalanceHistorico = async (req, res) => {
   const cantidad = Math.min(parseInt(req.query.cantidad) || 12, 24);
@@ -408,15 +447,20 @@ export const getBalanceHistorico = async (req, res) => {
         };
       });
 
-    const historialConVariacion = historial.map((mes, idx) => {
-      const anterior = historial[idx + 1];
-      let variacion = null;
-      if (anterior && anterior.balance_neto !== 0) {
-        variacion = Math.round(
-          ((mes.balance_neto - anterior.balance_neto) / Math.abs(anterior.balance_neto)) * 100
-        );
-      }
-      return { ...mes, variacion_vs_anterior: variacion };
+    // Se compara contra el mes calendario anterior. Si no tuvo movimientos no
+    // está en la lista y la variación queda en null: no se salta a uno más
+    // viejo (pasa con el primer mes de uso del sistema).
+    const historialPorMes = new Map(historial.map((fila) => [fila.mes, fila]));
+    const historialConVariacion = historial.map((mes) => {
+      const anterior = historialPorMes.get(mesAnterior(mes.mes));
+      return {
+        ...mes,
+        variacion_vs_anterior: variacionPorcentual(mes.balance_neto, anterior?.balance_neto),
+        variacion_vs_anterior_sin_comisiones: variacionPorcentual(
+          balanceSinComisiones(mes),
+          anterior ? balanceSinComisiones(anterior) : undefined,
+        ),
+      };
     });
 
     res.json(historialConVariacion);

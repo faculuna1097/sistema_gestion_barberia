@@ -2,7 +2,7 @@
 // Semántica central de los movimientos de plata. Es la ÚNICA fuente del backend
 // que decide si un movimiento entra o sale y si afecta el resultado del negocio:
 // ningún otro archivo compara contra nombres de tipo, todos consultan este mapa
-// o sus helpers. Ver docs/plan_movimientos_extra.md §5.
+// o sus helpers. Ver docs/decisiones_movimientos_extra.md.
 
 // Tipos de la tabla movimiento_extra (espeja su CHECK de `tipo`).
 //   sentido:         'entrada' | 'salida' — hacia dónde se mueve la plata.
