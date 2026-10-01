@@ -15,6 +15,7 @@ import Card from '../ui/Card.jsx';
 import FeatureList from '../landing/FeatureList.jsx';
 import VideoEmbed from '../landing/VideoEmbed.jsx';
 import MetricCard from '../landing/MetricCard.jsx';
+import NotaAlPie from '../landing/NotaAlPie.jsx';
 
 // Las 10 funcionalidades agrupadas en 3 bloques temáticos.
 const GRUPOS = [
@@ -175,6 +176,8 @@ function SistemaGestion() {
           </Reveal>
         ))}
       </div>
+
+      <NotaAlPie>Números de ejemplo: muestran cómo se ve, no son de una barbería real.</NotaAlPie>
     </Section>
   );
 }

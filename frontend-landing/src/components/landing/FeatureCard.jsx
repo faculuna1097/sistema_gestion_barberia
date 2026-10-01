@@ -1,6 +1,7 @@
 // /frontend-landing/src/components/landing/FeatureCard.jsx
-// Tarjeta de "ícono + título + texto". La usan la sección Problema (dolores) y
-// Beneficios (resultados). Reusa el primitivo Card del sistema como contenedor.
+// Tarjeta de "ícono + título + texto". La usa el bloque "¿Y frente a otras apps
+// de turnos?" de la sección Comparación. Reusa el primitivo Card del sistema
+// como contenedor.
 
 import { theme } from '../../theme/tokens.js';
 import Card from '../ui/Card.jsx';
@@ -9,11 +10,16 @@ import Card from '../ui/Card.jsx';
  * FeatureCard
  * Tarjeta con un ícono en chip, un título y un cuerpo.
  * @param {Function} props.icon - Componente de ícono de Lucide
- * @param {string} props.title - Título de la tarjeta (<h3>)
+ * @param {string} props.title - Título de la tarjeta
  * @param {string} props.body - Texto descriptivo
+ * @param {'h3'|'h4'} [props.nivel='h3'] - Tag del título, según dónde se use:
+ *   si la tarjeta va debajo de un <h3>, su título tiene que ser <h4>
  * @param {Object} [props.style] - Override del Card
+ * @returns {JSX.Element}
  */
-function FeatureCard({ icon: Icon, title, body, style }) {
+function FeatureCard({ icon: Icon, title, body, nivel = 'h3', style }) {
+  const Titulo = nivel;
+
   return (
     <Card
       padding={20}
@@ -33,7 +39,7 @@ function FeatureCard({ icon: Icon, title, body, style }) {
       >
         <Icon size={20} strokeWidth={1.75} aria-hidden="true" />
       </span>
-      <h3
+      <Titulo
         style={{
           fontFamily: theme.body,
           fontWeight: theme.weightHeading,
@@ -44,7 +50,7 @@ function FeatureCard({ icon: Icon, title, body, style }) {
         }}
       >
         {title}
-      </h3>
+      </Titulo>
       <p
         style={{
           fontFamily: theme.body,

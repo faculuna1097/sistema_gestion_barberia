@@ -305,7 +305,7 @@ octubre de 2026.*
 | 2 | Pre-renderizado | chat aparte | ✅ 2026-10-01 |
 | — | Imágenes: la captura del Hero reserva su espacio, posters lazy | orquestador | ✅ 2026-10-01 |
 | 3a | Investigación de competidores + copy | orquestador | ✅ 2026-10-01 |
-| 3b | Implementar el contenido | chat aparte | 🔲 |
+| 3b | Implementar el contenido | chat aparte | ✅ 2026-10-01 |
 | 4a | `og-image` | orquestador | 🔲 |
 | 4b | robots, sitemap, meta, JSON-LD, `llms.txt` | chat aparte | 🔲 |
 | 5 | Docs, merge, verificación en producción, guía fuera del sitio | orquestador | 🔲 |
@@ -351,3 +351,7 @@ Se anotan en `estado_actual.md` en el paso 5 (fuera de alcance):
   login del panel (`<title>Barber Manager</title>`) una vez por tenant, y eso compite con la
   landing en las búsquedas de la marca. Evaluar un `noindex` para el panel que no alcance al
   turnero (`/turnos`), que sí conviene indexar.
+- **Contraste de `muted` sobre `surfaceAlt`** (nueva, paso 3b): ≈4.4:1, apenas debajo de AA
+  (4.5:1). Pasa con la nota de "números de ejemplo" de `SistemaGestion`, que está en una sección
+  `tone="alt"`. Extiende la deuda #9 de `sistema_de_disenio.md` (que ya lista `mutedSoft` sobre
+  `surfaceAlt`).

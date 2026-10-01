@@ -70,9 +70,10 @@ function Hero() {
               maxWidth: 600,
             }}
           >
-            Turnos, caja, barberos y números. Todo conectado, sin planillas
-            sueltas ni el WhatsApp desbordado. Lo configurás en minutos y
-            trabajás más ordenado desde el primer día.
+            El sistema de gestión para barberías de Argentina: turnero online,
+            caja, barberos y números, todo conectado. Sin planillas sueltas ni
+            el WhatsApp desbordado. Te ayudamos a configurarlo y trabajás
+            ordenado desde el primer día.
           </p>
 
           {/* Doble CTA */}
