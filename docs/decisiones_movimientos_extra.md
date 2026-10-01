@@ -1,11 +1,11 @@
 # Movimientos extra (aportes, retiros y otros ingresos) — núcleo de decisiones
 
-> ✅ **Implementado el 2026-09-30** (branch `feature/movimientos-extra`). Documento de
-> decisiones: el "por qué". Schema en [`SQL_Schema.md`](SQL_Schema.md) (`socio`,
-> `movimiento_extra`). Implementación: backend `utils/movimientos.js`, `controllers/caja.js`,
-> `controllers/balances.js`, `controllers/socios.js`, `services/sociosService.js`; front
-> `SeccionCaja.jsx`, `SeccionBalances.jsx`, `utils/movimientos.js`.
-> **Pendiente:** migrar los retiros históricos de Kingsai (ver `estado_actual.md` → Pendientes).
+> ✅ **Completado; en producción desde el 2026-10-01** (branch `feature/movimientos-extra`).
+> Documento **archivado**: solo el "por qué". Schema en [`SQL_Schema.md`](SQL_Schema.md)
+> (`socio`, `movimiento_extra`). Implementación: backend `utils/movimientos.js`,
+> `controllers/caja.js`, `controllers/balances.js`, `controllers/socios.js`,
+> `services/sociosService.js`; front `SeccionCaja.jsx`, `SeccionBalances.jsx`,
+> `utils/movimientos.js`. Los retiros históricos de Kingsai se migraron el 2026-10-01.
 
 ## Problema que resolvió
 
@@ -45,15 +45,19 @@ histórico caía cuando retiraban más.
   base (el socio). `monto` sale como número en todas las respuestas nuevas.
 - **Histórico:** un mes que solo tiene aportes o retiros aparece con ganancia 0, y el mes
   siguiente queda sin "vs anterior" (no hay porcentaje contra cero).
-- **Descripción:** los retiros migrados desde `gasto` conservan su descripción original; los
-  cargados desde Caja no tienen.
+- **Descripción:** los aportes y retiros cargados desde Caja no tienen. Los tres retiros
+  migrados de Kingsai tampoco: su texto solo repetía el dueño ("Migue retira"), y el original
+  quedó en el respaldo CSV. La columna sigue admitiendo texto en aporte y retiro por si una
+  migración futura lo necesita.
 - **Tenant sin socios:** el formulario no deja guardar aportes ni retiros, porque no hay dueño
   para elegir. Los socios se cargan en el alta del tenant (`onboarding.md`, Paso 2b).
-- **Migración de retiros:** filas elegidas a mano entre los gastos de "Otros", con el dueño
-  asignado. `INSERT … SELECT` a `movimiento_extra` con fecha y descripción originales, y
-  `DELETE` de `gasto`, en una sola ejecución del SQL editor, con respaldo previo en CSV. Se
-  corre con el código nuevo ya en producción: con el viejo, los retiros migrados
-  desaparecerían de Caja.
+- **Migración de retiros (2026-10-01):** en Kingsai había tres retiros de Migue cargados como
+  gasto en "Otros": 13/06 por $300.000, 15/07 por $20.000 y 05/08 por $70.000. Se pasaron a
+  `movimiento_extra` con su fecha original, en un solo bloque `DO` que controlaba la cantidad
+  y la suma antes de borrar de `gasto`, con respaldo previo en CSV. Se corrió con el código
+  nuevo ya en producción: con el viejo, los retiros migrados habrían desaparecido de Caja.
+  Verificado: Balances de junio, julio y agosto muestra los retiros en "Aportes y retiros", y
+  Caja los muestra en su día como "Retiro".
 - **Deploy:** las tablas antes que el código (si no, Caja y Balances dan 500); el front puede
   terminar de deployar antes que el backend, así que conviene subir en un momento de poco uso.
 

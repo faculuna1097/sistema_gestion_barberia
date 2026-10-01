@@ -235,7 +235,6 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
 
 ## Pendientes
 
-- **Movimientos extra — migrar los retiros históricos de Kingsai.** Hasta el 2026-09-30 los retiros de los dueños se cargaban como gasto (categoría "Otros"). Hay que pasarlos a `movimiento_extra` con su dueño, con la feature ya deployada: filas elegidas a mano, `INSERT … SELECT` + `DELETE` en una sola ejecución del SQL editor, con respaldo en CSV. Hasta entonces, la ganancia de esos meses sigue descontando los retiros. Detalle en [`decisiones_movimientos_extra.md`](./decisiones_movimientos_extra.md).
 - **Balances — separar servicios y productos en el histórico (analizar después del deploy de los modales de detalle).** `GET /balances/historico` trae servicios y productos sumados dentro de `ingresos_brutos`, así que el modal del mes los muestra en un solo renglón ("Servicios y productos" = ingresos brutos − otros ingresos). Opción: que el endpoint devuelva también `ingresos_servicios` e `ingresos_productos` (campos nuevos, no rompen nada) y el modal los muestre por separado, como el mensual.
 - **Landing para IA — deploy y verificación en producción.** El branch `feature/landing-ia` está mergeado a `main` local; sale con el próximo push. Antes del push: activar Vercel Web Analytics en el proyecto de la landing (Analytics → Enable). Después:
   1. Verificar que `curl -A GPTBot https://barbermanager.app/` traiga la página completa con el JSON-LD.
