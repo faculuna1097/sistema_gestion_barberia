@@ -151,10 +151,13 @@ Verificación (el ejecutor, sin levantar servidores):
 
 ### Paso 3b — Implementar el contenido (chat aparte)
 
-- El contenido vive en módulos de datos (`src/content/…`, por ejemplo `faq.js` y
-  `comparacion.js`), que lee la UI y va a leer el JSON-LD del paso 4b.
-- Bloque comparativo responsive: a 375 px, sin scroll horizontal de página. Sigue
-  `sistema_de_disenio.md`.
+- Implementa §5.3 a §5.6. El "para quién es" quedó como FAQ 6, y la tabla comparativa como el
+  bloque de 4 puntos de §5.4: con datos verificables solo daba para 2 filas.
+- La FAQ y el bloque de §5.4 viven en módulos de datos (`src/content/faq.js` y
+  `src/content/alternativas.js`), que lee la UI y van a leer el JSON-LD y el `llms.txt` del
+  paso 4b.
+- El bloque de §5.4 reusa `FeatureCard` (hoy sin uso). A 375 px, sin scroll horizontal de
+  página. Sigue `sistema_de_disenio.md`.
 - Verificación: build + lint + textos nuevos en `dist/index.html`.
 
 ### Paso 4a — `og-image` (orquestador)
@@ -201,7 +204,95 @@ Verificación (el ejecutor, sin levantar servidores):
 
 ## 5. Contenido aprobado
 
-Se completa en el paso 3a.
+Aprobado por el usuario el 2026-10-01 (paso 3a). Los textos que mencionan el precio se arman
+desde `PRECIO` (`config/landing.js`), nunca con el número escrito (D9).
+
+### 5.1 Relevamiento de la competencia (01/10/2026)
+
+Fuentes: páginas de precios oficiales, abiertas desde Argentina.
+
+| | Precio | Moneda | Notas |
+|---|---|---|---|
+| Fresha ([precios](https://www.fresha.com/es/pricing)) | Independiente 8.000 ARS/mes (1 profesional). Equipo 5.300 ARS por miembro reservable/mes. Más impuestos | ARS | Sistema completo: punto de venta, inventario, informes (incluye ingresos y gastos), comisiones y sueldos (plan Equipo). Complementos pagos (Insights, Xero, etc.). Tarifa única por cliente nuevo que llega por su marketplace |
+| Booksy ([precios](https://biz.booksy.com/pricing)) | US$29,99/mes + US$20 por miembro adicional. Más impuestos | USD | Todo incluido. Boost opcional: 30% de la primera visita del cliente nuevo (tope US$100) |
+| Setmore ([precios](https://www.setmore.com/pricing)) | Gratis hasta 4 usuarios. Pro: US$5/usuario/mes (anual) o US$12 (mensual) | USD | Agenda y cobros. No figuran comisiones ni gastos |
+
+Consecuencias para el copy:
+- El precio **no** se compara con números: Fresha sale más barato hasta unos 5 barberos y Setmore
+  es gratis hasta 4 usuarios.
+- Fresha también tiene gestión (caja, comisiones, gastos): no se afirma que falte.
+- Lo verificable: (1) los tres cobran según el tamaño del equipo y BarberManager es precio fijo
+  con barberos ilimitados; (2) Booksy y Setmore cobran en dólares. El resto se afirma solo sobre
+  BarberManager.
+
+### 5.2 Cabecera (paso 4b)
+
+- **title:** BarberManager — Sistema de gestión y turnos para barberías en Argentina
+- **meta description:** Turnero online, app para barberos, caja, gastos, planillas y balance del
+  mes en un solo sistema, con barberos ilimitados. Hecho para barberías de Argentina. Primer mes
+  gratis.
+
+### 5.3 Hero — subtítulo
+
+> El sistema de gestión para barberías de Argentina: turnero online, caja, barberos y números,
+> todo conectado. Sin planillas sueltas ni el WhatsApp desbordado. Te ayudamos a configurarlo y
+> trabajás ordenado desde el primer día.
+
+### 5.4 Bloque "¿Y frente a otras apps de turnos?"
+
+Va dentro de la sección Comparación, debajo de las dos columnas del antes y después.
+
+1. **No pagás por barbero.** Fresha, Booksy y Setmore cobran según cuántos miembros tenga tu
+   equipo. En BarberManager el precio es fijo: sumás todos los barberos que quieras sin pagar más.
+2. **En pesos, sin sorpresas con el dólar.** Booksy y Setmore cobran en dólares. BarberManager se
+   paga en pesos.
+3. **Todo en el mismo precio.** Turnero online, app para barberos, caja, gastos, planillas de cada
+   barbero y balance del mes. Sin complementos pagos.
+4. **Te acompañamos.** Te ayudamos a dejar todo configurado y te atendemos por WhatsApp.
+
+Nota al pie: *Datos de Fresha, Booksy y Setmore según sus páginas de precios oficiales al 1 de
+octubre de 2026.*
+
+### 5.5 FAQ (11 preguntas, en este orden)
+
+1. **¿Qué es BarberManager?** Un sistema de gestión para barberías de Argentina. Junta el turnero
+   online para tus clientes, la app de cada barbero y el panel donde cargás cortes, ventas y
+   gastos y ves la caja del día, las planillas y el balance del mes.
+2. **¿Cuánto cuesta?** El primer mes es gratis. Después, {precio} por mes con todo incluido, sin
+   importar cuántos barberos tengas. Sin contrato: cancelás cuando quieras.
+3. **¿Hay límite de barberos?** No. Cargás todos los que tengas sin pagar más. Cada uno tiene su
+   agenda, sus horarios y sus días libres, y vos ves todo el local junto.
+4. **¿Qué incluye el sistema de gestión?** Registro de cortes, ventas y gastos; caja del día
+   separada en efectivo y Mercado Pago; planillas semanales y mensuales con lo que le toca a cada
+   barbero (comisión y propinas), exportables a Excel; y el balance del mes con la ganancia, los
+   aportes y los retiros.
+5. **¿En qué se diferencia de Fresha, Booksy o Setmore?** Esas apps cobran según la cantidad de
+   miembros del equipo, y Booksy y Setmore en dólares. BarberManager cobra un precio fijo en pesos
+   con barberos ilimitados, e incluye turnero, app para barberos y la gestión del negocio.
+6. **¿Para qué barberías sirve?** Para barberías de Argentina de cualquier tamaño, desde un
+   barbero solo hasta equipos grandes, que hoy toman turnos por WhatsApp y llevan la caja en papel
+   o en Excel.
+7. **¿Sirve si tengo varias sucursales?** Cada suscripción cubre un local. Si tenés varias
+   sucursales, cada una funciona con su propia suscripción.
+8. **¿Cómo reservan mis clientes?** Con un link que compartís en Instagram o WhatsApp. El cliente
+   elige barbero, servicio y horario, recibe la confirmación al instante y un recordatorio por
+   email la noche anterior.
+9. **¿Necesito instalar algo? ¿Funciona en el celular?** No instalás nada: funciona desde el
+   navegador. El turnero y la app del barbero andan en el celular; el panel de gestión está pensado
+   para iPad, tablet o computadora.
+10. **¿Qué pasa con mis datos?** Son tuyos. Quedan guardados de forma segura, los consultás cuando
+    quieras y podés exportar las planillas a Excel.
+11. **¿Cómo empiezo?** Nos escribís por WhatsApp o email, damos de alta tu barbería y arrancás el
+    primer mes gratis. Te ayudamos a cargar barberos, servicios y horarios.
+
+`{precio}` = `fmtPesos(PRECIO.mensual)`.
+
+### 5.6 Otros ajustes
+
+- **Métricas de `SistemaGestion`:** debajo de las tarjetas, el rótulo *"Números de ejemplo:
+  muestran cómo se ve, no son de una barbería real."*
+- **Plan → "Qué incluye":** sumar *"Barberos ilimitados, sin costo extra"* (después de "Turnero
+  online para tus clientes").
 
 ---
 
@@ -212,7 +303,8 @@ Se completa en el paso 3a.
 | 0 | Branch `feature/landing-ia` + este doc | orquestador | ✅ 2026-10-01 |
 | 1 | Vercel Web Analytics + precio a $30.000 | orquestador | ✅ 2026-10-01 (sin pushear) |
 | 2 | Pre-renderizado | chat aparte | ✅ 2026-10-01 |
-| 3a | Investigación de competidores + copy | orquestador | 🔲 |
+| — | Imágenes: la captura del Hero reserva su espacio, posters lazy | orquestador | ✅ 2026-10-01 |
+| 3a | Investigación de competidores + copy | orquestador | ✅ 2026-10-01 |
 | 3b | Implementar el contenido | chat aparte | 🔲 |
 | 4a | `og-image` | orquestador | 🔲 |
 | 4b | robots, sitemap, meta, JSON-LD, `llms.txt` | chat aparte | 🔲 |
