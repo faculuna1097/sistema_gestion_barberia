@@ -5,6 +5,19 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!-- Marca que hay JS antes del primer paint: las animaciones de entrada
+         (.js .om-reveal en index.css) solo ocultan contenido si esta clase está.
+         Sin JS, la página pre-renderizada se ve completa.
+         Red de seguridad: si a los 3 s la app no hidrató (el bundle no cargó,
+         tiró error o el navegador no lo soporta), se saca la clase y el
+         contenido se ve sin animar. main.jsx marca window.__omHidratado. -->
+    <script>
+      document.documentElement.classList.add('js');
+      setTimeout(function () {
+        if (!window.__omHidratado) document.documentElement.classList.remove('js');
+      }, 3000);
+    </script>
+
     <!-- SEO básico -->
     <title>BarberManager — Gestioná toda tu barbería desde un solo lugar</title>
     <meta

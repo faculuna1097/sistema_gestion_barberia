@@ -8,7 +8,6 @@ import { theme } from '../../theme/tokens.js';
 import { linkWhatsApp } from '../../utils/contacto.js';
 import { CAPTURAS } from '../../config/landing.js';
 import Container from '../landing/Container.jsx';
-import Reveal from '../landing/Reveal.jsx';
 import Button from '../ui/Button.jsx';
 import FreeMonthBadge from '../landing/FreeMonthBadge.jsx';
 import ScreenshotFrame from '../landing/ScreenshotFrame.jsx';
@@ -32,8 +31,9 @@ function Hero() {
       }}
     >
       <Container>
-        {/* Bloque de texto */}
-        <Reveal
+        {/* Bloque de texto. El Hero no usa <Reveal>: es el contenido principal
+            y tiene que verse en el primer paint (una animación retrasaría el LCP). */}
+        <div
           style={{
             maxWidth: 720,
             marginInline: 'auto',
@@ -105,11 +105,10 @@ function Hero() {
               </span>
             ))}
           </div>
-        </Reveal>
+        </div>
 
         {/* Captura de Planillas (reemplaza el registro en papel) */}
-        <Reveal
-          delay={120}
+        <div
           style={{ maxWidth: 960, marginInline: 'auto', marginTop: 'clamp(40px, 6vw, 64px)' }}
         >
           <ScreenshotFrame
@@ -130,7 +129,7 @@ function Hero() {
           >
             Planilla semanal — sin cuaderno ni Excel
           </p>
-        </Reveal>
+        </div>
       </Container>
     </section>
   );

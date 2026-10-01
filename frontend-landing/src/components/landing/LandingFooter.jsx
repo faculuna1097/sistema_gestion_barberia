@@ -8,6 +8,11 @@ import { MARCA, CONTACTO } from '../../config/landing.js';
 import { linkWhatsApp, linkEmail } from '../../utils/contacto.js';
 import Container from './Container.jsx';
 
+// Año del copyright: lo fija el build (`define` en vite.config.js). No usar
+// new Date() en el render: la página se pre-renderiza y, desde el 1 de enero,
+// el HTML del build y el render del cliente no coincidirían.
+const ANIO = __ANIO_BUILD__;
+
 // Fondo del chip del logo (indigo de marca): igual al fondo del emblema, para que
 // el recuadro redondeado se vea seamless y recorte las esquinas de la imagen.
 const LOGO_BG = theme.accent;
@@ -57,8 +62,6 @@ function FooterLink({ href, external = false, children }) {
  * Pie de página. Sin props.
  */
 function LandingFooter() {
-  const anio = new Date().getFullYear();
-
   return (
     <footer
       style={{
@@ -172,7 +175,7 @@ function LandingFooter() {
             color: theme.mutedSoft,
           }}
         >
-          © {anio} {MARCA.nombre}. Hecho para barberías.
+          © {ANIO} {MARCA.nombre}. Hecho para barberías.
         </div>
       </Container>
     </footer>

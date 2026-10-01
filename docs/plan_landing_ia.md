@@ -211,7 +211,7 @@ Se completa en el paso 3a.
 |---|---|---|---|
 | 0 | Branch `feature/landing-ia` + este doc | orquestador | ✅ 2026-10-01 |
 | 1 | Vercel Web Analytics + precio a $30.000 | orquestador | ✅ 2026-10-01 (sin pushear) |
-| 2 | Pre-renderizado | chat aparte | 🔲 |
+| 2 | Pre-renderizado | chat aparte | ✅ 2026-10-01 |
 | 3a | Investigación de competidores + copy | orquestador | 🔲 |
 | 3b | Implementar el contenido | chat aparte | 🔲 |
 | 4a | `og-image` | orquestador | 🔲 |
