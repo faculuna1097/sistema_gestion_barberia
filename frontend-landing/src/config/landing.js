@@ -35,7 +35,7 @@ export const CONTACTO = {
  * "Consultanos el precio" en vez de un monto.
  */
 export const PRECIO = {
-  mensual: 40000,
+  mensual: 30000,
   moneda:  'ARS',
 };
 
