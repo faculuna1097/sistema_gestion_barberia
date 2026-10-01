@@ -2,12 +2,20 @@
 // Sección Comparación: "antes vs después" en dos columnas. La del método
 // tradicional en rojo con ✗ (mismo recurso de "dolor" que Problema); la de
 // BarberManager en indigo con ✓ y resaltada como la opción ganadora.
+// Debajo, el bloque "¿Y frente a otras apps de turnos?" (content/alternativas.js).
 
-import { Check, X } from 'lucide-react';
+import { Check, X, Users, Banknote, PackageCheck, MessageCircle } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
 import { MARCA } from '../../config/landing.js';
+import { ALTERNATIVAS } from '../../content/alternativas.js';
 import Section from '../landing/Section.jsx';
 import Reveal from '../landing/Reveal.jsx';
+import FeatureCard from '../landing/FeatureCard.jsx';
+import NotaAlPie from '../landing/NotaAlPie.jsx';
+
+// Íconos de los puntos de ALTERNATIVAS.puntos, en el mismo orden (el módulo de
+// contenido es datos puros, sin íconos).
+const ICONOS_ALTERNATIVAS = [Users, Banknote, PackageCheck, MessageCircle];
 
 // Paletas de las dos columnas.
 const PAL = {
@@ -126,8 +134,63 @@ function ColumnaComparativa({ titulo, items, variante }) {
 }
 
 /**
+ * BloqueAlternativas
+ * Bloque "¿Y frente a otras apps de turnos?": título, los 4 puntos en
+ * FeatureCard (2 × 2 en desktop, 1 columna en mobile) y la nota con la fuente.
+ * Los textos salen de content/alternativas.js. Las tarjetas van en filas de a
+ * dos con el mismo flex y maxWidth que las columnas de arriba, así quedan
+ * alineadas con ellas; con flex-wrap en una sola fila entrarían 3 por fila en
+ * desktop.
+ * @returns {JSX.Element}
+ */
+function BloqueAlternativas() {
+  // Filas de a dos tarjetas: [[p0, p1], [p2, p3]].
+  const filas = [];
+  for (let i = 0; i < ALTERNATIVAS.puntos.length; i += 2) {
+    filas.push(ALTERNATIVAS.puntos.slice(i, i + 2));
+  }
+
+  return (
+    <div style={{ marginTop: 'clamp(48px, 7vw, 72px)' }}>
+      <Reveal style={{ maxWidth: theme.maxWidthText, marginInline: 'auto', textAlign: 'center', marginBottom: 'clamp(24px, 4vw, 32px)' }}>
+        <h3
+          style={{
+            fontFamily: theme.body,
+            fontWeight: theme.weightHeading,
+            fontSize: 'clamp(20px, 3vw, 28px)',
+            letterSpacing: '-0.02em',
+            lineHeight: 1.2,
+            color: theme.ink,
+            margin: 0,
+          }}
+        >
+          {ALTERNATIVAS.titulo}
+        </h3>
+      </Reveal>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {filas.map((fila, f) => (
+          <div key={f} style={{ display: 'flex', flexWrap: 'wrap', gap: 20, justifyContent: 'center', alignItems: 'stretch' }}>
+            {fila.map((p, j) => {
+              const i = f * 2 + j;
+              return (
+                <Reveal key={p.titulo} delay={i * 80} style={{ flex: '1 1 300px', maxWidth: 460, display: 'flex' }}>
+                  <FeatureCard icon={ICONOS_ALTERNATIVAS[i]} title={p.titulo} body={p.texto} nivel="h4" />
+                </Reveal>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      <NotaAlPie>{ALTERNATIVAS.nota}</NotaAlPie>
+    </div>
+  );
+}
+
+/**
  * Comparacion
- * Sección "antes vs después". Sin props.
+ * Sección "antes vs después" + bloque frente a otras apps de turnos. Sin props.
  * @returns {JSX.Element}
  */
 function Comparacion() {
@@ -147,6 +210,8 @@ function Comparacion() {
           <ColumnaComparativa titulo={`Con ${MARCA.nombre}`} items={CON_SISTEMA} variante="bueno" />
         </Reveal>
       </div>
+
+      <BloqueAlternativas />
     </Section>
   );
 }

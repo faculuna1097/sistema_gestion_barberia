@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-Última actualización: 2026-09-30 (movimientos extra: aportes, retiros y otros ingresos; RLS en todas las tablas; modales de detalle en Planillas y Balances). **Go-live del turnero mergeado a `main` y en producción** (`kingsaistudio.barbermanager.app`): turnero del cliente, app del barbero, acceso de barberos al panel, horario de atención + feriados y rediseño del panel de gestión, todo live. Backend fijado a **Node 22** en Railway (supabase-js v2 necesita WebSocket nativo — ver post-mortem en [`postmortem_golive_turnero.md`](./postmortem_golive_turnero.md)). El mailer de Resend está activo tanto en el web service como en el cron. **(2026-06-15) Landing de marketing en producción** en `barbermanager.app` (apex canónico, `www` redirige). Quedan solo residuales operativos/time-gated de entregabilidad de mail — ver Pendientes.
+Última actualización: 2026-10-01 (landing pre-renderizada y lista para IA: SSG, robots, sitemap, JSON-LD, `llms.txt`, `og-image`, Vercel Analytics y copy nuevo; pendiente de deploy). Antes, 2026-09-30: movimientos extra (aportes, retiros y otros ingresos), RLS en todas las tablas y modales de detalle en Planillas y Balances. **Go-live del turnero mergeado a `main` y en producción** (`kingsaistudio.barbermanager.app`): turnero del cliente, app del barbero, acceso de barberos al panel, horario de atención + feriados y rediseño del panel de gestión, todo live. Backend fijado a **Node 22** en Railway (supabase-js v2 necesita WebSocket nativo — ver post-mortem en [`postmortem_golive_turnero.md`](./postmortem_golive_turnero.md)). El mailer de Resend está activo tanto en el web service como en el cron. **(2026-06-15) Landing de marketing en producción** en `barbermanager.app` (apex canónico, `www` redirige). Quedan solo residuales operativos/time-gated de entregabilidad de mail — ver Pendientes.
 
 Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convenciones_tecnicas.md).
 
@@ -48,8 +48,23 @@ necesita `vercel.json`**. Configuración de dominio:
   `*.barbermanager.app`** del proyecto de gestión (un dominio exacto le gana al
   wildcard en Vercel) — `kingsaistudio` y los demás subdominios de tenant siguen
   resolviendo al panel, sin regresión.
-- El `og:url` del `index.html` ya apunta al apex, así que coincide con el canónico.
-- **Pendiente:** falta el `og:image` (ver Pendientes).
+- El `og:url` y el `<link rel="canonical">` del `index.html` apuntan al apex
+  (`https://barbermanager.app/`).
+
+**(2026-10-01) Landing pre-renderizada y lista para IA** (branch `feature/landing-ia`).
+- **Pre-renderizado:** `npm run build` genera el HTML completo de la página (antes llegaba
+  un `#root` vacío y los crawlers de IA, que no ejecutan JS, no veían nada) y React hidrata
+  encima.
+- **Archivos para buscadores e IA:** robots, sitemap, datos estructurados (JSON-LD),
+  `llms.txt` y `og-image`.
+- **Analytics:** Vercel Web Analytics, plan Hobby (sin eventos, ventana de 1 mes).
+- **Contenido:** el copy apunta a Argentina; precio $30.000/mes con barberos ilimitados.
+  Incluye un bloque frente a Fresha, Booksy y Setmore, con datos fechados.
+
+El build corre el script `build` del `package.json` (`vite build` + build SSR +
+`scripts/prerender.js`): el proyecto de Vercel **no** tiene que tener el Build Command
+sobrescrito. Decisiones y mantenimiento en
+[`decisiones_landing_ia.md`](./decisiones_landing_ia.md).
 
 El proyecto de gestión actúa de shell: su `/frontend/vercel.json` proxea
 `/turnos/*` y `/barbero/*` a los otros dos proyectos vía rewrites.
@@ -222,11 +237,14 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
 
 - **Movimientos extra — migrar los retiros históricos de Kingsai.** Hasta el 2026-09-30 los retiros de los dueños se cargaban como gasto (categoría "Otros"). Hay que pasarlos a `movimiento_extra` con su dueño, con la feature ya deployada: filas elegidas a mano, `INSERT … SELECT` + `DELETE` en una sola ejecución del SQL editor, con respaldo en CSV. Hasta entonces, la ganancia de esos meses sigue descontando los retiros. Detalle en [`decisiones_movimientos_extra.md`](./decisiones_movimientos_extra.md).
 - **Balances — separar servicios y productos en el histórico (analizar después del deploy de los modales de detalle).** `GET /balances/historico` trae servicios y productos sumados dentro de `ingresos_brutos`, así que el modal del mes los muestra en un solo renglón ("Servicios y productos" = ingresos brutos − otros ingresos). Opción: que el endpoint devuelva también `ingresos_servicios` e `ingresos_productos` (campos nuevos, no rompen nada) y el modal los muestre por separado, como el mensual.
-- **Landing — `og:image` faltante.** El `index.html` de `/frontend-landing`
-  referencia `https://barbermanager.app/og-image.png`, pero ese archivo no existe
-  en `public/`. Sin esa
-  imagen, el preview al compartir el link (WhatsApp, el canal de conversión) sale
-  sin imagen. Resolver: sumar una imagen 1200×630 a `public/og-image.png`.
+- **Landing para IA — deploy y verificación en producción.** El branch `feature/landing-ia` está mergeado a `main` local; sale con el próximo push. Antes del push: activar Vercel Web Analytics en el proyecto de la landing (Analytics → Enable). Después:
+  1. Verificar que `curl -A GPTBot https://barbermanager.app/` traiga la página completa con el JSON-LD.
+  2. Verificar que `robots.txt`, `sitemap.xml`, `llms.txt` y `og-image.png` respondan 200.
+  3. Pasar el Rich Results Test y validator.schema.org.
+  4. Revisar la vista previa del link en WhatsApp.
+  5. Hacer las acciones fuera del sitio (Search Console, Bing Webmaster Tools, directorios).
+
+  Detalle en [`decisiones_landing_ia.md`](./decisiones_landing_ia.md).
 - **Caja — Tabs 2 y 3 (Cierre de caja + Historial):** postergado. No hay plan escrito; si se retoma, branch sugerido `feature/cierre-caja` (implicaría `ALTER TABLE cierre_caja` con columnas de saldo inicial — `efectivo_inicial`, `mp_inicial`, etc.).
 - **Log de actividad:** registrar quién eliminó qué y cuándo (hoy las eliminaciones no dejan rastro).
 - **Generación de QR de Mercado Pago** para cobro en el momento desde el iPad.
@@ -286,6 +304,9 @@ Deudas detectadas durante la feature de movimientos extra (2026-09-30), verifica
 - **Categorías de gasto por tenant, cargadas a mano.** `crearTenant.js` no crea categorías: se cargan por SQL (ver `onboarding.md`, Paso 2c), así que cada tenant tiene su propia copia de la misma lista base. Idea del usuario: una lista base común más categorías propias por cliente. El schema ya tiene `tenant_id` nullable y `es_default`, pero `getCategorias` solo trae las del tenant. Recomendación (2026-09-30): sembrar la lista base en cada tenant al crearlo (desde `crearTenant.js`) en vez de filas globales con `tenant_id` NULL. Las filas globales obligan a casos especiales en cada consulta, y no dejan que un cliente renombre u oculte una categoría base sin otro mecanismo. Sembrar por tenant mantiene las consultas en `tenant_id = $1` y permite un FK compuesto que cierra la deuda de `categoria_id`. Decidir en su propio chat.
 - Menores: `gastos.js` sin JSDoc; `getGastosMensual` corre sus dos consultas en serie; el comentario del bloque "RUTAS DEL BACKOFFICE" de `index.js` dice "admin + barbero", pero la mayoría de sus rutas son solo admin.
 - **Propias de movimientos extra:** sin edición (corregir es borrar y volver a cargar) y sin pantalla de alta de socios (se cargan por SQL, ver `onboarding.md`).
+- **(nueva, 2026-10-01) — Subdominios de tenant sin `robots.txt` ni `noindex`.** Google puede indexar el login del panel (`<title>Barber Manager</title>`) una vez por tenant, y eso compite con la landing en las búsquedas de la marca. Evaluar un `noindex` para el panel (header `X-Robots-Tag` en el `vercel.json` del proyecto de gestión) que no alcance al turnero (`/turnos`), que sí conviene indexar.
+- **(nueva, 2026-10-01) — Landing: `linkWhatsApp()` y `linkEmail()` no manejan `null`.** El comentario de `config/landing.js` dice que la UI lo maneja, pero con `CONTACTO.whatsapp` en `null` los CTA armarían `https://wa.me/null?...` (los módulos de SEO sí lo cubren). Menor: hoy los valores están cargados.
+- **(nueva, 2026-10-01) — Landing: datos de la competencia con fecha.** El bloque "¿Y frente a otras apps de turnos?" y la FAQ 5 afirman cosas de Fresha, Booksy y Setmore relevadas el 01/10/2026. Revisarlas cada tanto (o si cambian sus precios) y actualizar la nota al pie. Cómo, en [`decisiones_landing_ia.md`](./decisiones_landing_ia.md).
 
 ### Deudas vivas del frontend del panel (consolidadas del registro archivado)
 
@@ -299,7 +320,7 @@ El rediseño del panel de gestión cerró todas sus deudas accionables; quedan e
 - **#45 (aceptada) — Bloque del barbero en un día que el local cerró después no se valida** (`TabBarberos`). Si el local cierra un día donde un barbero ya tenía un bloque cargado, ese bloque se sigue mostrando editable pero `validarHorario` no lo marca inválido (no hay rango del local contra el cual validar: `horarioLocal[dia]` es `undefined`). Caso de borde poco frecuente, dejado fuera de alcance al resolver #40. Si se quiere endurecer: marcar inválido todo bloque en día cerrado del local (con `horarioLocal != null`).
 - **(nueva, 2026-06-10) — Fallo de DELETE silencioso en las secciones de movimientos** (`SeccionVentas`, `SeccionGastos` y `SeccionCaja`→`TabMovimientos`). El handler `confirmarEliminar` de las tres traga el error en el `catch` con solo `console.error` (sin feedback al usuario) y cierra el `ConfirmDialog` igual: si el DELETE falla (red/servidor), la fila reaparece al recargar pero el usuario no se entera de que no se borró. Detectado al cablear el Toast de export (helper `cargarChunk`, 2026-06-10). Fix natural: surfacear el error con el mismo patrón `<Toast tone="danger">` que ya se usa para el export (estado de feedback local) — o, mejor, esperar al Toast flotante global ([`sistema_de_disenio.md`](./sistema_de_disenio.md) §9 deuda #16) y migrar los tres a la vez. Bajo riesgo, anotado.
 - **(nueva, 2026-09-29) — Fórmula de comisión repetida en tres lugares.** `planillaService.resumenSemanal` (backend), `SeccionPlanillas.calcularComisionDia` (panel) y `MiPlanilla.calcularComisionDia` (`frontend-barbero`) calculan la comisión cada uno por su lado. Ya divergieron una vez: el Excel del Detalle de Planillas ponía la comisión de cada día sin propinas mientras la semanal las incluía (resuelto el 2026-09-29: el subtotal del día ahora suma las propinas, igual que el "Pago" en pantalla). Reglas de negocio vigentes (2026-09-29): la comisión es siempre porcentaje y las propinas van siempre al barbero. Fix de fondo: que el backend devuelva también la comisión por día y los fronts dejen de calcularla.
-- **(nueva, 2026-09-29) — `npm run lint` del front de gestión falla en `main`** (7 errores + 1 warning, ninguno funcional; los fronts de barbero y turnero pasan limpio): 2 falsos positivos `'Icon' is defined but never used` (`PanelAdmin.jsx:114` y `KpiCard` en `SeccionBalances.jsx`: el parámetro renombrado `icon: Icon` solo se usa como JSX y `no-unused-vars` no lo ve; se resolvería sumando `argsIgnorePattern: '^[A-Z_]'` a la regla, igual que el `varsIgnorePattern` que ya tiene), 3 de `react-hooks/set-state-in-effect` (`App.jsx:231` y `:269`, `FondoLocal.jsx:106`; ver deuda #13 de [`sistema_de_disenio.md`](./sistema_de_disenio.md)), `token` asignado y sin usar (`App.jsx:136`), `react-refresh/only-export-components` (`screens/flows/wizard.jsx:356`) y el warning `exhaustive-deps` del efecto del histórico en `SeccionBalances`. El landing también falla, con 2 errores de `set-state-in-effect` (`components/landing/Reveal.jsx:26`, `hooks/useMediaQuery.js:32`). Tarea sugerida: "lint en verde en los cuatro fronts".
+- **(nueva, 2026-09-29) — `npm run lint` del front de gestión falla en `main`** (7 errores + 1 warning, ninguno funcional; los fronts de barbero y turnero pasan limpio): 2 falsos positivos `'Icon' is defined but never used` (`PanelAdmin.jsx:114` y `KpiCard` en `SeccionBalances.jsx`: el parámetro renombrado `icon: Icon` solo se usa como JSX y `no-unused-vars` no lo ve; se resolvería sumando `argsIgnorePattern: '^[A-Z_]'` a la regla, igual que el `varsIgnorePattern` que ya tiene), 3 de `react-hooks/set-state-in-effect` (`App.jsx:231` y `:269`, `FondoLocal.jsx:106`; ver deuda #13 de [`sistema_de_disenio.md`](./sistema_de_disenio.md)), `token` asignado y sin usar (`App.jsx:136`), `react-refresh/only-export-components` (`screens/flows/wizard.jsx:356`) y el warning `exhaustive-deps` del efecto del histórico en `SeccionBalances`. El de la landing quedó en verde el 2026-10-01 (pre-renderizado, ver [`decisiones_landing_ia.md`](./decisiones_landing_ia.md)). Tarea sugerida: "lint en verde en los cuatro fronts".
 - **(pendiente de producto) — ¿`ScreenHeader` en todo el admin?** Se sacaron de Gestión, Turnero, Planillas, Balances y Caja (decisión D15 en [`decisiones_redisenio_panel_gestion.md`](./decisiones_redisenio_panel_gestion.md)); quedan solo en `SeccionVentas` y `SeccionGastos` (verificado 2026-09-29). Falta decidir si se sacan también de ahí o se conservan.
 - **(nueva, 2026-09-29) — `SeccionInicio.jsx:423` usa `.then(r => r.json())`** dentro del `Promise.all`, contra convenciones §3 (nunca `.then()`). Pasarlo a `async/await` la próxima vez que se toque Inicio.
 - **(nueva, 2026-09-30) — Caja esconde todo mientras carga o si falla.** El estado de carga y el de error reemplazan también el selector de día y los totales: si un día falla, solo queda "Reintentar" y no se puede cambiar de día sin salir de la sección.

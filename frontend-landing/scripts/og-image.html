@@ -1,0 +1,127 @@
+<!doctype html>
+<!--
+  /frontend-landing/scripts/og-image.html
+  Plantilla de la imagen de vista previa (og:image) de la landing: la tarjeta
+  que se ve al compartir el link por WhatsApp, Instagram, Facebook, etc.
+  No se publica: se captura a PNG con Edge headless y el resultado va a
+  public/og-image.png. Usa los tokens del sistema "Luz" (tokens.js) y la
+  captura real de Planillas.
+
+  Regenerar (desde /frontend-landing, en Bash):
+    "/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" --headless=new \
+      --disable-gpu --no-first-run --user-data-dir="$TEMP/og-edge" \
+      --hide-scrollbars --window-size=1200,630 --virtual-time-budget=10000 \
+      --screenshot="$(pwd -W)/public/og-image.png" "file:///$(pwd -W)/scripts/og-image.html"
+  --user-data-dir separado evita que el comando le pase el trabajo a un Edge
+  abierto y no genere nada. El PNG puede tardar un segundo en aparecer después
+  de que el comando termina. --virtual-time-budget da tiempo a que cargue Geist.
+  Medidas: 1200 × 630. Peso objetivo: menos de 300 KB (WhatsApp a veces no
+  muestra la vista previa con imágenes más pesadas).
+  Lo esencial (marca y frase) va centrado: en algunas vistas WhatsApp recorta
+  la imagen a un cuadrado central.
+-->
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=block"
+    />
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+
+      html, body {
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        background: #FAFAFA; /* bg */
+        font-family: 'Geist', system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .lienzo {
+        position: relative;
+        width: 1200px;
+        height: 630px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding-top: 52px;
+      }
+
+      /* Marca: chip indigo con el logo + nombre */
+      .marca {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .marca-chip {
+        width: 52px;
+        height: 52px;
+        border-radius: 13px;
+        background: #4F46E5; /* accent */
+        overflow: hidden;
+        display: flex;
+      }
+      .marca-chip img { width: 100%; height: 100%; object-fit: contain; }
+      .marca-nombre {
+        font-size: 30px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: #09090B; /* ink */
+      }
+
+      .titulo {
+        margin-top: 30px;
+        max-width: 960px;
+        text-align: center;
+        font-size: 58px;
+        font-weight: 700;
+        line-height: 1.06;
+        letter-spacing: -0.03em;
+        color: #09090B; /* ink */
+        text-wrap: balance; /* dos líneas parejas, sin una palabra suelta abajo */
+      }
+
+      .bajada {
+        margin-top: 18px;
+        font-size: 26px;
+        font-weight: 500;
+        color: #71717A; /* muted */
+      }
+      .bajada strong { color: #4F46E5; font-weight: 600; } /* accent */
+
+      /* Captura real de Planillas, en marco como ScreenshotFrame, cortada por
+         el borde inferior del lienzo. */
+      .captura {
+        position: absolute;
+        top: 352px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 1000px;
+        border-radius: 14px; /* radiusLg */
+        border: 1px solid #E4E4E7; /* hairline */
+        background: #FFFFFF;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.10); /* shadowLg */
+        overflow: hidden;
+      }
+      .captura img { display: block; width: 100%; height: auto; }
+    </style>
+  </head>
+  <body>
+    <div class="lienzo">
+      <div class="marca">
+        <span class="marca-chip"><img src="../public/logo.png" alt="" /></span>
+        <span class="marca-nombre">BarberManager</span>
+      </div>
+
+      <h1 class="titulo">Gestioná toda tu barbería desde un solo lugar.</h1>
+
+      <p class="bajada">Turnos, caja y planillas · <strong>Primer mes gratis</strong></p>
+
+      <div class="captura">
+        <img src="../public/screenshots/seccionPlanillas.jpg" alt="" />
+      </div>
+    </div>
+  </body>
+</html>

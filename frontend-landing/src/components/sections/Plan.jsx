@@ -11,15 +11,8 @@ import Card from '../ui/Card.jsx';
 import FreeMonthBadge from '../landing/FreeMonthBadge.jsx';
 import FeatureList from '../landing/FeatureList.jsx';
 import CTAGroup from '../landing/CTAGroup.jsx';
-
-// Qué incluye el plan (todo, sin módulos sueltos).
-const INCLUYE = [
-  'Sistema de gestión completo',
-  'App para los barberos',
-  'Turnero online para tus clientes',
-  'Recordatorios automáticos por email',
-  'Te ayudamos a configurarlo',
-];
+import NotaAlPie from '../landing/NotaAlPie.jsx';
+import { INCLUYE } from '../../content/plan.js';
 
 /**
  * Plan
@@ -96,9 +89,7 @@ function Plan() {
           {/* CTA */}
           <CTAGroup align="center" primaryLabel="Empezá tu mes gratis" style={{ width: '100%' }} />
 
-          <span style={{ fontFamily: theme.body, fontSize: 13, color: theme.mutedSoft }}>
-            Sin instalaciones · Cancelás cuando quieras
-          </span>
+          <NotaAlPie style={{ margin: 0 }}>Sin instalaciones · Cancelás cuando quieras</NotaAlPie>
         </Card>
       </Reveal>
     </Section>

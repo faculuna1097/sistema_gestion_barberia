@@ -84,15 +84,24 @@ function Placeholder({ label }) {
  * ScreenshotFrame
  * Marco que contiene una captura del producto (o un placeholder).
  * @param {string} [props.image] - URL de la captura; si falta, muestra placeholder
+ * @param {number} [props.width] - Ancho real del archivo en px. Junto con height,
+ *   el navegador reserva el espacio antes de que cargue (sin salto de contenido)
+ * @param {number} [props.height] - Alto real del archivo en px
+ * @param {boolean} [props.priority=false] - Imagen principal de la página (Hero):
+ *   se descarga con prioridad alta. Solo una por página
  * @param {string} [props.alt=''] - Texto alternativo de la imagen
  * @param {ReactNode} [props.children] - Contenido alternativo si no hay image
  * @param {boolean} [props.chrome=false] - Muestra la barra tipo navegador
  * @param {string} [props.label='barbermanager.app'] - URL de la ChromeBar
  * @param {string} [props.placeholderLabel='Captura del producto'] - Texto del placeholder
  * @param {Object} [props.style] - Override del contenedor
+ * @returns {JSX.Element}
  */
 function ScreenshotFrame({
   image,
+  width,
+  height,
+  priority = false,
   alt = '',
   children,
   chrome = false,
@@ -113,7 +122,17 @@ function ScreenshotFrame({
     >
       {chrome && <ChromeBar label={label} />}
       {image ? (
-        <img src={image} alt={alt} style={{ display: 'block', width: '100%' }} />
+        // height: 'auto' es obligatorio: con el atributo height solo, la imagen
+        // quedaría con alto fijo. Así el navegador usa width/height como
+        // proporción y reserva el lugar justo.
+        <img
+          src={image}
+          alt={alt}
+          width={width}
+          height={height}
+          fetchPriority={priority ? 'high' : undefined}
+          style={{ display: 'block', width: '100%', height: 'auto' }}
+        />
       ) : (
         children ?? <Placeholder label={placeholderLabel} />
       )}

@@ -1,7 +1,11 @@
 // /frontend-landing/src/components/landing/Reveal.jsx
 // Anima la aparición de un bloque cuando entra al viewport (fade + subida
 // sutil). Animación FUNCIONAL: guía la lectura al hacer scroll, no es
-// decorativa. Respeta prefers-reduced-motion (muestra sin animar).
+// decorativa.
+// La página se pre-renderiza: en el HTML el contenido va visible. El ocultar y
+// animar lo hace CSS (`.js .om-reveal` en index.css), solo si hay JS activo, y
+// prefers-reduced-motion también se resuelve ahí (sin ocultar ni animar). Este
+// componente solo agrega `om-reveal-visible` al entrar en pantalla.
 
 import { useRef, useState, useEffect } from 'react';
 
@@ -11,21 +15,20 @@ import { useRef, useState, useEffect } from 'react';
  * @param {ReactNode} props.children
  * @param {number} [props.delay=0] - Retardo de la animación en ms (para escalonar)
  * @param {string} [props.as='div'] - Tag HTML del wrapper
- * @param {Object} [props.style] - Override puntual
+ * @param {Object} [props.style] - Override puntual (no pasar opacity ni animation:
+ *   los maneja la clase CSS y un inline los pisaría)
+ * @returns {JSX.Element}
  */
 function Reveal({ children, delay = 0, as = 'div', style }) {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
 
+  // Observa el wrapper y lo marca visible la primera vez que entra en pantalla.
+  // El setState va en el callback del observer (evento externo), no en el
+  // cuerpo del efecto.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-
-    // Si el usuario pidió menos movimiento, mostrar directo sin observar.
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setVisible(true);
-      return;
-    }
 
     const obs = new IntersectionObserver(
       ([entry]) => {
@@ -44,9 +47,10 @@ function Reveal({ children, delay = 0, as = 'div', style }) {
   return (
     <Tag
       ref={ref}
+      className={visible ? 'om-reveal om-reveal-visible' : 'om-reveal'}
       style={{
-        opacity: visible ? 1 : 0,
-        animation: visible ? `om-reveal 0.5s ease-out ${delay}ms both` : undefined,
+        // El delay viaja como variable CSS: la animación la define index.css.
+        ...(delay ? { '--om-reveal-delay': `${delay}ms` } : null),
         ...style,
       }}
     >

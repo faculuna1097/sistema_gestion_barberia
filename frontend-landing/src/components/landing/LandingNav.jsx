@@ -1,11 +1,12 @@
 // /frontend-landing/src/components/landing/LandingNav.jsx
 // Barra de navegación superior fija. Logo + anclas (desktop) + CTA de WhatsApp.
 // Gana fondo sólido y sombra al hacer scroll, para despegarse del contenido.
+// Anclas y CTA están siempre en el HTML (la página se pre-renderiza); la clase
+// `om-solo-desktop` (index.css) los oculta en mobile.
 
 import { useState, useEffect } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
-import { useIsDesktop } from '../../hooks/useMediaQuery.js';
 import { MARCA } from '../../config/landing.js';
 import { linkWhatsApp } from '../../utils/contacto.js';
 import Button from '../ui/Button.jsx';
@@ -101,7 +102,6 @@ function NavLink({ href, children }) {
  * Header sticky de la landing. Sin props.
  */
 function LandingNav() {
-  const isDesktop = useIsDesktop();
   const [scrolled, setScrolled] = useState(false);
 
   // Detecta scroll para alternar el estilo "flotante" del nav.
@@ -141,18 +141,18 @@ function LandingNav() {
         <Logo />
 
         {/* Anclas — solo desktop */}
-        {isDesktop && (
+        <div className="om-solo-desktop">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {ANCLAS.map((a) => (
               <NavLink key={a.href} href={a.href}>{a.label}</NavLink>
             ))}
           </div>
-        )}
+        </div>
 
         {/* CTA del nav: solo en desktop. En mobile la barra fija de abajo
             (MobileCtaBar) ya mantiene el contacto a un toque; tener los dos
             persistentes a la vez saturaba. */}
-        {isDesktop && (
+        <div className="om-solo-desktop">
           <Button
             href={linkWhatsApp()}
             external
@@ -163,7 +163,7 @@ function LandingNav() {
             <MessageCircle size={16} strokeWidth={2} aria-hidden="true" />
             Primer mes gratis
           </Button>
-        )}
+        </div>
       </nav>
     </header>
   );

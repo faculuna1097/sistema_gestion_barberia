@@ -2,8 +2,9 @@
    Reset global + carga de fuentes + animaciones reutilizables.
    Copiado del sistema "Luz" (frontend-turnero) con dos diferencias propias de
    la landing: scroll-behavior smooth (para la navegación por anclas del nav) y
-   el keyframe `om-reveal` (fade-in on-scroll de las secciones). No define
-   estilos de componentes — eso vive en los .jsx de /components/. */
+   el keyframe `om-reveal` (fade-in on-scroll de las secciones). Los estilos de
+   componentes viven inline en los .jsx de /components/, salvo las pocas clases
+   `om-` del bloque "Clases de la landing" (ver ahí por qué). */
 
 /* ── Geist + Geist Mono via Google Fonts ─────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
@@ -80,6 +81,47 @@ a {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Clases de la landing (excepción a "sin clases CSS globales") ──
+   La landing se pre-renderiza en el build (scripts/prerender.js): el HTML se
+   genera sin conocer el viewport ni si hay JS, y React hidrata encima. Todo lo
+   que depende del ancho de pantalla o de que el JS esté activo no se puede
+   decidir en el render (saldría un layout y saltaría a otro al hidratar), así
+   que se resuelve acá con media queries. Son pocas, todas con prefijo `om-`.
+   El corte mobile/desktop es 768px. El resto de los estilos sigue inline. */
+
+/* Visibilidad por viewport. `display: contents` hace al wrapper invisible para
+   el layout: el hijo se acomoda como si estuviera directo en su contenedor. */
+.om-solo-desktop { display: none; }
+.om-solo-mobile  { display: contents; }
+
+/* Fila en desktop, columna en mobile (FlowDiagram, SplitFeature). El
+   modificador invertido pone el primer hijo a la derecha solo en desktop; en
+   mobile el orden sigue siendo el del DOM. */
+.om-fila { flex-direction: column; }
+
+@media (min-width: 768px) {
+  .om-solo-desktop { display: contents; }
+  .om-solo-mobile  { display: none; }
+  .om-fila { flex-direction: row; }
+  .om-fila.om-fila-invertida { flex-direction: row-reverse; }
+}
+
+/* Reveal on-scroll (<Reveal>). El contenido está visible en el HTML; solo se
+   oculta para animarlo si hay JS (clase `js` en <html>, la pone un script
+   inline del <head> de index.html antes del primer paint). Reveal agrega
+   `om-reveal-visible` al entrar en pantalla. */
+.js .om-reveal { opacity: 0; }
+.js .om-reveal.om-reveal-visible {
+  opacity: 1;
+  animation: om-reveal 0.5s ease-out var(--om-reveal-delay, 0ms) both;
+}
+
+/* FAQ con <details>/<summary> (<FaqItem>): sin el marcador nativo y con el
+   chevron rotado cuando está abierto. */
+.om-faq > summary { list-style: none; }
+.om-faq > summary::-webkit-details-marker { display: none; }
+.om-faq[open] > summary .om-faq-chevron { transform: rotate(180deg); }
+
 /* ── Accesibilidad: respetar "reducir movimiento" ────────────── */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -88,4 +130,7 @@ a {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+  /* Reveal: sin ocultar ni animar. */
+  .js .om-reveal,
+  .js .om-reveal.om-reveal-visible { opacity: 1; animation: none; }
 }

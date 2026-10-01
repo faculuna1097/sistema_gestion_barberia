@@ -1,32 +1,57 @@
 <!doctype html>
-<html lang="es">
+<html lang="es-AR">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- SEO básico -->
-    <title>BarberManager — Gestioná toda tu barbería desde un solo lugar</title>
+    <!-- Marca que hay JS antes del primer paint: las animaciones de entrada
+         (.js .om-reveal en index.css) solo ocultan contenido si esta clase está.
+         Sin JS, la página pre-renderizada se ve completa.
+         Red de seguridad: si a los 3 s la app no hidrató (el bundle no cargó,
+         tiró error o el navegador no lo soporta), se saca la clase y el
+         contenido se ve sin animar. main.jsx marca window.__omHidratado. -->
+    <script>
+      document.documentElement.classList.add('js');
+      setTimeout(function () {
+        if (!window.__omHidratado) document.documentElement.classList.remove('js');
+      }, 3000);
+    </script>
+
+    <!-- SEO básico. La meta description es el mismo texto que DESCRIPCION
+         (src/seo/sitio.js), que usan el JSON-LD y el llms.txt: si no
+         coinciden, scripts/prerender.js corta el build. -->
+    <title>BarberManager — Sistema de gestión y turnos para barberías en Argentina</title>
     <meta
       name="description"
-      content="Software de gestión para barberías: turnos, caja, barberos y números, todo conectado. Probá tu primer mes gratis."
+      content="Turnero online, app para barberos, caja, gastos, planillas y balance del mes en un solo sistema, con barberos ilimitados. Hecho para barberías de Argentina. Primer mes gratis."
     />
+    <link rel="canonical" href="https://barbermanager.app/" />
     <meta name="theme-color" content="#4F46E5" />
 
     <!-- Open Graph (preview al compartir el link) -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="BarberManager" />
+    <meta property="og:locale" content="es_AR" />
     <meta
       property="og:title"
-      content="BarberManager — Gestioná toda tu barbería desde un solo lugar"
+      content="BarberManager — Sistema de gestión y turnos para barberías en Argentina"
     />
     <meta
       property="og:description"
-      content="Turnos, caja, barberos y números, todo conectado. Probá tu primer mes gratis."
+      content="Turnero online, app para barberos, caja, gastos, planillas y balance del mes en un solo sistema, con barberos ilimitados. Hecho para barberías de Argentina. Primer mes gratis."
     />
-    <meta property="og:url" content="https://barbermanager.app" />
+    <meta property="og:url" content="https://barbermanager.app/" />
     <meta property="og:image" content="https://barbermanager.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="BarberManager: gestioná toda tu barbería desde un solo lugar"
+    />
     <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- El JSON-LD (datos estructurados) lo inyecta scripts/prerender.js en el build. -->
   </head>
   <body>
     <div id="root"></div>

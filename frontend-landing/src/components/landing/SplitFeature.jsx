@@ -2,9 +2,11 @@
 // Layout de sección "texto + medio" en dos columnas (apiladas en mobile).
 // Reusado por Turnero, App barberos y Sistema de gestión. `reverse` alterna el
 // lado del medio para dar ritmo entre secciones consecutivas.
+// Fila/columna e inversión se resuelven por CSS (`om-fila` y `om-fila-invertida`
+// en index.css), porque la página se pre-renderiza sin conocer el ancho de
+// pantalla. En mobile el texto va siempre primero (orden del DOM).
 
 import { theme } from '../../theme/tokens.js';
-import { useIsDesktop } from '../../hooks/useMediaQuery.js';
 import Section from './Section.jsx';
 import Eyebrow from './Eyebrow.jsx';
 import Reveal from './Reveal.jsx';
@@ -24,14 +26,12 @@ import FeatureList from './FeatureList.jsx';
  * @returns {JSX.Element}
  */
 function SplitFeature({ id, tone = 'default', eyebrow, title, subtitle, items, media, cta, reverse = false }) {
-  const isDesktop = useIsDesktop();
-
   return (
     <Section id={id} tone={tone}>
       <div
+        className={reverse ? 'om-fila om-fila-invertida' : 'om-fila'}
         style={{
           display: 'flex',
-          flexDirection: isDesktop ? 'row' : 'column',
           alignItems: 'center',
           gap: 'clamp(32px, 6vw, 64px)',
         }}
@@ -42,7 +42,6 @@ function SplitFeature({ id, tone = 'default', eyebrow, title, subtitle, items, m
             flex: '1 1 0',
             minWidth: 0,
             width: '100%',
-            order: isDesktop && reverse ? 2 : 1,
             display: 'flex',
             flexDirection: 'column',
             gap: 16,
@@ -86,7 +85,6 @@ function SplitFeature({ id, tone = 'default', eyebrow, title, subtitle, items, m
             flex: '1 1 0',
             minWidth: 0,
             width: '100%',
-            order: isDesktop && reverse ? 1 : 2,
           }}
         >
           {media}

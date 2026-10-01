@@ -1,34 +1,13 @@
 // /frontend-landing/src/components/sections/FAQ.jsx
 // Sección de preguntas frecuentes. Respuestas honestas y concretas, sin jerga.
+// Los textos viven en content/faq.js (los comparte con el JSON-LD y el llms.txt).
 
 import { theme } from '../../theme/tokens.js';
 import { linkWhatsApp } from '../../utils/contacto.js';
+import { FAQS } from '../../content/faq.js';
 import Section from '../landing/Section.jsx';
 import Reveal from '../landing/Reveal.jsx';
 import FaqItem from '../landing/FaqItem.jsx';
-
-const FAQS = [
-  {
-    pregunta: '¿Necesito instalar algo?',
-    respuesta: 'No. Funciona desde el navegador, en la computadora y en el celular. No instalás nada ni dependés de un equipo en particular.',
-  },
-  {
-    pregunta: '¿Puedo usar varios barberos?',
-    respuesta: 'Sí. Cada barbero tiene su propia agenda, sus horarios y sus días libres, y vos ves todo el local junto.',
-  },
-  {
-    pregunta: '¿Funciona desde el celular?',
-    respuesta: 'Sí. El turnero para tus clientes y la app del barbero. El panel de gestión es exclusivo de Ipad, compu o tablet.',
-  },
-  {
-    pregunta: '¿Qué pasa con mis datos?',
-    respuesta: 'Son tuyos. Quedan guardados de forma segura y los podés consultar cuando quieras.',
-  },
-  {
-    pregunta: '¿Cómo empiezo?',
-    respuesta: 'Nos escribís por WhatsApp o email, damos de alta tu barbería y arrancás tu primer mes gratis. Te ayudamos a dejar todo configurado.',
-  },
-];
 
 /**
  * FAQ

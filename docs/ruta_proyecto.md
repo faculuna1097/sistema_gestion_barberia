@@ -439,6 +439,9 @@ frontend-landing/
 |-- public/
 |   |-- favicon.png
 |   |-- logo.png
+|   |-- og-image.png          vista previa al compartir el link (1200×630)
+|   |-- robots.txt
+|   |-- sitemap.xml
 |   |-- screenshots/
 |   |   `-- seccionPlanillas.jpg
 |   `-- videos/
@@ -448,8 +451,12 @@ frontend-landing/
 |       |-- corte.mp4
 |       |-- turnero.jpg
 |       `-- turnero.mp4
+|-- scripts/
+|   |-- og-image.html         plantilla de la og-image (no se publica; se captura con Edge headless)
+|   `-- prerender.js          SSG: inyecta el HTML, el JSON-LD y genera dist/llms.txt
 `-- src/
     |-- App.jsx
+    |-- entry-server.jsx      entrada del build SSR: render() + datos de SEO
     |-- index.css
     |-- main.jsx
     |-- components/
@@ -466,6 +473,7 @@ frontend-landing/
     |   |   |-- LandingNav.jsx
     |   |   |-- MetricCard.jsx
     |   |   |-- MobileCtaBar.jsx
+    |   |   |-- NotaAlPie.jsx
     |   |   |-- PainCard.jsx
     |   |   |-- Reveal.jsx
     |   |   |-- ScreenshotFrame.jsx
@@ -489,9 +497,15 @@ frontend-landing/
     |       |-- Button.jsx
     |       `-- Card.jsx
     |-- config/
-    |   `-- landing.js
-    |-- hooks/
-    |   `-- useMediaQuery.js
+    |   `-- landing.js        marca, contacto, precio, flags, capturas, videos
+    |-- content/              datos puros que comparten la UI, el JSON-LD y el llms.txt
+    |   |-- alternativas.js   bloque "¿Y frente a otras apps de turnos?"
+    |   |-- faq.js
+    |   `-- plan.js           qué incluye la suscripción
+    |-- seo/                  solo los usa el build SSR (no llegan al cliente)
+    |   |-- datosEstructurados.js
+    |   |-- llmsTxt.js
+    |   `-- sitio.js          URL canónica y meta description
     |-- theme/
     |   `-- tokens.js
     `-- utils/

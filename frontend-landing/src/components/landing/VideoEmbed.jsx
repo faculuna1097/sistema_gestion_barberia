@@ -67,10 +67,14 @@ function VideoEmbed({ src, youtubeId, poster, aspect = '16 / 9', title = 'Video 
         aria-label={`Reproducir: ${title}`}
         style={{ ...frame, padding: 0, cursor: 'pointer', display: 'block' }}
       >
+        {/* lazy: los videos están debajo del Hero; así el poster no compite
+            con la captura principal en la carga inicial (y React no lo precarga). */}
         {poster && (
           <img
             src={poster}
             alt=""
+            loading="lazy"
+            decoding="async"
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
           />
         )}

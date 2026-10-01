@@ -35,7 +35,7 @@ export const CONTACTO = {
  * "Consultanos el precio" en vez de un monto.
  */
 export const PRECIO = {
-  mensual: 40000,
+  mensual: 30000,
   moneda:  'ARS',
 };
 
@@ -49,13 +49,17 @@ export const FLAGS = {
 };
 
 /**
- * CAPTURAS — rutas de los screenshots del producto.
- * Subí las imágenes a `public/screenshots/` y poné acá la ruta (empezando con
- * "/"). Mientras el valor sea null, la UI muestra un placeholder neutro en su
- * lugar (no rompe). Ejemplo: panel: '/screenshots/panel-inicio.png'.
+ * CAPTURAS — screenshots del producto.
+ * Subí las imágenes a `public/screenshots/` y poné acá cada entrada como
+ * { src, width, height }: src es la ruta (empezando con "/") y width/height las
+ * medidas reales del archivo en px. Con las medidas, el navegador reserva el
+ * espacio de la imagen antes de que cargue; sin ellas, al cargar empuja todo el
+ * contenido de abajo. Si cambiás la imagen, actualizá las medidas.
+ * Mientras el valor sea null, la UI muestra un placeholder neutro (no rompe).
  */
 export const CAPTURAS = {
-  planillas: '/screenshots/seccionPlanillas.jpg', // Hero — pantalla de Planillas (reemplaza el registro en papel)
+  // Hero — pantalla de Planillas (reemplaza el registro en papel).
+  planillas: { src: '/screenshots/seccionPlanillas.jpg', width: 1902, height: 862 },
 };
 
 /**

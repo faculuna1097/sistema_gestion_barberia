@@ -1,11 +1,13 @@
 // /frontend-landing/src/components/landing/FlowDiagram.jsx
 // Diagrama del flujo Cliente → Turnero → Barbero → BarberManager. Horizontal
 // con flechas en desktop, vertical en mobile. Muestra que todo está conectado.
+// La dirección y la flecha se resuelven por CSS (clases `om-fila`,
+// `om-solo-desktop` y `om-solo-mobile` de index.css), porque la página se
+// pre-renderiza sin conocer el ancho de pantalla.
 
 import { Fragment } from 'react';
 import { User, CalendarCheck, Scissors, LayoutDashboard, ArrowRight, ArrowDown } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
-import { useIsDesktop } from '../../hooks/useMediaQuery.js';
 import Card from '../ui/Card.jsx';
 
 // Los 4 nodos del flujo, en orden.
@@ -81,17 +83,14 @@ function FlowNode({ icon: Icon, title, desc }) {
  * @returns {JSX.Element}
  */
 function FlowDiagram() {
-  const isDesktop = useIsDesktop();
-  const Arrow = isDesktop ? ArrowRight : ArrowDown;
-
   return (
     <div
+      className="om-fila"
       style={{
         display: 'flex',
-        flexDirection: isDesktop ? 'row' : 'column',
         alignItems: 'stretch',
         justifyContent: 'center',
-        gap: isDesktop ? 4 : 0,
+        gap: 4,
         maxWidth: 980,
         marginInline: 'auto',
       }}
@@ -105,12 +104,19 @@ function FlowDiagram() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: isDesktop ? '0 2px' : '8px 0',
+                // Con el gap de 4px: 6px horizontales en desktop y 8px
+                // verticales en mobile entre la flecha y las cards.
+                padding: '4px 2px',
                 color: theme.mutedSoft,
                 flex: '0 0 auto',
               }}
             >
-              <Arrow size={22} strokeWidth={1.75} aria-hidden="true" />
+              <span className="om-solo-desktop">
+                <ArrowRight size={22} strokeWidth={1.75} aria-hidden="true" />
+              </span>
+              <span className="om-solo-mobile">
+                <ArrowDown size={22} strokeWidth={1.75} aria-hidden="true" />
+              </span>
             </div>
           )}
         </Fragment>

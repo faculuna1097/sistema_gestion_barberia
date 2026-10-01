@@ -2,24 +2,22 @@
 // Barra de CTA fija abajo, SOLO en mobile. Mantiene el contacto a un toque
 // mientras el visitante scrollea. Incluye un spacer en el flujo para que la
 // barra fija no tape el final del contenido (footer).
+// Está siempre en el HTML (la página se pre-renderiza); la clase
+// `om-solo-mobile` (index.css) la oculta en desktop.
 
 import { MessageCircle } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
-import { useIsDesktop } from '../../hooks/useMediaQuery.js';
 import { linkWhatsApp } from '../../utils/contacto.js';
 import Button from '../ui/Button.jsx';
 
 /**
  * MobileCtaBar
- * Render nulo en desktop. Sin props.
- * @returns {JSX.Element|null}
+ * Oculta en desktop por CSS. Sin props.
+ * @returns {JSX.Element}
  */
 function MobileCtaBar() {
-  const isDesktop = useIsDesktop();
-  if (isDesktop) return null;
-
   return (
-    <>
+    <div className="om-solo-mobile">
       {/* Spacer en flujo: reserva el alto de la barra fija. */}
       <div style={{ height: 'calc(64px + env(safe-area-inset-bottom, 0px))' }} aria-hidden="true" />
 
@@ -41,7 +39,7 @@ function MobileCtaBar() {
           Probá tu primer mes gratis
         </Button>
       </div>
-    </>
+    </div>
   );
 }
 
