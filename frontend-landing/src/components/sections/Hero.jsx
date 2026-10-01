@@ -112,7 +112,10 @@ function Hero() {
           style={{ maxWidth: 960, marginInline: 'auto', marginTop: 'clamp(40px, 6vw, 64px)' }}
         >
           <ScreenshotFrame
-            image={CAPTURAS.planillas}
+            image={CAPTURAS.planillas?.src}
+            width={CAPTURAS.planillas?.width}
+            height={CAPTURAS.planillas?.height}
+            priority
             alt="Planilla semanal de BarberManager con el detalle de cada barbero"
             placeholderLabel="Captura de Planillas"
           />
