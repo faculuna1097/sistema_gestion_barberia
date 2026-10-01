@@ -22,6 +22,12 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  // Entrada del build SSR: exporta funciones (render, JSON-LD, llms.txt) y no
+  // pasa nunca por el fast refresh del dev server, así que la regla no aplica.
+  {
+    files: ['src/entry-server.jsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
   // Scripts de build (corren en Node, no en el navegador).
   {
     files: ['scripts/**/*.js', 'vite.config.js'],

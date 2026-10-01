@@ -9,6 +9,13 @@ import { StrictMode } from 'react';
 import { renderToString } from 'react-dom/server';
 import App from './App.jsx';
 
+// SEO generado en el build (D9/D10): prerender.js los toma de este bundle, así
+// salen compilados con los mismos módulos que la página. Al importarse solo
+// acá, no llegan al bundle del cliente.
+export { datosEstructurados } from './seo/datosEstructurados.js';
+export { llmsTxt } from './seo/llmsTxt.js';
+export { DESCRIPCION } from './seo/sitio.js';
+
 /**
  * render
  * Genera el HTML estático de la landing completa.

@@ -180,6 +180,11 @@ Verificación (el ejecutor, sin levantar servidores):
 - JSON-LD (D10): `Organization` + `SoftwareApplication` (`offers` en ARS, desde `PRECIO`) +
   `FAQPage`, que tiene que ser idéntica a la FAQ visible.
 - `llms.txt` generado en el build desde las mismas fuentes (D9) → `dist/llms.txt`.
+- `INCLUYE` (lo que incluye el plan) pasa a `src/content/plan.js`: lo usan la sección Plan, el
+  `featureList` del JSON-LD y el `llms.txt`.
+- La meta description vive escrita en `index.html` y también en `src/seo/sitio.js`
+  (`DESCRIPCION`), que usan el JSON-LD y el `llms.txt`. Si no coinciden, `prerender.js` corta el
+  build.
 - Verificación: build; `dist/` contiene robots, sitemap y `llms.txt`; JSON-LD válido en
   validator.schema.org.
 
@@ -307,7 +312,7 @@ octubre de 2026.*
 | 3a | Investigación de competidores + copy | orquestador | ✅ 2026-10-01 |
 | 3b | Implementar el contenido | chat aparte | ✅ 2026-10-01 |
 | 4a | `og-image` | orquestador | ✅ 2026-10-01 |
-| 4b | robots, sitemap, meta, JSON-LD, `llms.txt` | chat aparte | 🔲 |
+| 4b | robots, sitemap, meta, JSON-LD, `llms.txt` | chat aparte | ✅ 2026-10-01 |
 | 5 | Docs, merge, verificación en producción, guía fuera del sitio | orquestador | 🔲 |
 
 ### Cómo se ejecuta
@@ -355,3 +360,7 @@ Se anotan en `estado_actual.md` en el paso 5 (fuera de alcance):
   (4.5:1). Pasa con la nota de "números de ejemplo" de `SistemaGestion`, que está en una sección
   `tone="alt"`. Extiende la deuda #9 de `sistema_de_disenio.md` (que ya lista `mutedSoft` sobre
   `surfaceAlt`).
+- **`linkWhatsApp()` y `linkEmail()` no manejan `null`** (nueva, paso 4b). El comentario de
+  `config/landing.js` dice que "la UI lo maneja", pero con `CONTACTO.whatsapp` en `null` los CTA
+  armarían `https://wa.me/null?...`. Los módulos de SEO sí lo cubren. Es menor, porque hoy los
+  valores están cargados.
