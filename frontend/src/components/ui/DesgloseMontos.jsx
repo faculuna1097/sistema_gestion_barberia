@@ -4,19 +4,20 @@
 // de Balances (la cuenta de un mes del histórico) y de Planillas.
 //
 // No calcula nada: cada renglón llega con su monto ya resuelto por la sección.
-// Los colores siguen la regla de las tablas: salidas en danger, resultados en
-// accent, el resto en ink. El renglón "total" lleva la línea indigo de 2px de
-// las filas TOTAL.
+// Los colores siguen la regla de color en montos (sistema_de_disenio §3.1.1):
+// salidas en danger, el resultado en verde o rojo según su signo, el resto en
+// ink. El renglón "total" lleva la línea indigo de 2px de las filas TOTAL.
 
 import { theme } from '../../theme/tokens.js';
 import { fmtPesos } from '../../utils/formato.js';
+import { colorResultado } from '../../utils/colorMonto.js';
 import BarraProporcional from './BarraProporcional.jsx';
 
 // Color del monto y de la barra según el tono del renglón. La barra neutra va
-// en gris para que el color quede para las salidas y los resultados.
+// en gris para que el color quede para las salidas y los resultados. El tono
+// 'resultado' no está acá porque su color depende del signo (ver coloresDe).
 const TONOS = {
   neutro:   { texto: theme.ink,    barra: theme.mutedSoft },
-  positivo: { texto: theme.accent, barra: theme.accent },
   negativo: { texto: theme.danger, barra: theme.danger },
 };
 
@@ -28,6 +29,22 @@ const VARIANTES = {
 };
 
 /**
+ * coloresDe
+ * Colores del monto y de la barra de un renglón. Con tono 'resultado' van en
+ * verde, rojo o negro según el signo del monto; con los otros tonos, los
+ * colores fijos de TONOS.
+ * @param {object} renglon - Renglón de DesgloseMontos.
+ * @returns {{texto: string, barra: string}}
+ */
+function coloresDe(renglon) {
+  if (renglon.tono === 'resultado') {
+    const color = colorResultado(renglon.monto);
+    return { texto: color, barra: color };
+  }
+  return TONOS[renglon.tono ?? 'neutro'];
+}
+
+/**
  * segmentosDe
  * Segmentos de la barra de un renglón: los que trae el renglón o, si no trae,
  * uno solo con el valor absoluto del monto en el color de su tono (así un
@@ -37,7 +54,7 @@ const VARIANTES = {
  */
 function segmentosDe(renglon) {
   if (renglon.segmentos) return renglon.segmentos;
-  return [{ valor: Math.abs(renglon.monto), color: TONOS[renglon.tono ?? 'neutro'].barra }];
+  return [{ valor: Math.abs(renglon.monto), color: coloresDe(renglon).barra }];
 }
 
 /**
@@ -49,12 +66,14 @@ function segmentosDe(renglon) {
  *   label: string,
  *   monto: number,
  *   operador?: '+'|'−'|'=',
- *   tono?: 'neutro'|'positivo'|'negativo',
+ *   tono?: 'neutro'|'negativo'|'resultado',
  *   variante?: 'normal'|'subtotal'|'total',
  *   segmentos?: Array<{valor: number, color: string}>,
  * }>} props.renglones - En orden de lectura. `label` no se repite dentro de la
- *   lista (es la key). `tono` pinta el monto y la barra (default neutro);
- *   `segmentos` reemplaza la barra por una partida en tramos.
+ *   lista (es la key). `tono` pinta el monto y la barra (default neutro):
+ *   'negativo' para las salidas y 'resultado' para el número final de la
+ *   cuenta (verde, rojo o negro según el signo). `segmentos` reemplaza la
+ *   barra por una partida en tramos.
  * @param {string} [props.titulo] - Eyebrow mono sobre la lista.
  * @param {boolean} [props.conBarras=true] - Si false, no dibuja la columna de barras.
  * @param {number} [props.maximo] - Valor que ocupa la barra entera. Default: el
@@ -92,7 +111,7 @@ function DesgloseMontos({ renglones, titulo, conBarras = true, maximo }) {
           list-style none. */}
       <ul role="list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {renglones.map((r) => {
-          const tono = TONOS[r.tono ?? 'neutro'];
+          const colores = coloresDe(r);
           const variante = VARIANTES[r.variante ?? 'normal'];
           return (
             <li
@@ -117,7 +136,7 @@ function DesgloseMontos({ renglones, titulo, conBarras = true, maximo }) {
               {conBarras && <BarraProporcional segmentos={segmentosDe(r)} maximo={tope} />}
               <span style={{
                 textAlign: 'right',
-                color: tono.texto,
+                color: colores.texto,
                 fontWeight: variante.pesoMonto,
                 fontVariantNumeric: 'tabular-nums',
               }}>

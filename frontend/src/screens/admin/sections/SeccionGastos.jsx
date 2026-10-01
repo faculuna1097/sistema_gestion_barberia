@@ -9,8 +9,10 @@
 //
 // Sistema de diseño: tokens + Geist + Lucide + onClick. Densidad compacta.
 // Fondo lo da PanelAdmin (theme.surfaceAlt, D7). Loading via LoadingState (D6).
-// Monto por fila en theme.danger (semántica de egreso, consistente con
-// la fila de gasto en SeccionCaja). Total del mes y resumen en theme.accent.
+// Montos en ink y solo los totales en theme.danger: en una lista donde todo son
+// gastos, el título ya dice qué son y un rojo por fila no agrega información
+// (sistema_de_disenio §3.1.1). Caja sí pinta cada gasto en rojo porque mezcla
+// entradas y salidas.
 
 import { useState, useEffect } from 'react';
 import { Pencil, Trash2, Receipt, RefreshCw } from 'lucide-react';
@@ -67,8 +69,9 @@ function BadgeCategoria({ nombre }) {
 
 /**
  * TablaGastos
- * Tabla densa con detalle por gasto + footer "Total del mes" en theme.accent.
- * Monto por fila en theme.danger (egreso). Hover scoped (#21).
+ * Tabla densa con detalle por gasto + footer "Total del mes". Montos por fila
+ * en ink y el total en theme.danger (ver la cabecera del archivo). Hover
+ * scoped (#21).
  *
  * @param {object} props
  * @param {Array} props.gastos
@@ -134,7 +137,6 @@ function TablaGastos({ gastos, totalGeneral, onEditar, onEliminar, accionesDesha
                   ...tdBase,
                   textAlign: 'right',
                   fontWeight: theme.weightHeading,
-                  color: theme.danger,
                   fontVariantNumeric: 'tabular-nums',
                   whiteSpace: 'nowrap',
                 }}>{fmtPesos(g.monto)}</td>
@@ -177,7 +179,7 @@ function TablaGastos({ gastos, totalGeneral, onEditar, onEliminar, accionesDesha
               fontFamily: theme.body,
               fontSize: theme.sizeBody,
               fontWeight: theme.weightHeading,
-              color: theme.accent,
+              color: theme.danger,
               borderTop: `2px solid ${theme.accent}`,
               textAlign: 'right',
               fontVariantNumeric: 'tabular-nums',
@@ -195,7 +197,8 @@ function TablaGastos({ gastos, totalGeneral, onEditar, onEliminar, accionesDesha
 
 /**
  * TablaResumen
- * Tabla densa secundaria con cantidad de gastos y monto por categoría.
+ * Tabla densa secundaria con cantidad de gastos y monto por categoría. Montos
+ * en ink y el total en theme.danger, como la tabla principal.
  *
  * @param {object} props
  * @param {Array} props.totales - [{ categoria_nombre, cantidad, total }]
@@ -286,7 +289,7 @@ function TablaResumen({ totales, totalGeneral, cantidadGastos }) {
               fontFamily: theme.body,
               fontSize: theme.sizeBody,
               fontWeight: theme.weightHeading,
-              color: theme.accent,
+              color: theme.danger,
               borderTop: `2px solid ${theme.accent}`,
               textAlign: 'right',
               fontVariantNumeric: 'tabular-nums',
@@ -589,7 +592,6 @@ export default function SeccionGastos() {
       label: 'Monto',
       valor: fmtPesos(gastoAEliminar.monto),
       numeric: true,
-      valorColor: theme.danger,
       valorWeight: theme.weightHeading,
     },
   ] : [];

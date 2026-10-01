@@ -245,6 +245,10 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
   5. Hacer las acciones fuera del sitio (Search Console, Bing Webmaster Tools, directorios).
 
   Detalle en [`decisiones_landing_ia.md`](./decisiones_landing_ia.md).
+- **Color de montos — llevarlo a los otros fronts.** La regla (verde solo en resultados, rojo en salidas, ningún monto en indigo) está en [`sistema_de_disenio.md`](./sistema_de_disenio.md) §3.1.1 y aplicada en el panel de gestión desde el 2026-10-01. Falta:
+  1. `frontend-barbero`: en `MiPlanilla`, el total de la semana y la comisión por día están en indigo. Aplicar la regla desde la mirada del barbero: lo que cobra es su resultado. El contador "Pendientes" del Dashboard (`KPI` con `tone="accent"`) es un contador de estado y queda fuera de la regla.
+  2. Unificar `fmtPesos` entre fronts: el turnero devuelve `$8.000` (sin espacio y sin fijar 0 decimales) y el panel `$ 8.000` y `-$ 130.000`, aunque §8 del sistema de diseño dice que las copias son idénticas.
+  3. Cuando el cambio esté en producción, volver a sacar la captura de Planillas de la landing (`frontend-landing/public/screenshots/seccionPlanillas.jpg`) y regenerar la `og-image.png`, que la usa (`scripts/og-image.html`): hoy muestran los totales en indigo.
 - **Caja — Tabs 2 y 3 (Cierre de caja + Historial):** postergado. No hay plan escrito; si se retoma, branch sugerido `feature/cierre-caja` (implicaría `ALTER TABLE cierre_caja` con columnas de saldo inicial — `efectivo_inicial`, `mp_inicial`, etc.).
 - **Log de actividad:** registrar quién eliminó qué y cuándo (hoy las eliminaciones no dejan rastro).
 - **Generación de QR de Mercado Pago** para cobro en el momento desde el iPad.

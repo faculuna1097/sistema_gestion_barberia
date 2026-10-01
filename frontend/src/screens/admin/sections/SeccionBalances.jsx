@@ -37,6 +37,7 @@ import { fmtPesos, formatPago } from '../../../utils/formato';
 import { getMesActual, mesALabel } from '../../../utils/fecha';
 import { labelTipoMovimiento } from '../../../utils/movimientos';
 import { cargarChunk } from '../../../utils/cargarChunk';
+import { colorResultado } from '../../../utils/colorMonto';
 import { theme } from '../../../theme/tokens.js';
 
 import {
@@ -131,10 +132,11 @@ function esSalida(movimiento) {
 
 /**
  * KpiCard
- * Card de KPI grande con eyebrow + ícono + valor en color de acento.
+ * Card de KPI grande con eyebrow + ícono + valor.
  * @param {string} props.titulo - Eyebrow uppercase mono.
  * @param {number} props.valor - Monto a formatear con fmtPesos.
- * @param {string} props.color - Color del valor (accent/danger/ink).
+ * @param {string} props.color - Color del valor según la regla de color en
+ *   montos (sistema_de_disenio §3.1.1): ink, danger o colorResultado().
  * @param {string} [props.subtitulo] - Texto auxiliar abajo en muted.
  * @param {React.ComponentType} props.icon - Componente Lucide.
  */
@@ -273,9 +275,10 @@ const tdStyle = {
 };
 
 // Fila TOTAL — ancla visual de la tabla.
-// Línea indigo de 2px arriba (border-top accent) + texto ink bold; el monto
-// se pinta en accent en el caller (mantiene la regla "totales en indigo").
-// Sin bg: la jerarquía la da la línea, no una banda gris.
+// Línea indigo de 2px arriba (border-top accent) + texto ink bold. El color de
+// cada monto lo decide el caller según la regla de color en montos
+// (sistema_de_disenio §3.1.1). Sin bg: la jerarquía la da la línea, no una
+// banda gris.
 const tdTotalStyle = {
   padding: '14px 14px',
   fontFamily: theme.body,
@@ -728,7 +731,7 @@ function ContenidoMensual({ datos, mostrarComisiones, mesSeleccionado }) {
         <KpiCard
           titulo="Ingresos del negocio"
           valor={ingresosKpi}
-          color={theme.accent}
+          color={theme.ink}
           subtitulo={mostrarComisiones ? 'Después de comisiones' : 'Bruto sin descontar comisiones'}
           icon={Banknote}
         />
@@ -742,7 +745,7 @@ function ContenidoMensual({ datos, mostrarComisiones, mesSeleccionado }) {
         <KpiCard
           titulo="Ganancia del mes"
           valor={balance}
-          color={balance >= 0 ? theme.accent : theme.danger}
+          color={colorResultado(balance)}
           subtitulo="Ingresos − Egresos"
           icon={Wallet}
         />
@@ -809,7 +812,6 @@ function FilaIngresoSinComision({ label, monto, mostrarComisiones }) {
       <td style={{
         ...tdStyle,
         textAlign: 'right',
-        color: theme.accent,
         fontWeight: theme.weightHeading,
         fontVariantNumeric: 'tabular-nums',
       }}>
@@ -870,7 +872,6 @@ function TablaPorBarbero({ datos, mostrarComisiones }) {
             <td style={{
               ...tdStyle,
               textAlign: 'right',
-              color: theme.accent,
               fontWeight: theme.weightHeading,
               fontVariantNumeric: 'tabular-nums',
             }}>
@@ -932,7 +933,6 @@ function TablaPorBarbero({ datos, mostrarComisiones }) {
           <td style={{
             ...tdTotalStyle,
             textAlign: 'right',
-            color: theme.accent,
             fontVariantNumeric: 'tabular-nums',
           }}>
             {fmtPesos(datos.resumen.ingresos_brutos)}
@@ -951,7 +951,6 @@ function TablaPorBarbero({ datos, mostrarComisiones }) {
               <td style={{
                 ...tdTotalStyle,
                 textAlign: 'right',
-                color: theme.accent,
                 fontVariantNumeric: 'tabular-nums',
               }}>
                 {fmtPesos(datos.resumen.ingresos_netos)}
@@ -969,6 +968,8 @@ function TablaPorBarbero({ datos, mostrarComisiones }) {
 /**
  * TablaPorCategoria
  * Egresos del mes agrupados por categoría de gasto + fila "Total egresos".
+ * Filas en ink y el total en danger: en una lista donde todo son salidas, el
+ * rojo va solo en el total (sistema_de_disenio §3.1.1).
  * @param {Array<{categoria: string, total: number}>} props.categorias - `gastos.porCategoria`.
  * @param {number} props.totalEgresos - `resumen.egresos`.
  */
@@ -988,7 +989,6 @@ function TablaPorCategoria({ categorias, totalEgresos }) {
             <td style={{
               ...tdStyle,
               textAlign: 'right',
-              color: theme.danger,
               fontWeight: theme.weightHeading,
               fontVariantNumeric: 'tabular-nums',
             }}>
@@ -1033,7 +1033,8 @@ function celdaMontoCapital(monto, color) {
  * Aportes y retiros del mes, una fila por dueño, y el cierre con la cuenta
  * completa: Ganancia del mes + Aportes − Retiros = Queda en el negocio.
  * Aportes en ink, retiros en danger; "Queda en el negocio" es la fila total
- * (línea accent), en accent si es positivo y en danger si es negativo.
+ * (línea accent), con el color de un resultado (colorResultado: verde, rojo o
+ * negro según el signo).
  * @param {object} props.capital  - `capital` de GET /balances/mensual
  *   ({ aportes, retiros, porSocio }).
  * @param {number} props.ganancia - Ganancia del mes según el toggle de comisiones.
@@ -1105,7 +1106,7 @@ function TablaCapital({ capital, ganancia }) {
           <td style={{
             ...tdTotalStyle,
             textAlign: 'right',
-            color: queda >= 0 ? theme.accent : theme.danger,
+            color: colorResultado(queda),
             fontVariantNumeric: 'tabular-nums',
           }}>
             {fmtPesos(queda)}
@@ -1214,7 +1215,6 @@ function TablaHistorico({ filas, mostrarComisiones, onVerDetalle }) {
                     <td style={{
                       ...tdStyle,
                       textAlign: 'right',
-                      color: theme.accent,
                       fontWeight: theme.weightHeading,
                       fontVariantNumeric: 'tabular-nums',
                     }}>
@@ -1233,7 +1233,7 @@ function TablaHistorico({ filas, mostrarComisiones, onVerDetalle }) {
                 <td style={{
                   ...tdStyle,
                   textAlign: 'right',
-                  color: balance >= 0 ? theme.accent : theme.danger,
+                  color: colorResultado(balance),
                   fontWeight: theme.weightHeading,
                   fontVariantNumeric: 'tabular-nums',
                 }}>
@@ -1294,13 +1294,8 @@ function renglonesResultado(fila, mostrarComisiones) {
   const comisiones = mostrarComisiones
     ? [
         { operador: '−', label: 'Comisiones', monto: fila.total_comisiones, tono: 'negativo' },
-        {
-          operador: '=',
-          label: 'Ingresos netos',
-          monto: fila.ingresos_netos,
-          variante: 'subtotal',
-          tono: 'positivo',
-        },
+        // Neutro: es un subtotal; el verde queda para el resultado final.
+        { operador: '=', label: 'Ingresos netos', monto: fila.ingresos_netos, variante: 'subtotal' },
       ]
     : [];
 
@@ -1313,7 +1308,7 @@ function renglonesResultado(fila, mostrarComisiones) {
       label: 'Ganancia del mes',
       monto: ganancia,
       variante: 'total',
-      tono: ganancia >= 0 ? 'positivo' : 'negativo',
+      tono: 'resultado',
     },
   ];
 }
@@ -1337,7 +1332,7 @@ function renglonesCapital(fila, ganancia) {
       label: 'Queda en el negocio',
       monto: queda,
       variante: 'total',
-      tono: queda >= 0 ? 'positivo' : 'negativo',
+      tono: 'resultado',
     },
   ];
 }

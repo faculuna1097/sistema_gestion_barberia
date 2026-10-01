@@ -60,6 +60,7 @@ Lista corta de prohibiciones explícitas. Alinea rápido a cualquier chat nuevo.
 - ❌ `alert()`, `confirm()`, `prompt()` nativos. Usar `ConfirmDialog`.
 - ❌ CSS classes globales. Excepción: `index.css` para reset / fonts / keyframes. La landing suma unas pocas clases `om-` porque se pre-renderiza (ver §4.1).
 - ❌ Múltiples colores de acento. Solo `theme.accent` (indigo).
+- ❌ Indigo en un monto. El color de la plata sigue §3.1.1.
 - ❌ Sombras pesadas, glow, gradientes.
 - ❌ Glassmorphism, blurs decorativos.
 - ❌ Animaciones decorativas. Solo animaciones funcionales (`om-fade` al cambiar pantalla, `om-pop` en success).
@@ -78,7 +79,50 @@ Inspirado en Stripe / Clerk. Neutral claro + acento indigo.
 ### 3.1 Colores
 - Neutros: `zinc` (`bg`, `surface`, `surfaceAlt`, `ink`, `inkSoft`, `muted`, `mutedSoft`, `hairline`, `hairlineSoft`).
 - Acento: `indigo-600` (`accent`). **Un solo acento. No agregar otros chromaticos**.
-- Estados: `success` (emerald-700), `danger` (red-700), `warning` (amber-700). Discretos.
+- Estados: `success` (green-700), `danger` (red-700), `warning` (amber-700). Discretos.
+
+#### 3.1.1 Color en montos
+
+Decidido el 2026-10-01. El color de un monto dice qué le pasa a la plata, no
+decora. Casi todo lo que muestra el panel es ingreso: si todo lo que entra
+fuera verde, el verde dejaría de avisar algo.
+
+| Rol del monto | Color | Ejemplos |
+|---|---|---|
+| **Resultado**: el número final de una cuenta | `success` si es positivo, `danger` si es negativo, `ink` si da cero (`colorResultado`, en `utils/colorMonto.js`) | Ganancia del mes, "Queda en el negocio", neto por medio de pago en Caja |
+| **Salida junto a entradas**: en una cuenta o en una lista mixta | `danger` | Comisiones y egresos en Balances, gastos y retiros en Caja, renglones `−` de `DesgloseMontos` |
+| **Salidas solas**: una lista donde todo son salidas | filas en `ink`, el total en `danger` | Sección Gastos, "Egresos por categoría", flujo de Gasto |
+| **Todo lo demás** | `ink` | Ingresos brutos y netos, totales de ventas, precios, subtotales, aportes, Planillas |
+
+- **Indigo nunca pinta un monto.** Un texto en el color de la marca se lee como
+  algo clickeable. Un número importante se destaca con tamaño y peso; el indigo
+  queda para interacción, selección y estructura (la línea de 2px de las filas
+  TOTAL).
+- **Un monto negativo va en `danger`**, aunque sea un paso intermedio de la
+  cuenta (ej. la ganancia como primer renglón de la cuenta de capital).
+  `fmtPesos` lo muestra como `-$ 130.000`. El color de un resultado se decide
+  sobre el monto redondeado a pesos, igual que lo muestra `fmtPesos`: un
+  resultado de `$ 0` va en `ink`.
+- **El color nunca va solo:** signo, operador (`+ − =`) o una columna con su
+  nombre. Cerca de 1 de cada 12 hombres tiene algún grado de daltonismo
+  rojo-verde.
+- **Depende de quién mira.** La comisión es una salida para el dueño y lo que
+  cobra el barbero. Donde miran los dos (Planillas, que también se abre en modo
+  barbero) va en `ink`: es una liquidación.
+- **En una lista de un solo tipo, el título ya dice qué es:** un rojo por fila
+  no agrega información. Caja sí pinta cada gasto en rojo porque mezcla entradas
+  y salidas.
+- **Las barras de montos** (`BarraProporcional`, `DesgloseMontos`) llevan el
+  color de su monto; las neutras, `mutedSoft`.
+- **Variación %** (`BadgeVariacion`): verde es buena noticia. Hoy solo mide cosas
+  donde subir es bueno (facturación, ganancia); si algún día mide gastos, hay
+  que invertirla.
+- **Fuera de esta regla:** las pills de tipo de movimiento y de forma de pago
+  (son categorías), los contadores por estado (ej. "Reservados" en indigo, el
+  color de ese estado en la agenda) y la fecha de "hoy" resaltada.
+- **Dónde está aplicada:** en el panel de gestión. El turnero ya cumple (sus
+  precios van en `ink`); falta `frontend-barbero` (ver Pendientes en
+  `estado_actual.md`).
 
 ### 3.2 Tipografía
 - **Geist** (body) + **Geist Mono** (eyebrows / micro labels en mayúsculas).
@@ -390,7 +434,9 @@ barras se hacen con divs de ancho proporcional y los tokens del tema.
 `BarraProporcional` es la barra (partible en tramos de color, decorativa:
 el número va siempre como texto al lado) y `DesgloseMontos` la cuenta renglón
 por renglón (`+`, `−`, `=`, con barra y monto) de los modales de detalle de
-Balances y Planillas. Si algún día hace falta un gráfico de verdad (ejes,
+Balances y Planillas. Los colores de los montos y de sus barras siguen §3.1.1
+(el tono `resultado` de `DesgloseMontos` elige verde, rojo o negro según el
+signo). Si algún día hace falta un gráfico de verdad (ejes,
 series temporales), se evalúa una librería cargada solo al usarla, como `xlsx`.
 
 ### 6.2 Específicas del wizard de reserva (NO usar en otros fronts)
@@ -529,7 +575,9 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-09-30 — §4.4 suma el patrón de fila de tabla clickeable; §6.1 suma los gráficos sin librería (`BarraProporcional`, `DesgloseMontos`).*
+*Última actualización: 2026-10-01 — §3.1.1 nueva (color en montos: verde solo en resultados, rojo en salidas, ningún monto en indigo); §2 suma la prohibición; §3.1 corrige `success` a green-700 (es #15803D); §6.1 remite a §3.1.1.*
+
+*2026-09-30 — §4.4 suma el patrón de fila de tabla clickeable; §6.1 suma los gráficos sin librería (`BarraProporcional`, `DesgloseMontos`).*
 
 *2026-09-29 — auditoría de la documentación: §1 sin `esDomingo`; §6.1 con los 13 universales (`LoadingState`/`Toast` como propios del panel); deudas #1, #6 y #11 de §9 resueltas; #13 remite a `estado_actual.md` para el estado de lint.*
 

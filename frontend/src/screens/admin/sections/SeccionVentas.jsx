@@ -74,7 +74,8 @@ function CampoFijo({ label, children, numeric }) {
 
 /**
  * TablaVentas
- * Tabla densa con detalle por venta + footer "Total del mes" en theme.accent.
+ * Tabla densa con detalle por venta + footer "Total del mes". Los montos van
+ * en ink: son ingresos (sistema_de_disenio §3.1.1).
  *
  * @param {object} props
  * @param {Array} props.ventas
@@ -177,7 +178,7 @@ function TablaVentas({ ventas, totalGeneral, onEditar, onEliminar, accionesDesha
               fontFamily: theme.body,
               fontSize: theme.sizeBody,
               fontWeight: theme.weightHeading,
-              color: theme.accent,
+              color: theme.ink,
               borderTop: `2px solid ${theme.accent}`,
               textAlign: 'right',
               fontVariantNumeric: 'tabular-nums',
@@ -196,7 +197,7 @@ function TablaVentas({ ventas, totalGeneral, onEditar, onEliminar, accionesDesha
 /**
  * TablaResumen
  * Tabla densa secundaria con unidades y monto por producto. Footer
- * "Total general" en theme.accent. Ancho acotado (subordinada a la principal).
+ * "Total general" en ink. Ancho acotado (subordinada a la principal).
  *
  * @param {object} props
  * @param {Array} props.totales - [{ producto_nombre, cantidad_total, monto_total }]
@@ -287,7 +288,7 @@ function TablaResumen({ totales, totalGeneral, cantidadTotal }) {
               fontFamily: theme.body,
               fontSize: theme.sizeBody,
               fontWeight: theme.weightHeading,
-              color: theme.accent,
+              color: theme.ink,
               borderTop: `2px solid ${theme.accent}`,
               textAlign: 'right',
               fontVariantNumeric: 'tabular-nums',
@@ -359,8 +360,8 @@ function ModalEditarVenta({ open, venta, form, onChange, onGuardar, onCancelar, 
               alignItems: 'center',
               padding: '12px 14px',
               borderRadius: theme.radius,
-              background: theme.accentSoft,
-              border: `1px solid ${theme.accentSoft}`,
+              background: theme.surfaceAlt,
+              border: `1px solid ${theme.hairline}`,
             }}>
               <span style={{
                 fontFamily: theme.body,
@@ -371,7 +372,7 @@ function ModalEditarVenta({ open, venta, form, onChange, onGuardar, onCancelar, 
                 fontFamily: theme.body,
                 fontSize: theme.sizeHeading,
                 fontWeight: theme.weightHeading,
-                color: theme.accent,
+                color: theme.ink,
                 fontVariantNumeric: 'tabular-nums',
               }}>{fmtPesos(totalCalculado)}</span>
             </div>
@@ -591,7 +592,6 @@ export default function SeccionVentas() {
       label: 'Total',
       valor: fmtPesos(ventaAEliminar.total),
       numeric: true,
-      valorColor: theme.accent,
       valorWeight: theme.weightHeading,
     },
   ] : [];
