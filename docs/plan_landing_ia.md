@@ -306,7 +306,7 @@ octubre de 2026.*
 | — | Imágenes: la captura del Hero reserva su espacio, posters lazy | orquestador | ✅ 2026-10-01 |
 | 3a | Investigación de competidores + copy | orquestador | ✅ 2026-10-01 |
 | 3b | Implementar el contenido | chat aparte | ✅ 2026-10-01 |
-| 4a | `og-image` | orquestador | 🔲 |
+| 4a | `og-image` | orquestador | ✅ 2026-10-01 |
 | 4b | robots, sitemap, meta, JSON-LD, `llms.txt` | chat aparte | 🔲 |
 | 5 | Docs, merge, verificación en producción, guía fuera del sitio | orquestador | 🔲 |
 
