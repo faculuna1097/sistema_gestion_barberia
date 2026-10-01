@@ -84,8 +84,11 @@ Descartado:
   `src/App.jsx`.
 - **Usuario, antes del deploy:** Vercel → proyecto de la landing → Analytics → Enable. Las
   rutas `/_vercel/insights/*` se habilitan en el deploy siguiente.
-- **Merge temprano a `main`** para empezar a medir. Antes de deployar el paso 2, el usuario
-  saca una captura del panel (ventana de 1 mes).
+- **Push:** lo decide el usuario. Está demorando otros deploys: el `main` local tiene commits
+  sin pushear de movimientos extra y modales. Cuando vaya a pushear `main`, se mergea antes el
+  branch hasta el paso 1, así salen también el precio nuevo y el analytics. Hasta entonces no
+  hay medición. Si el paso 2 llega a producción después que el 1, el usuario saca antes una
+  captura del panel (la ventana es de 1 mes).
 
 ### Paso 2 — Pre-renderizado (chat aparte)
 
@@ -207,7 +210,7 @@ Se completa en el paso 3a.
 | # | Paso | Dónde | Estado |
 |---|---|---|---|
 | 0 | Branch `feature/landing-ia` + este doc | orquestador | ✅ 2026-10-01 |
-| 1 | Vercel Web Analytics + precio a $30.000 (merge temprano a `main`) | orquestador | 🔲 |
+| 1 | Vercel Web Analytics + precio a $30.000 | orquestador | ✅ 2026-10-01 (sin pushear) |
 | 2 | Pre-renderizado | chat aparte | 🔲 |
 | 3a | Investigación de competidores + copy | orquestador | 🔲 |
 | 3b | Implementar el contenido | chat aparte | 🔲 |

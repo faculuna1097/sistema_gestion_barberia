@@ -1,7 +1,9 @@
 // /frontend-landing/src/App.jsx
 // Ensamblado final de la landing: Nav + las secciones en orden + Footer +
 // barra CTA fija de mobile. Testimonios se renderiza solo si su flag está en true.
+// <Analytics /> registra las visitas en Vercel Web Analytics (anónimo, sin cookies).
 
+import { Analytics } from '@vercel/analytics/react';
 import LandingNav from './components/landing/LandingNav.jsx';
 import LandingFooter from './components/landing/LandingFooter.jsx';
 import MobileCtaBar from './components/landing/MobileCtaBar.jsx';
@@ -45,6 +47,10 @@ function App() {
 
       <LandingFooter />
       <MobileCtaBar />
+
+      {/* Vercel Web Analytics: no renderiza nada visible; inyecta el script que
+          cuenta las visitas. En `npm run dev` no mide. */}
+      <Analytics />
     </>
   );
 }
