@@ -2,7 +2,8 @@
 //
 // Sección Caja del panel de administrador.
 // - Tab "Movimientos del día": tabla de movimientos del día seleccionado +
-//   totales netos por canal (efectivo / Mercado Pago).
+//   totales netos por canal (efectivo / Mercado Pago). El "+" de la fila de
+//   pestañas abre el alta de movimientos extra (retiro, aporte, otro ingreso).
 // - Tabs "Cierre de caja" / "Historial de cierres": placeholders (v1.1).
 //
 // Sistema de diseño: tokens + Geist + Lucide + onClick. Densidad compacta.
@@ -10,11 +11,16 @@
 // Loading via primitivo LoadingState (D6).
 
 import { useState, useEffect } from 'react';
-import { Banknote, Trash2, Inbox, Construction, RefreshCw, Info } from 'lucide-react';
+import { Banknote, Trash2, Inbox, Construction, RefreshCw, Info, Plus } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
 import { getFechaHoy } from '../../../utils/fecha';
-import { fmtPesos, formatPago } from '../../../utils/formato';
+import { fmtPesos, formatPago, OPCIONES_FORMA_PAGO } from '../../../utils/formato';
+import {
+  labelTipoMovimiento,
+  OPCIONES_TIPO_MOVIMIENTO_EXTRA,
+  MAX_DESCRIPCION_MOVIMIENTO,
+} from '../../../utils/movimientos';
 import { cargarChunk } from '../../../utils/cargarChunk';
 import {
   Tabs,
@@ -30,6 +36,9 @@ import {
   BotonExportarExcel,
   TogglePill,
   SelectorDia,
+  Modal,
+  Field,
+  InputTiempo,
 } from '../../../components/ui';
 import { theme } from '../../../theme/tokens.js';
 
@@ -37,18 +46,23 @@ import { theme } from '../../../theme/tokens.js';
 
 /**
  * TipoMovimientoPill
- * Pill compacto que indica el tipo de movimiento (corte / venta / gasto).
+ * Pill compacto que indica el tipo de movimiento. El texto sale del catálogo
+ * central (utils/movimientos.js); acá solo se decide el color. Aporte y retiro
+ * van en neutro: el retiro se distingue por el monto (con "−" y en rojo).
  * Local a esta sección. Promover a primitivo cuando aparezca el segundo uso (§7.1).
  * @param {object} props
- * @param {'corte'|'venta'|'gasto'} props.tipo
+ * @param {'corte'|'venta'|'gasto'|'aporte_capital'|'retiro_socio'|'otro_ingreso'} props.tipo
  */
 function TipoMovimientoPill({ tipo }) {
   const variantes = {
-    corte: { background: theme.successSoft, color: theme.success, label: 'Corte' },
-    venta: { background: theme.accentSoft,  color: theme.accent,  label: 'Venta' },
-    gasto: { background: theme.dangerSoft,  color: theme.danger,  label: 'Gasto' },
+    corte:          { background: theme.successSoft, color: theme.success },
+    venta:          { background: theme.accentSoft,  color: theme.accent  },
+    gasto:          { background: theme.dangerSoft,  color: theme.danger  },
+    aporte_capital: { background: theme.surfaceAlt,  color: theme.inkSoft },
+    retiro_socio:   { background: theme.surfaceAlt,  color: theme.inkSoft },
+    otro_ingreso:   { background: theme.successSoft, color: theme.success },
   };
-  const v = variantes[tipo] ?? { background: theme.surfaceAlt, color: theme.muted, label: tipo };
+  const v = variantes[tipo] ?? { background: theme.surfaceAlt, color: theme.muted };
   return (
     <span style={{
       display: 'inline-block',
@@ -58,9 +72,10 @@ function TipoMovimientoPill({ tipo }) {
       fontSize: theme.sizeMicro,
       fontWeight: theme.weightMedium,
       letterSpacing: '0.02em',
+      whiteSpace: 'nowrap',
       background: v.background,
       color: v.color,
-    }}>{v.label}</span>
+    }}>{labelTipoMovimiento(tipo)}</span>
   );
 }
 
@@ -74,13 +89,15 @@ function TipoMovimientoPill({ tipo }) {
 function filasDetalleMovimiento(m) {
   return [
     { label: 'Hora',    valor: m.hora },
-    { label: 'Detalle', valor: m.detalle },
+    { label: 'Tipo',    valor: labelTipoMovimiento(m.tipo) },
+    // overflowWrap: un detalle largo sin espacios corta dentro del diálogo.
+    { label: 'Detalle', valor: <span style={{ overflowWrap: 'anywhere' }}>{m.detalle}</span> },
     ...(m.barbero_nombre ? [{ label: 'Barbero', valor: m.barbero_nombre }] : []),
     {
       label: 'Monto',
       valor: fmtPesos(m.monto),
       numeric: true,
-      valorColor: m.tipo === 'gasto' ? theme.danger : theme.ink,
+      valorColor: m.sentido === 'salida' ? theme.danger : theme.ink,
       valorWeight: theme.weightHeading,
     },
   ];
@@ -92,6 +109,10 @@ function filasDetalleMovimiento(m) {
  * inline (excepción consciente al patrón useState — ver deuda #8 del sistema
  * de diseño: para tablas densas con N filas, useState por fila explota el
  * render al mover el mouse).
+ *
+ * El signo y el color del monto salen de `m.sentido`, que llega resuelto desde
+ * el backend. Las columnas cortas no parten línea; Detalle absorbe el ancho
+ * restante y corta dentro de la celda aunque el texto no tenga espacios.
  *
  * @param {object} props
  * @param {Array} props.movimientos
@@ -129,7 +150,7 @@ function TablaMovimientos({ movimientos, onEliminar }) {
         </thead>
         <tbody>
           {movimientos.map((m, i) => {
-            const esGasto = m.tipo === 'gasto';
+            const esSalida = m.sentido === 'salida';
             const tdBase = {
               padding: '10px 12px',
               fontFamily: theme.body,
@@ -138,21 +159,22 @@ function TablaMovimientos({ movimientos, onEliminar }) {
               borderBottom: i === movimientos.length - 1 ? 'none' : `1px solid ${theme.hairlineSoft}`,
               verticalAlign: 'middle',
             };
+            const tdFijo = { ...tdBase, whiteSpace: 'nowrap' };
             return (
               <tr key={m.id || i} className="om-fila-hover">
-                <td style={tdBase}>{m.hora}</td>
-                <td style={tdBase}><TipoMovimientoPill tipo={m.tipo} /></td>
-                <td style={{ ...tdBase, color: theme.muted }}>{m.barbero_nombre || '—'}</td>
-                <td style={tdBase}>{m.detalle}</td>
+                <td style={tdFijo}>{m.hora}</td>
+                <td style={tdFijo}><TipoMovimientoPill tipo={m.tipo} /></td>
+                <td style={{ ...tdFijo, color: theme.muted }}>{m.barbero_nombre || '—'}</td>
+                <td style={{ ...tdBase, overflowWrap: 'anywhere' }}>{m.detalle}</td>
                 <td style={{
                   ...tdBase,
                   fontVariantNumeric: 'tabular-nums',
                   fontWeight: theme.weightHeading,
-                  color: esGasto ? theme.danger : theme.ink,
+                  color: esSalida ? theme.danger : theme.ink,
                   textAlign: 'right',
                   whiteSpace: 'nowrap',
-                }}>{esGasto ? '− ' : ''}{fmtPesos(m.monto)}</td>
-                <td style={tdBase}><BadgeFormaPago forma={m.forma_pago} /></td>
+                }}>{esSalida ? '− ' : ''}{fmtPesos(m.monto)}</td>
+                <td style={tdFijo}><BadgeFormaPago forma={m.forma_pago} /></td>
                 <td style={{ ...tdBase, padding: '6px 8px', textAlign: 'center', width: 48 }}>
                   <BotonIconoFila
                     tono="danger"
@@ -242,9 +264,294 @@ function LogoMercadoPagoConFallback() {
   );
 }
 
+// ─── Alta de movimientos extra ────────────────────────────────────────────────
+
+/**
+ * BotonNuevoMovimiento
+ * "+" discreto que abre el alta de movimientos extra. Va a la derecha de las
+ * pestañas, sin texto: no es una acción de uso cotidiano.
+ * @param {object} props
+ * @param {() => void} props.onClick
+ */
+function BotonNuevoMovimiento({ onClick }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      aria-label="Registrar movimiento"
+      title="Registrar movimiento"
+      style={{
+        alignSelf: 'center',
+        flexShrink: 0,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 8,
+        background: 'transparent',
+        border: `2px solid ${theme.accent}`,
+        borderRadius: theme.radiusSm,
+        color: hover ? theme.ink : theme.muted,
+        cursor: 'pointer',
+        transition: `color ${theme.transitionFast}`,
+      }}
+    >
+      <Plus size={16} strokeWidth={1.75} />
+    </button>
+  );
+}
+
+// Rótulo de GrupoOpciones: replica la label del primitivo Field (mono micro
+// uppercase, color muted) para que el grupo se vea uniforme con los campos.
+const labelEyebrow = {
+  fontFamily: theme.mono,
+  fontWeight: theme.weightMedium,
+  fontSize: theme.sizeMicro,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+  color: theme.muted,
+};
+
+/**
+ * GrupoOpciones
+ * Campo de opción única donde cada opción es un botón (en vez de una lista
+ * desplegable). El botón activo se tinta; con muchas opciones el grupo pasa a
+ * varias filas sin desbordar.
+ * Mismo lenguaje visual que `BotonFormaPago` de SeccionTurnero, que queda sin
+ * migrar (deuda anotada): al unificarlos, promover este componente a /ui.
+ *
+ * @param {object} props
+ * @param {string} props.label - Rótulo del grupo (también su nombre accesible)
+ * @param {Array<{value: string, label: string, tonoBg?: string, tonoFg?: string}>} props.opciones
+ *   `tonoBg` / `tonoFg`: fondo y color de texto/borde del botón activo.
+ *   Por defecto `accentSoft` / `accent`.
+ * @param {string|null} props.value - Valor elegido; null si no hay ninguno
+ * @param {(value: string) => void} props.onChange - Recibe el value de la opción tocada
+ */
+function GrupoOpciones({ label, opciones, value, onChange }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span style={labelEyebrow}>{label}</span>
+      <div role="group" aria-label={label} style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {opciones.map((o) => {
+          const activo = o.value === value;
+          const tonoBg = o.tonoBg ?? theme.accentSoft;
+          const tonoFg = o.tonoFg ?? theme.accent;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => onChange(o.value)}
+              aria-pressed={activo}
+              style={{
+                // Base 0 + mínimo max-content: los botones de una fila quedan
+                // del mismo ancho mientras entren, y bajan de fila cuando no.
+                flex: '1 1 0',
+                minWidth: 'max-content',
+                maxWidth: '100%',
+                minHeight: 44,
+                padding: '10px 12px',
+                background: activo ? tonoBg : theme.surface,
+                border: `1px solid ${activo ? tonoFg : theme.hairline}`,
+                borderRadius: theme.radius,
+                color: activo ? tonoFg : theme.inkSoft,
+                fontFamily: theme.body,
+                fontSize: theme.sizeBody,
+                fontWeight: activo ? theme.weightHeading : theme.weightMedium,
+                overflowWrap: 'anywhere',
+                cursor: 'pointer',
+                transition: `background ${theme.transitionFast}, border-color ${theme.transitionFast}, color ${theme.transitionFast}`,
+              }}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Formas de pago con los tonos de BadgeFormaPago: efectivo en success,
+// Mercado Pago en accent.
+const TONOS_FORMA_PAGO = {
+  efectivo:     { tonoBg: theme.successSoft, tonoFg: theme.success },
+  mercado_pago: { tonoBg: theme.accentSoft,  tonoFg: theme.accent  },
+};
+const OPCIONES_FORMA_PAGO_TONO = OPCIONES_FORMA_PAGO.map((o) => ({ ...o, ...TONOS_FORMA_PAGO[o.value] }));
+
+/**
+ * ModalNuevoMovimiento
+ * Formulario de alta de un movimiento extra (retiro, aporte de capital u otro
+ * ingreso). Es dueño de su estado: el padre lo monta al abrir y lo desmonta al
+ * cerrar, así cada apertura arranca limpia.
+ *
+ * "Guardar" se habilita recién con todo elegido y válido. Un error del
+ * servidor se muestra dentro del modal, que no se cierra.
+ *
+ * @param {object} props
+ * @param {string} props.fechaInicial - Día con el que arranca el campo Fecha ('YYYY-MM-DD')
+ * @param {Array<{id: string, nombre: string}>} props.socios - Dueños activos del tenant
+ * @param {() => void} props.onCerrar - Cierra sin guardar
+ * @param {(fecha: string) => void} props.onGuardado - Se llama tras un alta exitosa,
+ *   con la fecha del movimiento guardado ('YYYY-MM-DD')
+ */
+function ModalNuevoMovimiento({ fechaInicial, socios, onCerrar, onGuardado }) {
+  const [tipo, setTipo]                 = useState(null);
+  const [socioId, setSocioId]           = useState(null);
+  const [descripcion, setDescripcion]   = useState('');
+  const [monto, setMonto]               = useState('');
+  const [formaPago, setFormaPago]       = useState(null);
+  const [fecha, setFecha]               = useState(fechaInicial);
+  const [guardando, setGuardando]       = useState(false);
+  const [errorGuardar, setErrorGuardar] = useState(null);
+
+  const hoy = getFechaHoy();
+  const tipoElegido   = OPCIONES_TIPO_MOVIMIENTO_EXTRA.find((o) => o.value === tipo) ?? null;
+  const requiereSocio = tipoElegido?.requiereSocio ?? false;
+  // Con un solo dueño cargado, viene elegido sin que haya que tocarlo.
+  const socioElegido  = socioId ?? (socios.length === 1 ? socios[0].id : null);
+  const descripcionLimpia = descripcion.trim();
+  const montoNumero   = Number(monto);
+
+  const detalleValido = requiereSocio
+    ? socioElegido !== null
+    : descripcionLimpia.length >= 1 && descripcionLimpia.length <= MAX_DESCRIPCION_MOVIMIENTO;
+  const montoValido = String(monto).trim() !== '' && Number.isFinite(montoNumero) && montoNumero > 0;
+  // 'YYYY-MM-DD' ordena igual como texto que como fecha.
+  const fechaValida = fecha !== '' && fecha <= hoy;
+  const puedeGuardar = tipoElegido !== null && detalleValido && montoValido
+    && formaPago !== null && fechaValida;
+
+  /**
+   * Envía el alta. Manda solo el campo que corresponde al tipo (socio_id o
+   * descripcion). Si el servidor rechaza, deja el mensaje en el modal.
+   */
+  const guardar = async () => {
+    setGuardando(true);
+    setErrorGuardar(null);
+    try {
+      const res = await apiFetch('/caja/movimientos', {
+        method: 'POST',
+        body: JSON.stringify({
+          tipo,
+          monto: montoNumero,
+          forma_pago: formaPago,
+          fecha,
+          ...(requiereSocio ? { socio_id: socioElegido } : { descripcion: descripcionLimpia }),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Error del servidor');
+      }
+      onGuardado(fecha);
+    } catch (err) {
+      console.error('[seccionCaja] Error en guardarMovimiento:', err.message);
+      setErrorGuardar(err.message || 'No se pudo registrar el movimiento. Intentá de nuevo.');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onCerrar}
+      loading={guardando}
+      title="Registrar movimiento"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onCerrar} disabled={guardando}>
+            Cancelar
+          </Button>
+          <Button variant="primary" onClick={guardar} disabled={!puedeGuardar || guardando}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <GrupoOpciones
+          label="Tipo"
+          opciones={OPCIONES_TIPO_MOVIMIENTO_EXTRA}
+          value={tipo}
+          onChange={setTipo}
+        />
+
+        {tipoElegido && requiereSocio && (
+          <GrupoOpciones
+            label="Dueño"
+            opciones={socios.map((s) => ({ value: s.id, label: s.nombre }))}
+            value={socioElegido}
+            onChange={setSocioId}
+          />
+        )}
+
+        {tipoElegido && !requiereSocio && (
+          <Field
+            label="Descripción"
+            value={descripcion}
+            onChange={(v) => setDescripcion(v.slice(0, MAX_DESCRIPCION_MOVIMIENTO))}
+            placeholder="Ej.: alquiler de sillón"
+          />
+        )}
+
+        <Field
+          label="Monto"
+          type="number"
+          value={monto}
+          onChange={setMonto}
+        />
+
+        <GrupoOpciones
+          label="Forma de pago"
+          opciones={OPCIONES_FORMA_PAGO_TONO}
+          value={formaPago}
+          onChange={setFormaPago}
+        />
+
+        <InputTiempo
+          type="date"
+          label="Fecha"
+          value={fecha}
+          onChange={setFecha}
+          max={hoy}
+          full
+        />
+
+        {errorGuardar && (
+          <div role="alert" style={{
+            padding: '10px 12px',
+            borderRadius: theme.radius,
+            background: theme.dangerSoft,
+            color: theme.danger,
+            fontFamily: theme.body,
+            fontSize: theme.sizeBody,
+            textAlign: 'center',
+          }}>{errorGuardar}</div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Tab Movimientos del día ──────────────────────────────────────────────────
 
-function TabMovimientos() {
+/**
+ * TabMovimientos
+ * Movimientos del día elegido: totales netos por canal, tabla con borrado por
+ * fila, filtro "Solo Barberos", export a Excel y alta de movimientos extra.
+ * El modal de alta se monta fuera del contenido, así puede abrirse aunque el
+ * día esté cargando, vacío o haya fallado la carga.
+ *
+ * @param {object} props
+ * @param {boolean} props.modalAbierto - Si el modal de alta está abierto (lo maneja SeccionCaja)
+ * @param {() => void} props.onCerrarModal - Cierra el modal de alta
+ */
+function TabMovimientos({ modalAbierto, onCerrarModal }) {
   const [fecha, setFecha]                              = useState(getFechaHoy);
   const [movimientos, setMovimientos]                  = useState([]);
   const [cargando, setCargando]                        = useState(true);
@@ -254,8 +561,28 @@ function TabMovimientos() {
   const [eliminando, setEliminando]                   = useState(false);
   const [soloNegocio, setSoloNegocio]                 = useState(false);
   const [errorExport, setErrorExport]                 = useState(null);
+  const [socios, setSocios]                           = useState([]);
 
-  // Carga de movimientos. `intento` re-dispara el efecto al hacer "Reintentar".
+  // Carga one-shot de socios (los dueños del formulario de alta). Si falla
+  // queda como array vacío: el modal no ofrece dueños, pero la sección no se rompe.
+  useEffect(() => {
+    let cancelado = false;
+    const cargarSocios = async () => {
+      try {
+        const res = await apiFetch('/admin/socios');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!cancelado) setSocios(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('[seccionCaja] Error en cargarSocios:', err.message);
+      }
+    };
+    cargarSocios();
+    return () => { cancelado = true; };
+  }, []);
+
+  // Carga de movimientos. `intento` re-dispara el efecto al hacer "Reintentar"
+  // y tras un alta en el día que se está viendo.
   useEffect(() => {
     let cancelado = false;
     const cargar = async () => {
@@ -263,6 +590,7 @@ function TabMovimientos() {
       setError(null);
       try {
         const res  = await apiFetch(`/caja/movimientos-dia?fecha=${fecha}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (!cancelado) setMovimientos(data.movimientos || []);
       } catch (err) {
@@ -283,10 +611,10 @@ function TabMovimientos() {
     ? movimientos.filter(m => m.tipo !== 'corte' || Number(m.comision_valor) < 100)
     : movimientos;
 
-  // Totales netos por canal: gastos restan, ingresos suman.
+  // Totales netos por canal: las salidas restan, las entradas suman.
   const calcularNeto = (forma) => movimientosFiltrados.reduce((acc, m) => {
     if (m.forma_pago !== forma) return acc;
-    return m.tipo === 'gasto' ? acc - Number(m.monto) : acc + Number(m.monto);
+    return m.sentido === 'salida' ? acc - Number(m.monto) : acc + Number(m.monto);
   }, 0);
   const efectivoNeto    = calcularNeto('efectivo');
   const mercadoPagoNeto = calcularNeto('mercado_pago');
@@ -306,6 +634,18 @@ function TabMovimientos() {
     }
   };
 
+  /**
+   * Tras un alta: cierra el modal y muestra el día del movimiento guardado.
+   * Si es el día en pantalla recarga la lista; si es otro, Caja salta a ese día
+   * (el cambio de `fecha` dispara la carga).
+   * @param {string} fechaGuardada - 'YYYY-MM-DD'
+   */
+  const alGuardarMovimiento = (fechaGuardada) => {
+    onCerrarModal();
+    if (fechaGuardada === fecha) setIntento(n => n + 1);
+    else setFecha(fechaGuardada);
+  };
+
   const exportarExcel = async () => {
     // El chunk de xlsx se baja recién acá (lazy, #3). Si la descarga falla,
     // cargarChunk lo convierte en un error con mensaje al usuario en vez de
@@ -319,10 +659,10 @@ function TabMovimientos() {
     }
     const datos = movimientos.map(m => ({
       Hora:            m.hora,
-      Tipo:            m.tipo === 'corte' ? 'Corte' : m.tipo === 'venta' ? 'Venta' : 'Gasto',
+      Tipo:            labelTipoMovimiento(m.tipo),
       Barbero:         m.barbero_nombre || '-',
       Detalle:         m.detalle,
-      Monto:           m.tipo === 'gasto' ? -Number(m.monto) : Number(m.monto),
+      Monto:           m.sentido === 'salida' ? -Number(m.monto) : Number(m.monto),
       'Forma de pago': formatPago(m.forma_pago),
     }));
     const ws = XLSX.utils.json_to_sheet(datos);
@@ -337,98 +677,109 @@ function TabMovimientos() {
   const turnoVuelveAReservado =
     movimientoAEliminar?.tipo === 'corte' && !!movimientoAEliminar?.turno_id;
 
-  if (cargando) return <LoadingState />;
-
-  if (error) return (
-    <EmptyState
-      tone="danger"
-      glyph={<IconoAlerta />}
-      title="No se pudo cargar"
-      body={error}
-      action={
-        <Button variant="secondary" full={false} onClick={() => setIntento(n => n + 1)}>
-          <RefreshCw size={16} strokeWidth={1.75} />
-          Reintentar
-        </Button>
-      }
-    />
-  );
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <ConfirmDialog
-        open={!!movimientoAEliminar}
-        title="¿Eliminar este registro?"
-        message="Esta acción no se puede deshacer."
-        confirmLabel="Sí, eliminar"
-        loading={eliminando}
-        onConfirm={confirmarEliminar}
-        onCancel={() => setMovimientoAEliminar(null)}
-      >
-        {movimientoAEliminar && <DetalleRecurso filas={filasDetalleMovimiento(movimientoAEliminar)} />}
-        {turnoVuelveAReservado && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 8,
-            marginTop: 12,
-            fontFamily: theme.body,
-            fontSize: theme.sizeBody,
-            color: theme.muted,
-          }}>
-            <Info size={14} strokeWidth={1.75} style={{ flexShrink: 0, marginTop: 2 }} />
-            <span>
-              El turno asociado volverá a estado{' '}
-              <strong style={{ color: theme.ink }}>Reservado</strong>.
-            </span>
-          </div>
-        )}
-      </ConfirmDialog>
-
-      <div style={{ display: 'flex', gap: 12 }}>
-        <CardTotal
-          icono={<Banknote size={28} strokeWidth={1.5} />}
-          label="Efectivo neto"
-          monto={efectivoNeto}
+    <>
+      {modalAbierto && (
+        <ModalNuevoMovimiento
+          fechaInicial={fecha}
+          socios={socios}
+          onCerrar={onCerrarModal}
+          onGuardado={alGuardarMovimiento}
         />
-        <CardTotal
-          icono={<LogoMercadoPagoConFallback />}
-          label="Mercado Pago neto"
-          monto={mercadoPagoNeto}
-        />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', gap: 16 }}>
-        <TogglePill
-          activo={soloNegocio}
-          onToggle={() => setSoloNegocio(v => !v)}
-          labelOn="Solo Barberos"
-        />
-        <div style={{ justifySelf: 'center' }}>
-          <SelectorDia value={fecha} onChange={setFecha} />
-        </div>
-        <BotonExportarExcel onClick={exportarExcel} disabled={movimientos.length === 0} />
-      </div>
-
-      {errorExport && (
-        <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
-          {errorExport}
-        </Toast>
       )}
 
-      {movimientosFiltrados.length === 0 ? (
+      {cargando ? (
+        <LoadingState />
+      ) : error ? (
         <EmptyState
-          glyph={<Inbox size={28} strokeWidth={1.5} />}
-          title="Sin movimientos"
-          body="No hay movimientos registrados en este día."
+          tone="danger"
+          glyph={<IconoAlerta />}
+          title="No se pudo cargar"
+          body={error}
+          action={
+            <Button variant="secondary" full={false} onClick={() => setIntento(n => n + 1)}>
+              <RefreshCw size={16} strokeWidth={1.75} />
+              Reintentar
+            </Button>
+          }
         />
       ) : (
-        <TablaMovimientos
-          movimientos={movimientosFiltrados}
-          onEliminar={setMovimientoAEliminar}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <ConfirmDialog
+            open={!!movimientoAEliminar}
+            title="¿Eliminar este registro?"
+            message="Esta acción no se puede deshacer."
+            confirmLabel="Sí, eliminar"
+            loading={eliminando}
+            onConfirm={confirmarEliminar}
+            onCancel={() => setMovimientoAEliminar(null)}
+          >
+            {movimientoAEliminar && <DetalleRecurso filas={filasDetalleMovimiento(movimientoAEliminar)} />}
+            {turnoVuelveAReservado && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
+                marginTop: 12,
+                fontFamily: theme.body,
+                fontSize: theme.sizeBody,
+                color: theme.muted,
+              }}>
+                <Info size={14} strokeWidth={1.75} style={{ flexShrink: 0, marginTop: 2 }} />
+                <span>
+                  El turno asociado volverá a estado{' '}
+                  <strong style={{ color: theme.ink }}>Reservado</strong>.
+                </span>
+              </div>
+            )}
+          </ConfirmDialog>
+
+          <div style={{ display: 'flex', gap: 12 }}>
+            <CardTotal
+              icono={<Banknote size={28} strokeWidth={1.5} />}
+              label="Efectivo neto"
+              monto={efectivoNeto}
+            />
+            <CardTotal
+              icono={<LogoMercadoPagoConFallback />}
+              label="Mercado Pago neto"
+              monto={mercadoPagoNeto}
+            />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', gap: 16 }}>
+            <TogglePill
+              activo={soloNegocio}
+              onToggle={() => setSoloNegocio(v => !v)}
+              labelOn="Solo Barberos"
+            />
+            <div style={{ justifySelf: 'center' }}>
+              <SelectorDia value={fecha} onChange={setFecha} />
+            </div>
+            <BotonExportarExcel onClick={exportarExcel} disabled={movimientos.length === 0} />
+          </div>
+
+          {errorExport && (
+            <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
+              {errorExport}
+            </Toast>
+          )}
+
+          {movimientosFiltrados.length === 0 ? (
+            <EmptyState
+              glyph={<Inbox size={28} strokeWidth={1.5} />}
+              title="Sin movimientos"
+              body="No hay movimientos registrados en este día."
+            />
+          ) : (
+            <TablaMovimientos
+              movimientos={movimientosFiltrados}
+              onEliminar={setMovimientoAEliminar}
+            />
+          )}
+        </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -462,15 +813,40 @@ const TABS = [
   { key: 'historial',   label: 'Historial de cierres' },
 ];
 
+/**
+ * SeccionCaja
+ * Raíz de la sección: pestañas + contenido de la pestaña activa. Guarda si el
+ * modal de alta de movimientos está abierto, porque el "+" que lo abre vive en
+ * la fila de las pestañas; el modal lo renderiza TabMovimientos, que conoce el
+ * día elegido y recarga la lista.
+ */
 export default function SeccionCaja() {
-  const [tabActivo, setTabActivo] = useState('movimientos');
+  const [tabActivo, setTabActivo]       = useState('movimientos');
+  const [modalAbierto, setModalAbierto] = useState(false);
 
   return (
     <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-      <Tabs items={TABS} value={tabActivo} onChange={setTabActivo} />
+      {/* La línea inferior la dibuja este contenedor (y no el tablist) para que
+          corra también debajo del "+", que queda fuera del role="tablist". */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 12,
+        borderBottom: `1px solid ${theme.hairline}`,
+      }}>
+        <Tabs items={TABS} value={tabActivo} onChange={setTabActivo} style={{ borderBottom: 'none' }} />
+        {tabActivo === 'movimientos' && (
+          <BotonNuevoMovimiento onClick={() => setModalAbierto(true)} />
+        )}
+      </div>
 
-      {tabActivo === 'movimientos' && <TabMovimientos />}
+      {tabActivo === 'movimientos' && (
+        <TabMovimientos
+          modalAbierto={modalAbierto}
+          onCerrarModal={() => setModalAbierto(false)}
+        />
+      )}
       {tabActivo === 'cierre'      && <TabCierre />}
       {tabActivo === 'historial'   && <TabHistorial />}
     </div>

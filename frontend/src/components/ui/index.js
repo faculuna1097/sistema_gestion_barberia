@@ -44,3 +44,5 @@ export { default as BotonExportarExcel } from './BotonExportarExcel.jsx';
 export { default as SelectorMes }      from './SelectorMes.jsx';
 export { default as SelectorDia }      from './SelectorDia.jsx';
 export { default as SelectorSemana }   from './SelectorSemana.jsx';
+export { default as BarraProporcional } from './BarraProporcional.jsx';
+export { default as DesgloseMontos }   from './DesgloseMontos.jsx';

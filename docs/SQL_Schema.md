@@ -11,6 +11,13 @@
 --   - corte: UNIQUE corte_turno_unico (turno_id) WHERE turno_id IS NOT NULL
 --     (un turno se vincula a un solo corte; violación → 23505).
 --   - barbero_suspension: índice (barbero_id, desde, hasta).
+--   - barbero.comision_tipo: el CHECK admite 'fijo', pero hoy no hay barberos con
+--     comisión fija: toda comisión es porcentaje (decisión de negocio; ver la deuda
+--     "Comisión: siempre porcentaje" en estado_actual.md).
+--   - Row Level Security ACTIVADO y sin policies en las 18 tablas (desde 2026-09-30).
+--     Cierra la API automática de Supabase (roles anon / authenticated); el backend
+--     entra como owner (postgres) y RLS no le aplica. Toda tabla nueva se crea con
+--     ALTER TABLE ... ENABLE ROW LEVEL SECURITY (el SQL editor no lo activa solo).
 
 CREATE TABLE public.tenant (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -230,4 +237,52 @@ CREATE TABLE public.tenant_imagen (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT tenant_imagen_pkey PRIMARY KEY (id),
   CONSTRAINT tenant_imagen_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
+);
+CREATE TABLE public.socio (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tenant_id uuid NOT NULL,
+  nombre text NOT NULL,
+  -- Vínculo opcional con barbero (NULL: el dueño no corta). Va acá y no en
+  -- barbero para no tocar la tabla central. Nadie lo lee todavía.
+  barbero_id uuid,
+  activo boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT socio_pkey PRIMARY KEY (id),
+  CONSTRAINT socio_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  -- Target del FK compuesto (tenant_id, socio_id) de movimiento_extra.
+  CONSTRAINT socio_tenant_id_id_key UNIQUE (tenant_id, id),
+  CONSTRAINT socio_tenant_nombre_key UNIQUE (tenant_id, nombre),
+  -- Un barbero es, a lo sumo, un socio (admite múltiples NULL).
+  CONSTRAINT socio_barbero_id_key UNIQUE (barbero_id),
+  CONSTRAINT socio_barbero_tenant_fkey FOREIGN KEY (tenant_id, barbero_id) REFERENCES public.barbero(tenant_id, id)
+);
+-- Movimientos de plata que no son corte, venta ni gasto. El signo y si afectan la
+-- ganancia salen del tipo (mapa en backend/src/utils/movimientos.js), nunca del monto.
+CREATE TABLE public.movimiento_extra (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tenant_id uuid NOT NULL,
+  tipo text NOT NULL CHECK (tipo = ANY (ARRAY['aporte_capital'::text, 'retiro_socio'::text, 'otro_ingreso'::text])),
+  socio_id uuid,
+  descripcion text,
+  monto numeric NOT NULL CHECK (monto > 0),
+  forma_pago text NOT NULL CHECK (forma_pago = ANY (ARRAY['efectivo'::text, 'mercado_pago'::text])),
+  -- timestamp: cuándo se movió la plata (puede ser un día pasado).
+  -- created_at: cuándo se registró (auditoría).
+  timestamp timestamp with time zone NOT NULL DEFAULT now(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT movimiento_extra_pkey PRIMARY KEY (id),
+  CONSTRAINT movimiento_extra_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  -- FK compuesto con tenant_id (mismo estándar que auditoría 2.1): un movimiento
+  -- no puede referenciar un socio de otro tenant. MATCH SIMPLE: no se chequea si
+  -- socio_id es NULL (otro_ingreso).
+  CONSTRAINT movimiento_extra_socio_tenant_fkey FOREIGN KEY (tenant_id, socio_id) REFERENCES public.socio(tenant_id, id),
+  -- Aporte y retiro llevan socio; otro_ingreso no.
+  CONSTRAINT movimiento_extra_socio_segun_tipo CHECK (
+    (tipo = 'otro_ingreso' AND socio_id IS NULL) OR (tipo <> 'otro_ingreso' AND socio_id IS NOT NULL)
+  ),
+  -- otro_ingreso lleva descripción; en aporte y retiro es opcional (la conservan
+  -- los retiros migrados desde gasto).
+  CONSTRAINT movimiento_extra_descripcion_otro_ingreso CHECK (
+    tipo <> 'otro_ingreso' OR (descripcion IS NOT NULL AND btrim(descripcion) <> '')
+  )
 );

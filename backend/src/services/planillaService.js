@@ -151,6 +151,8 @@ export const resumenSemanal = async ({ tenantId, semana, barberoId }) => {
     const totalGenerado  = montoServicios + propinas;
     const comisionValor  = Number(b.comision_valor);
 
+    // La rama `fijo` no se usa hoy: no hay barberos con comisión fija, toda
+    // comisión es porcentaje (ver la deuda en docs/estado_actual.md).
     const comision =
       b.comision_tipo === 'porcentaje'
         ? montoServicios * comisionValor / 100 + propinas

@@ -1,8 +1,10 @@
 // /backend/src/controllers/balances.js
 // Controller para la sección Balances del panel de administrador.
 
+import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { TZ } from '../utils/constantes.js';
+import { TIPOS_MOVIMIENTO_EXTRA, resumirMovimientosExtra } from '../utils/movimientos.js';
 
 /**
  * redondear2
@@ -12,13 +14,93 @@ import { TZ } from '../utils/constantes.js';
  */
 const redondear2 = (n) => Math.round(n * 100) / 100;
 
+/**
+ * variacionPorcentual
+ * Variación de un balance contra el del mes anterior, como % entero. Divide por
+ * el valor absoluto del anterior para que un anterior negativo no invierta el
+ * signo (pasar de −100 a 50 es una mejora: +150%).
+ * @param {number} actual - Balance del mes.
+ * @param {number|undefined} anterior - Balance del mes anterior; undefined si no hay.
+ * @returns {number|null} % entero, o null si no hay mes anterior o su balance es 0.
+ */
+const variacionPorcentual = (actual, anterior) => {
+  if (anterior === undefined || anterior === 0) return null;
+  return Math.round(((actual - anterior) / Math.abs(anterior)) * 100);
+};
+
+/**
+ * balanceSinComisiones
+ * Balance de una fila del histórico sin descontar comisiones: ingresos brutos −
+ * egresos. Es el número que muestra el panel con el botón en "Sin comisiones"
+ * (`balanceSegunModo` en SeccionBalances.jsx).
+ * @param {{ingresos_brutos: number, egresos: number}} fila - Fila del histórico.
+ * @returns {number} Balance redondeado a centavos.
+ */
+const balanceSinComisiones = (fila) => redondear2(fila.ingresos_brutos - fila.egresos);
+
+/**
+ * mesAnterior
+ * Mes calendario anterior a uno dado. En UTC para que ningún cambio de horario
+ * mueva la cuenta: es aritmética de calendario, no un instante.
+ * @param {string} mes - Mes 'YYYY-MM'.
+ * @returns {string} Mes anterior 'YYYY-MM' (enero → diciembre del año anterior).
+ */
+const mesAnterior = (mes) =>
+  DateTime.fromFormat(mes, 'yyyy-MM', { zone: 'utc' }).minus({ months: 1 }).toFormat('yyyy-MM');
+
+/**
+ * agruparCapitalPorSocio
+ * Totaliza los movimientos de capital de un mes por socio. Si un movimiento es
+ * aporte o retiro lo decide `sentido` en TIPOS_MOVIMIENTO_EXTRA, no el nombre
+ * del tipo.
+ * @param {Array<{tipo: string, socio_id: string, socio_nombre: string, monto: number}>} detalle -
+ *   Movimientos de capital del mes (los que no afectan el resultado), con `monto` como número.
+ * @returns {Array<{socio_id: string, nombre: string, aportes: number, retiros: number}>}
+ *   Una entrada por socio con movimientos, ordenada por nombre.
+ */
+const agruparCapitalPorSocio = (detalle) => {
+  const porSocio = new Map();
+
+  for (const m of detalle) {
+    if (!porSocio.has(m.socio_id)) {
+      porSocio.set(m.socio_id, { socio_id: m.socio_id, nombre: m.socio_nombre, aportes: 0, retiros: 0 });
+    }
+    const acumulado = porSocio.get(m.socio_id);
+    if (TIPOS_MOVIMIENTO_EXTRA[m.tipo].sentido === 'entrada') {
+      acumulado.aportes += m.monto;
+    } else {
+      acumulado.retiros += m.monto;
+    }
+  }
+
+  return Array.from(porSocio.values())
+    .map((s) => ({ ...s, aportes: redondear2(s.aportes), retiros: redondear2(s.retiros) }))
+    .sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es') || String(a.socio_id).localeCompare(String(b.socio_id)));
+};
+
 // ─── GET /api/balances/mensual?mes=YYYY-MM ────────────────────────────────────
 /**
  * getBalanceMensual
  * Devuelve el balance completo de un mes dado. `serviciosPorBarbero` incluye a
  * los barberos activos que no cortaron en el mes, con sus montos en 0.
+ * Los movimientos extra del mes se separan según TIPOS_MOVIMIENTO_EXTRA: los que
+ * afectan el resultado van a `otrosIngresos` y suman a `ingresos_brutos` (y por
+ * lo tanto al `balance_neto`); los de capital (aportes y retiros) van a
+ * `capital` y no entran en ninguna fórmula del resultado.
  * @param {string} req.query.mes - Mes en formato YYYY-MM (default: mes actual)
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
+ * @returns {JSON} {
+ *   mes, serviciosPorBarbero, productos, gastos, propinas,
+ *   otrosIngresos: { total, detalle: [{ id, fecha, descripcion, monto, forma_pago, sentido }] },
+ *   capital: {
+ *     aportes, retiros,
+ *     detalle:  [{ id, fecha, tipo, socio_id, socio_nombre, descripcion, monto, forma_pago, sentido }],
+ *     porSocio: [{ socio_id, nombre, aportes, retiros }]
+ *   },
+ *   resumen: { ingresos_brutos, total_comisiones, ingresos_netos, egresos, balance_neto,
+ *              otros_ingresos, aportes, retiros }
+ * } — `fecha` como YYYY-MM-DD (hora argentina) y los montos como número.
+ *   400 si `mes` no tiene formato YYYY-MM.
  */
 export const getBalanceMensual = async (req, res) => {
   const mes = req.query.mes || new Date().toLocaleDateString('sv-SE', { timeZone: TZ }).slice(0, 7);
@@ -92,11 +174,31 @@ export const getBalanceMensual = async (req, res) => {
       ORDER BY total DESC
     `;
 
-    const [resServicios, resPropinas, resProductos, resGastos] = await Promise.all([
+    // Detalle de los movimientos extra del mes, en orden cronológico. El join
+    // repite tenant_id como defensa en profundidad (igual que en caja.js).
+    const queryMovimientosExtra = `
+      SELECT
+        me.id                                                   AS id,
+        me.tipo                                                 AS tipo,
+        me.socio_id                                             AS socio_id,
+        s.nombre                                                AS socio_nombre,
+        me.descripcion                                          AS descripcion,
+        me.monto                                                AS monto,
+        me.forma_pago                                           AS forma_pago,
+        TO_CHAR(me.timestamp AT TIME ZONE $3, 'YYYY-MM-DD')     AS fecha
+      FROM movimiento_extra me
+      LEFT JOIN socio s ON s.id = me.socio_id AND s.tenant_id = me.tenant_id
+      WHERE me.tenant_id = $1
+        AND TO_CHAR(me.timestamp AT TIME ZONE $3, 'YYYY-MM') = $2
+      ORDER BY me.timestamp ASC, me.id ASC
+    `;
+
+    const [resServicios, resPropinas, resProductos, resGastos, resExtras] = await Promise.all([
       query(queryServicios, params),
       query(queryPropinas, params),
       query(queryProductos, params),
       query(queryGastos, params),
+      query(queryMovimientosExtra, params),
     ]);
 
     const serviciosPorBarbero = resServicios.rows.map((b) => {
@@ -116,9 +218,48 @@ export const getBalanceMensual = async (req, res) => {
       };
     });
 
+    // Movimientos extra: los totales salen de resumirMovimientosExtra (que además
+    // rechaza un tipo desconocido) y cada fila se reparte según afectaResultado.
+    // pg devuelve los NUMERIC como string: la API expone el monto como número.
+    const totalesExtra = resumirMovimientosExtra(
+      resExtras.rows.map((m) => ({ tipo: m.tipo, total: m.monto }))
+    );
+    // Cada fila lleva `sentido` resuelto, igual que las de Caja: el front no
+    // decide por nombre de tipo si un movimiento suma o resta.
+    const detalleOtrosIngresos = [];
+    const detalleCapital       = [];
+    for (const m of resExtras.rows) {
+      const monto = Number(m.monto);
+      const { afectaResultado, sentido } = TIPOS_MOVIMIENTO_EXTRA[m.tipo];
+      if (afectaResultado) {
+        detalleOtrosIngresos.push({
+          id:          m.id,
+          fecha:       m.fecha,
+          descripcion: m.descripcion,
+          monto,
+          forma_pago:  m.forma_pago,
+          sentido,
+        });
+      } else {
+        detalleCapital.push({
+          id:           m.id,
+          fecha:        m.fecha,
+          tipo:         m.tipo,
+          socio_id:     m.socio_id,
+          socio_nombre: m.socio_nombre,
+          descripcion:  m.descripcion,
+          monto,
+          forma_pago:   m.forma_pago,
+          sentido,
+        });
+      }
+    }
+
     const totalProductos  = resProductos.rows.reduce((acc, p) => acc + Number(p.total), 0);
     const totalGastos     = resGastos.rows.reduce((acc, g) => acc + Number(g.total), 0);
-    const ingresosBrutos  = serviciosPorBarbero.reduce((acc, b) => acc + b.monto_servicios, 0) + totalProductos;
+    const ingresosBrutos  = serviciosPorBarbero.reduce((acc, b) => acc + b.monto_servicios, 0)
+                          + totalProductos
+                          + totalesExtra.otrosIngresos;
     const totalComisiones = serviciosPorBarbero.reduce((acc, b) => acc + b.monto_comision, 0);
     const ingresosNetos   = ingresosBrutos - totalComisiones;
     const balanceNeto     = ingresosNetos - totalGastos;
@@ -142,12 +283,25 @@ export const getBalanceMensual = async (req, res) => {
         })),
       },
       propinas: { total: Number(resPropinas.rows[0].total) },
+      otrosIngresos: {
+        total:   redondear2(totalesExtra.otrosIngresos),
+        detalle: detalleOtrosIngresos,
+      },
+      capital: {
+        aportes:  redondear2(totalesExtra.aportes),
+        retiros:  redondear2(totalesExtra.retiros),
+        detalle:  detalleCapital,
+        porSocio: agruparCapitalPorSocio(detalleCapital),
+      },
       resumen: {
         ingresos_brutos:  redondear2(ingresosBrutos),
         total_comisiones: redondear2(totalComisiones),
         ingresos_netos:   redondear2(ingresosNetos),
         egresos:          redondear2(totalGastos),
         balance_neto:     redondear2(balanceNeto),
+        otros_ingresos:   redondear2(totalesExtra.otrosIngresos),
+        aportes:          redondear2(totalesExtra.aportes),
+        retiros:          redondear2(totalesExtra.retiros),
       },
     };
 
@@ -163,8 +317,19 @@ export const getBalanceMensual = async (req, res) => {
  * getBalanceHistorico
  * Devuelve el resumen de los últimos N meses para la tabla de histórico anual:
  * el mes en curso + los N-1 anteriores completos, con los meses en hora argentina.
+ * Un mes aparece si tuvo al menos un corte, venta, gasto o movimiento extra.
+ * `ingresos_brutos` incluye los otros ingresos; `balance_neto` y las variaciones
+ * no incluyen aportes ni retiros (son capital, no resultado).
  * @param {number} req.query.cantidad - Cantidad de meses (default: 12, máx: 24)
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
+ * @returns {JSON} [{ mes, label, ingresos_brutos, total_comisiones, ingresos_netos, egresos,
+ *   balance_neto, otros_ingresos, aportes, retiros, variacion_vs_anterior,
+ *   variacion_vs_anterior_sin_comisiones }], del mes más reciente al más viejo.
+ *   Las dos variaciones comparan contra el mes calendario anterior y son un % entero, o
+ *   null si ese mes no tuvo movimientos (no está en la lista) o su balance es 0:
+ *   `variacion_vs_anterior` compara `balance_neto` (con comisiones) y
+ *   `variacion_vs_anterior_sin_comisiones` compara ingresos brutos − egresos, para el
+ *   botón "Sin comisiones" del panel.
  */
 export const getBalanceHistorico = async (req, res) => {
   const cantidad = Math.min(parseInt(req.query.cantidad) || 12, 24);
@@ -208,21 +373,42 @@ export const getBalanceHistorico = async (req, res) => {
       GROUP BY DATE_TRUNC('month', timestamp AT TIME ZONE '${TZ}')
     `;
 
-    const [resServicios, resProductos, resGastos] = await Promise.all([
+    // Una fila por (mes, tipo): la clasificación por tipo se hace en JS con
+    // resumirMovimientosExtra, no en el SQL.
+    const queryExtrasMensuales = `
+      SELECT
+        TO_CHAR(DATE_TRUNC('month', timestamp AT TIME ZONE '${TZ}'), 'YYYY-MM') AS mes,
+        tipo                                                                     AS tipo,
+        COALESCE(SUM(monto), 0)                                                  AS total
+      FROM movimiento_extra
+      WHERE tenant_id = $1
+        AND timestamp AT TIME ZONE '${TZ}' >= DATE_TRUNC('month', NOW() AT TIME ZONE '${TZ}') - INTERVAL '1 month' * $2
+      GROUP BY DATE_TRUNC('month', timestamp AT TIME ZONE '${TZ}'), tipo
+    `;
+
+    const [resServicios, resProductos, resGastos, resExtras] = await Promise.all([
       query(queryServiciosMensuales, params),
       query(queryProductosMensuales, params),
       query(queryGastosMensuales,    params),
+      query(queryExtrasMensuales,    params),
     ]);
 
     const mesesSet = new Set([
       ...resServicios.rows.map((r) => r.mes),
       ...resProductos.rows.map((r) => r.mes),
       ...resGastos.rows.map((r) => r.mes),
+      ...resExtras.rows.map((r) => r.mes),
     ]);
 
     const idxServicios = Object.fromEntries(resServicios.rows.map((r) => [r.mes, r]));
     const idxProductos = Object.fromEntries(resProductos.rows.map((r) => [r.mes, r]));
     const idxGastos    = Object.fromEntries(resGastos.rows.map((r) => [r.mes, r]));
+
+    // Los movimientos extra traen varias filas por mes (una por tipo): se agrupan.
+    const extrasPorMes = {};
+    for (const r of resExtras.rows) {
+      (extrasPorMes[r.mes] ||= []).push(r);
+    }
 
     const nombresMeses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
                           'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -234,7 +420,11 @@ export const getBalanceHistorico = async (req, res) => {
         const p = idxProductos[mes] || {};
         const g = idxGastos[mes]    || {};
 
-        const ingresosBrutos  = Number(s.ingresos_brutos_servicios || 0) + Number(p.total_productos || 0);
+        const e = resumirMovimientosExtra(extrasPorMes[mes] || []);
+
+        const ingresosBrutos  = Number(s.ingresos_brutos_servicios || 0)
+                              + Number(p.total_productos || 0)
+                              + e.otrosIngresos;
         const totalComisiones = Number(s.total_comisiones || 0);
         const ingresosNetos   = ingresosBrutos - totalComisiones;
         const egresos         = Number(g.total_gastos || 0);
@@ -251,18 +441,26 @@ export const getBalanceHistorico = async (req, res) => {
           ingresos_netos:   redondear2(ingresosNetos),
           egresos:          redondear2(egresos),
           balance_neto:     redondear2(balanceNeto),
+          otros_ingresos:   redondear2(e.otrosIngresos),
+          aportes:          redondear2(e.aportes),
+          retiros:          redondear2(e.retiros),
         };
       });
 
-    const historialConVariacion = historial.map((mes, idx) => {
-      const anterior = historial[idx + 1];
-      let variacion = null;
-      if (anterior && anterior.balance_neto !== 0) {
-        variacion = Math.round(
-          ((mes.balance_neto - anterior.balance_neto) / Math.abs(anterior.balance_neto)) * 100
-        );
-      }
-      return { ...mes, variacion_vs_anterior: variacion };
+    // Se compara contra el mes calendario anterior. Si no tuvo movimientos no
+    // está en la lista y la variación queda en null: no se salta a uno más
+    // viejo (pasa con el primer mes de uso del sistema).
+    const historialPorMes = new Map(historial.map((fila) => [fila.mes, fila]));
+    const historialConVariacion = historial.map((mes) => {
+      const anterior = historialPorMes.get(mesAnterior(mes.mes));
+      return {
+        ...mes,
+        variacion_vs_anterior: variacionPorcentual(mes.balance_neto, anterior?.balance_neto),
+        variacion_vs_anterior_sin_comisiones: variacionPorcentual(
+          balanceSinComisiones(mes),
+          anterior ? balanceSinComisiones(anterior) : undefined,
+        ),
+      };
     });
 
     res.json(historialConVariacion);

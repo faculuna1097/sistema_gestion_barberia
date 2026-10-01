@@ -24,3 +24,10 @@ export function fmtPesos(n) {
 export function formatPago(forma) {
   return forma === 'efectivo' ? 'Efectivo' : 'Mercado Pago';
 }
+
+// Formas de pago del sistema como opciones { value, label }, para selectores
+// y grupos de botones de los formularios.
+export const OPCIONES_FORMA_PAGO = [
+  { value: 'efectivo',     label: 'Efectivo' },
+  { value: 'mercado_pago', label: 'Mercado Pago' },
+];

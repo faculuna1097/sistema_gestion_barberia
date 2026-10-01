@@ -1,6 +1,6 @@
 # Estado actual del proyecto
 
-Última actualización: 2026-09-29 (auditoría de la documentación). **Go-live del turnero mergeado a `main` y en producción** (`kingsai.barbermanager.app`): turnero del cliente, app del barbero, acceso de barberos al panel, horario de atención + feriados y rediseño del panel de gestión, todo live. Backend fijado a **Node 22** en Railway (supabase-js v2 necesita WebSocket nativo — ver post-mortem en [`postmortem_golive_turnero.md`](./postmortem_golive_turnero.md)). El mailer de Resend está activo tanto en el web service como en el cron. **(2026-06-15) Landing de marketing en producción** en `barbermanager.app` (apex canónico, `www` redirige). Quedan solo residuales operativos/time-gated de entregabilidad de mail — ver Pendientes.
+Última actualización: 2026-09-30 (movimientos extra: aportes, retiros y otros ingresos; RLS en todas las tablas; modales de detalle en Planillas y Balances). **Go-live del turnero mergeado a `main` y en producción** (`kingsaistudio.barbermanager.app`): turnero del cliente, app del barbero, acceso de barberos al panel, horario de atención + feriados y rediseño del panel de gestión, todo live. Backend fijado a **Node 22** en Railway (supabase-js v2 necesita WebSocket nativo — ver post-mortem en [`postmortem_golive_turnero.md`](./postmortem_golive_turnero.md)). El mailer de Resend está activo tanto en el web service como en el cron. **(2026-06-15) Landing de marketing en producción** en `barbermanager.app` (apex canónico, `www` redirige). Quedan solo residuales operativos/time-gated de entregabilidad de mail — ver Pendientes.
 
 Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convenciones_tecnicas.md).
 
@@ -46,7 +46,7 @@ necesita `vercel.json`**. Configuración de dominio:
 - El apex estaba libre (404 `DEPLOYMENT_NOT_FOUND`) antes de este deploy. Asignar
   `www` explícitamente al proyecto del landing **sobrescribe el wildcard
   `*.barbermanager.app`** del proyecto de gestión (un dominio exacto le gana al
-  wildcard en Vercel) — `kingsai` y los demás subdominios de tenant siguen
+  wildcard en Vercel) — `kingsaistudio` y los demás subdominios de tenant siguen
   resolviendo al panel, sin regresión.
 - El `og:url` del `index.html` ya apunta al apex, así que coincide con el canónico.
 - **Pendiente:** falta el `og:image` (ver Pendientes).
@@ -105,10 +105,10 @@ Para abrir el turnero o la app del barbero desde un celular en la misma WiFi:
 
 | Tenant | Tipo | Subdominio | UUID |
 |---|---|---|---|
-| Kingsai Studio | Producción | `kingsai` | `a1b2c3d4-0000-0000-0000-000000000001` |
+| Kingsai Studio | Producción | `kingsaistudio` | `a1b2c3d4-0000-0000-0000-000000000001` |
 | Demo | Desarrollo | `demo` | `aaaaaaaa-0000-0000-0000-000000000002` |
 
-URL de producción: `kingsai.barbermanager.app` ✅ funcionando.
+URL de producción: `kingsaistudio.barbermanager.app` ✅ funcionando.
 
 ### Setup de dev local para la integración con Google Calendar
 
@@ -138,6 +138,15 @@ La convención (header `X-Tenant-Subdomain`, fallback `TENANT_ID`, extracción d
 - **Caché del middleware:** las entradas resueltas se guardan en memoria como `{ tenant_id, operativo_token_version, admin_token_version }` por subdominio (query única `resolverPorSubdominio`, reusada por todo). Se invalidan al reiniciar **o** vía invalidación explícita: automática al rotar la password operativa (`adminOperativo`) o el PIN admin (`gestion.cambiarPinAdmin`) — ambos llaman `invalidar(subdominio)` en proceso → preserva la revocación inmediata de esos tokens — y manual con el endpoint de plataforma `POST /api/plataforma/cache/invalidate` (para baja / cambio de subdominio editados a mano en la DB). Ver `onboarding.md` → "Baja de un tenant".
 
 La estructura del panel admin y el scroll global son convenciones: ver [`convenciones_tecnicas.md`](./convenciones_tecnicas.md) §8.
+
+### RLS activado en todas las tablas (2026-09-30)
+Las 18 tablas de `public` tienen Row Level Security activado y **sin policies**. Supabase expone `public` por su API automática (Data API) y los roles `anon` / `authenticated` tienen todos los permisos sobre las tablas; con RLS activado y sin policies, por esa API no se lee ni se escribe nada. El backend no se ve afectado: se conecta por el pooler como `postgres`, que es el dueño de las tablas, y al dueño RLS no le aplica. Ningún frontend usa Supabase (solo el backend, para Storage, con la `service_role`).
+
+- Hasta esa fecha solo lo tenían `tenant_feriado`, `tenant_horario_atencion` y `tenant_imagen`; las otras 13 estaban abiertas para quien tuviera la anon key (que no está publicada en ningún front).
+- **Regla:** toda tabla nueva se crea con `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`. El SQL editor no lo activa solo; el editor de tablas de Supabase sí.
+- **Gotcha:** si el backend (o el cron) se conectara con un rol que no es el dueño, RLS no da error: devuelve cero filas y la app se ve vacía. Se revierte con `ALTER TABLE ... DISABLE ROW LEVEL SECURITY`.
+- **Mejora opcional pendiente:** apagar la Data API desde la configuración del proyecto de Supabase, ya que la app no la usa. RLS no cubre `TRUNCATE`, pero esa API no lo expone.
+- Verificado en producción el mismo día: el panel de gestión funciona igual con RLS activado en todas las tablas.
 
 ---
 
@@ -171,12 +180,12 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
 
 ### Panel admin
 - Inicio ✅
-- Caja — Tab 1 (Movimientos del día) ✅
+- Caja — Tab 1 (Movimientos del día) ✅, con el alta de aportes, retiros y otros ingresos (el "+" de la fila de pestañas)
 - Caja — Tabs 2 y 3 (Cierre + Historial) ⏸️ postergado, ver pendientes
-- Planillas ✅
+- Planillas ✅. En el Resumen semanal, al tocar un barbero se abre su detalle (cifras de la semana, pago, total generado por día y por forma de pago), también en el modo barbero.
 - Gastos ✅
 - Ventas ✅
-- Balances ✅
+- Balances ✅: "Ganancia del mes" con los otros ingresos; aportes y retiros aparte, cerrando en "Queda en el negocio". Decisiones en [`decisiones_movimientos_extra.md`](./decisiones_movimientos_extra.md). En el histórico, al tocar un mes se abre su detalle: la cuenta de la ganancia, la variación contra el mes anterior y los aportes y retiros, en el modo del botón de comisiones (el "vs anterior" también sigue a ese botón). El "vs anterior" compara contra el mes calendario anterior; si ese mes no tuvo movimientos, queda vacío (solo pasa con el primer mes de uso del sistema).
 - Turnero (vista global de turnos del día) ✅
 - Gestión (6 tabs) ✅
 
@@ -198,19 +207,21 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
   | `/api/ventas`, `/api/gastos` (rol por método, dentro del router) | `POST`: operativo, admin · `GET /mensual`, `PUT`, `DELETE`: admin |
   | `/api/caja`, `/api/inicio`, `/api/balances` | admin |
   | `/api/admin/{turnos, horarios, suspensiones, clientes, planilla}` | admin, barbero (el controller scopea por barbero) |
-  | `/api/admin/{barberos, servicios, productos, negocio, turnero/config, operativo, feriados, imagenes}` | admin |
+  | `/api/admin/{barberos, servicios, productos, negocio, turnero/config, operativo, feriados, imagenes, socios}` | admin |
   | `/api/admin/horario-atencion` (dentro del router) | `GET`: admin, barbero · `PUT`: admin |
   | `POST /api/plataforma/cache/invalidate` | fuera de tenant/JWT; header `X-Platform-Key` |
 
   Frontend gestión: `PantallaLoginOperativo` precede al MainScreen cuando no hay `token_operativo` en localStorage; `apiFetchOperativo` (`services/api.js`) inyecta el token operativo y ante 401 redirige al login. El tab `Seguridad` de SeccionGestion cambia PIN admin, usuario operativo y password operativa.
 - Bloqueo/aviso por suscripción ✅ mergeado a `main`.
-- Multi-tenancy por subdominio ✅ en producción (`kingsai.barbermanager.app`).
+- Multi-tenancy por subdominio ✅ en producción (`kingsaistudio.barbermanager.app`).
 - Migración de schema `refactor/schema-corte` ✅ mergeado a `main`.
 
 ---
 
 ## Pendientes
 
+- **Movimientos extra — migrar los retiros históricos de Kingsai.** Hasta el 2026-09-30 los retiros de los dueños se cargaban como gasto (categoría "Otros"). Hay que pasarlos a `movimiento_extra` con su dueño, con la feature ya deployada: filas elegidas a mano, `INSERT … SELECT` + `DELETE` en una sola ejecución del SQL editor, con respaldo en CSV. Hasta entonces, la ganancia de esos meses sigue descontando los retiros. Detalle en [`decisiones_movimientos_extra.md`](./decisiones_movimientos_extra.md).
+- **Balances — separar servicios y productos en el histórico (analizar después del deploy de los modales de detalle).** `GET /balances/historico` trae servicios y productos sumados dentro de `ingresos_brutos`, así que el modal del mes los muestra en un solo renglón ("Servicios y productos" = ingresos brutos − otros ingresos). Opción: que el endpoint devuelva también `ingresos_servicios` e `ingresos_productos` (campos nuevos, no rompen nada) y el modal los muestre por separado, como el mensual.
 - **Landing — `og:image` faltante.** El `index.html` de `/frontend-landing`
   referencia `https://barbermanager.app/og-image.png`, pero ese archivo no existe
   en `public/`. Sin esa
@@ -255,17 +266,34 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
 
 - **(2026-06-19) — Doble fetch del branding del tenant en el login del barbero.** `frontend-barbero/src/App.jsx` agrega un `useEffect` de arranque que pide `getTenant()` + `getImagenesNegocio()` para setear el favicon y el título del tab; `components/Login.jsx` ya pedía esos mismos dos endpoints para brandear su propia UI (logo + nombre). En la pantalla de login ambos corren → dos GET por endpoint. Son best-effort y el navegador cachea el GET, así que el costo es marginal. Se dejó así **a propósito** para no acoplar el branding del documento (favicon/título, que debe aplicar también con sesión activa) a la lógica de la pantalla de login. Fix si molesta: subir el fetch a un único punto (`App.jsx`) y pasar logo/nombre a `Login` por prop. Bajo riesgo, a analizar después.
 
-- **(2026-09-29) — Comisión: decisión de negocio "siempre porcentaje"; el tipo `fijo` queda como resto latente.** El schema admite `barbero.comision_tipo = 'fijo'` y la planilla lo calcula (`planillaService.resumenSemanal`, `SeccionPlanillas.calcularComisionDia`, `MiPlanilla.calcularComisionDia` en la app del barbero), pero Balances (`controllers/balances.js`, mensual e histórico) trata toda comisión como porcentaje y su columna "Comisión %" muestra `valor%`. Decisión (2026-09-29): las comisiones son siempre porcentaje. Verificado ese día: no hay barberos `fijo` en la DB, y la UI de Gestión no expone el tipo (solo se podría setear directo en la DB). Si se quiere cerrar del todo: sacar `fijo` del CHECK del schema y de los cálculos de la planilla.
+- **(2026-09-29) — Comisión: decisión de negocio "siempre porcentaje"; el tipo `fijo` queda como resto latente.** **Por ahora no existen barberos con comisión fija: siempre es porcentual.** El schema admite `barbero.comision_tipo = 'fijo'` y la planilla lo calcula (`planillaService.resumenSemanal`, `SeccionPlanillas.calcularComisionDia`, `MiPlanilla.calcularComisionDia` en la app del barbero), pero Balances (`controllers/balances.js`, mensual e histórico) trata toda comisión como porcentaje y su columna "Comisión %" muestra `valor%`. Decisión (2026-09-29): las comisiones son siempre porcentaje. Verificado ese día: no hay barberos `fijo` en la DB, y la UI de Gestión no expone el tipo (solo se podría setear directo en la DB). **(2026-09-30) Además, con `fijo` las propinas no cierran:** el backend y `MiPlanilla` calculan `valor × cortes` sin propinas, pero el subtotal del día de Planillas (`BloqueDia`) y el Excel del Detalle les suman las propinas también con `fijo`; con un barbero `fijo`, los días no sumarían lo de la semana. Hoy no pasa por lo anterior. Si se quiere cerrar del todo: sacar `fijo` del CHECK del schema y de los cálculos de la planilla (anotado también en `SQL_Schema.md` y en los comentarios de esos cálculos).
 
 - **(2026-09-29) — `barbero.activo` y `barbero.created_at` aceptan NULL** (y también `activo` en `servicio`, `producto` y `categoria_gasto`: `boolean DEFAULT true` sin `NOT NULL`). Un NULL no entra ni en `activo = true` ni en `activo = false`, y la regla de qué barberos listan Planillas y Balances usa las dos columnas de `barbero`. Verificado 2026-09-29: no hay NULLs en `barbero` (las otras tablas no se revisaron). Fix: `ALTER TABLE ... ALTER COLUMN ... SET NOT NULL`, que va directo a producción (hay una sola DB). Baja prioridad.
+
+Deudas detectadas durante la feature de movimientos extra (2026-09-30), verificadas contra los docs:
+
+- **`req.body` sin fallback (Express 5).** 27 handlers en 15 controllers desestructuran `req.body` directo; en Express 5 `req.body` es `undefined` si no llega body, así que un POST o PUT sin body tira `TypeError` y responde 500 en vez de 400. Arreglo para todos: un middleware después de `express.json()` que haga `req.body ??= {}`. Hoy solo `crearMovimientoExtra` y el endpoint de plataforma usan `req.body || {}`.
+- **Borrar con un `id` que no es UUID da 500** en todas las ramas de `caja.eliminarMovimiento`: el `22P02` solo se maneja en los services.
+- **`getCategorias` no filtra `activo`** (`controllers/categorias.js`), aunque su comentario dice "activas": desactivar una categoría no la saca del iPad. Ojo al arreglarlo: `categoria_gasto.activo` acepta NULL (ver la deuda de columnas nullables).
+- **Gasto sin categoría:** Gastos usa `LEFT JOIN categoria_gasto` ("Sin categoría"), pero Balances mensual y Caja usan `JOIN` y lo pierden, y el histórico no hace join: los totales pueden no coincidir. Hoy el alta exige categoría, así que solo afecta filas viejas o cargadas a mano.
+- **`gasto.categoria_id` no se valida contra el tenant** en `createGasto` / `updateGasto` (la auditoría cubrió barbero, servicio y producto). Riesgo bajo: hace falta conocer el UUID de una categoría ajena.
+- **La comisión no queda guardada en el corte:** Balances y Planillas usan el % actual del barbero, así que cambiar el % de un barbero cambia los balances de meses pasados.
+- **El borrado de gastos y ventas está implementado dos veces** (`gastos.js` / `ventas.js` y `caja.eliminarMovimiento`); la auditoría ya tuvo que arreglar el mismo bug en los dos lados.
+- **`REGEX_FECHA` copiada en 5 controllers** (feriados, turnero, turnosOperativo, turnos, planilla). El código nuevo usa `esFechaISO` de `utils/validarFecha.js`; falta migrar esas copias.
+- **Montos como texto:** varias respuestas viejas devuelven el `NUMERIC` de pg como string (`createGasto`, los listados de gastos y ventas); las de Caja, movimientos extra y Balances devuelven número. La regla quedó en `convenciones_tecnicas.md` §4; falta migrar las viejas.
+- **`getBalanceHistorico` acepta `cantidad` negativa:** `?cantidad=-5` deja la ventana en el futuro y responde `[]` en vez de 400 o del valor por defecto.
+- **Redondeo de comisiones distinto:** el mensual redondea la comisión por barbero y después suma; el histórico suma sin redondear. Pueden diferir en centavos. Desde el modal del histórico, "Ver el mes completo" lleva al mensual del mismo mes, así que la diferencia queda a un click (en pantalla se ve solo si cruza el redondeo a pesos enteros de `fmtPesos`).
+- **Categorías de gasto por tenant, cargadas a mano.** `crearTenant.js` no crea categorías: se cargan por SQL (ver `onboarding.md`, Paso 2c), así que cada tenant tiene su propia copia de la misma lista base. Idea del usuario: una lista base común más categorías propias por cliente. El schema ya tiene `tenant_id` nullable y `es_default`, pero `getCategorias` solo trae las del tenant. Recomendación (2026-09-30): sembrar la lista base en cada tenant al crearlo (desde `crearTenant.js`) en vez de filas globales con `tenant_id` NULL. Las filas globales obligan a casos especiales en cada consulta, y no dejan que un cliente renombre u oculte una categoría base sin otro mecanismo. Sembrar por tenant mantiene las consultas en `tenant_id = $1` y permite un FK compuesto que cierra la deuda de `categoria_id`. Decidir en su propio chat.
+- Menores: `gastos.js` sin JSDoc; `getGastosMensual` corre sus dos consultas en serie; el comentario del bloque "RUTAS DEL BACKOFFICE" de `index.js` dice "admin + barbero", pero la mayoría de sus rutas son solo admin.
+- **Propias de movimientos extra:** sin edición (corregir es borrar y volver a cargar) y sin pantalla de alta de socios (se cargan por SQL, ver `onboarding.md`).
 
 ### Deudas vivas del frontend del panel (consolidadas del registro archivado)
 
 El rediseño del panel de gestión cerró todas sus deudas accionables; quedan estas, **todas de prioridad baja**. Historia completa de cómo se resolvió cada deuda del rediseño en [`deudas_tecnicas_frontend.md`](./deudas_tecnicas_frontend.md) (archivado). Se conservan los números `#NN` originales para las referencias cruzadas en commits y docs.
 
 - **#48 (abierta) — Naming "Admin" en el login unificado por PIN.** Desde que el login por PIN se unificó (admin y barbero entran por la misma pantalla; el backend resuelve el rol según el PIN), el naming "Admin" quedó stale en `frontend`: `screens/PantallaLoginAdmin.jsx` (+ sub-componentes `ShellLoginAdmin`, `BotonCancelarEsquina`, prefijo de log `[pantallaLoginAdmin]`), el estado `currentScreen === "loginAdmin"` y el handler `cerrarSesionAdmin` en `App.jsx`. Cosmético, sin impacto funcional. Resolver en un cleanup de naming aparte → `PantallaLoginPanel` / `loginPanel` / `cerrarSesionPanel`.
-- **#27 (aceptada) — Semántica engañosa de la columna comisión del subtotal del día** (`SeccionPlanillas`, tab Detalle). El `thead` no tiene columna "Comisión"; el slot "Pago" del `tfoot` muestra `comisión + propinas` sin label explícito (solo el eyebrow mono indica `XX% + prop` o `$N/c + prop`). Mantenido a pedido del usuario durante el rediseño. Revisitar como mejora UX si aparece pedido: (a) fila aparte "Comisión del día" + "A pagar al barbero", o (b) columna "Comisión" en el thead.
-- **#28 (aceptada) — Acoplamiento sutil entre tabs en `SeccionPlanillas`.** `infoComisionActiva` se deriva de `resumenData` pero se consume en el tab Detalle (comisión por día). El `Promise.all` que carga ambos endpoints en paralelo lo garantiza hoy. Si se separan los fetches (lazy load por tab) o se mueve el cálculo al backend, se rompe en silencio (el Detalle quedaría sin comisión hasta que cargue el Resumen).
+- **#27 (aceptada) — Semántica engañosa de la columna comisión del subtotal del día** (`SeccionPlanillas`, tab Detalle). El `thead` no tiene columna "Comisión"; el slot "Pago" del `tfoot` muestra `comisión + propinas` sin label explícito (solo el eyebrow mono indica `XX% + prop` o `$N/c + prop`). Mantenido a pedido del usuario durante el rediseño. Revisitar como mejora UX si aparece pedido: (a) fila aparte "Comisión del día" + "A pagar al barbero", o (b) columna "Comisión" en el thead. **(2026-09-30)** En el Resumen, la columna "Comisión" pasó a llamarse "A pagar" (con la pista `XX% + prop`), y la columna del Excel de los dos tabs pasó a "A pagar ($)". Así "comisión" queda solo para la comisión sin propinas, como en Balances y en el modal de detalle. El tab Detalle en pantalla sigue como se describe acá.
+- **#28 (aceptada) — Acoplamiento sutil entre tabs en `SeccionPlanillas`.** `infoComisionActiva` se deriva de `resumenData` pero se consume en el tab Detalle (comisión por día). El `Promise.all` que carga ambos endpoints en paralelo lo garantiza hoy. Si se separan los fetches (lazy load por tab) o se mueve el cálculo al backend, se rompe en silencio (el Detalle quedaría sin comisión hasta que cargue el Resumen). **(2026-09-30)** Ahora también al revés: el modal de detalle del Resumen (`ModalDetalleBarbero`) usa los cortes de `detalleData` para el total por día y por forma de pago. Si se separan los fetches, hay que cargar los dos antes de abrirlo.
 - **#42 (aceptada) — `BloqueFeriados` con overflow propio.** `max-height:260` + `overflowY:auto` en la lista: divergencia consciente de la convención "las secciones no tienen overflow propio", justificada porque la lista de feriados es de largo variable dentro del bloque sin scroll de `TabNegocio`. Revisar si en el futuro el panel de Gestión pasa a scrollear normalmente.
 - **#43 (aceptada / nota de producto) — Nombre del negocio + URL de reservas sin self-service** (`TabNegocio`). Se removió el formulario de esos dos campos (se editan directo en la DB porque cambian muy poco); el endpoint `GET/PUT /admin/negocio` sigue existiendo y `App.jsx`/`PanelAdmin` leen el nombre. Si el producto se vende a terceros que quieran renombrar su negocio o cambiar la plataforma de turnos sin tocar la DB, reponer un formulario mínimo.
 - **#45 (aceptada) — Bloque del barbero en un día que el local cerró después no se valida** (`TabBarberos`). Si el local cierra un día donde un barbero ya tenía un bloque cargado, ese bloque se sigue mostrando editable pero `validarHorario` no lo marca inválido (no hay rango del local contra el cual validar: `horarioLocal[dia]` es `undefined`). Caso de borde poco frecuente, dejado fuera de alcance al resolver #40. Si se quiere endurecer: marcar inválido todo bloque en día cerrado del local (con `horarioLocal != null`).
@@ -274,4 +302,13 @@ El rediseño del panel de gestión cerró todas sus deudas accionables; quedan e
 - **(nueva, 2026-09-29) — `npm run lint` del front de gestión falla en `main`** (7 errores + 1 warning, ninguno funcional; los fronts de barbero y turnero pasan limpio): 2 falsos positivos `'Icon' is defined but never used` (`PanelAdmin.jsx:114` y `KpiCard` en `SeccionBalances.jsx`: el parámetro renombrado `icon: Icon` solo se usa como JSX y `no-unused-vars` no lo ve; se resolvería sumando `argsIgnorePattern: '^[A-Z_]'` a la regla, igual que el `varsIgnorePattern` que ya tiene), 3 de `react-hooks/set-state-in-effect` (`App.jsx:231` y `:269`, `FondoLocal.jsx:106`; ver deuda #13 de [`sistema_de_disenio.md`](./sistema_de_disenio.md)), `token` asignado y sin usar (`App.jsx:136`), `react-refresh/only-export-components` (`screens/flows/wizard.jsx:356`) y el warning `exhaustive-deps` del efecto del histórico en `SeccionBalances`. El landing también falla, con 2 errores de `set-state-in-effect` (`components/landing/Reveal.jsx:26`, `hooks/useMediaQuery.js:32`). Tarea sugerida: "lint en verde en los cuatro fronts".
 - **(pendiente de producto) — ¿`ScreenHeader` en todo el admin?** Se sacaron de Gestión, Turnero, Planillas, Balances y Caja (decisión D15 en [`decisiones_redisenio_panel_gestion.md`](./decisiones_redisenio_panel_gestion.md)); quedan solo en `SeccionVentas` y `SeccionGastos` (verificado 2026-09-29). Falta decidir si se sacan también de ahí o se conservan.
 - **(nueva, 2026-09-29) — `SeccionInicio.jsx:423` usa `.then(r => r.json())`** dentro del `Promise.all`, contra convenciones §3 (nunca `.then()`). Pasarlo a `async/await` la próxima vez que se toque Inicio.
+- **(nueva, 2026-09-30) — Caja esconde todo mientras carga o si falla.** El estado de carga y el de error reemplazan también el selector de día y los totales: si un día falla, solo queda "Reintentar" y no se puede cambiar de día sin salir de la sección.
+- **(nueva, 2026-09-30) — Errores sin mensaje del servidor se muestran crudos** en los modales de Caja, Gastos y Ventas: "Failed to fetch" si no hay red, o el texto del parser si la respuesta no es JSON (un 502 del proxy). Arreglar los tres juntos con un mensaje genérico en español.
+- **(nueva, 2026-09-30) — Etiqueta neutra sobre fila con hover.** "Aporte" y "Retiro" (Caja) y `BadgeCategoria` (Gastos) usan `surfaceAlt`, igual que el hover de la fila, y pierden el fondo al pasar el mouse.
+- **(nueva, 2026-09-30) — Tamaños escritos a mano:** `fontSize: 13` en los bloques de error de Gastos y Ventas; 15 y 12 en `Field`. Además, `Field` no acepta `maxLength`. `SummaryRow` también usa `fontSize: 13` para el valor, en las copias de los tres fronts (en el panel no lo usa ninguna pantalla; en el turnero y el barbero sí): baja del mínimo de 14 del sistema de diseño (§3.6), así que se arregla en las tres copias a la vez.
+- **(nueva, 2026-09-30) — `Modal`: valores escritos a mano y sin manejo del foco.** El fondo oscuro (`rgba(9, 9, 11, 0.5)`) y la sombra (`0 20px 40px rgba(0,0,0,0.15)`) no salen de `theme`: no hay token de overlay y `shadowMd` es más liviana (sumar tokens `overlay` / `shadowLg` en `tokens.js`, que es el mismo en los cuatro fronts). Además, el modal no lleva el foco adentro al abrirse, no lo encierra y no lo devuelve al cerrar: con teclado, Tab sigue recorriendo la pantalla de atrás (ESC sí cierra). Afecta a todos los modales del panel.
+- **(nueva, 2026-09-30) — Formas de pago en tres lugares** (`formatPago`, `OPCIONES_FORMA_PAGO` y `BadgeFormaPago`); el Excel de Gastos usa un ternario propio.
+- **(nueva, 2026-09-30) — `BotonFormaPago` (SeccionTurnero) y `GrupoOpciones` (SeccionCaja) son el mismo patrón**, con su rótulo `labelEyebrow` duplicado. Al unificarlos, promover `GrupoOpciones` a `/ui` (§7.1 del sistema de diseño).
+- **(nueva, 2026-09-30) — Menores:** comentario viejo en `SeccionGastos.jsx` ("las categorías traen id numérico"; son UUID); encabezado de `SelectorDia.jsx` con la ruta vieja.
+
 *— Fin del documento —*

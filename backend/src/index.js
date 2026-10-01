@@ -43,6 +43,7 @@ import adminOperativoRoutes from './routes/adminOperativo.js';
 import adminHorarioAtencionRoutes from './routes/adminHorarioAtencion.js';
 import adminFeriadosRoutes from './routes/adminFeriados.js';
 import adminImagenesRoutes from './routes/adminImagenes.js';
+import adminSociosRoutes from './routes/adminSocios.js';
 import { requiereRol } from './middlewares/requiereRolMiddleware.js';
 import { getNegocio } from './controllers/gestion.js';
 import { getImagenes } from './controllers/imagenes.js';
@@ -230,6 +231,8 @@ app.use('/api/admin/operativo',      verificarToken, requiereRol('admin'), admin
 app.use('/api/admin/horario-atencion', verificarToken, adminHorarioAtencionRoutes);
 app.use('/api/admin/feriados',         verificarToken, requiereRol('admin'), adminFeriadosRoutes);
 app.use('/api/admin/imagenes',         verificarToken, requiereRol('admin'), adminImagenesRoutes);
+// socios: los dueños del negocio, para el selector de aportes y retiros de Caja.
+app.use('/api/admin/socios',           verificarToken, requiereRol('admin'), adminSociosRoutes);
 
 // --- Arranque del servidor ---
 const startServer = async () => {
