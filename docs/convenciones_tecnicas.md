@@ -214,9 +214,13 @@ Reglas para que los números signifiquen algo (aprendidas midiendo el turnero y 
 - **Emular el celular real, no el iPad.** El User-Agent cambia lo que sirve el server: en iPad
   Google Fonts mandó 6 `.ttf`; en iPhone real, 2 `.woff2` (fuentes variables). Medir el
   dispositivo equivocado dio un diagnóstico peor que la realidad.
-- **Estos fronts son CSR puro (Vite SPA):** el HTML llega vacío; el bundle pega doble en mobile
-  (descarga **y** ejecución, ~3–4× más lenta en celular). Para la CPU del celular la cura es
-  **mandar menos JS** (code-split), no cachear (el cache no ahorra parse/execute).
+- **Gestión, turnero y barbero son CSR puro (Vite SPA):** el HTML llega vacío; el bundle pega doble
+  en mobile (descarga **y** ejecución, ~3–4× más lenta en celular). Para la CPU del celular la cura
+  es **mandar menos JS** (code-split), no cachear (el cache no ahorra parse/execute).
+- **La landing es la excepción: se pre-renderiza (SSG)** desde 2026-10-01. El HTML llega completo y
+  React hidrata encima, así que el contenido pinta sin esperar al JS. Al medirla, el primer paint
+  ya no depende del bundle; mirá el salto de layout (CLS) y la hidratación. Detalle en
+  [`decisiones_landing_ia.md`](./decisiones_landing_ia.md).
 - **Medí antes de optimizar.** El cuello casi nunca es lo que uno sospecha: el JS del turnero
   parecía el problema y estaba exonerado (descarga 300 ms, ejecución 237 ms @ CPU 4×); el cuello
   real era el backend.

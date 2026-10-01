@@ -58,7 +58,7 @@ código nuevo.** No re-inventar.
 Lista corta de prohibiciones explícitas. Alinea rápido a cualquier chat nuevo.
 
 - ❌ `alert()`, `confirm()`, `prompt()` nativos. Usar `ConfirmDialog`.
-- ❌ CSS classes globales. Excepción: `index.css` para reset / fonts / keyframes.
+- ❌ CSS classes globales. Excepción: `index.css` para reset / fonts / keyframes. La landing suma unas pocas clases `om-` porque se pre-renderiza (ver §4.1).
 - ❌ Múltiples colores de acento. Solo `theme.accent` (indigo).
 - ❌ Sombras pesadas, glow, gradientes.
 - ❌ Glassmorphism, blurs decorativos.
@@ -167,6 +167,22 @@ function Botoncito({ children }) {
 
 **Excepción**: `index.css` define el reset, la carga de Geist, los
 `@keyframes` (que no se pueden expresar inline) y la scrollbar.
+
+**Excepción de la landing (2026-10-01)**: la landing se pre-renderiza en el
+build. El HTML se genera sin conocer el ancho de pantalla ni si hay JS, y React
+hidrata encima. Todo lo que dependa del viewport o de que el JS esté activo no se
+puede decidir en el render: saldría un layout y saltaría a otro al hidratar. Se
+resuelve con CSS, en un bloque comentado de su `index.css` con prefijo `om-`:
+- `om-solo-desktop` / `om-solo-mobile`: visibilidad por viewport, con
+  `display: contents` en el wrapper;
+- `om-fila` / `om-fila-invertida`: columna en mobile, fila en desktop;
+- `om-reveal` / `om-reveal-visible`: animación de entrada, solo bajo la clase
+  `js` de `<html>`;
+- `om-faq` / `om-faq-chevron`: el `<details>` de la FAQ.
+
+El corte es 768 px. En la landing no se usa `useIsDesktop`: el layout responsive
+va por CSS o por flex-wrap inline. El resto de los estilos sigue inline. Detalle
+en [`decisiones_landing_ia.md`](./decisiones_landing_ia.md).
 
 **Caveat conocido**: esta decisión escala bien para mobile/turnero, pero
 no está validada para tablas densas del panel de gestión. Ver §9.8.
@@ -448,7 +464,7 @@ la estrategia es duplicar**:
 **Lo que se copia de `frontend-turnero` a cualquier front nuevo**:
 - `theme/tokens.js` *(idéntico)*.
 - `utils/formato.js`, `utils/fecha.js` *(idénticos)*.
-- `index.css` *(idéntico)*.
+- `index.css` *(idéntico; la landing suma sus clases `om-`, ver §4.1)*.
 - Los 13 primitivos universales (sección 6.1).
 
 **Lo que NO se copia**:
@@ -500,7 +516,9 @@ actualizá este doc.**
 6. ~~Catálogos (`servicios`, `barberos`) sin `ORDER BY` explícito en backend.~~ — **Resuelto**: servicios ordenan por precio y barberos por nombre (`controllers/turnero.js`, `barberos.js`, `servicios.js`).
 7. ~~`MiniCalendario` "2 semanas" hardcodeado~~ — **Resuelto**: el sublabel se deriva de `dias.length` como "N días".
 8. **Inline styles + `useState` para hover** (§4.1, §4.2) — validado solo para mobile/turnero. **Antes de arrancar el front de gestión**, revisar: las tablas densas con muchas filas hover-ables pueden hacer ruidoso el re-render. Considerar híbrido: tokens en JS + `:hover` puntual via `<style>` scoped donde la performance importe.
-9. **Contraste WCAG no verificado** — `mutedSoft` sobre `surfaceAlt`, `inkSoft` sobre `bg`, blanco sobre `accent`. Auditar con WebAIM antes de release público.
+9. **Contraste WCAG no verificado** — `mutedSoft` sobre `surfaceAlt`, `inkSoft` sobre `bg`, blanco sobre `accent`. Auditar con WebAIM antes de release público. Medido en la landing (2026-10-01):
+   - `mutedSoft` sobre blanco da ≈2.6:1. Por eso las notas al pie (`NotaAlPie`) pasaron a `muted` a 14 px: 4.8:1 sobre blanco y 4.6:1 sobre `bg`.
+   - `muted` sobre `surfaceAlt` queda en ≈4.4:1, apenas debajo de AA. Le pasa a la nota de "números de ejemplo", que está en una sección `tone="alt"`.
 10. ~~**Iconografía sin librería elegida**~~ — **Resuelto**: se eligió Lucide (`lucide-react`). Ver §3.7.
 11. ~~**`<html lang="es">`** — verificar que esté en `index.html` de cada front.~~ — **Resuelto**: presente en los cuatro fronts (verificado 2026-09-29).
 12. **Focus visible global** — auditar que todos los primitivos tengan estilo de `:focus-visible`. Hoy `Card` y `Button` sí; el resto, sin verificar.
