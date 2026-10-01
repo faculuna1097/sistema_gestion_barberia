@@ -22,6 +22,7 @@ import {
   MAX_DESCRIPCION_MOVIMIENTO,
 } from '../../../utils/movimientos';
 import { cargarChunk } from '../../../utils/cargarChunk';
+import { colorResultado } from '../../../utils/colorMonto';
 import {
   Tabs,
   LoadingState,
@@ -199,10 +200,11 @@ function TablaMovimientos({ movimientos, onEliminar }) {
  * @param {object} props
  * @param {ReactNode} props.icono - Ícono o logo a la izquierda
  * @param {string} props.label - Label corto (eyebrow mono uppercase)
- * @param {number} props.monto - Monto neto (color condicional según signo)
+ * @param {number} props.monto - Monto neto. Es un resultado: verde, rojo o
+ *   negro en cero (colorResultado).
  */
 function CardTotal({ icono, label, monto }) {
-  const colorMonto = monto >= 0 ? theme.success : theme.danger;
+  const colorMonto = colorResultado(monto);
   return (
     <div style={{
       flex: 1,

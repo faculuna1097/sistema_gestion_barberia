@@ -11,7 +11,7 @@
 //   CampoTexto    — textarea con el lenguaje visual de Field.
 //   CampoMonto    — input numérico grande ($).
 //   FilaResumen   — fila label/valor del resumen (densidad kiosko).
-//   FilaTotal     — fila de total (color parametrizable: accent ingreso / danger egreso).
+//   FilaTotal     — fila de total (color parametrizable: ink ingreso / danger egreso).
 //   PantallaExito — confirmación con checkmark animado + monto.
 //   wizardStyles  — estilos de layout reusables por los flujos (grillas, botón grande, etc.).
 
@@ -300,15 +300,16 @@ export function FilaResumen({ label, value, ultima = false }) {
 /**
  * FilaTotal
  * Fila de total del resumen: line indigo arriba (ancla la mirada) + monto en el
- * color semántico (accent para ingreso, danger para egreso).
+ * color semántico (ink para ingreso, danger para egreso; sistema_de_disenio
+ * §3.1.1).
  *
  * @param {Object} props
  * @param {string} props.label
  * @param {string} props.value — monto ya formateado
- * @param {string} [props.color=theme.accent] — color del monto
+ * @param {string} [props.color=theme.ink] — color del monto
  * @returns {JSX.Element}
  */
-export function FilaTotal({ label, value, color = theme.accent }) {
+export function FilaTotal({ label, value, color = theme.ink }) {
   return (
     <div style={styles.totalRow}>
       <span style={styles.totalLabel}>{label}</span>
@@ -328,11 +329,12 @@ export function FilaTotal({ label, value, color = theme.accent }) {
  * @param {string|null} [props.imagenLocal]
  * @param {string} props.titulo      — ej. "¡Gasto registrado!"
  * @param {number} props.monto       — monto a mostrar (se formatea con fmtPesos)
- * @param {string} [props.montoColor=theme.accent] — color del monto
+ * @param {string} [props.montoColor=theme.ink] — color del monto (ink para
+ *   ingreso, danger para egreso)
  * @param {React.ReactNode} [props.children] — contenido extra bajo el monto
  * @returns {JSX.Element}
  */
-export function PantallaExito({ imagenLocal, titulo, monto, montoColor = theme.accent, children }) {
+export function PantallaExito({ imagenLocal, titulo, monto, montoColor = theme.ink, children }) {
   return (
     <FondoLocal imagenLocal={imagenLocal}>
       <div style={styles.exitoPanel}>

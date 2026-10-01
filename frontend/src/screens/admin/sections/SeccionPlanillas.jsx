@@ -584,12 +584,12 @@ function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisi
             </td>
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>{fmtPesos(totalMonto)}</td>
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>{fmtPesos(totalPropina)}</td>
-            <td style={{ ...tdTotalBase, textAlign: 'right', color: theme.accent }}>
+            <td style={{ ...tdTotalBase, textAlign: 'right' }}>
               {fmtPesos(totalGeneral)}
             </td>
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>
               {mostrarComisiones && infoComisionActiva ? (
-                <span style={{ color: theme.accent, fontWeight: theme.weightHeading }}>
+                <span style={{ fontWeight: theme.weightHeading }}>
                   {fmtPesos(comisionDelDia + totalPropina)}
                   <span style={{
                     fontFamily: theme.mono,
@@ -664,7 +664,7 @@ function TablaResumen({ resumenData, mostrarComisiones, onVerDetalle }) {
               <TdCelda alinear="right">{fmtPesos(b.propinas)}</TdCelda>
               <TdCelda alinear="right" bold>{fmtPesos(b.total_generado)}</TdCelda>
               {mostrarComisiones && (
-                <td style={{ ...tdBase, textAlign: 'right', color: theme.accent, fontWeight: theme.weightHeading }}>
+                <td style={{ ...tdBase, textAlign: 'right', fontWeight: theme.weightHeading }}>
                   {fmtPesos(b.comision)}
                   <span style={{
                     fontFamily: theme.mono,
@@ -701,11 +701,11 @@ function TablaResumen({ resumenData, mostrarComisiones, onVerDetalle }) {
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>{totales.cantidad_cortes}</td>
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>{fmtPesos(totales.monto_servicios)}</td>
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>{fmtPesos(totales.propinas)}</td>
-            <td style={{ ...tdTotalBase, textAlign: 'right', color: theme.accent }}>
+            <td style={{ ...tdTotalBase, textAlign: 'right' }}>
               {fmtPesos(totales.total_generado)}
             </td>
             {mostrarComisiones && (
-              <td style={{ ...tdTotalBase, textAlign: 'right', color: theme.accent }}>
+              <td style={{ ...tdTotalBase, textAlign: 'right' }}>
                 {fmtPesos(totales.comision)}
               </td>
             )}
@@ -727,6 +727,8 @@ function TablaResumen({ resumenData, mostrarComisiones, onVerDetalle }) {
  * sale de restarle las propinas: el modal no repite la fórmula de comisión.
  * Con `fijo` (hoy sin uso) el backend no suma propinas, así que la comisión va
  * sin el renglón de propinas.
+ * Todo en neutro: Planillas la ven el dueño y el barbero, y para uno este monto
+ * es una salida y para el otro lo que cobra (sistema_de_disenio §3.1.1).
  * @param {object} resumen - Fila del barbero en /admin/planilla/resumen.
  * @returns {Array<object>} Renglones para DesgloseMontos.
  */
@@ -736,7 +738,6 @@ function renglonesPago(resumen) {
     label: 'Total a pagar',
     monto: resumen.comision,
     variante: 'total',
-    tono: 'positivo',
   };
   if (resumen.comision_tipo !== 'porcentaje') {
     return [
@@ -810,7 +811,7 @@ function CifrasSemana({ resumen }) {
     { label: 'Cortes',         valor: resumen.cantidad_cortes },
     { label: 'Servicios',      valor: fmtPesos(resumen.monto_servicios) },
     { label: 'Propinas',       valor: fmtPesos(resumen.propinas) },
-    { label: 'Total generado', valor: fmtPesos(resumen.total_generado), color: theme.accent },
+    { label: 'Total generado', valor: fmtPesos(resumen.total_generado) },
   ];
 
   // auto-fit: 4 columnas si entran; si no, pasan a 2.
@@ -848,7 +849,7 @@ function CifrasSemana({ resumen }) {
             fontFamily: theme.body,
             fontSize: theme.sizeHeading,
             fontWeight: theme.weightHeading,
-            color: c.color ?? theme.ink,
+            color: theme.ink,
             letterSpacing: '-0.01em',
             fontVariantNumeric: 'tabular-nums',
           }}>
@@ -864,6 +865,8 @@ function CifrasSemana({ resumen }) {
  * ListaConBarras
  * Lista de filas con la forma: rótulo · barra proporcional al total · cortes ·
  * monto. Las filas sin cortes quedan en gris con "—" (así se ven los huecos).
+ * La barra va en gris, como las neutras de DesgloseMontos: son ingresos
+ * (sistema_de_disenio §3.1.1).
  * La usan "Total generado por día" y "Por forma de pago" del modal.
  * @param {string} props.titulo - Eyebrow mono sobre la lista.
  * @param {Array<{clave: string, label: string, cantidad: number, total: number}>} props.filas
@@ -911,7 +914,7 @@ function ListaConBarras({ titulo, filas, maximo }) {
               <span style={{ color: vacio ? theme.muted : theme.ink }}>
                 {f.label}
               </span>
-              <BarraProporcional segmentos={[{ valor: f.total, color: theme.accent }]} maximo={tope} />
+              <BarraProporcional segmentos={[{ valor: f.total, color: theme.mutedSoft }]} maximo={tope} />
               <span style={{
                 textAlign: 'right',
                 color: vacio ? theme.mutedSoft : theme.muted,

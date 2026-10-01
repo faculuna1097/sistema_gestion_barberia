@@ -1,6 +1,6 @@
 # Ruta del proyecto - Sistema de Gestion de Barberia
 
-Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y actualizado el 2026-09-30 (movimientos extra).
+Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y actualizado por última vez el 2026-10-01 (árbol de `frontend/` regenerado: color de montos).
 
 Este documento lista las carpetas y archivos del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP. Para mantenerlo, regenerar los arboles desde `git ls-files` en vez de parchearlos a mano.
 
@@ -236,6 +236,7 @@ frontend/
     |       |-- BadgeEstado.jsx
     |       |-- BadgeFormaPago.jsx
     |       |-- BadgeVariacion.jsx
+    |       |-- BarraProporcional.jsx
     |       |-- BotonExportarExcel.jsx
     |       |-- BotonIconoFila.jsx
     |       |-- Button.jsx
@@ -243,6 +244,7 @@ frontend/
     |       |-- ChipFiltro.jsx
     |       |-- ConfirmDialog.jsx
     |       |-- DataTable.jsx
+    |       |-- DesgloseMontos.jsx
     |       |-- DetalleRecurso.jsx
     |       |-- EmptyState.jsx
     |       |-- ErrorBoundary.jsx
@@ -305,6 +307,7 @@ frontend/
     |   `-- tokens.js
     `-- utils/
         |-- cargarChunk.js
+        |-- colorMonto.js
         |-- fecha.js
         |-- formato.js
         `-- movimientos.js
