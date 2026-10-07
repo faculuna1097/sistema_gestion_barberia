@@ -364,8 +364,16 @@ export const getTurnoPorToken = async (req, res) => {
       return res.status(404).json({ error: 'Turno no encontrado' });
     }
     const r = result.rows[0];
+    // inicio/fin son timestamptz (objetos Date de pg): se serializan en TZ con
+    // offset (-03:00) en vez del UTC por defecto del JSON, así la fecha local
+    // sale correcta aunque el cliente la recorte (convención §4).
     res.json({
-      turno:    { id: r.id, inicio: r.inicio, fin: r.fin, estado: r.estado },
+      turno: {
+        id: r.id,
+        inicio: DateTime.fromJSDate(r.inicio, { zone: TZ }).toISO(),
+        fin: DateTime.fromJSDate(r.fin, { zone: TZ }).toISO(),
+        estado: r.estado,
+      },
       barbero:  { id: r.barbero_id, nombre: r.barbero_nombre },
       servicio: { id: r.servicio_id, nombre: r.servicio_nombre, precio: r.servicio_precio, duracion_minutos: r.servicio_duracion_minutos },
       cliente:  { nombre: r.cliente_nombre, email: r.cliente_email, telefono: r.cliente_telefono },

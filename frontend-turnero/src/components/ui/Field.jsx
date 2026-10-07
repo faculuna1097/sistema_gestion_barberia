@@ -13,6 +13,9 @@ import { theme } from '../../theme/tokens.js';
  * @param {Function} [props.onBlur]
  * @param {string} [props.placeholder]
  * @param {string} [props.type='text'] - text|email|tel|password|number
+ * @param {string} [props.name] - name del <input> (ayuda al autocompletado del navegador)
+ * @param {string} [props.autoComplete] - Token de autocompletado HTML (ej. 'name', 'email', 'tel')
+ * @param {string} [props.inputMode] - Teclado virtual sugerido (ej. 'tel', 'email', 'numeric')
  * @param {boolean} [props.invalid=false] - Marca el field con border de error
  * @param {string} [props.helper] - Texto auxiliar bajo el input
  * @param {string} [props.error] - Si está presente, reemplaza al helper en rojo
@@ -24,6 +27,9 @@ function Field({
   onBlur,
   placeholder,
   type = 'text',
+  name,
+  autoComplete,
+  inputMode,
   invalid = false,
   helper,
   error,
@@ -49,6 +55,9 @@ function Field({
 
       <input
         type={type}
+        name={name}
+        autoComplete={autoComplete}
+        inputMode={inputMode}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}

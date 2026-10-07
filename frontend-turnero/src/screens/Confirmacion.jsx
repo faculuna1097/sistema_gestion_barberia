@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { crearTurno } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { fmtPesos } from '../utils/formato.js';
-import { fmtFechaLarga, fmtFechaHora, fmtHora } from '../utils/fecha.js';
+import { fmtFechaLarga, fmtFechaHora, fmtHora, fechaDeISO } from '../utils/fecha.js';
 import {
   PageContainer, TopBar, ScreenHeader, Progress,
   Button, StickyFooter, SummaryRow, AvatarIniciales,
@@ -323,7 +323,7 @@ function ConfirmadoView({ reserva, resultado, onNuevaReserva }) {
             letterSpacing: '0.04em',
             textTransform: 'uppercase',
             color: theme.muted,
-          }}>{fmtFechaLarga(reserva.horario.slice(0, 10))}</div>
+          }}>{fmtFechaLarga(fechaDeISO(reserva.horario))}</div>
 
           <div style={{
             fontFamily: theme.body,
