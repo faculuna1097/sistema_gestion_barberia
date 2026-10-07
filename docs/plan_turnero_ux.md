@@ -27,6 +27,8 @@ al calendario y los hallazgos de la revisión corregidos.
 | Autocompletado | Obligatorio (hecho en el paso 1) |
 | WhatsApp | Preparado y condicional: aparece solo si se carga el número (el usuario lo consulta con el dueño) |
 | Fuente de verdad del sistema de diseño | Se muda del turnero a `frontend/` |
+| Reseñas en Google (2026-10-07) | Link "Dejanos tu reseña en Google" en la landing + QR impreso en la puerta del local. Sin mail post-turno |
+| Origen del cliente (2026-10-07) | Cada turno guarda por qué link llegó el cliente (`?origen=instagram`) |
 | Fuera | Tema por barbería, ticket, turno rápido / primer turno disponible, galería de trabajos, "recordarme en este celular" (el navegador de Instagram en iPhone no conserva lo guardado), código por mail |
 
 ## Diseño
@@ -55,8 +57,24 @@ por barbero con los datos ya cargados, sin query extra).
 **De paso en `turnero.js`**: `REGEX_FECHA` → `esFechaISO` (`utils/validarFecha.js`; paga parte de la
 deuda "REGEX_FECHA copiada en 5 controllers"); `precio` como número en `getServicios` y
 `getTurnoPorToken` (deuda "Montos como texto"; la app del barbero lo pasa por `fmtPesos`, compatible);
-`getTenant` expone `whatsapp` desde `tenant.configuracion.whatsapp` (E.164 validado; `null` si falta).
-Sin cambios de schema.
+`getTenant` expone `whatsapp` desde `tenant.configuracion.whatsapp` (E.164 validado; `null` si falta)
+y `resena_url` desde `tenant.configuracion.resena_url` (URL https validada con `esUrlHttps`; `null`
+si falta). Sin cambios de schema.
+
+**Reseñas en Google**: Google no permite publicar reseñas por API; solo se lleva al cliente al
+formulario. El link de la landing y el QR de la puerta apuntan a una ruta propia del turnero,
+`/turnos/resena?origen=landing|qr`, que redirige a `resena_url`. Esa indirección hace que el QR impreso
+siga andando si Google cambia el link (se actualiza el dato, no el cartel). Sin `resena_url`, la ruta
+vuelve a la landing y el link no se muestra. Reglas de Google: sin incentivos a cambio de la reseña y
+sin filtrar a los clientes contentos (el link es para todos). El link lo saca el dueño desde "Pedir
+reseñas" de su Perfil de Empresa de Google (`g.page/r/…/review`).
+
+**Origen del cliente**: el front lee `?origen=` al cargar (ej. el link de la bio de Instagram:
+`/turnos?origen=instagram`), lo conserva en memoria durante el flujo y lo manda en
+`POST /api/turnero/turnos`. Columna nueva `turno.origen_link` (text, nullable; el SQL lo corre el
+usuario, con RLS ya activo en la tabla). El backend acepta `origen` opcional validado con
+`^[a-z0-9_-]{1,30}$` (si no cumple, se guarda `null` sin rechazar la reserva). No confundir con
+`turno.origen_creacion` (turnero/barbero/admin).
 
 ### Front — base
 
@@ -80,8 +98,9 @@ Sin cambios de schema.
     en el flujo y 14 en reprogramación).
   - `rutas.js` (nuevo): `RUTA_TURNERO` (de `import.meta.env.BASE_URL`) y `rutaGestion(token)`; los usan
     `App.jsx` (regex del token), éxito, `GestionTurno` y el calendario.
-  - `calendario.js` (nuevo): `armarIcs(evento)` y `linkGoogleCalendar(evento)`.
-  - `telefono.js` (existe, paso 1): sumar `fmtTelefono(tel)` para mostrar el teléfono del local.
+  - `calendario.js` (nuevo, **paso 6**, donde se usa): `armarIcs(evento)` y `linkGoogleCalendar(evento)`.
+  - `telefono.js` (existe, paso 1): sumar `fmtTelefono(tel)` en el **paso 4**, donde se muestra el
+    teléfono del local.
 - **Limpieza**: borrar `src/assets/{hero.png,react.svg,vite.svg}`, `src/App.css`, `public/icons.svg`.
 
 ### Landing (vidriera) — `screens/Landing.jsx`
@@ -93,7 +112,13 @@ Una columna, botón "Reservar turno" fijo abajo:
 2. **Servicios**: filas (nombre, duración, precio). Tocar → "¿Cuándo?" con el servicio elegido.
 3. **Equipo**: barberos (avatar de iniciales + nombre). Tocar → Servicio con el barbero preseleccionado.
 4. **Info**: horario semanal desplegable (`HorarioSemanal`, se conserva), dirección → Maps, teléfono
-   formateado, botón de WhatsApp solo si `tenant.whatsapp` viene cargado.
+   formateado, botón de WhatsApp solo si `tenant.whatsapp` viene cargado y link "Dejanos tu reseña en
+   Google" solo si `tenant.resena_url` viene cargado (apunta a `/turnos/resena?origen=landing`).
+
+Ruta `/turnos/resena` (en `App.jsx`, junto a la de gestión): redirige con `window.location.replace`
+a `tenant.resena_url`, o a la landing si no hay. Archivo del QR para imprimir (SVG, apuntando a
+`https://{subdominio}.barbermanager.app/turnos/resena?origen=qr`), generado con un script fuera del
+repo (sin sumar dependencias al front) y entregado al usuario.
 
 Skeleton de carga con la silueta real (hoy usa 16:9 y avatar 80 contra 4:3 y 96). `fechaLocalStr` de
 `Landing.jsx` se reemplaza por `fechaLocalISO`.
@@ -162,6 +187,16 @@ Deudas nuevas detectadas en el paso 1, para `estado_actual.md` en el paso 7 (no 
 - `sistema_de_disenio.md` §8 da como ejemplo que el `Field` del turnero no acepta `autoComplete`; desde
   el paso 1 sí lo acepta.
 
+Del paso 2:
+- Un `barbero_id`/`servicio_id` con formato que no es uuid da 500 en la disponibilidad (error 22P02 de
+  Postgres; con `ANY($2::uuid[])` también el formato con llaves). Los fronts reales siempre mandan uuid
+  válidos. Resolverlo con el mismo criterio que los otros casos de id inválido (auditoría, hallazgo
+  UUID 22P02).
+- La deuda "REGEX_FECHA copiada en 5 controllers" queda en 4; "Montos como texto" ya no aplica al
+  turnero.
+- La query de barberos activos de `controllers/barberos.js` duplica `listarBarberosActivos` (ya anotado
+  en general como "Duplicación parcial de endpoints `/api/barberos` y `/api/turnero/barberos`").
+
 ## Pasos de ejecución
 
 Flujo orquestador: un chat arma los prompts y revisa el diff; un chat ejecutor + un commit por paso, en
@@ -170,14 +205,16 @@ navegador** con `vite preview` (puerto fuera de 5173–5176, solo 127.0.0.1) y l
 
 1. ✅ **Hotfix de producción** (branch `fix/turnero-fechas-autocompletado`, mergeado a `main` local el
    2026-10-07; push pendiente porque el sistema está en uso): hallazgos 1–4.
-2. **Backend "Cualquiera"**: refactor de disponibilidad, `barbero_id` opcional, regla de asignación,
-   hallazgo 5 y `whatsapp` en `getTenant`.
+2. ✅ **Backend "Cualquiera"**: refactor de disponibilidad (`cargarDatosAgenda`), `barbero_id`
+   opcional, regla de asignación (`elegirBarbero`), hallazgo 5, tope de 62 días en
+   `/dias-disponibles`, `whatsapp` y `resena_url` en `getTenant`.
 3. **Front base**: identidad, navegación con historial + transiciones, datos compartidos en App,
    helpers, limpieza (hallazgos 6–8).
-4. **Landing vidriera** (hallazgos 9–10).
+4. **Landing vidriera** (hallazgos 9–10) + link de reseñas, ruta `/turnos/resena` y archivo del QR.
 5. **¿Cuándo?**: `SelectorDiaHorario` + `SeleccionCuando` + reprogramación de la gestión + barra de
    progreso (hallazgos 11–12).
-6. **Datos y confirmación + éxito + calendario** (éxito y gestión) + reintento del 409 (hallazgos 13–14).
+6. **Datos y confirmación + éxito + calendario** (éxito y gestión) + reintento del 409 (hallazgos
+   13–14) + origen del cliente (front, `crearTurno` y el SQL de `turno.origen_link`).
 7. **Docs (orquestador)**:
    - `sistema_de_disenio.md`: fuente de verdad → `frontend/src/`; sección "Turnero: identidad propia"
      (acento, movimiento, excepción de clases CSS); §6.2 y §8 actualizados.
@@ -206,6 +243,15 @@ y este documento (sin limitar la lectura de otros archivos).
 
 ## Para después (fuera de este plan)
 
+- **Base de clientes** (feature aparte, con su propio plan; el usuario quiere tratarla en detalle):
+  identidad del cliente por teléfono + E.164 con el 9 en Argentina; unificar duplicados (hoy el
+  barbero crea un cliente nuevo por cada turno sin email); cortes sin turno asociados a un cliente;
+  ficha de cliente en el panel (visitas, faltas, cancelaciones, gasto, barbero habitual, origen,
+  reseña pedida / marca manual); conteo de escaneos del QR. Google no informa qué cliente dejó la
+  reseña. Conviene encararla apenas termine el rediseño.
+- Cambiar el link de la bio de Instagram a `…/turnos?origen=instagram` después del deploy.
+- Cargar `configuracion.resena_url` con el link que pase el dueño (SQL de `onboarding.md`) e imprimir
+  el QR.
 - Activar WhatsApp cuando el dueño confirme el número (SQL de `onboarding.md`).
 - Los mails siguen con el CTA indigo de "Luz"; pasarlos a negro es un cambio chico en
   `backend/src/services/mail/mailer.js` si se quiere coherencia.
