@@ -197,6 +197,65 @@ Del paso 2:
 - La query de barberos activos de `controllers/barberos.js` duplica `listarBarberosActivos` (ya anotado
   en general como "Duplicación parcial de endpoints `/api/barberos` y `/api/turnero/barberos`").
 
+Del paso 3:
+- Resueltas en el paso (para registrarlas en el paso 7):
+  - La deuda "El path `/turnos/gestionar/` está hardcodeado en tres lugares" de `estado_actual.md`: los
+    dos del front pasan a `utils/rutas.js`; queda el del backend (`turnosService.js#armarLinkGestion`).
+  - `om-fade` retenía `transform: translateY(0)` y convertía a `PageContainer` en bloque contenedor de los
+    `position: fixed`: el overlay del `ConfirmDialog` de la gestión quedaba atado a la columna (en desktop
+    cubría solo la columna; con la página scrolleada, el diálogo podía quedar fuera de pantalla). Las
+    entradas `tt-` usan fill-mode `backwards` y sueltan el `transform`. No se vio en vivo (ver abajo).
+  - Skeleton del `MiniCalendario`: las celdas medían 16 px de alto contra celdas cuadradas, y la grilla
+    saltaba al cargar. Arreglado con `height="auto"`; medido: 43,9 px antes y después, mismo alto de grilla.
+- Para los pasos 4 a 6:
+  - `Skeleton` es una trampa: su `height` por defecto (16) le gana a un `aspectRatio` pasado por `style`.
+    En los skeletons nuevos (landing en el 4, `SelectorDiaHorario` en el 5) pasar `height="auto"`, o
+    cambiar el primitivo para que no fije alto cuando hay `aspectRatio`.
+  - Reprogramación (`GestionTurno#handleSeleccionarFechaReprog`): si falla la carga de horarios muestra
+    "Sin disponibilidad para esa fecha", un error disfrazado de vacío. Cubrirlo en el paso 5 con estado de
+    error y reintento.
+  - `SeleccionHorario` no tiene "Reintentar" en el error (Fecha, Servicio y Barbero sí). `SeleccionCuando`
+    (paso 5) tiene que tenerlo.
+  - En demo no hay turnos `reservado` futuros: para probar reprogramación, cancelación y `ConfirmDialog`
+    hay que crear uno en demo.
+  - Texto debajo de 14 px en el turnero, además de `SummaryRow` (13) y `Field` (12), que ya están en
+    "Tamaños escritos a mano" de `estado_actual.md`: nota de cancelación y aviso de spam de `Confirmacion`
+    (12), `BannerError`/`BannerMensaje` y las líneas secundarias de las cards de resumen (13), letras de la
+    semana del `MiniCalendario` (10). Las pantallas que se rehacen en 5 y 6 pueden subirlos.
+- Accesibilidad y sistema de diseño:
+  - `mutedSoft` sobre el blanco nuevo da 2,56:1 (deuda #9 de `sistema_de_disenio.md`). Como texto la usan
+    la nota de cancelación de `Confirmacion` (12 px), las letras de la semana del `MiniCalendario` (10 px)
+    y los placeholders de imagen de `Landing`. `muted` sobre `surfaceAlt` da 4,40:1 (también la #9).
+  - El botón "Volver" de `TopBar` mide ~37 px de alto (padding 8 + línea de 21), debajo de los 44 de §5.4:
+    la fila mide 44, pero lo tocable es el botón.
+  - Hover con `useState` (§4.2) en pantallas táctiles: iOS dispara `mouseenter` al tocar y el estado queda
+    "pegado" hasta tocar otra cosa (borde gris en `Card`/`SlotChip`, `accentHover` en el primario). Casi no
+    se nota porque la pantalla cambia, pero sí donde no se navega (chips de la reprogramación).
+  - `om-dialog-in` y `om-shimmer` no respetan `prefers-reduced-motion` (`om-pop` ya es el hallazgo 14).
+  - `index.css` repite a mano colores de `tokens.js` (fondo, foco, scrollbar) porque el CSS no puede
+    importar el JS; quedó comentado. Para una sola fuente: exponer los tokens como variables CSS.
+  - `Card` tiene `padding` por defecto 14, fuera de la escala 4/8/12/16/24/32.
+  - `sistema_de_disenio.md` quedó viejo para el turnero: §2 (cita `om-fade` y "solo `theme.accent`
+    (indigo)"), §3.1 (indigo), §4.1 (excepción de clases: sumar las `tt-`), §6.1 (`AvatarIniciales` "con
+    tono determinístico por nombre"). Lo cubre en parte el paso 7.
+  - `ruta_proyecto.md`: sumar `src/hooks/` (carpeta nueva), `utils/rutas.js` y `utils/movimiento.js`;
+    sacar `src/assets/` y `src/App.css`.
+- Backend:
+  - CORS en producción: un origin no permitido recibe **500** con una página HTML de error (el callback de
+    `cors` en `index.js` hace `callback(new Error(...))`) y Express deja el stack en el log por cada pedido
+    así. Lo esperable es `callback(null, false)` (sin headers CORS; el navegador bloquea) o un 403.
+    Verificado con curl: `Origin: http://127.0.0.1:4175` → 500.
+  - `crearTurno` y `reprogramarTurno` solo exigen que el inicio sea futuro: no hay tope de horizonte. El
+    front limita a `DIAS_RESERVABLES` (15), pero por API se puede reservar en cualquier fecha futura.
+- Para la prueba manual en celulares reales (no se pudo en el navegador del panel):
+  - El achique al tocar (`:active`) en iPhone: iOS solo lo aplica si hay un listener de toque; React
+    registra los suyos en la raíz, pero falta verlo.
+  - El `pushState` ocurre 150 ms después del toque (por la pausa de la elección). Está dentro de la ventana
+    de activación del usuario, así que el "atrás" no debería saltear entradas (intervención de Chrome),
+    pero conviene confirmarlo.
+  - "Reducir movimiento" real del sistema (en el panel se verificó la regla CSS y la pausa simulando
+    `matchMedia`) y el overlay del `ConfirmDialog` de la gestión.
+
 ## Pasos de ejecución
 
 Flujo orquestador: un chat arma los prompts y revisa el diff; un chat ejecutor + un commit por paso, en
@@ -208,7 +267,7 @@ navegador** con `vite preview` (puerto fuera de 5173–5176, solo 127.0.0.1) y l
 2. ✅ **Backend "Cualquiera"**: refactor de disponibilidad (`cargarDatosAgenda`), `barbero_id`
    opcional, regla de asignación (`elegirBarbero`), hallazgo 5, tope de 62 días en
    `/dias-disponibles`, `whatsapp` y `resena_url` en `getTenant`.
-3. **Front base**: identidad, navegación con historial + transiciones, datos compartidos en App,
+3. ✅ **Front base**: identidad, navegación con historial + transiciones, datos compartidos en App,
    helpers, limpieza (hallazgos 6–8).
 4. **Landing vidriera** (hallazgos 9–10) + link de reseñas, ruta `/turnos/resena` y archivo del QR.
 5. **¿Cuándo?**: `SelectorDiaHorario` + `SeleccionCuando` + reprogramación de la gestión + barra de

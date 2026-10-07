@@ -29,6 +29,7 @@ function Card({ children, selected = false, onClick, padding = 14, style }) {
       onMouseLeave={() => setHover(false)}
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}
+      className={clickable ? 'tt-presionable' : undefined}
       onKeyDown={clickable ? (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }
       } : undefined}
@@ -38,7 +39,8 @@ function Card({ children, selected = false, onClick, padding = 14, style }) {
         borderRadius: theme.radius,
         padding,
         cursor: clickable ? 'pointer' : 'default',
-        transition: `border-color ${theme.transitionFast}, box-shadow ${theme.transitionFast}, background ${theme.transitionFast}`,
+        // `transform` acompaña al achique de tt-presionable (index.css) al tocar.
+        transition: `border-color ${theme.transitionFast}, box-shadow ${theme.transitionFast}, background ${theme.transitionFast}, transform ${theme.transitionFast}`,
         boxShadow: selected ? `0 0 0 3px ${theme.accent}26` : 'none',
         ...style,
       }}

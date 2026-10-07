@@ -1,5 +1,7 @@
 // /frontend-turnero/src/theme/tokens.js
-// Tokens del sistema de diseño — tema "Luz" (Stripe/Clerk look).
+// Tokens del sistema de diseño del turnero.
+// Parte de "Luz" (Stripe/Clerk look), con identidad propia: fondo blanco y
+// acento casi negro en vez de indigo (el turnero lo usa el cliente final).
 // Single source of truth para colores, tipografía, spacing, radios.
 // Se importa así:   import { theme } from '../theme/tokens';
 
@@ -11,7 +13,7 @@
 export const theme = {
   // ── Colores ───────────────────────────────────────────────────
   // Neutros (zinc).
-  bg:           '#FAFAFA',  // fondo de la app
+  bg:           '#FFFFFF',  // fondo de la app
   surface:      '#FFFFFF',  // cards, inputs
   surfaceAlt:   '#F4F4F5',  // hover suave, fondos de soporte
   ink:          '#09090B',  // texto principal
@@ -21,10 +23,11 @@ export const theme = {
   hairline:     '#E4E4E7',  // borders, separadores
   hairlineSoft: '#F4F4F5',  // separadores muy sutiles
 
-  // Acento único — indigo.
-  accent:       '#4F46E5',
+  // Acento único — casi negro (zinc-900).
+  accent:       '#18181B',
+  accentHover:  '#27272A',  // hover del accent (zinc-800): sobre negro, un filtro de brillo no se nota
   accentInk:    '#FFFFFF',  // texto sobre fondo accent
-  accentSoft:   '#EEF2FF',  // backgrounds tinted con accent
+  accentSoft:   '#F4F4F5',  // backgrounds tinted con accent (neutro)
 
   // Estados.
   success:      '#15803D',

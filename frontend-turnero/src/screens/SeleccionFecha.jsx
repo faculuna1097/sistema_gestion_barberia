@@ -1,32 +1,33 @@
 // /frontend-turnero/src/screens/SeleccionFecha.jsx
-// Pantalla 4: el cliente elige una fecha — calendario 7× con próximos 15 días.
+// Pantalla 4: el cliente elige una fecha — calendario 7× con los próximos DIAS_RESERVABLES días.
 // Los días sin disponibilidad para el (barbero, servicio) elegido se grisan;
 // la disponibilidad la calcula el backend (GET /api/turnero/dias-disponibles).
 
 import { useState, useEffect } from 'react';
-import { generarProximosDias } from '../utils/fecha.js';
+import { generarProximosDias, DIAS_RESERVABLES } from '../utils/fecha.js';
 import { getDiasDisponibles } from '../services/api.js';
+import { useEleccionConPausa } from '../hooks/useEleccionConPausa.js';
 import {
   PageContainer, TopBar, ScreenHeader, Progress, MiniCalendario,
   EmptyState, Button, IconoAlerta,
 } from '../components/ui';
 
-// Cuántos días hacia adelante mostramos en el calendario.
-const DIAS_VISIBLES = 15;
-
 /**
  * SeleccionFecha
- * Muestra un mini-calendario 7× con los próximos DIAS_VISIBLES días, grisando
+ * Muestra un mini-calendario 7× con los próximos DIAS_RESERVABLES días, grisando
  * los que no tienen turnos disponibles para el barbero y servicio elegidos.
  * @param {Object} props.barbero - Barbero elegido ({ id, ... })
  * @param {Object} props.servicio - Servicio elegido ({ id, ... })
  * @param {string|null} props.seleccionada - Fecha previamente seleccionada (YYYY-MM-DD)
- * @param {Function} props.onSeleccionar - Callback con la fecha elegida
+ * @param {Function} props.onSeleccionar - Callback con la fecha elegida (tras la pausa de confirmación)
  * @param {Function} props.onVolver - Callback para retroceder
  */
 function SeleccionFecha({ barbero, servicio, seleccionada, onSeleccionar, onVolver }) {
   // Lista de días visible — estable durante la vida del componente.
-  const [dias] = useState(() => generarProximosDias(DIAS_VISIBLES));
+  const [dias] = useState(() => generarProximosDias(DIAS_RESERVABLES));
+
+  // El día tocado se marca ~150 ms antes de avanzar.
+  const [elegida, elegir] = useEleccionConPausa(onSeleccionar);
 
   const [diasDisponibles, setDiasDisponibles] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -61,7 +62,7 @@ function SeleccionFecha({ barbero, servicio, seleccionada, onSeleccionar, onVolv
       <ScreenHeader
         eyebrow="Paso 3 de 6"
         title="Elegí una fecha"
-        subtitle={`Próximos ${DIAS_VISIBLES} días.`}
+        subtitle={`Próximos ${DIAS_RESERVABLES} días.`}
       />
       <Progress step={3}/>
 
@@ -82,8 +83,8 @@ function SeleccionFecha({ barbero, servicio, seleccionada, onSeleccionar, onVolv
             dias={dias}
             diasDisponibles={diasDisponibles}
             cargando={cargando}
-            seleccionada={seleccionada}
-            onSeleccionar={onSeleccionar}
+            seleccionada={elegida ?? seleccionada}
+            onSeleccionar={elegir}
           />
         )}
       </div>

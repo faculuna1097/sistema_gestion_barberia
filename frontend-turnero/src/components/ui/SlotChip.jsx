@@ -26,6 +26,7 @@ function SlotChip({ iso, selected = false, onClick }) {
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      className="tt-presionable"
       style={{
         background: selected ? theme.accent : theme.surface,
         color: selected ? theme.accentInk : theme.ink,
@@ -36,7 +37,8 @@ function SlotChip({ iso, selected = false, onClick }) {
         fontWeight: theme.weightMedium,
         fontSize: theme.sizeBody,
         cursor: 'pointer',
-        transition: `background ${theme.transitionFast}, border-color ${theme.transitionFast}`,
+        // `transform` acompaña al achique de tt-presionable (index.css) al tocar.
+        transition: `background ${theme.transitionFast}, border-color ${theme.transitionFast}, transform ${theme.transitionFast}`,
       }}
     >
       {fmtHora(iso)}

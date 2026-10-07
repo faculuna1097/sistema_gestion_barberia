@@ -7,6 +7,7 @@ import { crearTurno } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { fmtPesos } from '../utils/formato.js';
 import { fmtFechaLarga, fmtFechaHora, fmtHora, fechaDeISO } from '../utils/fecha.js';
+import { rutaGestion } from '../utils/rutas.js';
 import {
   PageContainer, TopBar, ScreenHeader, Progress,
   Button, StickyFooter, SummaryRow, AvatarIniciales,
@@ -16,10 +17,10 @@ import {
  * Confirmacion
  * @param {Object} props.reserva - Estado completo del wizard
  * @param {Object} props.tenant - Datos del tenant
- * @param {Function} props.onExito - Callback con { turno_id, token_gestion }
- * @param {Function} props.onVolver - Callback para retroceder
+ * @param {Function} [props.onExito] - Modo revisar: callback con { turno_id, token_gestion }
+ * @param {Function} [props.onVolver] - Modo revisar: callback para retroceder
  * @param {Object|null} props.resultado - Si está presente, se renderiza el modo confirmado
- * @param {Function} props.onNuevaReserva - Callback para resetear y arrancar de nuevo
+ * @param {Function} [props.onNuevaReserva] - Modo confirmado: callback para resetear y arrancar de nuevo
  */
 function Confirmacion({ reserva, tenant, onExito, onVolver, resultado, onNuevaReserva }) {
   const [enviando, setEnviando] = useState(false);
@@ -238,7 +239,7 @@ function ConfirmadoView({ reserva, resultado, onNuevaReserva }) {
    * Navega a la URL de gestión del turno usando el token recibido del backend.
    */
   const irAGestionar = () => {
-    window.location.href = `/turnos/gestionar/${resultado.token_gestion}`;
+    window.location.href = rutaGestion(resultado.token_gestion);
   };
 
   return (

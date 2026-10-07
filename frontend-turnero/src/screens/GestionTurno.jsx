@@ -9,15 +9,15 @@ import {
 } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { fmtPesos } from '../utils/formato.js';
-import { fmtFechaLarga, fmtHora, fmtFechaHora, generarProximosDias, fechaDeISO } from '../utils/fecha.js';
+import {
+  fmtFechaLarga, fmtHora, fmtFechaHora, generarProximosDias, fechaDeISO, DIAS_RESERVABLES,
+} from '../utils/fecha.js';
+import { RUTA_TURNERO } from '../utils/rutas.js';
 import {
   PageContainer, ScreenHeader, Button, EmptyState, Skeleton,
   StatusPill, SummaryRow, AvatarIniciales, ConfirmDialog,
   MiniCalendario, SlotChip, IconoAlerta,
 } from '../components/ui';
-
-// Días hacia adelante que se muestran en el sub-flow de reprogramación.
-const DIAS_REPROG = 14;
 
 /**
  * GestionTurno
@@ -91,7 +91,7 @@ function GestionTurno({ token, tenant }) {
     setReprogramando(true);
     setCargandoDiasReprog(true);
     setErrorDiasReprog(false);
-    const dias = generarProximosDias(DIAS_REPROG);
+    const dias = generarProximosDias(DIAS_RESERVABLES);
     try {
       const { dias: disponibles } = await getDiasDisponibles(
         datos.barbero.id, datos.servicio.id, dias[0], dias[dias.length - 1],
@@ -162,11 +162,11 @@ function GestionTurno({ token, tenant }) {
 
   /**
    * irAHome
-   * Navega al inicio del turnero (limpia la URL del token). Usa el `base` de
-   * Vite (`/turnos/`): en producción `/` es el panel de gestión, no el turnero.
+   * Navega al inicio del turnero (limpia la URL del token). Usa RUTA_TURNERO
+   * (`/turnos/`): en producción `/` es el panel de gestión, no el turnero.
    */
   const irAHome = () => {
-    window.location.href = import.meta.env.BASE_URL;
+    window.location.href = RUTA_TURNERO;
   };
 
   // ── Render: loading ───────────────────────────────────────
@@ -213,7 +213,8 @@ function GestionTurno({ token, tenant }) {
         subtitle="Revisá los datos, reprogramá o cancelá tu reserva."
       />
 
-      <div style={{ flex: 1, padding: '0 16px 24px' }}>
+      {/* tt-aparecer: el contenido reemplaza al skeleton con un fundido corto */}
+      <div className="tt-aparecer" style={{ flex: 1, padding: '0 16px 24px' }}>
         {/* Banner de mensaje (post-acción) */}
         {mensaje && <BannerMensaje kind={mensaje.kind} text={mensaje.text}/>}
 
@@ -385,7 +386,7 @@ function ReprogramarPanel({
   onCerrar,
   onReintentarDias,
 }) {
-  const dias = generarProximosDias(DIAS_REPROG);
+  const dias = generarProximosDias(DIAS_RESERVABLES);
 
   return (
     <div style={{
@@ -458,7 +459,7 @@ function ReprogramarPanel({
               ))}
             </div>
           ) : slotsReprog.length === 0 ? (
-            <div style={{
+            <div className="tt-aparecer" style={{
               fontFamily: theme.body,
               fontSize: theme.sizeBody,
               color: theme.muted,
@@ -468,7 +469,7 @@ function ReprogramarPanel({
               Sin disponibilidad para esa fecha.
             </div>
           ) : (
-            <div style={{
+            <div className="tt-aparecer" style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(4, 1fr)',
               gap: 8,

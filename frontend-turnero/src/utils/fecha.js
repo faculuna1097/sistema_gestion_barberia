@@ -3,6 +3,13 @@
 // Convención del proyecto: el backend manda ISO y YYYY-MM-DD; el front muestra siempre en es-AR.
 
 /**
+ * DIAS_RESERVABLES
+ * Cuántos días hacia adelante (contando hoy) puede elegir el cliente, tanto al
+ * reservar como al reprogramar. Un solo número para los dos flujos.
+ */
+export const DIAS_RESERVABLES = 15;
+
+/**
  * fechaLocalISO
  * Devuelve el YYYY-MM-DD de un Date según la zona local del navegador.
  * No usar `toISOString().slice(0, 10)`: eso da la fecha UTC, que en Argentina

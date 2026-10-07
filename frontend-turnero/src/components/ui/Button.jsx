@@ -39,7 +39,8 @@ function Button({
     border: '1px solid transparent',
     borderRadius: theme.radius,
     cursor: disabled ? 'not-allowed' : 'pointer',
-    transition: `background ${theme.transitionFast}, border-color ${theme.transitionFast}, filter ${theme.transitionFast}, opacity ${theme.transitionFast}`,
+    // `transform` acompaña al achique de tt-presionable (index.css) al tocar.
+    transition: `background ${theme.transitionFast}, border-color ${theme.transitionFast}, opacity ${theme.transitionFast}, transform ${theme.transitionFast}`,
     opacity: disabled ? 0.6 : 1,
     display: 'inline-flex',
     alignItems: 'center',
@@ -50,10 +51,9 @@ function Button({
   // Estilos por variante. Cada variante define background/color/border/hover.
   const variants = {
     primary: {
-      background: theme.accent,
+      background: hover && !disabled ? theme.accentHover : theme.accent,
       color: theme.accentInk,
       boxShadow: disabled ? 'none' : theme.shadowSm,
-      filter: hover && !disabled ? 'brightness(1.08)' : 'none',
     },
     secondary: {
       background: hover && !disabled ? theme.surfaceAlt : theme.surface,
@@ -79,6 +79,7 @@ function Button({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       disabled={disabled}
+      className="tt-presionable"
       style={{ ...base, ...variants[variant], ...style }}
     >
       {children}

@@ -5,9 +5,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { getDisponibilidad } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { fmtFechaLarga } from '../utils/fecha.js';
+import { useEleccionConPausa } from '../hooks/useEleccionConPausa.js';
 import {
   PageContainer, TopBar, ScreenHeader, Progress,
-  Skeleton, EmptyState, SlotChip,
+  Skeleton, EmptyState, SlotChip, IconoAlerta,
 } from '../components/ui';
 
 // Cortes horarios para agrupar slots por turno del día (convención AR).
@@ -21,13 +22,16 @@ const CORTE_TARDE  = 20; // 13:00-19:59 = tarde, ≥ 20:00 = noche
  * @param {Object} props.servicio - { id, nombre, duracion_minutos, precio }
  * @param {string} props.fecha - 'YYYY-MM-DD'
  * @param {string|null} props.seleccionado - ISO del slot previamente elegido
- * @param {Function} props.onSeleccionar - Callback con el ISO del slot elegido
+ * @param {Function} props.onSeleccionar - Callback con el ISO del slot elegido (tras la pausa de confirmación)
  * @param {Function} props.onVolver - Callback para retroceder
  */
 function SeleccionHorario({ barbero, servicio, fecha, seleccionado, onSeleccionar, onVolver }) {
   const [slots, setSlots] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
+
+  // El horario tocado se marca ~150 ms antes de avanzar.
+  const [elegido, elegir] = useEleccionConPausa(onSeleccionar);
 
   useEffect(() => {
     async function cargar() {
@@ -75,11 +79,14 @@ function SeleccionHorario({ barbero, servicio, fecha, seleccionado, onSelecciona
             body="No hay disponibilidad para este día. Probá otra fecha o cambiá de barbero."
           />
         ) : (
-          <SlotGrupos
-            grupos={grupos}
-            seleccionado={seleccionado}
-            onSeleccionar={onSeleccionar}
-          />
+          // Los horarios siempre llegan después del skeleton: aparecen con un fundido.
+          <div className="tt-aparecer">
+            <SlotGrupos
+              grupos={grupos}
+              seleccionado={elegido ?? seleccionado}
+              onSeleccionar={elegir}
+            />
+          </div>
         )}
       </div>
     </PageContainer>
@@ -174,20 +181,6 @@ function SlotSkeletons() {
         </div>
       ))}
     </div>
-  );
-}
-
-/**
- * IconoAlerta
- * SVG para EmptyState de error de carga.
- */
-function IconoAlerta() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5"/>
-      <path d="M12 8v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-      <circle cx="12" cy="15.5" r="0.75" fill="currentColor"/>
-    </svg>
   );
 }
 

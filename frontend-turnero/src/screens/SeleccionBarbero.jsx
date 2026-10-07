@@ -1,40 +1,36 @@
 // /frontend-turnero/src/screens/SeleccionBarbero.jsx
 // Pantalla 3: el cliente elige un barbero.
 
-import { useState, useEffect } from 'react';
-import { getBarberos } from '../services/api.js';
+import { useState } from 'react';
 import { theme } from '../theme/tokens.js';
+import { useEleccionConPausa } from '../hooks/useEleccionConPausa.js';
 import {
   PageContainer, TopBar, ScreenHeader, Progress,
-  Card, Skeleton, EmptyState, AvatarIniciales,
+  Card, Skeleton, EmptyState, AvatarIniciales, Button, IconoAlerta,
 } from '../components/ui';
 
 /**
  * SeleccionBarbero
- * Carga y muestra los barberos activos del tenant.
+ * Muestra los barberos activos del tenant. La lista la carga App (una sola
+ * vez) y llega por props; el reintento ante un error también vive en App.
+ * @param {Array<Object>} props.barberos - Barberos activos [{ id, nombre }]
+ * @param {boolean} props.cargando - True mientras App los está pidiendo
+ * @param {boolean} props.error - True si la carga falló
+ * @param {Function} props.onReintentar - Vuelve a pedir los barberos
  * @param {Object|null} props.seleccionado - Barbero previamente seleccionado
- * @param {Function} props.onSeleccionar - Callback con el barbero elegido
+ * @param {Function} props.onSeleccionar - Callback con el barbero elegido (tras la pausa de confirmación)
  * @param {Function} props.onVolver - Callback para retroceder
  */
-function SeleccionBarbero({ seleccionado, onSeleccionar, onVolver }) {
-  const [barberos, setBarberos] = useState([]);
-  const [cargando, setCargando] = useState(true);
-  const [error, setError] = useState(null);
+function SeleccionBarbero({
+  barberos, cargando, error, onReintentar, seleccionado, onSeleccionar, onVolver,
+}) {
+  // La opción tocada se marca ~150 ms antes de avanzar.
+  const [elegido, elegir] = useEleccionConPausa(onSeleccionar);
+  const marcado = elegido ?? seleccionado;
 
-  useEffect(() => {
-    async function cargar() {
-      try {
-        const data = await getBarberos();
-        setBarberos(data);
-      } catch (err) {
-        console.error('[SeleccionBarbero] Error:', err.message);
-        setError('No pudimos cargar los barberos. Probá de nuevo en unos minutos.');
-      } finally {
-        setCargando(false);
-      }
-    }
-    cargar();
-  }, []);
+  // Si la lista no estaba visible al entrar (cargaba, o falló y se reintenta),
+  // aparece con un fundido cuando reemplaza al skeleton.
+  const [listaVisibleAlEntrar] = useState(!cargando && !error);
 
   return (
     <PageContainer>
@@ -59,7 +55,12 @@ function SeleccionBarbero({ seleccionado, onSeleccionar, onVolver }) {
           <EmptyState
             glyph={<IconoAlerta/>}
             title="Algo no funcionó"
-            body={error}
+            body="No pudimos cargar los barberos. Revisá tu conexión e intentá de nuevo."
+            action={
+              <Button variant="secondary" onClick={onReintentar} full={false}>
+                Reintentar
+              </Button>
+            }
           />
         ) : barberos.length === 0 ? (
           <EmptyState
@@ -68,14 +69,19 @@ function SeleccionBarbero({ seleccionado, onSeleccionar, onVolver }) {
             body="El negocio todavía no cargó barberos. Volvé a intentar más tarde."
           />
         ) : (
-          barberos.map(b => (
-            <BarberoCard
-              key={b.id}
-              barbero={b}
-              selected={seleccionado?.id === b.id}
-              onClick={() => onSeleccionar(b)}
-            />
-          ))
+          <div
+            className={listaVisibleAlEntrar ? undefined : 'tt-aparecer'}
+            style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+          >
+            {barberos.map(b => (
+              <BarberoCard
+                key={b.id}
+                barbero={b}
+                selected={marcado?.id === b.id}
+                onClick={() => elegir(b)}
+              />
+            ))}
+          </div>
         )}
       </div>
     </PageContainer>
@@ -152,20 +158,6 @@ function ChevronRight() {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
       <path d="M6 3l5 5-5 5" stroke={theme.mutedSoft} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-
-/**
- * IconoAlerta
- * SVG para EmptyState de error.
- */
-function IconoAlerta() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5"/>
-      <path d="M12 8v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-      <circle cx="12" cy="15.5" r="0.75" fill="currentColor"/>
     </svg>
   );
 }

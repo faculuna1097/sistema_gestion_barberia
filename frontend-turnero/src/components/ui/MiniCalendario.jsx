@@ -100,10 +100,12 @@ function MiniCalendario({ dias, diasDisponibles = [], cargando = false, seleccio
           <div key={`pad-${i}`}/>
         ))}
 
-        {/* Días — skeleton mientras carga, celda real cuando hay datos */}
+        {/* Días — skeleton mientras carga, celda real cuando hay datos.
+            height="auto": el alto por defecto del Skeleton (16) le gana al
+            aspectRatio y la celda saldría chata; así queda cuadrada como la real. */}
         {dias.map(f => (
           cargando ? (
-            <Skeleton key={f} radius={theme.radius} style={{ aspectRatio: '1' }}/>
+            <Skeleton key={f} height="auto" radius={theme.radius} style={{ aspectRatio: '1' }}/>
           ) : (
             <CeldaDia
               key={f}
@@ -123,6 +125,7 @@ function MiniCalendario({ dias, diasDisponibles = [], cargando = false, seleccio
  * CeldaDia
  * Celda cuadrada de un día. Estados: normal, hoy, seleccionado, cerrado.
  * "Cerrado" = día sin disponibilidad reservable; lo resuelve el padre.
+ * Aparece con un fundido corto (tt-aparecer) al reemplazar a su skeleton.
  * @param {string} props.fecha - YYYY-MM-DD
  * @param {boolean} props.cerrado - True si ese día no es reservable
  * @param {boolean} props.seleccionada
@@ -153,6 +156,7 @@ function CeldaDia({ fecha, cerrado, seleccionada, onClick }) {
       onClick={cerrado ? undefined : onClick}
       disabled={cerrado}
       aria-label={fecha + (cerrado ? ' (sin disponibilidad)' : '') + (hoy ? ' (hoy)' : '')}
+      className="tt-presionable tt-aparecer"
       style={{
         aspectRatio: '1',
         background,
@@ -172,7 +176,8 @@ function CeldaDia({ fecha, cerrado, seleccionada, onClick }) {
         fontSize: 16,
         letterSpacing: '-0.01em',
         position: 'relative',
-        transition: `background ${theme.transitionFast}, border-color ${theme.transitionFast}`,
+        // `transform` acompaña al achique de tt-presionable (index.css) al tocar.
+        transition: `background ${theme.transitionFast}, border-color ${theme.transitionFast}, transform ${theme.transitionFast}`,
       }}
     >
       {diaNumero(fecha)}

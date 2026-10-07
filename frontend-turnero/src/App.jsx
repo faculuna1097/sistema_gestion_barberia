@@ -1,11 +1,16 @@
 // /frontend-turnero/src/App.jsx
 // Router principal del turnero del cliente.
-// Si la URL contiene /turnos/gestionar/:token → muestra GestionTurno.
-// Si no → muestra el wizard de reserva (pasos 1-7).
+// Si la URL es la de gestión (/turnos/gestionar/:token) → muestra GestionTurno.
+// Si no → muestra el flujo de reserva: una pila de pantallas integrada con el
+// historial del navegador (useNavegacion), así el "atrás" del celular vuelve
+// un paso en vez de sacar al cliente del turnero.
 
-import { useState, useEffect } from 'react';
-import { getTenant, getImagenesNegocio } from './services/api.js';
+import { Fragment, useState, useEffect } from 'react';
+import { getTenant, getImagenesNegocio, getServicios, getBarberos } from './services/api.js';
 import { theme } from './theme/tokens.js';
+import { extraerTokenGestion } from './utils/rutas.js';
+import { useNavegacion } from './hooks/useNavegacion.js';
+import { useListaRemota } from './hooks/useListaRemota.js';
 import { PageContainer, Skeleton, EmptyState, Button, IconoAlerta } from './components/ui';
 import Landing from './screens/Landing.jsx';
 import SeleccionServicio from './screens/SeleccionServicio.jsx';
@@ -17,15 +22,18 @@ import Confirmacion from './screens/Confirmacion.jsx';
 import GestionTurno from './screens/GestionTurno.jsx';
 
 /**
- * extraerTokenDeURL
- * Busca el patrón /turnos/gestionar/:token en el pathname.
- * @returns {string|null} El token si existe, null si no
+ * RESERVA_VACIA
+ * Estado inicial de la reserva en memoria (y el de cada flujo nuevo).
  */
-function extraerTokenDeURL() {
-  const path = window.location.pathname;
-  const match = path.match(/\/turnos\/gestionar\/([^/]+)/);
-  return match ? match[1] : null;
-}
+const RESERVA_VACIA = {
+  servicio: null,
+  barbero: null,
+  fecha: null,
+  horario: null,
+  nombre: '',
+  telefono: '',
+  email: '',
+};
 
 /**
  * actualizarFavicon — apunta el <link rel="icon"> del documento al logo del
@@ -52,23 +60,32 @@ function App() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
 
-  // Token de gestión si la URL es /turnos/gestionar/:token
-  const [tokenGestion] = useState(() => extraerTokenDeURL());
+  // Token de gestión si la URL es la de gestión de un turno (link del mail).
+  const [tokenGestion] = useState(() => extraerTokenGestion(window.location.pathname));
+  const enFlujoReserva = !tokenGestion;
 
-  // Estado del wizard de reserva
-  const [paso, setPaso] = useState(0);
-  const [reserva, setReserva] = useState({
-    servicio: null,
-    barbero: null,
-    fecha: null,
-    horario: null,
-    nombre: '',
-    telefono: '',
-    email: '',
-  });
+  // Servicios y barberos: se piden una sola vez, en paralelo con el tenant y
+  // las imágenes, y bajan por props. Si fallan, cada lista expone su
+  // `reintentar` y la pantalla que la muestra ofrece el botón.
+  const servicios = useListaRemota(getServicios, { nombre: 'servicios', activa: enFlujoReserva });
+  const barberos = useListaRemota(getBarberos, { nombre: 'barberos', activa: enFlujoReserva });
 
-  // Resultado post-confirmación
+  // Estado de la reserva en curso (solo en memoria).
+  const [reserva, setReserva] = useState(RESERVA_VACIA);
+
+  // Resultado post-confirmación ({ turno_id, token_gestion }).
   const [resultado, setResultado] = useState(null);
+
+  /**
+   * reiniciarReserva
+   * Descarta la reserva en memoria: arranca un flujo nuevo desde la landing.
+   */
+  const reiniciarReserva = () => {
+    setReserva(RESERVA_VACIA);
+    setResultado(null);
+  };
+
+  const nav = useNavegacion({ activa: enFlujoReserva, alReiniciar: reiniciarReserva });
 
   useEffect(() => {
     async function cargar() {
@@ -176,80 +193,110 @@ function App() {
   };
 
   /**
-   * siguiente
-   * Avanza al próximo paso del wizard.
+   * renderPantalla
+   * Elige qué pantalla mostrar según la que está arriba de la pila.
+   * El orden del flujo: landing → servicio → barbero → fecha → horario →
+   * datos → confirmacion → exito.
+   * @returns {JSX.Element}
    */
-  const siguiente = () => setPaso(prev => prev + 1);
+  const renderPantalla = () => {
+    const landing = (
+      <Landing tenant={tenant} imagenes={imagenes} onReservar={() => nav.irA('servicio')} />
+    );
 
-  /**
-   * volver
-   * Retrocede al paso anterior del wizard.
-   */
-  const volver = () => setPaso(prev => prev - 1);
+    switch (nav.pantalla) {
+      case 'servicio':
+        return (
+          <SeleccionServicio
+            servicios={servicios.datos}
+            cargando={servicios.cargando}
+            error={servicios.error}
+            onReintentar={servicios.reintentar}
+            seleccionado={reserva.servicio}
+            onSeleccionar={(s) => { actualizarReserva({ servicio: s }); nav.irA('barbero'); }}
+            onVolver={nav.volver}
+          />
+        );
+      case 'barbero':
+        return (
+          <SeleccionBarbero
+            barberos={barberos.datos}
+            cargando={barberos.cargando}
+            error={barberos.error}
+            onReintentar={barberos.reintentar}
+            seleccionado={reserva.barbero}
+            onSeleccionar={(b) => { actualizarReserva({ barbero: b }); nav.irA('fecha'); }}
+            onVolver={nav.volver}
+          />
+        );
+      case 'fecha':
+        return (
+          <SeleccionFecha
+            barbero={reserva.barbero}
+            servicio={reserva.servicio}
+            seleccionada={reserva.fecha}
+            onSeleccionar={(f) => { actualizarReserva({ fecha: f, horario: null }); nav.irA('horario'); }}
+            onVolver={nav.volver}
+          />
+        );
+      case 'horario':
+        return (
+          <SeleccionHorario
+            barbero={reserva.barbero}
+            servicio={reserva.servicio}
+            fecha={reserva.fecha}
+            seleccionado={reserva.horario}
+            onSeleccionar={(h) => { actualizarReserva({ horario: h }); nav.irA('datos'); }}
+            onVolver={nav.volver}
+          />
+        );
+      case 'datos':
+        return (
+          <DatosCliente
+            datos={{ nombre: reserva.nombre, telefono: reserva.telefono, email: reserva.email }}
+            onConfirmar={(d) => { actualizarReserva(d); nav.irA('confirmacion'); }}
+            onVolver={nav.volver}
+          />
+        );
+      case 'confirmacion':
+        // Al confirmar, la pantalla se reemplaza por 'exito' y se cierra el
+        // flujo: el "atrás" ya no vuelve acá ni puede reenviar la reserva.
+        return (
+          <Confirmacion
+            reserva={reserva}
+            tenant={tenant}
+            resultado={null}
+            onExito={(res) => { setResultado(res); nav.cerrarFlujo('exito'); }}
+            onVolver={nav.volver}
+          />
+        );
+      case 'exito':
+        // Sin resultado, Confirmacion mostraría "Revisar" con el botón de
+        // confirmar: nunca se renderiza el éxito sin un turno creado.
+        if (!resultado) return landing;
+        return (
+          <Confirmacion
+            reserva={reserva}
+            tenant={tenant}
+            resultado={resultado}
+            onNuevaReserva={() => { reiniciarReserva(); nav.volverAlInicio(); }}
+          />
+        );
+      default:
+        return landing;
+    }
+  };
 
-  // Wizard de reserva — paso 0 a 6 (7 pantallas)
-  switch (paso) {
-    case 0:
-      return <Landing tenant={tenant} imagenes={imagenes} onReservar={siguiente} />;
-    case 1:
-      return (
-        <SeleccionServicio
-          seleccionado={reserva.servicio}
-          onSeleccionar={(s) => { actualizarReserva({ servicio: s }); siguiente(); }}
-          onVolver={volver}
-        />
-      );
-    case 2:
-      return (
-        <SeleccionBarbero
-          seleccionado={reserva.barbero}
-          onSeleccionar={(b) => { actualizarReserva({ barbero: b }); siguiente(); }}
-          onVolver={volver}
-        />
-      );
-    case 3:
-      return (
-        <SeleccionFecha
-          barbero={reserva.barbero}
-          servicio={reserva.servicio}
-          seleccionada={reserva.fecha}
-          onSeleccionar={(f) => { actualizarReserva({ fecha: f, horario: null }); siguiente(); }}
-          onVolver={volver}
-        />
-      );
-    case 4:
-      return (
-        <SeleccionHorario
-          barbero={reserva.barbero}
-          servicio={reserva.servicio}
-          fecha={reserva.fecha}
-          seleccionado={reserva.horario}
-          onSeleccionar={(h) => { actualizarReserva({ horario: h }); siguiente(); }}
-          onVolver={volver}
-        />
-      );
-    case 5:
-      return (
-        <DatosCliente
-          datos={{ nombre: reserva.nombre, telefono: reserva.telefono, email: reserva.email }}
-          onConfirmar={(d) => { actualizarReserva(d); siguiente(); }}
-          onVolver={volver}
-        />
-      );
-    case 6:
-      return (
-        <Confirmacion
-          reserva={reserva}
-          tenant={tenant}
-          onExito={(res) => setResultado(res)}
-          onVolver={volver}
-          resultado={resultado}
-          onNuevaReserva={() => { setReserva({ servicio: null, barbero: null, fecha: null, horario: null, nombre: '', telefono: '', email: '' }); setResultado(null); setPaso(0); }}
-        />
-      );
-    default:
-      return <p>Paso desconocido</p>;
-  }
+  return (
+    // data-tt-direccion: index.css elige con él la animación de entrada de la
+    // pantalla (desde la derecha al avanzar, desde la izquierda al volver).
+    <div data-tt-direccion={nav.direccion}>
+      {/* key: cada pantalla nueva se monta de cero y corre su transición */}
+      <Fragment key={`${nav.profundidad}-${nav.pantalla}`}>
+        {renderPantalla()}
+      </Fragment>
+    </div>
+  );
 }
 
 export default App;
