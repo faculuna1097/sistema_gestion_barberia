@@ -13,6 +13,7 @@ import { theme } from '../../theme/tokens.js';
  * @param {boolean} [props.disabled=false]
  * @param {boolean} [props.full=true] - Si ocupa el 100% del ancho del padre
  * @param {string} [props.type='button'] - type del <button> nativo
+ * @param {string} [props.form] - id del <form> al que pertenece (para un submit fuera del form)
  * @param {Object} [props.style] - Override de estilos puntuales
  */
 function Button({
@@ -22,6 +23,7 @@ function Button({
   disabled = false,
   full = true,
   type = 'button',
+  form,
   style,
 }) {
   const [hover, setHover] = useState(false);
@@ -72,6 +74,7 @@ function Button({
   return (
     <button
       type={type}
+      form={form}
       onClick={disabled ? undefined : onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}

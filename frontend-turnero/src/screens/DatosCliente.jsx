@@ -2,45 +2,21 @@
 // Pantalla 6: el cliente ingresa nombre, teléfono y email.
 
 import { useState } from 'react';
-import { AsYouType, isValidPhoneNumber, getCountryCallingCode, parsePhoneNumber } from 'libphonenumber-js';
+import { AsYouType, isValidPhoneNumber, getCountryCallingCode } from 'libphonenumber-js';
 import {
   PageContainer, TopBar, ScreenHeader, Progress,
   Field, Button, StickyFooter,
 } from '../components/ui';
 import { theme } from '../theme/tokens.js';
+import {
+  PAISES, MAX_DIGITOS_POR_PAIS, telefonoDesdeE164, telefonoAE164, normalizarTelefonoCompleto,
+} from '../utils/telefono.js';
 
 // Regex muy permisivo para email — solo verifica forma "algo@algo.algo".
 const REGEX_EMAIL = /\S+@\S+\.\S+/;
 
-/**
- * PAISES
- * Países disponibles en el selector de prefijo telefónico: Argentina (default),
- * sus limítrofes y Estados Unidos. `iso` es el código ISO que entiende
- * libphonenumber-js; `bandera` es el emoji (se ve como bandera en mobile y como
- * las siglas "AR"/"BR" en desktop). El prefijo (+54, etc.) lo deriva la librería
- * con getCountryCallingCode, así no duplicamos ese dato.
- */
-const PAISES = [
-  { iso: 'AR', nombre: 'Argentina',      bandera: '🇦🇷' },
-  { iso: 'BO', nombre: 'Bolivia',        bandera: '🇧🇴' },
-  { iso: 'BR', nombre: 'Brasil',         bandera: '🇧🇷' },
-  { iso: 'CL', nombre: 'Chile',          bandera: '🇨🇱' },
-  { iso: 'PY', nombre: 'Paraguay',       bandera: '🇵🇾' },
-  { iso: 'UY', nombre: 'Uruguay',        bandera: '🇺🇾' },
-  { iso: 'US', nombre: 'Estados Unidos', bandera: '🇺🇸' },
-];
-
-/**
- * MAX_DIGITOS_POR_PAIS
- * Tope de dígitos editables por país: el largo estándar del número (el celular
- * en el caso típico). Al llegar al tope, el input deja de aceptar más dígitos.
- * Para Argentina son 10: libphonenumber considera "posible" también 11 dígitos
- * (la forma con el 9 de celular), pero la entrada estándar son 10, así que lo
- * topamos ahí a propósito.
- */
-const MAX_DIGITOS_POR_PAIS = {
-  AR: 10, BO: 8, BR: 11, CL: 9, PY: 9, UY: 9, US: 10,
-};
+// id del <form>: el botón del StickyFooter queda fuera del form y se asocia por este id.
+const FORM_ID = 'form-datos-cliente';
 
 /**
  * capitalizarNombre
@@ -54,40 +30,6 @@ const MAX_DIGITOS_POR_PAIS = {
  */
 function capitalizarNombre(texto) {
   return texto.replace(/(^|\s)(\p{L})/gu, (_, sep, letra) => sep + letra.toUpperCase());
-}
-
-/**
- * telefonoDesdeE164
- * Dado un número en formato E.164 (ej. "+5491133111686"), deriva el país y el
- * número nacional ya formateado, para precargar el campo cuando el cliente
- * vuelve atrás en el wizard. Si no se puede parsear, devuelve null.
- * @param {string} e164 - Número en formato E.164
- * @returns {{ pais: string, nacional: string } | null}
- */
-function telefonoDesdeE164(e164) {
-  try {
-    const p = parsePhoneNumber(e164);
-    return { pais: p.country, nacional: new AsYouType(p.country).input(p.nationalNumber) };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * telefonoAE164
- * Convierte el número nacional escrito + el país elegido a formato E.164, que es
- * lo que se guarda. Devuelve null si no se puede parsear (no debería pasar si el
- * form es válido).
- * @param {string} nacional - Número nacional formateado (lo que se ve en el input)
- * @param {string} pais - ISO del país elegido
- * @returns {string | null}
- */
-function telefonoAE164(nacional, pais) {
-  try {
-    return parsePhoneNumber(nacional, pais).number;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -130,9 +72,17 @@ function DatosCliente({ datos, onConfirmar, onVolver }) {
    * (AsYouType: "1133111686" → "11 3311 1686"). Se crea una instancia nueva por
    * llamada para reformatear el string completo (uso recomendado en inputs
    * controlados de React). Frena la entrada al llegar al tope de dígitos del país.
+   * Si llega un número completo (autocompletado o pegado, con "+" o con más
+   * dígitos que el tope), lo interpreta y ajusta país + número nacional.
    * @param {string} crudo - Valor crudo del input
    */
   const handleTelefonoChange = (crudo) => {
+    const completo = normalizarTelefonoCompleto(crudo, pais);
+    if (completo) {
+      setPais(completo.pais);
+      setTelefono(completo.nacional);
+      return;
+    }
     // Freno duro: ignoramos la tecla si excede el tope de dígitos del país.
     const digitos = crudo.replace(/\D/g, '');
     if (digitos.length > (MAX_DIGITOS_POR_PAIS[pais] ?? 15)) return;
@@ -165,6 +115,17 @@ function DatosCliente({ datos, onConfirmar, onVolver }) {
   };
 
   /**
+   * handleFormSubmit
+   * Submit nativo del <form> (botón del footer o tecla "Ir"/Enter del teclado).
+   * Evita la recarga de la página y envía solo si el form es válido.
+   * @param {Event} e - Evento submit del form
+   */
+  const handleFormSubmit = (e) => {
+    e.preventDefault();
+    if (valido) handleSubmit();
+  };
+
+  /**
    * errorVisible
    * Solo se muestra el error del campo si el cliente ya hizo blur en él.
    */
@@ -180,7 +141,8 @@ function DatosCliente({ datos, onConfirmar, onVolver }) {
       />
       <Progress step={5}/>
 
-      <div style={{
+      {/* noValidate: la validación es la nuestra (errores), no la nativa del navegador */}
+      <form id={FORM_ID} onSubmit={handleFormSubmit} noValidate style={{
         flex: 1,
         padding: '0 16px 24px',
         display: 'flex',
@@ -189,6 +151,8 @@ function DatosCliente({ datos, onConfirmar, onVolver }) {
       }}>
         <Field
           label="Nombre y apellido"
+          name="name"
+          autoComplete="name"
           value={nombre}
           onChange={(valor) => setNombre(capitalizarNombre(valor))}
           onBlur={() => setTouched(t => ({ ...t, nombre: true }))}
@@ -210,6 +174,8 @@ function DatosCliente({ datos, onConfirmar, onVolver }) {
         <Field
           label="Email"
           type="email"
+          name="email"
+          autoComplete="email"
           value={email}
           onChange={setEmail}
           onBlur={() => setTouched(t => ({ ...t, email: true }))}
@@ -217,10 +183,10 @@ function DatosCliente({ datos, onConfirmar, onVolver }) {
           helper={!errorVisible('email') ? 'Te mandamos el link de gestión a este correo.' : undefined}
           error={errorVisible('email')}
         />
-      </div>
+      </form>
 
       <StickyFooter>
-        <Button onClick={handleSubmit} disabled={!valido}>
+        <Button type="submit" form={FORM_ID} disabled={!valido}>
           Revisar reserva
         </Button>
       </StickyFooter>
@@ -311,6 +277,8 @@ function CampoTelefono({ label, pais, onPaisChange, value, onChange, onBlur, pla
           id={inputId}
           type="tel"
           inputMode="tel"
+          name="tel"
+          autoComplete="tel"
           value={value}
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}

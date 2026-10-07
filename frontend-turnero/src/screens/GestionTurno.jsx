@@ -9,7 +9,7 @@ import {
 } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { fmtPesos } from '../utils/formato.js';
-import { fmtFechaLarga, fmtHora, fmtFechaHora, generarProximosDias } from '../utils/fecha.js';
+import { fmtFechaLarga, fmtHora, fmtFechaHora, generarProximosDias, fechaDeISO } from '../utils/fecha.js';
 import {
   PageContainer, ScreenHeader, Button, EmptyState, Skeleton,
   StatusPill, SummaryRow, AvatarIniciales, ConfirmDialog,
@@ -162,10 +162,11 @@ function GestionTurno({ token, tenant }) {
 
   /**
    * irAHome
-   * Navega al inicio del turnero (limpia la URL del token).
+   * Navega al inicio del turnero (limpia la URL del token). Usa el `base` de
+   * Vite (`/turnos/`): en producción `/` es el panel de gestión, no el turnero.
    */
   const irAHome = () => {
-    window.location.href = '/';
+    window.location.href = import.meta.env.BASE_URL;
   };
 
   // ── Render: loading ───────────────────────────────────────
@@ -236,7 +237,7 @@ function GestionTurno({ token, tenant }) {
             letterSpacing: '0.04em',
             textTransform: 'uppercase',
             color: theme.muted,
-          }}>{fmtFechaLarga(turno.inicio.slice(0, 10))}</div>
+          }}>{fmtFechaLarga(fechaDeISO(turno.inicio))}</div>
 
           <div style={{
             fontFamily: theme.body,
