@@ -13,6 +13,12 @@ export const TZ = 'America/Argentina/Buenos_Aires';
 // En el futuro podría volverse configurable por tenant.
 export const ANTELACION_MINIMA_MINUTOS = 5;
 
+// Tope de días (extremos inclusive) del rango de GET /api/turnero/dias-disponibles.
+// El endpoint es público y recorre el rango día por día en memoria: sin tope, un
+// rango de años bloquea el proceso durante segundos. Los fronts piden 15 días;
+// 62 (dos meses) deja margen para un calendario mensual sin habilitar abusos.
+export const DIAS_MAXIMOS_RANGO_DISPONIBILIDAD = 62;
+
 // Hora local (ART) a la que se envía el lote de recordatorios. Hoy la respeta
 // el schedule del cron (Railway corre en UTC: 20:30 ART = 23:30 UTC). Se deja
 // acá como referencia única; el envío no la lee en runtime todavía.

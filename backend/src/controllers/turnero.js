@@ -8,7 +8,10 @@
 
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
-import { calcularSlotsDisponibles, calcularDiasConDisponibilidad, DisponibilidadError } from '../services/disponibilidadService.js';
+import {
+  calcularSlotsDisponibles, calcularDiasConDisponibilidad,
+  calcularSlotsCualquiera, calcularDiasCualquiera, DisponibilidadError,
+} from '../services/disponibilidadService.js';
 import { actualizarEvento, cancelarEvento } from '../services/googleCalendar.js';
 import { enviarCancelacion, enviarReprogramacion, construirContextoMail } from '../services/mail/mailer.js';
 import {
@@ -16,14 +19,12 @@ import {
   armarLinkGestion, sincronizarCalendarCreacion, notificarConfirmacion,
   inicioPosteriorAhora,
 } from '../services/turnosService.js';
-import { barberoActivoEnTenant } from '../services/barberosService.js';
+import { barberoActivoEnTenant, listarBarberosActivos } from '../services/barberosService.js';
 import { obtenerHorarioCrudo, validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { obtenerFeriados, existeFeriado } from '../services/feriadosService.js';
 import { TZ } from '../utils/constantes.js';
-import { validarContacto } from '../utils/validarTexto.js';
-
-// Regex YYYY-MM-DD para validar el query param ?fecha.
-const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+import { esFechaISO, hoyISO } from '../utils/validarFecha.js';
+import { validarContacto, esTelefonoE164, esUrlHttps } from '../utils/validarTexto.js';
 
 /**
  * getTenant
@@ -33,13 +34,20 @@ const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
  * El logo y demás imágenes del tenant ya no viajan acá: se sirven por
  * GET /api/negocio/imagenes (los frontends los consumen desde ese endpoint).
  *
+ * `whatsapp` sale de `tenant.configuracion.whatsapp` (se carga por SQL, ver
+ * onboarding.md). Solo viaja si es un teléfono E.164 válido; si falta o tiene
+ * otro formato, va `null` y el turnero no muestra el botón de WhatsApp.
+ * `resena_url` sale de `tenant.configuracion.resena_url` (el link "Pedir
+ * reseñas" del Perfil de Empresa de Google, también por SQL): solo viaja si es
+ * una URL https; si no, `null` y el turnero no muestra el link de reseñas.
+ *
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
- * @returns {JSON} { id, nombre, telefono, direccion, horario_atencion, feriados }
+ * @returns {JSON} { id, nombre, telefono, whatsapp, resena_url, direccion, horario_atencion, feriados }
  */
 export const getTenant = async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, nombre_negocio, telefono, direccion
+      `SELECT id, nombre_negocio, telefono, direccion, configuracion
        FROM tenant
        WHERE id = $1 AND activo = true`,
       [req.tenant_id]
@@ -54,15 +62,18 @@ export const getTenant = async (req, res) => {
     // Son independientes entre sí (solo dependen de tenant_id) → se piden en
     // paralelo: 2 RTTs a la DB en vez de 3 en serie. El tenant va antes y solo
     // para poder cortar con 404 sin disparar estas dos.
-    const hoy = DateTime.now().setZone(TZ).toISODate();
     const [horarioAtencion, feriados] = await Promise.all([
       obtenerHorarioCrudo(req.tenant_id),
-      obtenerFeriados(req.tenant_id, hoy),
+      obtenerFeriados(req.tenant_id, hoyISO()),
     ]);
+    const whatsapp = row.configuracion?.whatsapp;
+    const resenaUrl = row.configuracion?.resena_url;
     res.json({
       id: row.id,
       nombre: row.nombre_negocio,
       telefono: row.telefono,
+      whatsapp: esTelefonoE164(whatsapp) ? whatsapp.trim() : null,
+      resena_url: esUrlHttps(resenaUrl) ? resenaUrl.trim() : null,
       direccion: row.direccion,
       horario_atencion: horarioAtencion,
       feriados,
@@ -77,9 +88,10 @@ export const getTenant = async (req, res) => {
  * getServicios
  * Lista los servicios activos del tenant con precio y duración real en minutos.
  * La duración se calcula como tenant.duracion_slot_minutos * servicio.cantidad_slots.
+ * El precio sale como número (pg entrega el NUMERIC como string; convención §4).
  *
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
- * @returns {JSON} [{ id, nombre, precio, duracion_minutos }]
+ * @returns {JSON} [{ id, nombre, precio: number, duracion_minutos }]
  */
 export const getServicios = async (req, res) => {
   try {
@@ -94,7 +106,7 @@ export const getServicios = async (req, res) => {
        ORDER BY s.precio ASC`,
       [req.tenant_id]
     );
-    res.json(result.rows);
+    res.json(result.rows.map(s => ({ ...s, precio: Number(s.precio) })));
   } catch (err) {
     console.error('[turnero] Error en getServicios:', err);
     res.status(500).json({ error: 'Error al obtener servicios' });
@@ -108,20 +120,17 @@ export const getServicios = async (req, res) => {
  * El param queda preparado para reglas futuras de "qué barbero atiende qué"
  * (ver plan_turnero_v2.md sección 12).
  *
+ * El listado sale de `listarBarberosActivos`, el mismo que usa "Cualquier
+ * barbero" en la disponibilidad: los barberos que ve el cliente son los que
+ * se le pueden asignar.
+ *
  * @param {string} req.tenant_id      - Inyectado por tenantMiddleware
  * @param {string} req.query.servicio_id - (ignorado) filtro futuro
  * @returns {JSON} [{ id, nombre }]
  */
 export const getBarberos = async (req, res) => {
   try {
-    const result = await query(
-      `SELECT id, nombre
-       FROM barbero
-       WHERE tenant_id = $1 AND activo = true
-       ORDER BY nombre ASC`,
-      [req.tenant_id]
-    );
-    res.json(result.rows);
+    res.json(await listarBarberosActivos(req.tenant_id));
   } catch (err) {
     console.error('[turnero] Error en getBarberos:', err);
     res.status(500).json({ error: 'Error al obtener barberos' });
@@ -130,26 +139,43 @@ export const getBarberos = async (req, res) => {
 
 /**
  * getDisponibilidad
- * Calcula los slots de inicio disponibles para un (barbero, servicio, fecha).
+ * Calcula los slots de inicio disponibles para un (servicio, fecha) y un
+ * barbero, o para "Cualquier barbero" si no llega `barbero_id`.
  * Delega la lógica al disponibilidadService.
  *
+ * - Con `barbero_id` (app del barbero y turnero con barbero elegido):
+ *   `{ slots }` con los horarios de ese barbero.
+ * - Sin `barbero_id` ("Cualquiera"): `{ slots, asignaciones }`, con la unión
+ *   de los horarios de los barberos activos y, por cada horario, el barbero
+ *   que se asigna (menos turnos ese día; empate → alfabético). El front manda
+ *   ese `barbero_id` en POST /turnos.
+ *
  * @param {string} req.tenant_id            - Inyectado por tenantMiddleware
- * @param {string} req.query.barbero_id
+ * @param {string} [req.query.barbero_id]   - Opcional; sin él, "Cualquier barbero"
  * @param {string} req.query.servicio_id
  * @param {string} req.query.fecha          - 'YYYY-MM-DD'
- * @returns {JSON} { slots: [ISO,...] }
+ * @returns {JSON} { slots: [ISO,...] } con barbero_id;
+ *   { slots: [ISO,...], asignaciones: { [ISO]: barbero_id } } sin barbero_id
  */
 export const getDisponibilidad = async (req, res) => {
   const { barbero_id, servicio_id, fecha } = req.query;
 
-  if (!barbero_id || !servicio_id || !fecha) {
-    return res.status(400).json({ error: 'barbero_id, servicio_id y fecha son requeridos' });
+  if (!servicio_id || !fecha) {
+    return res.status(400).json({ error: 'servicio_id y fecha son requeridos' });
   }
-  if (!REGEX_FECHA.test(fecha)) {
-    return res.status(400).json({ error: 'fecha debe tener formato YYYY-MM-DD' });
+  if (!esFechaISO(fecha)) {
+    return res.status(400).json({ error: 'fecha debe ser una fecha válida con formato YYYY-MM-DD' });
   }
 
   try {
+    if (!barbero_id) {
+      const { slots, asignaciones } = await calcularSlotsCualquiera({
+        tenantId: req.tenant_id,
+        servicioId: servicio_id,
+        fecha,
+      });
+      return res.json({ slots, asignaciones });
+    }
     const slots = await calcularSlotsDisponibles({
       tenantId: req.tenant_id,
       barberoId: barbero_id,
@@ -170,11 +196,17 @@ export const getDisponibilidad = async (req, res) => {
 /**
  * getDiasDisponibles
  * Devuelve qué días de un rango tienen al menos un slot reservable para un
- * (barbero, servicio). El calendario del turnero lo usa para grisar los días
- * sin disponibilidad. Delega la lógica al disponibilidadService.
+ * (barbero, servicio), o para "Cualquier barbero" si no llega `barbero_id`
+ * (la unión de los días de los barberos activos). El calendario del turnero
+ * lo usa para grisar los días sin disponibilidad. Delega la lógica al
+ * disponibilidadService.
+ *
+ * El rango tiene un tope de DIAS_MAXIMOS_RANGO_DISPONIBILIDAD días
+ * (utils/constantes.js): uno más largo responde 400 (lo valida el servicio con
+ * un error 'fecha_invalida').
  *
  * @param {string} req.tenant_id          - Inyectado por tenantMiddleware
- * @param {string} req.query.barbero_id
+ * @param {string} [req.query.barbero_id] - Opcional; sin él, "Cualquier barbero"
  * @param {string} req.query.servicio_id
  * @param {string} req.query.desde         - 'YYYY-MM-DD' (inclusive)
  * @param {string} req.query.hasta         - 'YYYY-MM-DD' (inclusive)
@@ -183,21 +215,28 @@ export const getDisponibilidad = async (req, res) => {
 export const getDiasDisponibles = async (req, res) => {
   const { barbero_id, servicio_id, desde, hasta } = req.query;
 
-  if (!barbero_id || !servicio_id || !desde || !hasta) {
-    return res.status(400).json({ error: 'barbero_id, servicio_id, desde y hasta son requeridos' });
+  if (!servicio_id || !desde || !hasta) {
+    return res.status(400).json({ error: 'servicio_id, desde y hasta son requeridos' });
   }
-  if (!REGEX_FECHA.test(desde) || !REGEX_FECHA.test(hasta)) {
-    return res.status(400).json({ error: 'desde y hasta deben tener formato YYYY-MM-DD' });
+  if (!esFechaISO(desde) || !esFechaISO(hasta)) {
+    return res.status(400).json({ error: 'desde y hasta deben ser fechas válidas con formato YYYY-MM-DD' });
   }
 
   try {
-    const dias = await calcularDiasConDisponibilidad({
-      tenantId: req.tenant_id,
-      barberoId: barbero_id,
-      servicioId: servicio_id,
-      desde,
-      hasta,
-    });
+    const dias = barbero_id
+      ? await calcularDiasConDisponibilidad({
+        tenantId: req.tenant_id,
+        barberoId: barbero_id,
+        servicioId: servicio_id,
+        desde,
+        hasta,
+      })
+      : await calcularDiasCualquiera({
+        tenantId: req.tenant_id,
+        servicioId: servicio_id,
+        desde,
+        hasta,
+      });
     res.json({ dias });
   } catch (err) {
     if (err instanceof DisponibilidadError) {
@@ -342,7 +381,8 @@ export const crearTurno = async (req, res) => {
  *
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @param {string} req.params.token
- * @returns {JSON} { turno, barbero, servicio, cliente }
+ * @returns {JSON} { turno: { id, inicio, fin, estado }, barbero: { id, nombre },
+ *   servicio: { id, nombre, precio: number, duracion_minutos }, cliente: { nombre, email, telefono } }
  */
 export const getTurnoPorToken = async (req, res) => {
   try {
@@ -375,7 +415,8 @@ export const getTurnoPorToken = async (req, res) => {
         estado: r.estado,
       },
       barbero:  { id: r.barbero_id, nombre: r.barbero_nombre },
-      servicio: { id: r.servicio_id, nombre: r.servicio_nombre, precio: r.servicio_precio, duracion_minutos: r.servicio_duracion_minutos },
+      // precio como número: pg entrega el NUMERIC como string (convención §4).
+      servicio: { id: r.servicio_id, nombre: r.servicio_nombre, precio: Number(r.servicio_precio), duracion_minutos: r.servicio_duracion_minutos },
       cliente:  { nombre: r.cliente_nombre, email: r.cliente_email, telefono: r.cliente_telefono },
     });
   } catch (err) {
