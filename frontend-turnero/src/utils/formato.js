@@ -10,3 +10,13 @@
 export function fmtPesos(n) {
   return '$' + Number(n).toLocaleString('es-AR');
 }
+
+/**
+ * capitalizar
+ * Pone en mayúscula la primera letra del texto y deja el resto igual.
+ * @param {string} texto
+ * @returns {string} Ej: "octubre" → "Octubre"
+ */
+export function capitalizar(texto) {
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}

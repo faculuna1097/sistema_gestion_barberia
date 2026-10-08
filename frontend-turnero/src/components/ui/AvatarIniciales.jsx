@@ -1,6 +1,6 @@
 // /frontend-turnero/src/components/ui/AvatarIniciales.jsx
 // Círculo con las iniciales de un nombre, en un tono neutro único.
-// Usado en SeleccionBarbero y Confirmacion/GestionTurno.
+// Usado en la landing, SeleccionCuando, Confirmacion y GestionTurno.
 
 import { theme } from '../../theme/tokens.js';
 

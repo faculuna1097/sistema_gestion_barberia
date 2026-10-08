@@ -16,6 +16,6 @@ export { default as PageContainer }   from './PageContainer.jsx';
 export { default as ConfirmDialog }   from './ConfirmDialog.jsx';
 export { default as AvatarIniciales } from './AvatarIniciales.jsx';
 export { default as SummaryRow }      from './SummaryRow.jsx';
-export { default as MiniCalendario }  from './MiniCalendario.jsx';
+export { default as SelectorDiaHorario } from './SelectorDiaHorario.jsx';
 export { default as SlotChip }        from './SlotChip.jsx';
 export { default as IconoAlerta }     from './IconoAlerta.jsx';

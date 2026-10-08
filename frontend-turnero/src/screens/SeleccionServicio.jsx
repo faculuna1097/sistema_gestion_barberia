@@ -1,5 +1,5 @@
 // /frontend-turnero/src/screens/SeleccionServicio.jsx
-// Pantalla 2: el cliente elige un servicio de la lista.
+// Paso 1 del flujo, "Servicio": el cliente elige un servicio de la lista.
 
 import { useState } from 'react';
 import { theme } from '../theme/tokens.js';
@@ -36,12 +36,11 @@ function SeleccionServicio({
   return (
     <PageContainer>
       <TopBar onVolver={onVolver}/>
+      <Progress paso={1}/>
       <ScreenHeader
-        eyebrow="Paso 1 de 6"
         title="Elegí un servicio"
         subtitle="Cuánto demora y cuánto sale."
       />
-      <Progress step={1}/>
 
       <div style={{
         flex: 1,

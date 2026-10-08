@@ -301,6 +301,79 @@ Del paso 4:
   - Los links con `target="_blank"` (Maps, WhatsApp, reseña) dentro del navegador de Instagram: si abren
     en la misma vista o afuera, y si `wa.me` abre la app de WhatsApp.
 
+Del paso 5:
+- Resueltas en el paso (para registrarlas en el paso 7):
+  - Hallazgos 11 (grilla con título "Octubre", sin "De 2026", o "Octubre – Noviembre" si el rango cruza,
+    con "nov" en el día 1; `aria-label` "martes 6 de octubre" / "…, sin turnos") y 12 (`Progress` es una
+    barra de 3 tramos con `role="progressbar"` y "Paso N de 3: X"; sin el eyebrow "Paso X de 6").
+  - Del paso 3: el botón "Volver" de `TopBar` mide 44 px; la reprogramación muestra error con "Reintentar"
+    (ya no "Sin disponibilidad"); "¿Cuándo?" tiene "Reintentar" en días y en horarios; las letras de la
+    semana del `MiniCalendario` (10 px, `mutedSoft`) se van con él (el encabezado nuevo usa el estilo de
+    etiqueta: 11 px mono en `muted`).
+  - Skeletons: el de `SeleccionHorario` medía 40 px contra chips de ~51, y el de la reprogramación 48.
+    `SlotChip` pasa a alto fijo (`ALTO_SLOT`, 48) y el skeleton usa el mismo. Medido en 375 px: la grilla
+    de días (206 px) y sus celdas, y el primer chip, en la misma posición con skeleton y con datos.
+  - Deuda #4 de `sistema_de_disenio.md` §9 (cortes 13/20 hardcodeados): queda sin objeto, los horarios ya
+    no se agrupan por mañana, tarde y noche.
+- Decisiones del paso (para `decisiones_turnero_ux.md`):
+  - Datos y presentación separados: `useDisponibilidad` (hook) pide días y horarios, elige el día y
+    descarta respuestas viejas; `SelectorDiaHorario` solo dibuja. Lo comparten "¿Cuándo?" y la
+    reprogramación.
+  - Respuestas viejas: cada respuesta se guarda con la clave de su pedido (servicio, barbero, día,
+    intento) y solo se muestra si coincide con la actual; además, el efecto que la pidió la ignora al
+    limpiarse. Probado con demoras: la respuesta tardía no pisa a la nueva.
+  - Día elegido: al cambiar de barbero se conserva el día si el barbero nuevo tiene lugar; si no, el
+    primero con lugar. Al volver de Datos se abre el día del horario elegido, marcado mientras el barbero
+    sea el de la entrada.
+  - La reserva se escribe recién al tocar un horario (barbero, `barberoAsignado` y horario juntos): un
+    cambio de barbero sin elegir horario no la toca. Sale `fecha` (se deriva de `horario`) y
+    `barberoPreelegido` (el barbero marcado al entrar sale de `barbero` + `barberoAsignado`).
+  - Días sin scroll (usuario, 2026-10-08): grilla semanal de 7 columnas, de lunes a domingo, con
+    encabezado "LUN … DOM" y los 15 días en 3 renglones; los lugares antes del primer día y después del
+    último quedan vacíos. Los días que atiende un barbero quedan alineados en columna. Se descartaron la
+    tira con scroll, la tira que pasa de renglón (no alinea por día de la semana) y una semana por vez con
+    flechas (más toques). Costo: la grilla mide ~206 px contra ~110 de la tira.
+  - Días con y sin lugar (usuario, 2026-10-08): la diferencia es de forma, no solo de color. Con lugar,
+    caja con borde `mutedSoft` y número fuerte; sin lugar, sin caja (borde transparente, mismo tamaño) y
+    texto `mutedSoft` regular. Se descartaron el número tachado (ruido, se lee como "cancelado") y ocultar
+    los días sin lugar (los huecos no se ven).
+  - Horarios en una sola grilla, sin agrupar por mañana, tarde y noche (usuario, 2026-10-08): ahorra
+    alto, para que los horarios no queden tan abajo con la grilla de días.
+  - "Cualquier barbero" (usuario, 2026-10-08): renglón propio a todo el ancho, arriba de los barberos,
+    como tarjeta de opción (borde + círculo con tilde), no como botón negro (se confundiría con el botón
+    principal). Solo el texto, sin línea de ayuda. Los barberos, como chips sin scroll de costado: si no
+    entran, pasan al renglón siguiente, centrados (todos los renglones van centrados).
+- Para el sistema de diseño y los docs (paso 7):
+  - Primitivo nuevo: `SelectorDiaHorario` (reemplaza a `MiniCalendario` en §6.2). Hook nuevo:
+    `useDisponibilidad`. `Progress` ya no es el stepper "01/06" (§6.2).
+  - `ruta_proyecto.md`: sumar `SeleccionCuando.jsx`, `SelectorDiaHorario.jsx` y `useDisponibilidad.js`;
+    sacar `SeleccionBarbero.jsx`, `SeleccionFecha.jsx`, `SeleccionHorario.jsx` y `MiniCalendario.jsx`.
+  - El estilo de etiqueta "eyebrow" (mono, 11 px, mayúsculas, `muted`) está copiado a mano en unos diez
+    lugares (`ScreenHeader`, `Field`, `SelectorDiaHorario`, `SeleccionCuando`, `GestionTurno`,
+    `Confirmacion`…). Candidato a un estilo compartido.
+- Para el paso 6:
+  - Con "Cualquiera", si el barbero asignado no está en la lista de App (falló la carga, o se sumó un
+    barbero después de cargarla), la reserva lleva `{ id, nombre: null }`. El resumen tiene que decir algo
+    sin el nombre ("te asignamos un barbero"); hoy `Confirmacion` mostraría el nombre vacío. Caso raro.
+  - El reintento del 409 puede reusar `getDisponibilidad(null, servicioId, fecha)` (ya acepta barbero nulo).
+  - `fmtFechaLarga` pone el día con cero ("jueves, 08 de octubre") en el resumen, mientras la grilla y
+    los `aria-label` dicen "8". Al rehacer el resumen, conviene `day: 'numeric'`.
+- Deudas nuevas:
+  - **Orden de deploy**: el front de este branch omite `barbero_id` para "Cualquiera", y producción
+    todavía no lo acepta (400 "barbero_id, servicio_id, desde y hasta son requeridos"). El backend del
+    paso 2 tiene que llegar a producción antes que el front, o junto con él. Para probar, el preview
+    atendió esos dos GET con los controllers del branch (req/res simulados, tenant demo, solo lecturas).
+  - Ancho tocable de los días: en 375 px cada celda mide ~46 px, pero dentro de la tarjeta de la
+    reprogramación (por su padding) baja a ~41 px, y en pantallas de 320 px a ~37 px. El alto es 48.
+    Debajo del mínimo de 44 de §5.4 por pocos píxeles; al `MiniCalendario` le pasaba lo mismo.
+  - Reprogramación: si falla la confirmación (ej. 409, el horario se ocupó), los horarios del panel no se
+    recargan y el aviso sale arriba de la página, fuera de vista si se scrolleó. Ya pasaba antes.
+  - `fecha.js` tiene un helper sin uso en el turnero (`fmtFechaCorta`). Como es parte de lo que se copia a
+    otros fronts, decidir en el paso 7 si se borra.
+- Para la prueba manual en celulares reales:
+  - Tocar los días de la grilla con el dedo (celdas de ~45 px) sin errarle al vecino, y la grilla dentro
+    de la reprogramación (~41 px).
+
 ## Pasos de ejecución
 
 Flujo orquestador: un chat arma los prompts y revisa el diff; un chat ejecutor + un commit por paso, en
@@ -316,7 +389,7 @@ navegador** con `vite preview` (puerto fuera de 5173–5176, solo 127.0.0.1) y l
    helpers, limpieza (hallazgos 6–8).
 4. ✅ **Landing vidriera** (hallazgos 9–10) + link de reseñas y ruta `/turnos/resena`. El archivo del QR lo
    genera el orquestador cuando el dueño pase el link de reseñas.
-5. **¿Cuándo?**: `SelectorDiaHorario` + `SeleccionCuando` + reprogramación de la gestión + barra de
+5. ✅ **¿Cuándo?**: `SelectorDiaHorario` + `SeleccionCuando` + reprogramación de la gestión + barra de
    progreso (hallazgos 11–12).
 6. **Datos y confirmación + éxito + calendario** (éxito y gestión) + reintento del 409 (hallazgos
    13–14) + origen del cliente (front, `crearTurno` y el SQL de `turno.origen_link`).
@@ -325,11 +398,39 @@ navegador** con `vite preview` (puerto fuera de 5173–5176, solo 127.0.0.1) y l
      (acento, movimiento, excepción de clases CSS); §6.2 y §8 actualizados.
    - `CLAUDE.md` §3: rutas de la fuente de verdad → `frontend/src/` y el doc nuevo en el mapa.
    - `estado_actual.md` (incluidas las deudas nuevas de arriba), `ruta_proyecto.md`.
-   - `onboarding.md`: el SQL para cargar `configuracion.whatsapp`.
+   - `onboarding.md`: el SQL para cargar `configuracion.whatsapp` y `configuracion.resena_url`.
+   - `SQL_Schema.md`: la columna `turno.origen_link`.
    - `decisiones_turnero_ux.md` (archiva este plan).
 
 Lectura obligatoria de cada ejecutor: `CLAUDE.md`, `convenciones_tecnicas.md`, `sistema_de_disenio.md`
 y este documento (sin limitar la lectura de otros archivos).
+
+### Estado de la ejecución y pendientes del orquestador (al 2026-10-08)
+
+- **Commits del branch `feature/turnero-ux`** (salió de `main` con el hotfix): `d56003f` plan, `565c7cb`
+  paso 2, `84fd6cb` plan, `fe7abf7` paso 3, `5597549` paso 4, y el commit del paso 5.
+- **`main` local** tiene el hotfix del paso 1 (`7fa9ec7` + merge `6d2c12b`) **sin push**: el usuario lo
+  sube cuando se pueda tocar producción (el sistema está en uso).
+- **SQL de `turno.origen_link`**: entregado al usuario el 2026-10-08 (`ALTER TABLE public.turno ADD
+  COLUMN origen_link text CONSTRAINT turno_origen_link_formato CHECK (origen_link ~
+  '^[a-z0-9_-]{1,30}$')`). Confirmar que lo corrió antes de revisar el paso 6.
+- **Paso 6**: prompt entregado; corre después del commit del paso 5 y del SQL.
+- **Ajustes que hizo el orquestador al revisar** (ya commiteados): `resena_url` + `esUrlHttps` en
+  `getTenant` (paso 2); `fmtTelefono` muestra "11 3311-1686" sin 0/15/9 (paso 4); al cambiar de servicio
+  se descarta el horario elegido antes (paso 5).
+- **Deploy**: al mergear `feature/turnero-ux` a `main`, el backend del paso 2 y el front salen juntos. Si
+  Vercel termina antes que Railway, "Cualquiera" puede dar 400 un minuto (el front muestra el error con
+  "Reintentar"). El merge sigue el flujo habitual (`--no-ff` local, push solo de `main`, lo hace el
+  usuario).
+- **QR de la puerta**: lo genera el orquestador (SVG listo para imprimir, en una carpeta que el usuario
+  encuentre, no en el repo) apuntando a `https://kingsaistudio.barbermanager.app/turnos/resena?origen=qr`,
+  cuando el dueño pase el link de reseñas.
+- **Del dueño de Kingsai**: el link "Pedir reseñas" del Perfil de Empresa de Google y si tiene número de
+  WhatsApp.
+- **Después del deploy**: cambiar el link de la bio de Instagram a
+  `https://kingsaistudio.barbermanager.app/turnos?origen=instagram`; cargar `resena_url` / `whatsapp` con
+  el SQL de `onboarding.md`; probar en celulares reales (lista de "Verificación").
+- **Después del rediseño**: planificar la feature "Base de clientes" (ver "Para después").
 
 ## Verificación
 

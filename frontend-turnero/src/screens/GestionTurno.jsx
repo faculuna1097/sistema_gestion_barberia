@@ -1,22 +1,20 @@
 // /frontend-turnero/src/screens/GestionTurno.jsx
-// Pantalla 8: gestión del turno desde link del mail.
+// Gestión del turno desde el link del mail (fuera del flujo de reserva).
 // Carga el turno por token y permite: ver, cancelar (con confirm dialog) o reprogramar.
 
 import { useState, useEffect } from 'react';
-import {
-  getTurnoPorToken, cancelarTurno, reprogramarTurno, getDisponibilidad,
-  getDiasDisponibles,
-} from '../services/api.js';
+import { getTurnoPorToken, cancelarTurno, reprogramarTurno } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { fmtPesos } from '../utils/formato.js';
 import {
-  fmtFechaLarga, fmtHora, fmtFechaHora, generarProximosDias, fechaDeISO, DIAS_RESERVABLES,
+  fmtFechaLarga, fmtHora, fmtFechaHora, fechaDeISO, DIAS_RESERVABLES,
 } from '../utils/fecha.js';
 import { RUTA_TURNERO } from '../utils/rutas.js';
+import { useDisponibilidad } from '../hooks/useDisponibilidad.js';
 import {
   PageContainer, ScreenHeader, Button, EmptyState, Skeleton,
   StatusPill, SummaryRow, AvatarIniciales, ConfirmDialog,
-  MiniCalendario, SlotChip, IconoAlerta,
+  SelectorDiaHorario, IconoAlerta,
 } from '../components/ui';
 
 /**
@@ -36,17 +34,8 @@ function GestionTurno({ token, tenant }) {
   const [procesando, setProcesando] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
 
-  // ── Estado del sub-flow de reprogramación ───────────────────
+  // ── Sub-flow de reprogramación (los días y horarios los maneja el panel) ──
   const [reprogramando, setReprogramando] = useState(false);
-  const [fechaReprog, setFechaReprog] = useState(null);
-  const [slotsReprog, setSlotsReprog] = useState([]);
-  const [cargandoSlots, setCargandoSlots] = useState(false);
-  const [slotElegido, setSlotElegido] = useState(null); // ISO del slot pre-seleccionado (aún sin confirmar)
-
-  // ── Estado de los días disponibles del calendario de reprogramación ──
-  const [diasReprog, setDiasReprog] = useState([]);
-  const [cargandoDiasReprog, setCargandoDiasReprog] = useState(false);
-  const [errorDiasReprog, setErrorDiasReprog] = useState(false);
 
   useEffect(() => {
     async function cargar() {
@@ -83,58 +72,15 @@ function GestionTurno({ token, tenant }) {
   };
 
   /**
-   * abrirReprogramacion
-   * Abre el sub-flow de reprogramación y carga los días con disponibilidad
-   * para el barbero y servicio del turno (para grisar el calendario).
-   */
-  const abrirReprogramacion = async () => {
-    setReprogramando(true);
-    setCargandoDiasReprog(true);
-    setErrorDiasReprog(false);
-    const dias = generarProximosDias(DIAS_RESERVABLES);
-    try {
-      const { dias: disponibles } = await getDiasDisponibles(
-        datos.barbero.id, datos.servicio.id, dias[0], dias[dias.length - 1],
-      );
-      setDiasReprog(disponibles);
-    } catch (err) {
-      console.error('[GestionTurno] Error cargando días disponibles:', err.message);
-      setErrorDiasReprog(true);
-    } finally {
-      setCargandoDiasReprog(false);
-    }
-  };
-
-  /**
-   * handleSeleccionarFechaReprog
-   * Carga los slots disponibles para la nueva fecha elegida.
-   * @param {string} fecha - YYYY-MM-DD
-   */
-  const handleSeleccionarFechaReprog = async (fecha) => {
-    setFechaReprog(fecha);
-    setSlotElegido(null); // al cambiar de fecha, se descarta el slot pre-elegido
-    setCargandoSlots(true);
-    setSlotsReprog([]);
-    try {
-      const data = await getDisponibilidad(datos.barbero.id, datos.servicio.id, fecha);
-      setSlotsReprog(data.slots);
-    } catch (err) {
-      console.error('[GestionTurno] Error cargando slots:', err.message);
-      setSlotsReprog([]);
-    } finally {
-      setCargandoSlots(false);
-    }
-  };
-
-  /**
    * handleConfirmarReprogramacion
-   * Confirma la reprogramación al slot pre-elegido. Solo se llama desde el botón de confirmar.
+   * Reprograma el turno al horario elegido en el panel. Solo se llama desde
+   * su botón de confirmar.
+   * @param {string} inicio - ISO del horario nuevo
    */
-  const handleConfirmarReprogramacion = async () => {
-    if (!slotElegido) return;
+  const handleConfirmarReprogramacion = async (inicio) => {
     setProcesando(true);
     try {
-      const res = await reprogramarTurno(token, slotElegido);
+      const res = await reprogramarTurno(token, inicio);
       setDatos(prev => ({
         ...prev,
         turno: { ...prev.turno, inicio: res.turno.inicio, fin: res.turno.fin },
@@ -151,13 +97,11 @@ function GestionTurno({ token, tenant }) {
 
   /**
    * cerrarReprogramacion
-   * Cancela el sub-flow de reprogramación sin guardar nada.
+   * Cierra el sub-flow de reprogramación sin guardar nada. El panel se
+   * desmonta y con él lo que se había elegido.
    */
   const cerrarReprogramacion = () => {
     setReprogramando(false);
-    setFechaReprog(null);
-    setSlotsReprog([]);
-    setSlotElegido(null);
   };
 
   /**
@@ -304,7 +248,7 @@ function GestionTurno({ token, tenant }) {
         {/* ── Acciones (si está reservado y no en reprog) ── */}
         {esReservado && !reprogramando && (
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-            <Button variant="secondary" onClick={abrirReprogramacion} disabled={procesando}>
+            <Button variant="secondary" onClick={() => setReprogramando(true)} disabled={procesando}>
               Reprogramar
             </Button>
             <Button variant="danger" onClick={() => setConfirmCancel(true)} disabled={procesando}>
@@ -316,19 +260,11 @@ function GestionTurno({ token, tenant }) {
         {/* ── Sub-flow de reprogramación ───────────────────── */}
         {reprogramando && (
           <ReprogramarPanel
-            fechaReprog={fechaReprog}
-            slotsReprog={slotsReprog}
-            cargandoSlots={cargandoSlots}
-            diasDisponibles={diasReprog}
-            cargandoDias={cargandoDiasReprog}
-            errorDias={errorDiasReprog}
+            barbero={barbero}
+            servicio={servicio}
             procesando={procesando}
-            slotElegido={slotElegido}
-            onSeleccionarFecha={handleSeleccionarFechaReprog}
-            onSeleccionarSlot={setSlotElegido}
             onConfirmar={handleConfirmarReprogramacion}
             onCerrar={cerrarReprogramacion}
-            onReintentarDias={abrirReprogramacion}
           />
         )}
 
@@ -368,25 +304,25 @@ function GestionTurno({ token, tenant }) {
 
 /**
  * ReprogramarPanel
- * Panel inline que aparece al apretar "Reprogramar".
- * Flujo: elegir fecha → elegir slot (pre-selección) → confirmar reprogramación.
+ * Panel inline que aparece al apretar "Reprogramar": días y horarios libres
+ * del mismo barbero y servicio (los próximos DIAS_RESERVABLES días), con el
+ * primer día con lugar elegido al abrir. Tocar un horario lo pre-elige; recién
+ * el botón de confirmar reprograma.
+ * Monta su propia carga (useDisponibilidad): se pide al abrir el panel y se
+ * descarta al cerrarlo.
+ * @param {Object} props.barbero - Barbero del turno ({ id, nombre }), fijo
+ * @param {Object} props.servicio - Servicio del turno ({ id, ... })
+ * @param {boolean} props.procesando - True mientras se manda la reprogramación
+ * @param {Function} props.onConfirmar - Recibe el ISO del horario elegido
+ * @param {Function} props.onCerrar - Cierra el panel sin reprogramar
  */
-function ReprogramarPanel({
-  fechaReprog,
-  slotsReprog,
-  cargandoSlots,
-  diasDisponibles,
-  cargandoDias,
-  errorDias,
-  procesando,
-  slotElegido,
-  onSeleccionarFecha,
-  onSeleccionarSlot,
-  onConfirmar,
-  onCerrar,
-  onReintentarDias,
-}) {
-  const dias = generarProximosDias(DIAS_RESERVABLES);
+function ReprogramarPanel({ barbero, servicio, procesando, onConfirmar, onCerrar }) {
+  const agenda = useDisponibilidad({ servicioId: servicio.id, barberoId: barbero.id });
+
+  // Horario pre-elegido (sin confirmar). Vale solo si está entre los horarios
+  // del día que se ve: al cambiar de día, deja de estar marcado.
+  const [slotElegido, setSlotElegido] = useState(null);
+  const slotVigente = agenda.horarios.includes(slotElegido) ? slotElegido : null;
 
   return (
     <div style={{
@@ -414,81 +350,23 @@ function ReprogramarPanel({
         </Button>
       </div>
 
-      {errorDias ? (
-        <EmptyState
-          glyph={<IconoAlerta/>}
-          title="No pudimos cargar las fechas"
-          body="Revisá tu conexión e intentá de nuevo."
-          action={
-            <Button variant="secondary" onClick={onReintentarDias} full={false}>
-              Reintentar
-            </Button>
-          }
-        />
-      ) : (
-        <MiniCalendario
-          dias={dias}
-          diasDisponibles={diasDisponibles}
-          cargando={cargandoDias}
-          seleccionada={fechaReprog}
-          onSeleccionar={onSeleccionarFecha}
-        />
-      )}
-
-      {/* Slots de la fecha elegida */}
-      {fechaReprog && (
-        <div style={{ marginTop: 20 }}>
-          <div style={{
-            fontFamily: theme.mono,
-            fontWeight: theme.weightMedium,
-            fontSize: theme.sizeMicro,
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-            color: theme.muted,
-            marginBottom: 8,
-          }}>Nuevo horario</div>
-
-          {cargandoSlots ? (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: 8,
-            }}>
-              {[0, 1, 2, 3, 4, 5, 6, 7].map(i => (
-                <Skeleton key={i} height={48}/>
-              ))}
-            </div>
-          ) : slotsReprog.length === 0 ? (
-            <div className="tt-aparecer" style={{
-              fontFamily: theme.body,
-              fontSize: theme.sizeBody,
-              color: theme.muted,
-              textAlign: 'center',
-              padding: '16px 0',
-            }}>
-              Sin disponibilidad para esa fecha.
-            </div>
-          ) : (
-            <div className="tt-aparecer" style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: 8,
-            }}>
-              {slotsReprog.map(iso => (
-                <SlotChip
-                  key={iso}
-                  iso={iso}
-                  selected={iso === slotElegido}
-                  onClick={() => !procesando && onSeleccionarSlot(iso)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      <SelectorDiaHorario
+        dias={agenda.dias}
+        diasDisponibles={agenda.diasDisponibles}
+        estadoDias={agenda.estadoDias}
+        onReintentarDias={agenda.reintentarDias}
+        fecha={agenda.fecha}
+        onElegirFecha={agenda.elegirFecha}
+        horarios={agenda.horarios}
+        estadoHorarios={agenda.estadoHorarios}
+        onReintentarHorarios={agenda.reintentarHorarios}
+        horario={slotVigente}
+        onElegirHorario={(iso) => { if (!procesando) setSlotElegido(iso); }}
+        textoSinDias={`${barbero.nombre} no tiene turnos libres en los próximos ${DIAS_RESERVABLES} días.`}
+      />
 
       {/* Footer del panel — confirmar (sólo aparece cuando hay slot pre-elegido) */}
-      {slotElegido && (
+      {slotVigente && (
         <div style={{
           marginTop: 20,
           paddingTop: 16,
@@ -510,9 +388,9 @@ function ReprogramarPanel({
             fontSize: theme.sizeBody,
             color: theme.ink,
             marginBottom: 12,
-          }}>{fmtFechaHora(slotElegido)}</div>
+          }}>{fmtFechaHora(slotVigente)}</div>
 
-          <Button onClick={onConfirmar} disabled={procesando}>
+          <Button onClick={() => onConfirmar(slotVigente)} disabled={procesando}>
             {procesando ? 'Confirmando…' : 'Confirmar reprogramación'}
           </Button>
         </div>

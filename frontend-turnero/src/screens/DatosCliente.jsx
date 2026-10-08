@@ -1,5 +1,5 @@
 // /frontend-turnero/src/screens/DatosCliente.jsx
-// Pantalla 6: el cliente ingresa nombre, teléfono y email.
+// Paso 3 del flujo, "Datos": el cliente ingresa nombre, teléfono y email.
 
 import { useState } from 'react';
 import { AsYouType, isValidPhoneNumber, getCountryCallingCode } from 'libphonenumber-js';
@@ -134,12 +134,11 @@ function DatosCliente({ datos, onConfirmar, onVolver }) {
   return (
     <PageContainer>
       <TopBar onVolver={onVolver}/>
+      <Progress paso={3}/>
       <ScreenHeader
-        eyebrow="Paso 5 de 6"
         title="Tus datos"
         subtitle="Para confirmar y mandarte el recordatorio."
       />
-      <Progress step={5}/>
 
       {/* noValidate: la validación es la nuestra (errores), no la nativa del navegador */}
       <form id={FORM_ID} onSubmit={handleFormSubmit} noValidate style={{

@@ -2,6 +2,8 @@
 // Helpers de fecha/hora. Todo en zona local del navegador.
 // Convención del proyecto: el backend manda ISO y YYYY-MM-DD; el front muestra siempre en es-AR.
 
+import { capitalizar } from './formato.js';
+
 /**
  * DIAS_RESERVABLES
  * Cuántos días hacia adelante (contando hoy) puede elegir el cliente, tanto al
@@ -129,6 +131,32 @@ export function diaNumero(fechaStr) {
 export function nombreMes(fechaStr) {
   const [y, m] = fechaStr.split('-').map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'short' }).replace('.', '');
+}
+
+/**
+ * fmtMes
+ * Nombre completo del mes con mayúscula inicial, sin el año.
+ * @param {string} fechaStr - 'YYYY-MM-DD'
+ * @returns {string} Ej: "Octubre"
+ */
+export function fmtMes(fechaStr) {
+  const [y, m] = fechaStr.split('-').map(Number);
+  return capitalizar(new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long' }));
+}
+
+/**
+ * fmtDiaAccesible
+ * Fecha para leer en voz alta (aria-label): día de la semana, número y mes,
+ * sin la coma que agrega el formato de es-AR.
+ * @param {string} fechaStr - 'YYYY-MM-DD'
+ * @returns {string} Ej: "martes 6 de octubre"
+ */
+export function fmtDiaAccesible(fechaStr) {
+  const [y, m, d] = fechaStr.split('-').map(Number);
+  const fecha = new Date(y, m - 1, d);
+  const diaSemana = fecha.toLocaleDateString('es-AR', { weekday: 'long' });
+  const mes = fecha.toLocaleDateString('es-AR', { month: 'long' });
+  return `${diaSemana} ${d} de ${mes}`;
 }
 
 /**

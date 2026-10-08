@@ -1,13 +1,22 @@
 // /frontend-turnero/src/components/ui/SlotChip.jsx
-// Chip de horario clickable. Usado en SeleccionHorario (wizard) y GestionTurno (reprog).
+// Chip de horario clickable. Lo usa SelectorDiaHorario ("¿Cuándo?" y la
+// reprogramación de la gestión).
 
 import { useState } from 'react';
 import { theme } from '../../theme/tokens.js';
 import { fmtHora } from '../../utils/fecha.js';
 
 /**
+ * ALTO_SLOT
+ * Alto fijo del chip, en px. El skeleton de los horarios usa el mismo, así
+ * no salta al reemplazarlo.
+ */
+export const ALTO_SLOT = 48;
+
+/**
  * SlotChip
- * Botón cuadrado con la hora del slot. Estados: normal, hover, seleccionado.
+ * Botón con la hora del slot; ocupa el ancho de su celda de la grilla.
+ * Estados: normal, hover, seleccionado.
  * @param {string} props.iso - ISO timestamp del slot
  * @param {boolean} [props.selected=false]
  * @param {Function} props.onClick
@@ -26,13 +35,16 @@ function SlotChip({ iso, selected = false, onClick }) {
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      aria-pressed={selected}
       className="tt-presionable"
       style={{
         background: selected ? theme.accent : theme.surface,
         color: selected ? theme.accentInk : theme.ink,
         border: `1px solid ${borderColor}`,
         borderRadius: theme.radius,
-        padding: '14px 0',
+        width: '100%',
+        height: ALTO_SLOT,
+        padding: 0,
         fontFamily: theme.body,
         fontWeight: theme.weightMedium,
         fontSize: theme.sizeBody,

@@ -6,7 +6,7 @@ import { theme } from '../../theme/tokens.js';
 /**
  * ScreenHeader
  * Bloque de título de cada pantalla del wizard.
- * @param {string} [props.eyebrow] - Texto pequeño superior (ej: "Paso 1 de 6")
+ * @param {string} [props.eyebrow] - Texto pequeño superior (ej: "Tu turno")
  * @param {string} props.title - Título principal
  * @param {string} [props.subtitle] - Texto descriptivo bajo el título
  */

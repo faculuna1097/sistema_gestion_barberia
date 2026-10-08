@@ -14,9 +14,7 @@ import { useListaRemota } from './hooks/useListaRemota.js';
 import { PageContainer, EmptyState, Button, IconoAlerta } from './components/ui';
 import Landing, { LandingSkeleton } from './screens/Landing.jsx';
 import SeleccionServicio from './screens/SeleccionServicio.jsx';
-import SeleccionBarbero from './screens/SeleccionBarbero.jsx';
-import SeleccionFecha from './screens/SeleccionFecha.jsx';
-import SeleccionHorario from './screens/SeleccionHorario.jsx';
+import SeleccionCuando from './screens/SeleccionCuando.jsx';
 import DatosCliente from './screens/DatosCliente.jsx';
 import Confirmacion from './screens/Confirmacion.jsx';
 import GestionTurno from './screens/GestionTurno.jsx';
@@ -25,14 +23,17 @@ import GestionTurno from './screens/GestionTurno.jsx';
  * SELECCION_VACIA
  * La parte de la reserva que se elige en el flujo (sin los datos del
  * cliente). Cada entrada desde la landing arranca de acá.
- * `barberoPreelegido`: el barbero se eligió en la landing, así que después
- * del servicio se saltea su pantalla.
+ * - `barbero`: antes de elegir horario, el barbero que se marca al entrar a
+ *   "¿Cuándo?" (null = "Cualquiera"; viene de la landing si se tocó un
+ *   barbero). Después, el barbero que atiende el turno.
+ * - `barberoAsignado`: true si el barbero lo asignó "Cualquiera" (el resumen
+ *   dice "te atiende X").
+ * - `horario`: ISO del turno elegido. El día sale de acá (fechaDeISO).
  */
 const SELECCION_VACIA = {
   servicio: null,
   barbero: null,
-  barberoPreelegido: false,
-  fecha: null,
+  barberoAsignado: false,
   horario: null,
 };
 
@@ -211,27 +212,23 @@ function App() {
    * Descarta lo elegido antes —si el cliente volvió a la landing, empieza de
    * nuevo— pero conserva sus datos (nombre, teléfono, email) si ya los había
    * escrito. Va a la primera pantalla a la que le falta su dato:
-   * - con un servicio → barbero;
-   * - con un barbero, o desde el CTA → servicio.
+   * - con un servicio → "¿Cuándo?", con "Cualquiera";
+   * - con un barbero → servicio, y después "¿Cuándo?" con ese barbero marcado;
+   * - desde el CTA → servicio, y después "¿Cuándo?" con "Cualquiera".
    * "Volver" desde ahí regresa a la landing (es la entrada anterior del historial).
    * @param {Object} [preeleccion] - { servicio } o { barbero }; vacío para el CTA
    */
   const entrarDesdeLanding = (preeleccion = {}) => {
-    actualizarReserva({
-      ...SELECCION_VACIA,
-      ...preeleccion,
-      barberoPreelegido: Boolean(preeleccion.barbero),
-    });
-    nav.irA(preeleccion.servicio ? 'barbero' : 'servicio');
+    actualizarReserva({ ...SELECCION_VACIA, ...preeleccion });
+    nav.irA(preeleccion.servicio ? 'cuando' : 'servicio');
   };
 
   /**
    * renderPantalla
    * Elige qué pantalla mostrar según la que está arriba de la pila.
-   * El orden del flujo: landing → servicio → barbero → fecha → horario →
-   * datos → confirmacion → exito. Desde la landing se puede entrar con el
-   * servicio o el barbero ya elegidos, y esa pantalla se saltea
-   * (ver entrarDesdeLanding y el onSeleccionar de 'servicio').
+   * El orden del flujo: landing → servicio → cuando → datos → confirmacion →
+   * exito. Desde la landing se puede entrar con el servicio ya elegido, y su
+   * pantalla se saltea (ver entrarDesdeLanding).
    * @returns {JSX.Element}
    */
   const renderPantalla = () => {
@@ -251,9 +248,6 @@ function App() {
 
     switch (nav.pantalla) {
       case 'servicio':
-        // Si el barbero vino de la landing, su pantalla se saltea. No alcanza
-        // con mirar si hay barbero en la reserva: si lo eligió en su pantalla
-        // y volvió atrás hasta acá, al avanzar tiene que volver a verla.
         return (
           <SeleccionServicio
             servicios={servicios.datos}
@@ -261,43 +255,30 @@ function App() {
             error={servicios.error}
             onReintentar={servicios.reintentar}
             seleccionado={reserva.servicio}
+            // Si cambia el servicio, el horario elegido antes (con otra duración)
+            // deja de valer: "¿Cuándo?" no lo marca ni abre su día.
             onSeleccionar={(s) => {
-              actualizarReserva({ servicio: s });
-              nav.irA(reserva.barberoPreelegido ? 'fecha' : 'barbero');
+              actualizarReserva(s.id === reserva.servicio?.id ? { servicio: s } : { servicio: s, horario: null });
+              nav.irA('cuando');
             }}
             onVolver={nav.volver}
           />
         );
-      case 'barbero':
+      case 'cuando':
+        // El barbero que se marca al entrar: el de la reserva, salvo que
+        // lo haya asignado "Cualquiera" (al volver de Datos, sigue "Cualquiera").
+        // La reserva se escribe recién al tocar un horario: barbero y horario
+        // juntos, así nunca queda un barbero con el horario de otro.
         return (
-          <SeleccionBarbero
-            barberos={barberos.datos}
-            cargando={barberos.cargando}
-            error={barberos.error}
-            onReintentar={barberos.reintentar}
-            seleccionado={reserva.barbero}
-            onSeleccionar={(b) => { actualizarReserva({ barbero: b }); nav.irA('fecha'); }}
-            onVolver={nav.volver}
-          />
-        );
-      case 'fecha':
-        return (
-          <SeleccionFecha
-            barbero={reserva.barbero}
+          <SeleccionCuando
             servicio={reserva.servicio}
-            seleccionada={reserva.fecha}
-            onSeleccionar={(f) => { actualizarReserva({ fecha: f, horario: null }); nav.irA('horario'); }}
-            onVolver={nav.volver}
-          />
-        );
-      case 'horario':
-        return (
-          <SeleccionHorario
-            barbero={reserva.barbero}
-            servicio={reserva.servicio}
-            fecha={reserva.fecha}
-            seleccionado={reserva.horario}
-            onSeleccionar={(h) => { actualizarReserva({ horario: h }); nav.irA('datos'); }}
+            barberos={barberos}
+            barberoInicial={reserva.barberoAsignado ? null : reserva.barbero}
+            horarioInicial={reserva.horario}
+            onElegir={({ horario, barbero, barberoAsignado }) => {
+              actualizarReserva({ horario, barbero, barberoAsignado });
+              nav.irA('datos');
+            }}
             onVolver={nav.volver}
           />
         );

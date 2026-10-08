@@ -1,5 +1,5 @@
 // /frontend-turnero/src/screens/Confirmacion.jsx
-// Pantalla 7: resumen final + confirmación de la reserva.
+// Paso 3 del flujo (después de Datos): resumen final + confirmación de la reserva.
 // Dos modos: "revisar" (antes de POST) y "confirmado" (después de POST exitoso).
 
 import { useState } from 'react';
@@ -85,12 +85,11 @@ function RevisarView({ reserva, tenant, enviando, error, onConfirmar, onVolver }
   return (
     <PageContainer>
       <TopBar onVolver={onVolver}/>
+      <Progress paso={3}/>
       <ScreenHeader
-        eyebrow="Paso 6 de 6"
         title="Revisá tu reserva"
         subtitle="Confirmás y te llega el detalle por mail."
       />
-      <Progress step={6}/>
 
       <div style={{
         flex: 1,

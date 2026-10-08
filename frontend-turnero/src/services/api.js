@@ -75,18 +75,18 @@ export const getBarberos = async () => {
 
 /**
  * getDisponibilidad
- * Obtiene slots disponibles para un (barbero, servicio, fecha).
- * @param {string} barberoId
+ * Obtiene los slots disponibles de un día para un servicio, con un barbero o
+ * con "Cualquiera" (`barberoId` nulo: se omite el parámetro).
+ * @param {string|null} barberoId - null para "Cualquiera"
  * @param {string} servicioId
  * @param {string} fecha - 'YYYY-MM-DD'
- * @returns {Promise<Object>} { slots: [ISO,...] }
+ * @returns {Promise<Object>} Con barbero: { slots: [ISO,...] }.
+ *   Con "Cualquiera": { slots: [ISO,...], asignaciones: { [ISO]: barbero_id } },
+ *   donde cada clave de `asignaciones` es exactamente un string de `slots`
  */
 export const getDisponibilidad = async (barberoId, servicioId, fecha) => {
-  const params = new URLSearchParams({
-    barbero_id: barberoId,
-    servicio_id: servicioId,
-    fecha,
-  });
+  const params = new URLSearchParams({ servicio_id: servicioId, fecha });
+  if (barberoId) params.set('barbero_id', barberoId);
   const res = await fetch(`${BASE_URL}/disponibilidad?${params}`, { headers: publicHeaders });
   if (!res.ok) throw new Error('Error al obtener disponibilidad');
   return res.json();
@@ -95,20 +95,18 @@ export const getDisponibilidad = async (barberoId, servicioId, fecha) => {
 /**
  * getDiasDisponibles
  * Obtiene qué días de un rango tienen al menos un slot reservable para un
- * (barbero, servicio). El calendario lo usa para grisar los días sin turnos.
- * @param {string} barberoId
+ * servicio, con un barbero o con "Cualquiera" (`barberoId` nulo: se omite el
+ * parámetro y el backend devuelve la unión de los días de todos los barberos).
+ * La tira de días lo usa para grisar los días sin turnos. Tope del backend: 62 días.
+ * @param {string|null} barberoId - null para "Cualquiera"
  * @param {string} servicioId
  * @param {string} desde - 'YYYY-MM-DD' (inclusive)
  * @param {string} hasta - 'YYYY-MM-DD' (inclusive)
  * @returns {Promise<Object>} { dias: ['YYYY-MM-DD', ...] }
  */
 export const getDiasDisponibles = async (barberoId, servicioId, desde, hasta) => {
-  const params = new URLSearchParams({
-    barbero_id: barberoId,
-    servicio_id: servicioId,
-    desde,
-    hasta,
-  });
+  const params = new URLSearchParams({ servicio_id: servicioId, desde, hasta });
+  if (barberoId) params.set('barbero_id', barberoId);
   const res = await fetch(`${BASE_URL}/dias-disponibles?${params}`, { headers: publicHeaders });
   if (!res.ok) throw new Error('Error al obtener días disponibles');
   return res.json();
