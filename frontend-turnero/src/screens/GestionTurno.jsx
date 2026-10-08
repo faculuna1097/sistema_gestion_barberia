@@ -1,6 +1,7 @@
 // /frontend-turnero/src/screens/GestionTurno.jsx
 // Gestión del turno desde el link del mail (fuera del flujo de reserva).
-// Carga el turno por token y permite: ver, cancelar (con confirm dialog) o reprogramar.
+// Carga el turno por token y permite: ver, agregarlo al calendario, cancelar
+// (con confirm dialog) o reprogramar.
 
 import { useState, useEffect } from 'react';
 import { getTurnoPorToken, cancelarTurno, reprogramarTurno } from '../services/api.js';
@@ -9,12 +10,13 @@ import { fmtPesos } from '../utils/formato.js';
 import {
   fmtFechaLarga, fmtHora, fmtFechaHora, fechaDeISO, DIAS_RESERVABLES,
 } from '../utils/fecha.js';
-import { RUTA_TURNERO } from '../utils/rutas.js';
+import { RUTA_TURNERO, urlGestion } from '../utils/rutas.js';
+import { eventoDeTurno } from '../utils/calendario.js';
 import { useDisponibilidad } from '../hooks/useDisponibilidad.js';
 import {
   PageContainer, ScreenHeader, Button, EmptyState, Skeleton,
   StatusPill, SummaryRow, AvatarIniciales, ConfirmDialog,
-  SelectorDiaHorario, IconoAlerta,
+  SelectorDiaHorario, IconoAlerta, AgregarAlCalendario,
 } from '../components/ui';
 
 /**
@@ -149,6 +151,20 @@ function GestionTurno({ token, tenant }) {
   const { turno, barbero, servicio, cliente } = datos;
   const esReservado = turno.estado === 'reservado';
 
+  // Evento para "Agregar al calendario": el mismo contenido que en el éxito de
+  // la reserva y el mismo UID (turno.id), así agregarlo de nuevo después de
+  // reprogramar actualiza el evento en vez de duplicarlo.
+  const evento = eventoDeTurno({
+    turnoId: turno.id,
+    servicio: servicio.nombre,
+    local: tenant?.nombre,
+    barbero: barbero.nombre,
+    direccion: tenant?.direccion,
+    inicio: turno.inicio,
+    fin: turno.fin,
+    urlGestion: urlGestion(token),
+  });
+
   return (
     <PageContainer>
       <ScreenHeader
@@ -221,7 +237,7 @@ function GestionTurno({ token, tenant }) {
               }}>{barbero.nombre}</div>
               <div style={{
                 fontFamily: theme.body,
-                fontSize: 13,
+                fontSize: theme.sizeBody,
                 color: theme.muted,
                 marginTop: 1,
               }}>
@@ -237,6 +253,13 @@ function GestionTurno({ token, tenant }) {
             }}>{fmtPesos(servicio.precio)}</div>
           </div>
         </div>
+
+        {/* ── Agregar al calendario (solo si el turno sigue en pie) ── */}
+        {esReservado && !reprogramando && (
+          <div style={{ marginTop: 12 }}>
+            <AgregarAlCalendario evento={evento} variant="secondary"/>
+          </div>
+        )}
 
         {/* ── Datos del cliente ────────────────────────────── */}
         <div style={{ marginTop: 16 }}>
@@ -417,7 +440,7 @@ function BannerMensaje({ kind, text }) {
       padding: '10px 12px',
       marginBottom: 12,
       fontFamily: theme.body,
-      fontSize: 13,
+      fontSize: theme.sizeBody,
       color: esOk ? theme.success : theme.danger,
       lineHeight: 1.4,
     }}>{text}</div>

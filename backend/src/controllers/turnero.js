@@ -24,7 +24,7 @@ import { obtenerHorarioCrudo, validarTurnoEnHorario } from '../services/horarioA
 import { obtenerFeriados, existeFeriado } from '../services/feriadosService.js';
 import { TZ } from '../utils/constantes.js';
 import { esFechaISO, hoyISO } from '../utils/validarFecha.js';
-import { validarContacto, esTelefonoE164, esUrlHttps } from '../utils/validarTexto.js';
+import { validarContacto, esTelefonoE164, esUrlHttps, normalizarOrigen } from '../utils/validarTexto.js';
 
 /**
  * getTenant
@@ -266,6 +266,9 @@ export const getDiasDisponibles = async (req, res) => {
  * @param {string} req.body.nombre
  * @param {string} req.body.telefono  - obligatorio en este controller
  * @param {string} req.body.email     - obligatorio en este controller
+ * @param {string} [req.body.origen]  - por qué link llegó el cliente (ej. 'instagram'),
+ *   se guarda en turno.origen_link. Opcional: si no cumple el formato
+ *   (normalizarOrigen), se guarda null y la reserva sigue
  * @returns {JSON} 201 { turno_id, token_gestion }
  */
 export const crearTurno = async (req, res) => {
@@ -284,6 +287,8 @@ export const crearTurno = async (req, res) => {
   if (contacto.error) {
     return res.status(400).json({ error: contacto.error });
   }
+  // Origen del cliente: dato de marketing, nunca rechaza la reserva.
+  const origenLink = normalizarOrigen(req.body.origen);
 
   const inicioDT = DateTime.fromISO(inicio, { zone: TZ });
   if (!inicioDT.isValid) {
@@ -336,7 +341,7 @@ export const crearTurno = async (req, res) => {
     try {
       resultado = await insertarTurno({
         tenantId: req.tenant_id, clienteId: cliente_id, barberoId: barbero_id,
-        servicioId: servicio_id, inicioDT, finDT, origenCreacion: 'turnero',
+        servicioId: servicio_id, inicioDT, finDT, origenCreacion: 'turnero', origenLink,
       });
     } catch (err) {
       if (err.code === 'SLOT_OCUPADO') {

@@ -2,6 +2,7 @@
 // Rutas del turnero. Una sola fuente para no escribir "/turnos/" a mano.
 // El turnero se sirve bajo el `base` de Vite (vite.config.js → '/turnos/'):
 // en producción, `/` es el panel de gestión, no el turnero.
+// También lee el `?origen=` con el que llega el cliente.
 
 /**
  * RUTA_TURNERO
@@ -21,6 +22,17 @@ const PREFIJO_GESTION = `${RUTA_TURNERO}gestionar/`;
  */
 export function rutaGestion(token) {
   return `${PREFIJO_GESTION}${encodeURIComponent(token)}`;
+}
+
+/**
+ * urlGestion
+ * Dirección completa (con dominio) de la gestión de un turno, para usarla
+ * fuera del turnero (ej. en la descripción del evento del calendario).
+ * @param {string} token - token_gestion del turno
+ * @returns {string} Ej: 'https://kingsaistudio.barbermanager.app/turnos/gestionar/3f9a…'
+ */
+export function urlGestion(token) {
+  return new URL(rutaGestion(token), window.location.origin).href;
 }
 
 /**
@@ -65,4 +77,21 @@ export function rutaResena(origen) {
  */
 export function esRutaResena(pathname) {
   return pathname === RUTA_RESENA || pathname === `${RUTA_RESENA}/`;
+}
+
+// Formato del origen del cliente: minúsculas, dígitos, guion y guion bajo, de 1
+// a 30. El mismo que valida el backend y el CHECK de `turno.origen_link`.
+const REGEX_ORIGEN = /^[a-z0-9_-]{1,30}$/;
+
+/**
+ * leerOrigen
+ * Lee por qué link llegó el cliente: el `?origen=` de la URL (ej. el link de
+ * la bio de Instagram, `/turnos?origen=instagram`). Se pasa a minúsculas; si
+ * no cumple el formato, se descarta (la reserva sigue, sin origen).
+ * @param {string} search - window.location.search (ej. '?origen=Instagram')
+ * @returns {string|null} Ej: 'instagram'; null si no viene o no cumple el formato
+ */
+export function leerOrigen(search) {
+  const origen = new URLSearchParams(search).get('origen')?.toLowerCase();
+  return origen && REGEX_ORIGEN.test(origen) ? origen : null;
 }

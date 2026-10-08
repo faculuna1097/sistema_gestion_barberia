@@ -3,8 +3,9 @@
 // (nombre, teléfono, email). Centraliza los topes de longitud y el formato de
 // email que comparten el turnero público (crearTurno) y el backoffice
 // (crearTurnoAdmin). Ver auditoría 3.2. También el formato E.164 de un
-// teléfono (el WhatsApp del negocio que expone el turnero) y el de una URL
-// https (el link de reseñas de Google del negocio).
+// teléfono (el WhatsApp del negocio que expone el turnero), el de una URL
+// https (el link de reseñas de Google del negocio) y el del origen del cliente
+// (por qué link llegó al turnero).
 
 // Topes de longitud de los inputs libres del cliente. Son cotas defensivas: un
 // nombre/teléfono legítimo entra holgado. El objetivo no es validar "formato de
@@ -62,6 +63,25 @@ export function esUrlHttps(valor) {
   } catch {
     return false;
   }
+}
+
+// Origen del cliente: minúsculas, dígitos, guion y guion bajo, de 1 a 30. Es
+// el mismo formato del CHECK de `turno.origen_link` y del front del turnero.
+const REGEX_ORIGEN = /^[a-z0-9_-]{1,30}$/;
+
+/**
+ * normalizarOrigen
+ * Normaliza el origen del cliente que manda el turnero (el `?origen=` del link
+ * por el que llegó, ej. 'instagram'). Misma regla que el front: a minúsculas y
+ * el formato de REGEX_ORIGEN. Es un dato de marketing, opcional: si no cumple,
+ * se descarta (null) en vez de rechazar la reserva.
+ * @param {*} valor - `req.body.origen` (puede faltar o no ser texto).
+ * @returns {string|null} El origen normalizado, o null si falta o no cumple.
+ */
+export function normalizarOrigen(valor) {
+  if (typeof valor !== 'string') return null;
+  const origen = valor.toLowerCase();
+  return REGEX_ORIGEN.test(origen) ? origen : null;
 }
 
 /**

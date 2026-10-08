@@ -77,22 +77,26 @@ export const upsertCliente = async (tenantId, { nombre, telefono, email }) => {
  * Inserta un turno en la DB. Captura la violación del constraint EXCLUDE GIST
  * (código 23P01) y la devuelve como error tipado en vez de propagarla.
  * @param {Object} datos
+ * @param {string} datos.origenCreacion - Quién lo crea: 'turnero' | 'barbero' | 'admin'
+ * @param {string|null} [datos.origenLink=null] - Por qué link llegó el cliente
+ *   al turnero (`turno.origen_link`, ej. 'instagram'), ya normalizado con
+ *   `normalizarOrigen`. Solo lo manda el turnero público.
  * @returns {Promise<{ turno_id: string, token_gestion: string }>}
  * @throws {{ code: 'SLOT_OCUPADO' }} si hay solapamiento
  */
 export const insertarTurno = async ({
-  tenantId, clienteId, barberoId, servicioId, inicioDT, finDT, origenCreacion,
+  tenantId, clienteId, barberoId, servicioId, inicioDT, finDT, origenCreacion, origenLink = null,
 }) => {
   const token_gestion = crypto.randomUUID();
   try {
     const result = await query(
       `INSERT INTO turno
          (tenant_id, cliente_id, barbero_id, servicio_id, inicio, fin,
-          estado, origen_creacion, token_gestion)
-       VALUES ($1, $2, $3, $4, $5, $6, 'reservado', $7, $8)
+          estado, origen_creacion, token_gestion, origen_link)
+       VALUES ($1, $2, $3, $4, $5, $6, 'reservado', $7, $8, $9)
        RETURNING id`,
       [tenantId, clienteId, barberoId, servicioId,
-       inicioDT.toISO(), finDT.toISO(), origenCreacion, token_gestion]
+       inicioDT.toISO(), finDT.toISO(), origenCreacion, token_gestion, origenLink]
     );
     return { turno_id: result.rows[0].id, token_gestion };
   } catch (err) {

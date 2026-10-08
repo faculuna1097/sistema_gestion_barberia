@@ -5,18 +5,20 @@
 // Si no → muestra el flujo de reserva: una pila de pantallas integrada con el
 // historial del navegador (useNavegacion), así el "atrás" del celular vuelve
 // un paso en vez de sacar al cliente del turnero.
+// Lee una sola vez el `?origen=` con el que llegó el cliente y lo manda con la
+// reserva (turno.origen_link).
 
 import { Fragment, useState, useEffect } from 'react';
 import { getTenant, getImagenesNegocio, getServicios, getBarberos } from './services/api.js';
-import { RUTA_TURNERO, extraerTokenGestion, esRutaResena } from './utils/rutas.js';
+import { RUTA_TURNERO, extraerTokenGestion, esRutaResena, leerOrigen } from './utils/rutas.js';
 import { useNavegacion } from './hooks/useNavegacion.js';
 import { useListaRemota } from './hooks/useListaRemota.js';
 import { PageContainer, EmptyState, Button, IconoAlerta } from './components/ui';
 import Landing, { LandingSkeleton } from './screens/Landing.jsx';
 import SeleccionServicio from './screens/SeleccionServicio.jsx';
 import SeleccionCuando from './screens/SeleccionCuando.jsx';
-import DatosCliente from './screens/DatosCliente.jsx';
-import Confirmacion from './screens/Confirmacion.jsx';
+import ConfirmarTurno from './screens/ConfirmarTurno.jsx';
+import TurnoConfirmado from './screens/TurnoConfirmado.jsx';
 import GestionTurno from './screens/GestionTurno.jsx';
 
 /**
@@ -91,6 +93,12 @@ function App() {
   const [esResena] = useState(() => esRutaResena(window.location.pathname));
   // Ni la gestión ni la reseña usan el flujo: sin historial propio ni listas.
   const enFlujoReserva = !tokenGestion && !esResena;
+
+  // Por qué link llegó el cliente (`?origen=instagram`): se lee una sola vez,
+  // al cargar. Vive fuera de la reserva para que "Reservar otro turno" no lo
+  // borre: sigue siendo la misma visita. La navegación del flujo no cambia la
+  // URL (pushState sin URL), y una recarga la vuelve a leer.
+  const [origen] = useState(() => leerOrigen(window.location.search));
 
   // Servicios y barberos: se piden una sola vez, en paralelo con el tenant y
   // las imágenes, y bajan por props. Si fallan, cada lista expone su
@@ -226,9 +234,10 @@ function App() {
   /**
    * renderPantalla
    * Elige qué pantalla mostrar según la que está arriba de la pila.
-   * El orden del flujo: landing → servicio → cuando → datos → confirmacion →
-   * exito. Desde la landing se puede entrar con el servicio ya elegido, y su
-   * pantalla se saltea (ver entrarDesdeLanding).
+   * El orden del flujo: landing → servicio → cuando → datos → exito. "datos"
+   * (ConfirmarTurno) junta el resumen, los datos del cliente y la
+   * confirmación. Desde la landing se puede entrar con el servicio ya elegido,
+   * y su pantalla se saltea (ver entrarDesdeLanding).
    * @returns {JSX.Element}
    */
   const renderPantalla = () => {
@@ -283,31 +292,25 @@ function App() {
           />
         );
       case 'datos':
-        return (
-          <DatosCliente
-            datos={{ nombre: reserva.nombre, telefono: reserva.telefono, email: reserva.email }}
-            onConfirmar={(d) => { actualizarReserva(d); nav.irA('confirmacion'); }}
-            onVolver={nav.volver}
-          />
-        );
-      case 'confirmacion':
         // Al confirmar, la pantalla se reemplaza por 'exito' y se cierra el
         // flujo: el "atrás" ya no vuelve acá ni puede reenviar la reserva.
         return (
-          <Confirmacion
+          <ConfirmarTurno
             reserva={reserva}
             tenant={tenant}
-            resultado={null}
+            barberos={barberos.datos}
+            origen={origen}
+            onGuardarDatos={actualizarReserva}
+            onCambiarBarbero={(barbero) => actualizarReserva({ barbero })}
             onExito={(res) => { setResultado(res); nav.cerrarFlujo('exito'); }}
             onVolver={nav.volver}
           />
         );
       case 'exito':
-        // Sin resultado, Confirmacion mostraría "Revisar" con el botón de
-        // confirmar: nunca se renderiza el éxito sin un turno creado.
+        // Nunca se renderiza el éxito sin un turno creado.
         if (!resultado) return landing;
         return (
-          <Confirmacion
+          <TurnoConfirmado
             reserva={reserva}
             tenant={tenant}
             resultado={resultado}

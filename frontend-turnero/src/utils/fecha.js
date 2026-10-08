@@ -70,14 +70,15 @@ export function fmtFechaCorta(fechaStr) {
 
 /**
  * fmtFechaLarga
- * Formato largo de fecha YYYY-MM-DD con día de semana y mes completo.
+ * Formato largo de fecha YYYY-MM-DD con día de semana y mes completo. El día
+ * va sin cero adelante, como en la grilla de días ("8", no "08").
  * @param {string} fechaStr - 'YYYY-MM-DD'
- * @returns {string} Ej: "lunes, 19 de mayo"
+ * @returns {string} Ej: "jueves, 8 de octubre"
  */
 export function fmtFechaLarga(fechaStr) {
   const [y, m, d] = fechaStr.split('-').map(Number);
   const date = new Date(y, m - 1, d);
-  return date.toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: 'long' });
+  return date.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 /**
@@ -99,6 +100,17 @@ export function fmtHora(iso) {
  */
 export function fmtFechaHora(iso) {
   return `${fmtFechaLarga(fechaDeISO(iso))} · ${fmtHora(iso)} hs`;
+}
+
+/**
+ * sumarMinutos
+ * Suma minutos a un instante (ej. el fin de un turno: inicio + duración).
+ * @param {string} iso - ISO timestamp
+ * @param {number} minutos
+ * @returns {string} ISO en UTC (ej. '2026-10-08T19:00:00.000Z')
+ */
+export function sumarMinutos(iso, minutos) {
+  return new Date(new Date(iso).getTime() + minutos * 60000).toISOString();
 }
 
 /**
@@ -146,7 +158,8 @@ export function fmtMes(fechaStr) {
 
 /**
  * fmtDiaAccesible
- * Fecha para leer en voz alta (aria-label): día de la semana, número y mes,
+ * Fecha para leer en voz alta (aria-label) o para ir dentro de una oración
+ * ("Te esperamos el martes 6 de octubre"): día de la semana, número y mes,
  * sin la coma que agrega el formato de es-AR.
  * @param {string} fechaStr - 'YYYY-MM-DD'
  * @returns {string} Ej: "martes 6 de octubre"

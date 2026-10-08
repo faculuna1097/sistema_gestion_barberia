@@ -70,10 +70,10 @@ a {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+/* Entrada del tilde del éxito: crece hasta su tamaño sin pasarse (sin rebote). */
 @keyframes om-pop {
-  0%   { opacity: 0; transform: scale(0.6); }
-  60%  { opacity: 1; transform: scale(1.08); }
-  100% { opacity: 1; transform: scale(1); }
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
 }
 @keyframes om-stroke {
   to { stroke-dashoffset: 0; }
@@ -85,6 +85,28 @@ a {
 @keyframes om-dialog-in {
   from { opacity: 0; transform: scale(0.96) translateY(8px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Con "reducir movimiento", el tilde del éxito y el diálogo solo aparecen con
+   un fundido, la tilde ya está dibujada y el skeleton queda quieto (sin el
+   brillo que lo recorre). Estas animaciones se aplican con `animation` inline
+   (no con una clase), así que no se pueden pisar desde una regla: se
+   redefinen los keyframes, y gana la última definición que aplica. */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes om-pop {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes om-dialog-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes om-stroke {
+    from, to { stroke-dashoffset: 0; }
+  }
+  @keyframes om-shimmer {
+    from, to { background-position: 0 0; }
+  }
 }
 
 /* ── Movimiento del turnero (clases tt-) ─────────────────────────

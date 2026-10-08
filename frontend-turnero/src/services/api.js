@@ -115,8 +115,11 @@ export const getDiasDisponibles = async (barberoId, servicioId, desde, hasta) =>
 /**
  * crearTurno
  * Crea un turno desde el turnero público.
- * @param {Object} datos - { servicio_id, barbero_id, inicio, nombre, telefono, email }
+ * @param {Object} datos - { servicio_id, barbero_id, inicio, nombre, telefono, email, origen? }.
+ *   `origen`: por qué link llegó el cliente (ej. 'instagram'); se omite si no hay
  * @returns {Promise<Object>} { turno_id, token_gestion }
+ * @throws {Error} Con `status` (el HTTP) y el mensaje del backend. Un error de
+ *   red llega sin `status`.
  */
 export const crearTurno = async (datos) => {
   const res = await fetch(`${BASE_URL}/turnos`, {
@@ -126,7 +129,8 @@ export const crearTurno = async (datos) => {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    const err = new Error(body.error || 'Error al crear turno');
+    // El 422 (fuera de horario, feriado) trae `mensaje` en vez de `error`.
+    const err = new Error(body.error || body.mensaje || 'Error al crear turno');
     err.status = res.status;
     throw err;
   }
@@ -178,7 +182,8 @@ export const reprogramarTurno = async (token, inicio) => {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    const err = new Error(body.error || 'Error al reprogramar turno');
+    // El 422 (fuera de horario, feriado) trae `mensaje` en vez de `error`.
+    const err = new Error(body.error || body.mensaje || 'Error al reprogramar turno');
     err.status = res.status;
     throw err;
   }

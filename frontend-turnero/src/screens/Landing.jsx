@@ -27,9 +27,10 @@ import { fmtPesos } from '../utils/formato.js';
 import { fechaLocalISO } from '../utils/fecha.js';
 import { fmtTelefono, linkWhatsApp } from '../utils/telefono.js';
 import { rutaResena } from '../utils/rutas.js';
+import { linkMapa } from '../utils/mapa.js';
 import { useEleccionConPausa } from '../hooks/useEleccionConPausa.js';
 import {
-  PageContainer, Button, StickyFooter, Skeleton, EmptyState, AvatarIniciales, IconoAlerta,
+  PageContainer, Button, StickyFooter, Skeleton, EmptyState, AvatarIniciales, IconoAlerta, IconoPin,
 } from '../components/ui';
 
 /**
@@ -232,7 +233,7 @@ function Landing({
 
             {tenant.direccion && (
               <LineaContacto
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(tenant.direccion)}`}
+                href={linkMapa(tenant.direccion)}
                 externo
                 icono={<IconoPin />}
                 texto={tenant.direccion}
@@ -927,24 +928,6 @@ function IconoReloj() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5"/>
       <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-
-/**
- * IconoPin
- * SVG inline de un pin de ubicación, para la línea de dirección.
- */
-function IconoPin() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M12 21s7-5.686 7-11a7 7 0 1 0-14 0c0 5.314 7 11 7 11z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-      <circle cx="12" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5"/>
     </svg>
   );
 }

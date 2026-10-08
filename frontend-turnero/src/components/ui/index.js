@@ -19,3 +19,6 @@ export { default as SummaryRow }      from './SummaryRow.jsx';
 export { default as SelectorDiaHorario } from './SelectorDiaHorario.jsx';
 export { default as SlotChip }        from './SlotChip.jsx';
 export { default as IconoAlerta }     from './IconoAlerta.jsx';
+export { default as IconoPin }        from './IconoPin.jsx';
+export { default as ResumenTurno }    from './ResumenTurno.jsx';
+export { default as AgregarAlCalendario } from './AgregarAlCalendario.jsx';

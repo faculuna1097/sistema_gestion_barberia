@@ -374,6 +374,67 @@ Del paso 5:
   - Tocar los días de la grilla con el dedo (celdas de ~45 px) sin errarle al vecino, y la grilla dentro
     de la reprogramación (~41 px).
 
+Del paso 6:
+- Resueltas en el paso (para registrarlas en el paso 7):
+  - Hallazgos 13 (botón "Confirmar turno" siempre habilitado: marca los errores y enfoca el primero;
+    `Field` con `aria-invalid` y `aria-describedby`, label con `htmlFor`) y 14 (`om-pop` sin rebote,
+    ease-out; `om-pop` y `om-dialog-in` quedan en un fundido con "reducir movimiento").
+  - Del paso 3: textos de 12–13 px del turnero a 14 (`Field`, `SummaryRow`, el aviso de spam, la línea de
+    servicio y el banner de la gestión); la nota de cancelación en `mutedSoft` se fue con `Confirmacion`.
+  - De "Tamaños escritos a mano" (`estado_actual.md`): `SummaryRow` a 14 **solo en la copia del
+    turnero**; las del barbero y el panel siguen en 13 (la deuda pedía las tres a la vez).
+- Decisiones del paso (para `decisiones_turnero_ux.md`):
+  - Pantalla `ConfirmarTurno` (clave de navegación `'datos'`, la de la barra de progreso): resumen,
+    datos y confirmación juntos. El éxito es `TurnoConfirmado`. Se borraron `DatosCliente` y
+    `Confirmacion`. Compartidos: `ResumenTurno` y `AgregarAlCalendario` (`components/ui`, solo del flujo).
+  - Quién atiende: "Te atiende X" si lo asignó "Cualquiera", "Con X" si se eligió a mano, "Te asignamos
+    un barbero" sin nombre.
+  - Errores del POST en el pie fijo, arriba del botón (`role="alert"`): se ven aunque el formulario esté
+    scrolleado. Sin conexión: "No pudimos conectarnos…" en vez del "Failed to fetch" del navegador. El 422
+    trae `mensaje` (no `error`): `api.js#crearTurno` lee los dos.
+  - 409: con "Cualquiera", un solo GET de la disponibilidad del día y, si el horario sigue libre con otro
+    barbero, la reserva pasa a ese barbero y se reintenta una vez. Si no (o con barbero elegido), "Ese
+    horario se acaba de ocupar. Elegí otro." y el botón pasa a "Elegir otro horario" (vuelve a "¿Cuándo?").
+    Los datos del cliente se guardan en la reserva al confirmar, así siguen al volver.
+  - Email validado en el front con la misma regex que el backend (antes `a@b.c` pasaba el front y daba 400).
+  - Calendario: en iPhone, iPad y Mac (user agent con iPhone/iPad/iPod/Macintosh; el iPad se anuncia
+    como Mac) el botón baja el `.ics` y el link de abajo abre Google; en el resto, al revés. El `.ics`
+    usa el `turno_id` como UID (el mismo desde el éxito y desde la gestión). Google no deja fijar el aviso
+    por link: usa el del usuario.
+  - Origen: `App` lo lee una vez (`leerOrigen`, `utils/rutas.js`) y lo guarda fuera de la reserva: "Reservar
+    otro turno" no lo borra (misma visita). Backend: `normalizarOrigen` (`utils/validarTexto.js`), misma
+    regla que el front (a minúsculas + regex); si no cumple, `null`.
+- Para el sistema de diseño y los docs (paso 7):
+  - §6.2: `ResumenTurno` y `AgregarAlCalendario`. §5.2: `Field` ya cumple. `Field` acepta `ref` (React 19).
+  - `ruta_proyecto.md`: sumar `ConfirmarTurno.jsx`, `TurnoConfirmado.jsx`, `ResumenTurno.jsx`,
+    `AgregarAlCalendario.jsx`, `IconoPin.jsx`, `utils/calendario.js` y `utils/mapa.js`; sacar
+    `DatosCliente.jsx` y `Confirmacion.jsx`.
+  - `fmtDiaAccesible` ahora también arma texto visible ("Te esperamos el jueves 8 de octubre"); el nombre
+    quedó corto. Renombrarlo es opcional.
+- Resueltas por el orquestador al revisar el paso 6:
+  - La landing usa `utils/mapa.js#linkMapa` y el ícono del pin pasó a `components/ui/IconoPin.jsx`
+    (lo comparten la landing y `ResumenTurno`; antes eran dos copias iguales).
+  - `api.js#reprogramarTurno` también lee `body.mensaje`: el 422 de la reprogramación (fuera de horario,
+    feriado) muestra el mensaje del backend, como `crearTurno`.
+  - Con "reducir movimiento", la tilde del éxito aparece ya dibujada (`om-stroke`) y el skeleton queda
+    quieto (`om-shimmer`), redefiniendo los keyframes en el mismo `@media` de `om-pop`.
+- Deudas nuevas:
+  - De fondo, el backend responde los errores con dos formas (`{ error }` y `{ codigo, mensaje }`): cada
+    función de `api.js` tiene que leer las dos.
+  - "Reservar otro turno" y el "atrás" desde el éxito borran nombre, teléfono y email (`RESERVA_VACIA`);
+    entrar desde la landing los conserva. Ya pasaba antes. Y "Volver" desde Datos sin confirmar pierde lo
+    tipeado (también antes): los datos se guardan recién al confirmar.
+  - El skeleton de la gestión no tiene el bloque del calendario (ni, ya antes, los botones de
+    reprogramar y cancelar): el contenido de abajo de la tarjeta baja ~100 px al cargar.
+  - El reintento del 409 suma un POST al límite de ráfaga (3 por minuto): dos intentos fallidos seguidos
+    con reintento pueden dar 429 antes. Raro.
+- Para la prueba manual en celulares reales:
+  - "Agregar al calendario" dentro de Instagram en iPhone (el riesgo conocido) y en Safari desde el mail.
+    Si en Instagram el `.ics` no abre, queda el plan B del adjunto en el mail.
+  - Volver a agregar el `.ics` después de reprogramar: Calendario de Apple debería actualizar el evento
+    (mismo UID); el link de Google crea uno nuevo.
+  - El teclado al enfocar el primer campo con error, y la tecla "Ir".
+
 ## Pasos de ejecución
 
 Flujo orquestador: un chat arma los prompts y revisa el diff; un chat ejecutor + un commit por paso, en
@@ -408,16 +469,18 @@ y este documento (sin limitar la lectura de otros archivos).
 ### Estado de la ejecución y pendientes del orquestador (al 2026-10-08)
 
 - **Commits del branch `feature/turnero-ux`** (salió de `main` con el hotfix): `d56003f` plan, `565c7cb`
-  paso 2, `84fd6cb` plan, `fe7abf7` paso 3, `5597549` paso 4, y el commit del paso 5.
+  paso 2, `84fd6cb` plan, `fe7abf7` paso 3, `5597549` paso 4, `12982fd` paso 5, y el commit del paso 6.
 - **`main` local** tiene el hotfix del paso 1 (`7fa9ec7` + merge `6d2c12b`) **sin push**: el usuario lo
   sube cuando se pueda tocar producción (el sistema está en uso).
-- **SQL de `turno.origen_link`**: entregado al usuario el 2026-10-08 (`ALTER TABLE public.turno ADD
+- **SQL de `turno.origen_link`**: corrido por el usuario el 2026-10-08 (`ALTER TABLE public.turno ADD
   COLUMN origen_link text CONSTRAINT turno_origen_link_formato CHECK (origen_link ~
-  '^[a-z0-9_-]{1,30}$')`). Confirmar que lo corrió antes de revisar el paso 6.
-- **Paso 6**: prompt entregado; corre después del commit del paso 5 y del SQL.
+  '^[a-z0-9_-]{1,30}$')`). Ya está en producción: `SQL_Schema.md` lo suma en el paso 7.
+- **Paso 6**: hecho y revisado (commit propio). Sigue el **paso 7** (docs, lo hace el orquestador) y
+  después el merge a `main`.
 - **Ajustes que hizo el orquestador al revisar** (ya commiteados): `resena_url` + `esUrlHttps` en
   `getTenant` (paso 2); `fmtTelefono` muestra "11 3311-1686" sin 0/15/9 (paso 4); al cambiar de servicio
-  se descarta el horario elegido antes (paso 5).
+  se descarta el horario elegido antes (paso 5); `linkMapa` + `IconoPin` compartido en la landing,
+  `reprogramarTurno` lee `mensaje` y "reducir movimiento" para `om-stroke`/`om-shimmer` (paso 6).
 - **Deploy**: al mergear `feature/turnero-ux` a `main`, el backend del paso 2 y el front salen juntos. Si
   Vercel termina antes que Railway, "Cualquiera" puede dar 400 un minuto (el front muestra el error con
   "Reintentar"). El merge sigue el flujo habitual (`--no-ff` local, push solo de `main`, lo hace el
