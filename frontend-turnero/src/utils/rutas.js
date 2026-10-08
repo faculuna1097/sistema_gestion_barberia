@@ -37,3 +37,32 @@ export function extraerTokenGestion(pathname) {
   const token = pathname.slice(PREFIJO_GESTION.length).split('/')[0];
   return token || null;
 }
+
+/**
+ * RUTA_RESENA
+ * Ruta que redirige al formulario de reseñas de Google del local
+ * (`tenant.resena_url`). La usan el link de la landing y el QR de la puerta:
+ * pasar por una ruta propia permite cambiar el link de Google sin reimprimir
+ * el QR.
+ */
+export const RUTA_RESENA = `${RUTA_TURNERO}resena`;
+
+/**
+ * rutaResena
+ * Arma la ruta de reseñas con el origen del pedido (de dónde llegó el cliente).
+ * @param {string} origen - Ej: 'landing' o 'qr'
+ * @returns {string} Ej: '/turnos/resena?origen=landing'
+ */
+export function rutaResena(origen) {
+  return `${RUTA_RESENA}?${new URLSearchParams({ origen })}`;
+}
+
+/**
+ * esRutaResena
+ * True si el pathname es el de la ruta de reseñas (con o sin barra final).
+ * @param {string} pathname - window.location.pathname
+ * @returns {boolean}
+ */
+export function esRutaResena(pathname) {
+  return pathname === RUTA_RESENA || pathname === `${RUTA_RESENA}/`;
+}

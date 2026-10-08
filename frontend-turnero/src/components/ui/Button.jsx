@@ -7,13 +7,17 @@ import { theme } from '../../theme/tokens.js';
 /**
  * Button
  * Botón principal del sistema. Variantes: primary | ghost | secondary | danger.
+ * Con `href` se renderiza como link (`<a>`) con el mismo aspecto: para lo que
+ * navega a otra página (ej. WhatsApp, un mapa), según §5.5 del sistema de diseño.
  * @param {ReactNode} props.children - Contenido del botón
- * @param {Function} props.onClick - Handler de click
+ * @param {Function} [props.onClick] - Handler de click
  * @param {'primary'|'ghost'|'secondary'|'danger'} [props.variant='primary'] - Estilo visual
- * @param {boolean} [props.disabled=false]
+ * @param {boolean} [props.disabled=false] - Solo para el botón (un link no se deshabilita)
  * @param {boolean} [props.full=true] - Si ocupa el 100% del ancho del padre
  * @param {string} [props.type='button'] - type del <button> nativo
  * @param {string} [props.form] - id del <form> al que pertenece (para un submit fuera del form)
+ * @param {string} [props.href] - Si se pasa, se renderiza un <a> hacia esa dirección
+ * @param {boolean} [props.externo=false] - Con href: abre en otra pestaña
  * @param {Object} [props.style] - Override de estilos puntuales
  */
 function Button({
@@ -24,6 +28,8 @@ function Button({
   full = true,
   type = 'button',
   form,
+  href,
+  externo = false,
   style,
 }) {
   const [hover, setHover] = useState(false);
@@ -70,6 +76,23 @@ function Button({
       borderColor: theme.hairline,
     },
   };
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        target={externo ? '_blank' : undefined}
+        rel={externo ? 'noopener noreferrer' : undefined}
+        onClick={onClick}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        className="tt-presionable"
+        style={{ ...base, ...variants[variant], textDecoration: 'none', ...style }}
+      >
+        {children}
+      </a>
+    );
+  }
 
   return (
     <button

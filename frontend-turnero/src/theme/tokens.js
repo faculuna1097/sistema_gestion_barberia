@@ -37,6 +37,16 @@ export const theme = {
   warning:      '#B45309',
   warningSoft:  '#FEF3C7',
 
+  // Hero de la landing: texto claro sobre la foto del local (o sobre `accent`
+  // si no hay foto). El título va en `accentInk`.
+  // El degradado oscurece solo la franja del texto: de transparente a `ink` al
+  // 55 % a los 48 px y al 80 % abajo. Con eso el texto pasa AA aunque la foto
+  // sea blanca (peor caso medido: título 7:1, estado 6,8:1). Es la única
+  // excepción a "sin gradientes": funcional, no decorativo.
+  heroScrim:    'linear-gradient(180deg, rgba(9,9,11,0) 0px, rgba(9,9,11,0.55) 48px, rgba(9,9,11,0.8) 100%)',
+  heroInkSoft:  'rgba(255,255,255,0.85)',  // texto secundario del hero (estado abierto/cerrado)
+  heroSuccess:  '#4ADE80',  // punto "abierto" sobre fondo oscuro (green-400): el green-700 no se ve
+
   // ── Tipografía ────────────────────────────────────────────────
   // Tres familias capadas para mantener jerarquía limpia.
   body: '"Geist", "DM Sans", system-ui, -apple-system, sans-serif',

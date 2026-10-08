@@ -1,6 +1,7 @@
 // /frontend-turnero/src/utils/telefono.js
 // Helpers de teléfono: países del selector, topes de dígitos, conversión a/desde
-// E.164 y normalización de lo que entrega el autocompletado del navegador.
+// E.164, normalización de lo que entrega el autocompletado del navegador,
+// formato para mostrar y link de WhatsApp.
 // Funciones puras (sin React) para poder probarlas con Node.
 
 import { AsYouType, parsePhoneNumber, parsePhoneNumberFromString } from 'libphonenumber-js';
@@ -100,4 +101,37 @@ export function normalizarTelefonoCompleto(crudo, paisActual) {
     nacional = nacional.slice(1);
   }
   return { pais: p.country, nacional: new AsYouType(p.country).input(nacional) };
+}
+
+/**
+ * fmtTelefono
+ * Formatea un teléfono para mostrarlo (ej. el del local en la landing).
+ * Sin código de país se lo toma como argentino. Un número argentino va como se
+ * escribe hoy: característica + número, sin el 0 ni el 15 de la marcación
+ * nacional (que es lo que devuelve `formatNational`: "011 15-3311-1686") y sin
+ * el 9 de celular. Uno de otro país, en internacional (con su +código).
+ * @param {string} tel - Teléfono como está guardado (ej. "1133111686", "+541133111686" o "+5491133111686")
+ * @returns {string} Ej: "11 3311-1686". Si no se puede interpretar como un
+ *   número válido, el texto tal cual.
+ */
+export function fmtTelefono(tel) {
+  // parsePhoneNumberFromString no lanza: devuelve undefined si no puede parsear.
+  const p = parsePhoneNumberFromString(tel, 'AR');
+  if (!p || !p.isValid()) return tel;
+  if (p.country !== 'AR') return p.formatInternational();
+  // El número nacional de un celular trae el 9 adelante (11 dígitos): se saca,
+  // igual que en normalizarTelefonoCompleto.
+  let nacional = p.nationalNumber;
+  if (nacional.length === 11 && nacional.startsWith('9')) nacional = nacional.slice(1);
+  return new AsYouType('AR').input(nacional);
+}
+
+/**
+ * linkWhatsApp
+ * Arma el link para abrir un chat de WhatsApp con un número.
+ * @param {string} e164 - Número en formato E.164 (ej. "+5491133111686")
+ * @returns {string} Ej: "https://wa.me/5491133111686"
+ */
+export function linkWhatsApp(e164) {
+  return `https://wa.me/${e164.replace(/\D/g, '')}`;
 }

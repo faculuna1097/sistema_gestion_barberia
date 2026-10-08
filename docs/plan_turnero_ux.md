@@ -256,6 +256,51 @@ Del paso 3:
   - "Reducir movimiento" real del sistema (en el panel se verificó la regla CSS y la pausa simulando
     `matchMedia`) y el overlay del `ConfirmDialog` de la gestión.
 
+Del paso 4:
+- Resueltas en el paso (para registrarlas en el paso 7):
+  - Hallazgos 9 (skeleton con la silueta real: `LandingSkeleton`, en `Landing.jsx`, con los mismos
+    bloques; medido sin salto) y 10 (`fmtTelefono`).
+  - Los placeholders de imagen de `Landing` que usaban `mutedSoft` como texto ya no existen (deuda del
+    paso 3).
+- Para el sistema de diseño (paso 7):
+  - Tokens nuevos del hero: `heroScrim`, `heroInkSoft`, `heroSuccess`. El degradado del hero es una
+    excepción funcional a "sin gradientes" (§2): contraste del texto sobre la foto (peor caso, foto
+    blanca: título 7:1, estado 6,8:1).
+  - `Button` acepta `href` y `externo` y se renderiza como `<a>` (link con forma de botón). Sumarlo a
+    §6.1; sirve para el paso 6 ("Cómo llegar", calendario, "Ver o cambiar mi turno").
+- Para los pasos 5 y 6:
+  - Entradas desde la landing (`App.jsx#entrarDesdeLanding`): descartan la selección anterior (conservan
+    nombre, teléfono y email) y marcan `reserva.barberoPreelegido` si vino un barbero. Hoy, el servicio de
+    la landing va a Barbero, y el servicio elegido con barbero preelegido saltea Barbero. En el paso 5:
+    servicio de la landing → ¿Cuándo?; barbero de la landing → Servicio → ¿Cuándo? con ese chip elegido.
+    El flag sigue sirviendo para eso; el salteo de Barbero desaparece con la pantalla.
+  - Los estados vacíos de servicios y equipo en la landing usan `IconoAlerta`: los íconos de tijera y
+    persona son locales de `SeleccionServicio`/`SeleccionBarbero`, que no se tocaban acá. Si el paso 5 los
+    mueve a `components/ui`, usarlos también en la landing.
+- Deudas nuevas:
+  - Sin foto del local, el hero mide ~182 px contra los `45svh` del skeleton: salta al cargar, solo en
+    tenants sin foto. Aceptado: el skeleton no sabe si hay foto, y un bloque negro del 45 % sin nada
+    sería el espacio desperdiciado que el paso quería sacar.
+  - `actualizarFavicon` (`App.jsx`) apunta al logo aunque la imagen no cargue (favicon roto). La landing
+    sí cae a las iniciales. Menor.
+  - La gestión del turno espera el tenant de App antes de montarse: columna en blanco → skeleton de la
+    gestión → contenido. Antes mostraba la silueta de la landing (peor). Si molesta: que `GestionTurno`
+    pinte su skeleton mientras App carga, o que no dependa de App para el tenant.
+  - `HorarioSemanal` lista el horario semanal sin feriados: en un feriado el hero dice "Cerrado" pero la
+    fila de hoy muestra el horario normal. Ya pasaba antes.
+  - El `tel:` del local usa los dígitos tal cual están guardados (`tel:1133111686`), sin código de país:
+    anda marcando desde Argentina. Emparenta con la deuda del 9 de los celulares (paso 1).
+  - En desktop, si hay más barberos que ancho, la fila del equipo muestra la scrollbar horizontal de
+    10 px del estilo global de `index.css`. En iPhone no se ve (es superpuesta). Menor.
+  - Una dirección de dos renglones centra el ícono del pin entre los dos, en vez de alinearlo con el
+    primero. Menor.
+  - El archivo del QR para imprimir (en el plan, dentro de este paso) no estaba en el prompt del paso 4:
+    queda pendiente.
+- Para la prueba manual en celulares reales:
+  - El alto del hero (`45svh`) y el degradado sobre la foto real dentro del navegador de Instagram.
+  - Los links con `target="_blank"` (Maps, WhatsApp, reseña) dentro del navegador de Instagram: si abren
+    en la misma vista o afuera, y si `wa.me` abre la app de WhatsApp.
+
 ## Pasos de ejecución
 
 Flujo orquestador: un chat arma los prompts y revisa el diff; un chat ejecutor + un commit por paso, en
@@ -269,7 +314,8 @@ navegador** con `vite preview` (puerto fuera de 5173–5176, solo 127.0.0.1) y l
    `/dias-disponibles`, `whatsapp` y `resena_url` en `getTenant`.
 3. ✅ **Front base**: identidad, navegación con historial + transiciones, datos compartidos en App,
    helpers, limpieza (hallazgos 6–8).
-4. **Landing vidriera** (hallazgos 9–10) + link de reseñas, ruta `/turnos/resena` y archivo del QR.
+4. ✅ **Landing vidriera** (hallazgos 9–10) + link de reseñas y ruta `/turnos/resena`. El archivo del QR lo
+   genera el orquestador cuando el dueño pase el link de reseñas.
 5. **¿Cuándo?**: `SelectorDiaHorario` + `SeleccionCuando` + reprogramación de la gestión + barra de
    progreso (hallazgos 11–12).
 6. **Datos y confirmación + éxito + calendario** (éxito y gestión) + reintento del 409 (hallazgos
