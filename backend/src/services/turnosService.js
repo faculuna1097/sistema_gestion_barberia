@@ -11,6 +11,7 @@ import { crearEvento, cancelarEvento } from './googleCalendar.js';
 import { enviarConfirmacion, enviarCancelacion, construirContextoMail } from './mail/mailer.js';
 import { TZ, ANTELACION_MINIMA_MINUTOS } from '../utils/constantes.js';
 import { registrarCorte } from './cortesService.js';
+import { suspensionSolapaSql } from './suspensionesService.js';
 
 // ─── Helpers compartidos ─────────────────────────────────────────────────────
 
@@ -73,37 +74,63 @@ export const upsertCliente = async (tenantId, { nombre, telefono, email }) => {
   return result.rows[0].id;
 };
 
+// Mensaje del 409 cuando el horario ya no se puede reservar (otro turno o una
+// suspensión). Lo comparten insertarTurno y reprogramarTurno (controllers/turnero.js).
+export const MENSAJE_SLOT_OCUPADO = 'El slot elegido ya no está disponible';
+
+/**
+ * Arma el error tipado que los controllers mapean a 409.
+ * @returns {Error} error con code 'SLOT_OCUPADO'
+ */
+const errorSlotOcupado = () => {
+  const slotError = new Error(MENSAJE_SLOT_OCUPADO);
+  slotError.code = 'SLOT_OCUPADO';
+  return slotError;
+};
+
 /**
  * Inserta un turno en la DB. Captura la violación del constraint EXCLUDE GIST
  * (código 23P01) y la devuelve como error tipado en vez de propagarla.
+ *
+ * Tampoco inserta si el barbero tiene una suspensión vigente (rango efectivo) que
+ * se superpone: el chequeo va en la misma sentencia (INSERT ... SELECT ... WHERE
+ * NOT EXISTS), así no hay ventana entre leer y escribir dentro de este request.
+ * Queda la del TOCTOU sistémico con una suspensión creada en el mismo instante
+ * (auditoria_2026-07.md). Si no inserta, tira el mismo SLOT_OCUPADO.
  * @param {Object} datos
  * @param {string} datos.origenCreacion - Quién lo crea: 'turnero' | 'barbero' | 'admin'
  * @param {string|null} [datos.origenLink=null] - Por qué link llegó el cliente
  *   al turnero (`turno.origen_link`, ej. 'instagram'), ya normalizado con
  *   `normalizarOrigen`. Solo lo manda el turnero público.
  * @returns {Promise<{ turno_id: string, token_gestion: string }>}
- * @throws {{ code: 'SLOT_OCUPADO' }} si hay solapamiento
+ * @throws {{ code: 'SLOT_OCUPADO' }} si se superpone con otro turno o con una suspensión
  */
 export const insertarTurno = async ({
   tenantId, clienteId, barberoId, servicioId, inicioDT, finDT, origenCreacion, origenLink = null,
 }) => {
   const token_gestion = crypto.randomUUID();
+  let result;
   try {
-    const result = await query(
+    // Los casts son explícitos: en un INSERT ... SELECT Postgres no siempre
+    // deduce el tipo de los parámetros a partir de la columna destino.
+    result = await query(
       `INSERT INTO turno
          (tenant_id, cliente_id, barbero_id, servicio_id, inicio, fin,
           estado, origen_creacion, token_gestion, origen_link)
-       VALUES ($1, $2, $3, $4, $5, $6, 'reservado', $7, $8, $9)
+       SELECT $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::timestamptz, $6::timestamptz,
+              'reservado', $7::text, $8::text, $9::text
+       WHERE NOT EXISTS (
+         SELECT 1 FROM barbero_suspension bs
+         WHERE bs.tenant_id = $1::uuid AND bs.barbero_id = $3::uuid
+           AND ${suspensionSolapaSql('bs', '$5::timestamptz', '$6::timestamptz')}
+       )
        RETURNING id`,
       [tenantId, clienteId, barberoId, servicioId,
        inicioDT.toISO(), finDT.toISO(), origenCreacion, token_gestion, origenLink]
     );
-    return { turno_id: result.rows[0].id, token_gestion };
   } catch (err) {
     if (err.code === '23P01') {
-      const slotError = new Error('El slot elegido ya no está disponible');
-      slotError.code = 'SLOT_OCUPADO';
-      throw slotError;
+      throw errorSlotOcupado();
     }
     // Backstop de carrera: FK compuesto (tenant_id, barbero_id|servicio_id)
     // violado. El controller ya valida barbero y servicio antes del insert, pero
@@ -116,6 +143,12 @@ export const insertarTurno = async ({
     }
     throw err;
   }
+
+  // Sin filas: el NOT EXISTS encontró una suspensión vigente que se superpone.
+  if (result.rows.length === 0) {
+    throw errorSlotOcupado();
+  }
+  return { turno_id: result.rows[0].id, token_gestion };
 };
 
 /**

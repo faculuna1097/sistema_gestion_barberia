@@ -98,6 +98,17 @@ rationale explícito** (abajo) — no es trabajo olvidado, es deuda evaluada y a
    inválidos que más importan (doble turno, referencia cross-tenant), y el helper
    de stock compensa best-effort. El residual es corrupción improbable bajo carrera
    estrecha, no fuga ni DoS.
+   - **Reserva vs. suspensión/descanso (agregado 2026-10-15, `plan_app_barbero.md`
+     2.1).** La reserva (`insertarTurno`, el `UPDATE` de `reprogramarTurno`) chequea
+     las suspensiones en la misma sentencia (`NOT EXISTS`), y `crearSuspension`
+     cancela los turnos que pisa en la misma sentencia que la inserta (CTEs). Queda
+     una ventana de milisegundos: si una reserva y una suspensión (o un descanso) del
+     mismo barbero se escriben exactamente a la vez, ninguna ve a la otra (las dos
+     sentencias corren con su propia foto de la DB, sin la fila que la otra todavía
+     no commiteó) y quedan superpuestas. Ningún constraint lo impide: un `EXCLUDE`
+     no compara filas de dos tablas distintas. Mismo rationale que el resto del
+     punto: el cierre duro es una función almacenada o un lock por barbero. El
+     residual es un turno sobre un descanso que el barbero ve en su Agenda.
 2. **Idempotency keys para los INSERT no idempotentes (residual de 4.2).** `turno`,
    `venta` y `gasto` se insertan sin clave de idempotencia; un retry tras un ack
    perdido podría duplicar la fila. **Por qué se difiere:** el turno ya está

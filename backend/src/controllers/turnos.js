@@ -138,7 +138,7 @@ export const crearTurnoAdmin = async (req, res) => {
       });
     } catch (err) {
       if (err.code === 'SLOT_OCUPADO') {
-        console.warn('[turnos] crearTurnoAdmin — slot ya reservado');
+        console.warn('[turnos] crearTurnoAdmin — slot ocupado (turno o suspensión)');
         return res.status(409).json({ error: err.message });
       }
       if (err.code === 'REFERENCIA_INVALIDA') {

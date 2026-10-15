@@ -13,7 +13,7 @@ router.get('/', getSuspensiones);
 // POST   /api/admin/suspensiones
 router.post('/', postSuspension);
 
-// DELETE /api/admin/suspensiones/:id
+// DELETE /api/admin/suspensiones/:id  (libera, no borra: ver deleteSuspension)
 router.delete('/:id', deleteSuspension);
 
 export default router;

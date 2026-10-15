@@ -832,8 +832,11 @@ function TabSuspensiones({ barbero }) {
 /**
  * FilaSuspension
  * Card de una suspensión: rango de fechas + motivo opcional + botón eliminar.
+ * Las que cargó el administrador (origen 'admin') no muestran el botón: el
+ * barbero no las puede liberar (el backend responde 403 igual).
  */
 function FilaSuspension({ suspension, onEliminar }) {
+  const puedeEliminar = suspension.origen !== 'admin';
   return (
     <Card padding={12}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -867,26 +870,28 @@ function FilaSuspension({ suspension, onEliminar }) {
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={onEliminar}
-          aria-label="Eliminar suspensión"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 44,
-            height: 44,
-            background: 'transparent',
-            border: 'none',
-            borderRadius: theme.radiusSm,
-            cursor: 'pointer',
-            color: theme.muted,
-            flexShrink: 0,
-          }}
-        >
-          <Trash2 size={16} strokeWidth={1.75} aria-hidden="true" />
-        </button>
+        {puedeEliminar && (
+          <button
+            type="button"
+            onClick={onEliminar}
+            aria-label="Eliminar suspensión"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 44,
+              height: 44,
+              background: 'transparent',
+              border: 'none',
+              borderRadius: theme.radiusSm,
+              cursor: 'pointer',
+              color: theme.muted,
+              flexShrink: 0,
+            }}
+          >
+            <Trash2 size={16} strokeWidth={1.75} aria-hidden="true" />
+          </button>
+        )}
       </div>
     </Card>
   );

@@ -17,8 +17,9 @@ import { enviarCancelacion, enviarReprogramacion, construirContextoMail } from '
 import {
   calcularDuracionServicio, upsertCliente, insertarTurno, enriquecerTurno,
   armarLinkGestion, sincronizarCalendarCreacion, notificarConfirmacion,
-  inicioPosteriorAhora,
+  inicioPosteriorAhora, MENSAJE_SLOT_OCUPADO,
 } from '../services/turnosService.js';
+import { suspensionSolapaSql } from '../services/suspensionesService.js';
 import { barberoActivoEnTenant, listarBarberosActivos } from '../services/barberosService.js';
 import { obtenerHorarioCrudo, validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { obtenerFeriados, existeFeriado } from '../services/feriadosService.js';
@@ -345,7 +346,7 @@ export const crearTurno = async (req, res) => {
       });
     } catch (err) {
       if (err.code === 'SLOT_OCUPADO') {
-        console.warn('[turnero] crearTurno — slot ya reservado (constraint 23P01)');
+        console.warn('[turnero] crearTurno — slot ocupado (turno o suspensión)');
         return res.status(409).json({ error: err.message });
       }
       if (err.code === 'REFERENCIA_INVALIDA') {
@@ -496,7 +497,8 @@ export const cancelarTurno = async (req, res) => {
  * reprogramarTurno
  * Cambia inicio/fin del turno. El constraint EXCLUDE GIST también aplica
  * al UPDATE: si el nuevo rango choca con otro turno reservado del mismo
- * barbero, devuelve 409.
+ * barbero, devuelve 409. Lo mismo si choca con una suspensión vigente del
+ * barbero: el UPDATE lleva un NOT EXISTS y no escribe nada.
  *
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @param {string} req.params.token
@@ -561,18 +563,32 @@ export const reprogramarTurno = async (req, res) => {
       return res.status(422).json({ codigo: 'feriado', mensaje: 'El negocio está cerrado por feriado ese día' });
     }
 
-    // ── UPDATE con captura de 23P01 ────────────────────────────────────────
+    // ── UPDATE con captura de 23P01 y sin pisar suspensiones ───────────────
+    // El chequeo de suspensión va en la misma sentencia (NOT EXISTS) y compara
+    // contra el barbero del propio turno. Sin filas actualizadas = la pisaba
+    // (el turno existe: lo acabamos de leer).
+    let updateRes;
     try {
-      await query(
-        `UPDATE turno SET inicio = $1, fin = $2 WHERE id = $3 AND tenant_id = $4`,
+      updateRes = await query(
+        `UPDATE turno SET inicio = $1, fin = $2
+         WHERE id = $3 AND tenant_id = $4
+           AND NOT EXISTS (
+             SELECT 1 FROM barbero_suspension bs
+             WHERE bs.tenant_id = turno.tenant_id AND bs.barbero_id = turno.barbero_id
+               AND ${suspensionSolapaSql('bs', '$1::timestamptz', '$2::timestamptz')}
+           )`,
         [inicioDT.toISO(), finDT.toISO(), r.id, req.tenant_id]
       );
     } catch (err) {
       if (err.code === '23P01') {
         console.warn('[turnero] reprogramarTurno — slot ya reservado (constraint 23P01)');
-        return res.status(409).json({ error: 'El slot elegido ya no está disponible' });
+        return res.status(409).json({ error: MENSAJE_SLOT_OCUPADO });
       }
       throw err;
+    }
+    if (updateRes.rowCount === 0) {
+      console.warn('[turnero] reprogramarTurno — el nuevo horario pisa una suspensión | turno_id:', r.id);
+      return res.status(409).json({ error: MENSAJE_SLOT_OCUPADO });
     }
     console.log('[turnero] reprogramarTurno — turno actualizado | turno_id:', r.id);
 

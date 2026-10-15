@@ -2,15 +2,34 @@
 // Controller del backoffice para suspensiones de barberos.
 // Thin wrapper con scoping por rol. Cobertura: plan_turnero_v2.md sección 5.
 
-import { listarSuspensiones, crearSuspension, eliminarSuspension } from '../services/suspensionesService.js';
+import { listarSuspensiones, crearSuspension, liberarSuspension } from '../services/suspensionesService.js';
 import { armarLinkTurnero } from '../services/turnosService.js';
+import { esFechaISO } from '../utils/validarFecha.js';
+import { TIPOS_SUSPENSION } from '../utils/constantes.js';
 
 /**
- * GET /api/admin/suspensiones?barbero_id=X
- * Si rol=barbero, devuelve solo las propias (ignora barbero_id del query).
- * @returns {JSON} array de suspensiones futuras
+ * GET /api/admin/suspensiones?barbero_id=X&desde=YYYY-MM-DD&hasta=YYYY-MM-DD&tipo=suspension|descanso
+ * Todos los parámetros son opcionales. Sin desde/hasta, las que todavía no
+ * terminaron (comportamiento original). Si rol=barbero, devuelve solo las propias
+ * (ignora barbero_id del query).
+ * @returns {JSON} array de suspensiones con su rango efectivo (ver listarSuspensiones)
  */
 export const getSuspensiones = async (req, res) => {
+  const { desde, hasta, tipo } = req.query;
+  if (desde !== undefined && !esFechaISO(desde)) {
+    return res.status(400).json({ error: 'desde debe ser una fecha YYYY-MM-DD válida' });
+  }
+  if (hasta !== undefined && !esFechaISO(hasta)) {
+    return res.status(400).json({ error: 'hasta debe ser una fecha YYYY-MM-DD válida' });
+  }
+  // Formato YYYY-MM-DD: comparar los strings equivale a comparar las fechas.
+  if (desde && hasta && hasta < desde) {
+    return res.status(400).json({ error: 'hasta debe ser igual o posterior a desde' });
+  }
+  if (tipo !== undefined && !TIPOS_SUSPENSION.includes(tipo)) {
+    return res.status(400).json({ error: `tipo debe ser uno de: ${TIPOS_SUSPENSION.join(', ')}` });
+  }
+
   try {
     let barberoId;
     if (req.rol === 'barbero') {
@@ -19,7 +38,7 @@ export const getSuspensiones = async (req, res) => {
       barberoId = req.query.barbero_id;
     }
 
-    const suspensiones = await listarSuspensiones(req.tenant_id, barberoId);
+    const suspensiones = await listarSuspensiones(req.tenant_id, { barberoId, desde, hasta, tipo });
     res.json(suspensiones);
   } catch (err) {
     console.error('[suspensiones] Error en getSuspensiones:', err);
@@ -82,22 +101,33 @@ export const postSuspension = async (req, res) => {
 
 /**
  * DELETE /api/admin/suspensiones/:id
- * Elimina la suspensión. No recupera turnos cancelados.
- * Si rol=barbero, solo puede eliminar las propias.
- * @returns {JSON} { ok: true }
+ * Libera la suspensión (no la borra): completa liberada_en/liberada_por. Si está
+ * en curso, termina en este momento. No recupera turnos cancelados.
+ * Path y verbo se mantienen por compatibilidad con los dos fronts; el renombre a
+ * POST .../:id/liberar está anotado en plan_app_barbero.md.
+ * Si rol=barbero, solo puede liberar las propias, y no las cargadas por el admin.
+ * @returns {JSON} 200 { ok: true, suspension } | 403 origen admin | 404 | 409 ya liberada o terminada
  */
 export const deleteSuspension = async (req, res) => {
   const barberoId = req.rol === 'barbero' ? req.barbero_id : null;
+  const rol = req.rol === 'barbero' ? 'barbero' : 'admin';
 
   try {
-    await eliminarSuspension(req.params.id, req.tenant_id, barberoId);
-    console.log('[suspensiones] deleteSuspension completado | suspension_id:', req.params.id);
-    res.json({ ok: true });
+    const suspension = await liberarSuspension(req.params.id, req.tenant_id, rol, barberoId);
+    console.log('[suspensiones] deleteSuspension — suspensión liberada | suspension_id:', req.params.id, '| por:', rol);
+    res.json({ ok: true, suspension });
   } catch (err) {
     if (err.code === 'NO_ENCONTRADA') {
       return res.status(404).json({ error: err.message });
     }
+    if (err.code === 'ORIGEN_ADMIN') {
+      console.warn('[suspensiones] deleteSuspension — barbero intentó liberar una suspensión del admin | suspension_id:', req.params.id);
+      return res.status(403).json({ error: err.message });
+    }
+    if (err.code === 'YA_LIBERADA' || err.code === 'YA_TERMINADA') {
+      return res.status(409).json({ error: err.message });
+    }
     console.error('[suspensiones] Error en deleteSuspension:', err);
-    res.status(500).json({ error: 'Error al eliminar suspensión' });
+    res.status(500).json({ error: 'Error al liberar la suspensión' });
   }
 };

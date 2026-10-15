@@ -11,6 +11,7 @@
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { listarBarberosActivos } from './barberosService.js';
+import { finEfectivoSql, suspensionSolapaSql } from './suspensionesService.js';
 import { TZ, ANTELACION_MINIMA_MINUTOS, DIAS_MAXIMOS_RANGO_DISPONIBILIDAD } from '../utils/constantes.js';
 
 /**
@@ -227,13 +228,14 @@ const cargarDatosAgenda = async ({ tenantId, servicioId, barberoIds, desde, hast
          AND fin    > $3`,
       [tenantId, ids, inicioRango, finRango]
     ),
+    // Rango efectivo: una suspensión liberada (o terminada antes) solo bloquea
+    // hasta liberada_en, y si se liberó antes de empezar no bloquea nada.
     query(
-      `SELECT barbero_id, desde, hasta
-       FROM barbero_suspension
-       WHERE tenant_id = $1
-         AND barbero_id = ANY($2::uuid[])
-         AND desde < $4
-         AND hasta > $3`,
+      `SELECT bs.barbero_id, bs.desde, ${finEfectivoSql('bs')} AS hasta
+       FROM barbero_suspension bs
+       WHERE bs.tenant_id = $1
+         AND bs.barbero_id = ANY($2::uuid[])
+         AND ${suspensionSolapaSql('bs', '$3', '$4')}`,
       [tenantId, ids, inicioRango, finRango]
     ),
     query(

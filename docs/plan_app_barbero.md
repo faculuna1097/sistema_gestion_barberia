@@ -8,7 +8,7 @@ Creado: 2026-10-15.
 
 | # | Feature | Estado |
 |---|---|---|
-| 1 | Grilla de slots y descansos en la Agenda | Planificada |
+| 1 | Grilla de slots y descansos en la Agenda | En curso: Fase 1 y 2.1–2.4 hechas (2026-10-15), sin deploy |
 | 2 | Planillas: cortes con turno vs. sin turno | Hecha (2026-10-15), sin deploy |
 
 ---
@@ -65,14 +65,14 @@ ALTER TABLE barbero_suspension
 Branch: `feature/descansos-agenda`, hijo de `feature/turnero-ux`, para mergear todo junto
 a `main`. Cada fase se verifica antes de pasar a la siguiente.
 
-#### Fase 1 — DB
+#### Fase 1 — DB ✅ (2026-10-15)
 
 1. Migración de arriba (la ejecuta el usuario en el SQL editor de Supabase).
 2. `SQL_Schema.md` actualizado.
 
-#### Fase 2 — Backend
+#### Fase 2 — Backend (2.1–2.4 ✅ 2026-10-15; 2.5 y 2.6 pendientes)
 
-**2.1 Cerrar el agujero de la reserva sobre una suspensión** (deuda abierta en
+**2.1 ✅ Cerrar el agujero de la reserva sobre una suspensión** (deuda abierta en
 `estado_actual.md`). Hoy `POST /api/turnero/turnos`, `/reprogramar` y
 `POST /api/admin/turnos` no validan suspensiones: un cliente que cargó los horarios antes
 de que el barbero marcara el descanso puede reservar igual.
@@ -85,7 +85,7 @@ de que el barbero marcara el descanso puede reservar igual.
 - Actualizar la deuda en `estado_actual.md`: el punto de las suspensiones queda cerrado;
   sigue abierto lo del bloque horario y la grilla de slots.
 
-**2.2 `crearSuspension` atómico.** Hoy cancela los turnos afectados (con mail y Calendar)
+**2.2 ✅ `crearSuspension` atómico.** Hoy cancela los turnos afectados (con mail y Calendar)
 y **después** inserta la suspensión. Si el INSERT falla, los clientes quedan cancelados y
 notificados sin que exista la suspensión. Como no podemos usar `BEGIN/COMMIT`
 (convenciones §6), se resuelve con **una sola sentencia** usando CTEs que modifican datos,
@@ -109,19 +109,47 @@ SELECT (SELECT row_to_json(nueva) FROM nueva) AS suspension,
 - El flujo de 409 con `confirmar_cancelacion` no cambia.
 - La sentencia no es idempotente: va con `{ reintentar: false }`.
 
-**2.3 `listarSuspensiones` con rango.** Hoy solo devuelve las que terminan en el futuro.
+**2.3 ✅ `listarSuspensiones` con rango.** Hoy solo devuelve las que terminan en el futuro.
 - Parámetros opcionales `desde`/`hasta` (fechas `YYYY-MM-DD` en TZ Argentina) y `tipo`.
 - Sin parámetros mantiene el comportamiento actual (futuras), así los dos fronts que lo
   usan no cambian.
 - Excluye las liberadas antes de empezar; en las demás devuelve el rango efectivo.
 
-**2.4 Liberar en vez de borrar.** `DELETE /api/admin/suspensiones/:id` pasa a completar
+**2.4 ✅ Liberar en vez de borrar.** `DELETE /api/admin/suspensiones/:id` pasa a completar
 `liberada_en = now()` y `liberada_por = rol`, en vez de `DELETE`.
 - Si el rol es barbero y la fila tiene `origen = 'admin'` → 403 (D9).
 - Si ya terminó o ya fue liberada → 409.
 - El path y el verbo se mantienen para no romper a los dos fronts. Evaluar renombrarlo a
   `POST .../:id/liberar` (lo que hace ya no es un DELETE); recomendado, pero toca los
   dos fronts.
+- **Pendiente (para la Fase 4 / 5.2):** el renombre a `POST .../:id/liberar` y los textos
+  de los dos fronts, que todavía dicen "Eliminar suspensión" / "no se puede deshacer"
+  (`Gestion.jsx` y `SubPanelAusencias`). En el paso de backend solo se ocultó el botón en
+  la app del barbero para las suspensiones con `origen = 'admin'`.
+
+**Cómo quedó 1 y 2.1–2.4 (2026-10-15), desvíos del plan:**
+- **Migración:** `barbero_suspension_rango_valido` (`hasta > desde`) ya existía en la DB sin
+  estar en `SQL_Schema.md`; se sacó del `ALTER`. Se sumó
+  `barbero_suspension_liberada_completa`: `liberada_en` y `liberada_por` van las dos o ninguna.
+- **Helper del rango efectivo:** `finEfectivoSql(alias)` y `suspensionSolapaSql(alias, ini, fin)`
+  en `suspensionesService`. La condición de superposición incluye `desde < fin_efectivo`: sin
+  eso, una liberada antes de empezar podía figurar como superpuesta. Lo usan
+  `cargarDatosAgenda`, `listarSuspensiones`, `insertarTurno`, el `UPDATE` de
+  `reprogramarTurno` y `liberarSuspension`.
+- **2.2:** el `INSERT` del CTE lleva `WHERE $confirmar OR NOT EXISTS (turno reservado en el
+  rango)`. Sin eso, una reserva que entra entre la lectura y la escritura se cancelaba (y se
+  avisaba al cliente) sin que nadie lo confirmara; ahora ese caso vuelve al 409 con la lista.
+  Los datos para mail/Calendar se leen después, por los ids que devolvió el `UPDATE`. El
+  `SELECT` final es `FROM nueva` (no `row_to_json`) para que las fechas sigan llegando como
+  `Date`. Los avisos están en try/catch por turno: un fallo ya no termina en 500 con la
+  suspensión creada.
+- **2.3:** `hasta` es el **fin efectivo** y se suma `hasta_programada` (el original), además de
+  `tipo`, `liberada_en`, `liberada_por`. Sin `desde` el rango arranca ahora; sin `hasta`, no
+  tiene fin. Las liberadas antes de empezar quedan fuera: el registro de la 5.3 va a necesitar
+  verlas (endpoint de planilla o un flag `incluir_liberadas`).
+- **2.4:** un `UPDATE` con todas las reglas en el `WHERE`; si no actualiza, una lectura elige
+  el código (404 / 403 / 409). Un id con formato inválido da 404 en vez de 500.
+- `TIPOS_SUSPENSION` en `utils/constantes.js`; `MENSAJE_SLOT_OCUPADO` en `turnosService`.
 
 **2.5 Crear descanso.** `POST /api/admin/descansos` con `{ desde, hasta }`. El barbero
 crea los propios (se fuerza `req.barbero_id`) y el admin puede pasar `barbero_id`.
@@ -318,11 +346,6 @@ salir antes que los fronts, o junto con ellos: sin `con_turno`, los fronts no mu
 **Tolerancia a un backend sin el campo:** si `con_turno` no viene, los dos fronts no muestran el
 origen. En el panel aparece "—" y la app del barbero no muestra la pill. Antes se rotulaban
 todos los cortes como "Sin turno". Pasó en la prueba visual, con el backend sin actualizar.
-
-### Orden respecto de la Feature 1
-
-Es independiente de la Feature 1 y mucho más chica (sin cambios de schema). Se puede
-hacer antes, en el mismo branch.
 
 ---
 

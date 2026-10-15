@@ -183,9 +183,20 @@ CREATE TABLE public.barbero_suspension (
   motivo text,
   origen text NOT NULL DEFAULT 'admin'::text CHECK (origen = ANY (ARRAY['admin'::text, 'barbero'::text, 'whatsapp'::text])),
   created_at timestamp with time zone DEFAULT now(),
+  -- tipo, liberada_en y liberada_por: agregadas el 2026-10-15 (plan_app_barbero.md,
+  -- Feature 1). Un descanso es una fila con tipo = 'descanso'. Las filas no se borran:
+  -- liberar (o terminar antes) completa liberada_en/liberada_por.
+  -- Rango efectivo: [desde, LEAST(hasta, COALESCE(liberada_en, hasta))); vacío si se
+  -- liberó antes de empezar. El backend lo calcula en un solo lugar
+  -- (suspensionesService, RANGO_EFECTIVO_SQL).
+  tipo text NOT NULL DEFAULT 'suspension'::text CHECK (tipo = ANY (ARRAY['suspension'::text, 'descanso'::text])),
+  liberada_en timestamp with time zone,
+  liberada_por text CHECK (liberada_por = ANY (ARRAY['admin'::text, 'barbero'::text])),
   CONSTRAINT barbero_suspension_pkey PRIMARY KEY (id),
   CONSTRAINT barbero_suspension_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
-  CONSTRAINT barbero_suspension_barbero_id_fkey FOREIGN KEY (barbero_id) REFERENCES public.barbero(id)
+  CONSTRAINT barbero_suspension_barbero_id_fkey FOREIGN KEY (barbero_id) REFERENCES public.barbero(id) ON DELETE CASCADE,
+  CONSTRAINT barbero_suspension_rango_valido CHECK (hasta > desde),
+  CONSTRAINT barbero_suspension_liberada_completa CHECK ((liberada_en IS NULL) = (liberada_por IS NULL))
 );
 CREATE TABLE public.turno (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
