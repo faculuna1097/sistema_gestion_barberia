@@ -1,0 +1,300 @@
+# Plan — App del barbero (`frontend-barbero`)
+
+Plan de trabajo de los cambios a la app del barbero. Cada feature tiene su sección con
+decisiones, fases y verificación. Cuando una feature termina, su núcleo de decisiones
+se archiva en un `decisiones_*.md` y acá queda una línea con el estado.
+
+Creado: 2026-10-15.
+
+| # | Feature | Estado |
+|---|---|---|
+| 1 | Grilla de slots y descansos en la Agenda | Planificada |
+| 2 | Planillas: cortes con turno vs. sin turno | Planificada |
+
+---
+
+## Feature 1 — Grilla de slots y descansos en la Agenda
+
+### Objetivo
+
+1. **Grilla:** la Agenda del día se divide visualmente por slots (línea punteada gris
+   entre cada uno), para que el barbero vea dónde entra cada turno y qué huecos tiene.
+2. **Descanso:** el barbero toca uno o más slots libres y futuros y los marca como
+   descanso. El turnero deja de ofrecerlos y nadie puede reservar ahí. Caso de uso: "no
+   tengo turno en la próxima hora, me voy a comer sin que me lo saquen 5 minutos antes".
+3. **Control del dueño:** cada descanso queda registrado (también los liberados), y el
+   dueño los ve en su panel.
+
+### Decisiones tomadas
+
+| # | Decisión | Por qué |
+|---|---|---|
+| D1 | El descanso es una fila de **`barbero_suspension` con `tipo = 'descanso'`**. No hay tabla nueva ni filas en `turno`. | Para el sistema, descanso y suspensión significan lo mismo ("este barbero no atiende en este rango"). La tabla ya existe, ya tiene permisos por rol y el algoritmo de disponibilidad ya la excluye. Meterlo en `turno` ensuciaría recordatorios, Calendar, reportes y cortes. |
+| D2 | Solo para ese día. Sin recurrencia. | Es una herramienta del momento. Lo recurrente se resuelve partiendo el bloque de horario semanal. |
+| D3 | Solo slots **libres y futuros**: el slot es seleccionable si su inicio es posterior a ahora y no se superpone con un turno reservado ni con otra suspensión. | El slot en curso no hace falta: el turnero ya no lo ofrece. |
+| D4 | Selección: tocar un slot lo selecciona; tocar el de abajo (o el de arriba) agranda la selección; tocar uno no pegado **reinicia** la selección desde ese; tocar uno ya seleccionado lo saca **junto con lo que queda debajo** (la selección es siempre un bloque continuo). | Un descanso = un rango continuo = una fila. |
+| D5 | Sin motivo: siempre "Descanso". | Pedido del usuario. |
+| D6 | Un descanso **nunca cancela turnos**. Si al guardarlo algún slot ya está ocupado, el servidor responde 409 y el front recarga. | A diferencia de las suspensiones, el descanso es solo sobre huecos libres. |
+| D7 | **Sin borrado físico.** Liberar un descanso (o una suspensión) completa `liberada_en`/`liberada_por`; la fila queda. | Sin esto no hay registro para el dueño. Además alinea la tabla con convenciones §7 ("ABMs — sin DELETE"). |
+| D8 | **Liberar vs. terminar antes.** Si el descanso no empezó, "Liberar" lo anula entero. Si está en curso, "Terminar descanso" lo corta en el momento y los slots que quedan se vuelven a ofrecer. Las dos cosas son el mismo dato: `liberada_en = now()`, y el fin efectivo es `LEAST(hasta, liberada_en)`. | Una sola columna cubre los dos casos y conserva el rango original para el registro. |
+| D9 | El barbero **no puede liberar** suspensiones creadas por el dueño (`origen = 'admin'`). | Hoy sí puede (ver Fase 2.4). |
+| D10 | Control del dueño: **(a) registro visible ahora**, **(b) tope configurable de minutos por día como fase posterior**, solo si se ve abuso real. Sin aviso por mail (genera ruido). | Ver "Registro de descansos" en la Fase 5. |
+| D11 | La Agenda también muestra las **suspensiones** del día (ausencias), distinguidas de los descansos. | Hoy el barbero ve el día "libre" aunque esté suspendido. |
+### Modelo de datos
+
+```sql
+ALTER TABLE barbero_suspension
+  ADD COLUMN tipo text NOT NULL DEFAULT 'suspension'
+    CHECK (tipo IN ('suspension', 'descanso')),
+  ADD COLUMN liberada_en  timestamptz,
+  ADD COLUMN liberada_por text CHECK (liberada_por IN ('admin', 'barbero')),
+  ADD CONSTRAINT barbero_suspension_rango_valido CHECK (hasta > desde);
+```
+
+- **Rango efectivo** de una fila: `[desde, LEAST(hasta, COALESCE(liberada_en, hasta)))`.
+  Si `liberada_en <= desde`, el rango es vacío: fue liberada antes de empezar y no bloquea
+  nada. Esta expresión se escribe en **un solo lugar** del backend (helper SQL en
+  `suspensionesService`) y la reusan todas las lecturas.
+- Antes del `ADD CONSTRAINT`, verificar que no haya filas con `hasta <= desde`.
+- Va directo a producción (hay una sola DB). Las columnas tienen default o aceptan NULL,
+  así que el código actual sigue funcionando hasta que se despliegue el nuevo.
+- Actualizar `SQL_Schema.md`.
+
+### Fases
+
+Branch: `feature/descansos-agenda`, hijo de `feature/turnero-ux`, para mergear todo junto
+a `main`. Cada fase se verifica antes de pasar a la siguiente.
+
+#### Fase 1 — DB
+
+1. Migración de arriba (la ejecuta el usuario en el SQL editor de Supabase).
+2. `SQL_Schema.md` actualizado.
+
+#### Fase 2 — Backend
+
+**2.1 Cerrar el agujero de la reserva sobre una suspensión** (deuda abierta en
+`estado_actual.md`). Hoy `POST /api/turnero/turnos`, `/reprogramar` y
+`POST /api/admin/turnos` no validan suspensiones: un cliente que cargó los horarios antes
+de que el barbero marcara el descanso puede reservar igual.
+- `insertarTurno` (`turnosService.js`) pasa a `INSERT ... SELECT ... WHERE NOT EXISTS
+  (suspensión vigente que se superpone)`. Es una sola sentencia; si no inserta nada,
+  tira el mismo `SLOT_OCUPADO` que ya se mapea a 409.
+- Lo mismo en el `UPDATE` de `reprogramarTurno`.
+- Queda la ventana de milisegundos si el descanso y la reserva se crean exactamente a la
+  vez: es el TOCTOU sistémico ya aceptado (`auditoria_2026-07.md`). Documentarlo ahí.
+- Actualizar la deuda en `estado_actual.md`: el punto de las suspensiones queda cerrado;
+  sigue abierto lo del bloque horario y la grilla de slots.
+
+**2.2 `crearSuspension` atómico.** Hoy cancela los turnos afectados (con mail y Calendar)
+y **después** inserta la suspensión. Si el INSERT falla, los clientes quedan cancelados y
+notificados sin que exista la suspensión. Como no podemos usar `BEGIN/COMMIT`
+(convenciones §6), se resuelve con **una sola sentencia** usando CTEs que modifican datos,
+que Postgres ejecuta de forma atómica:
+
+```sql
+WITH nueva AS (
+  INSERT INTO barbero_suspension (...) VALUES (...) RETURNING *
+), canceladas AS (
+  UPDATE turno SET estado = 'cancelado', cancelado_en = now(), cancelado_por = 'suspension'
+  WHERE <reservados del barbero que se superponen con el rango>
+  RETURNING id
+)
+SELECT (SELECT row_to_json(nueva) FROM nueva) AS suspension,
+       (SELECT array_agg(id) FROM canceladas) AS turnos_cancelados;
+```
+
+- Los efectos externos (mail al cliente, borrar evento de Calendar) se hacen **después**,
+  best-effort y solo sobre los ids que devolvió el `UPDATE`. Así nunca se notifica una
+  cancelación que no ocurrió.
+- El flujo de 409 con `confirmar_cancelacion` no cambia.
+- La sentencia no es idempotente: va con `{ reintentar: false }`.
+
+**2.3 `listarSuspensiones` con rango.** Hoy solo devuelve las que terminan en el futuro.
+- Parámetros opcionales `desde`/`hasta` (fechas `YYYY-MM-DD` en TZ Argentina) y `tipo`.
+- Sin parámetros mantiene el comportamiento actual (futuras), así los dos fronts que lo
+  usan no cambian.
+- Excluye las liberadas antes de empezar; en las demás devuelve el rango efectivo.
+
+**2.4 Liberar en vez de borrar.** `DELETE /api/admin/suspensiones/:id` pasa a completar
+`liberada_en = now()` y `liberada_por = rol`, en vez de `DELETE`.
+- Si el rol es barbero y la fila tiene `origen = 'admin'` → 403 (D9).
+- Si ya terminó o ya fue liberada → 409.
+- El path y el verbo se mantienen para no romper a los dos fronts. Evaluar renombrarlo a
+  `POST .../:id/liberar` (lo que hace ya no es un DELETE); recomendado, pero toca los
+  dos fronts.
+
+**2.5 Crear descanso.** `POST /api/admin/descansos` con `{ desde, hasta }`. El barbero
+crea los propios (se fuerza `req.barbero_id`) y el admin puede pasar `barbero_id`.
+Validaciones (todas en el servidor, que es la fuente de verdad):
+- Mismo día, `desde` posterior a ahora y `hasta > desde`.
+- Cada slot del rango es un inicio real de la grilla del barbero (alineado a su bloque
+  horario y a `duracion_slot_minutos`), dentro de un bloque y libre.
+- Para no duplicar el algoritmo: reusar `computarSlotsDeUnDia` de
+  `disponibilidadService` con `duracionServicioMin = duracionSlotMin` y
+  `umbralMinimo = ahora`. El rango es válido si todos sus inicios de slot están en el
+  resultado. Requiere que `cargarDatosAgenda` acepte no tener servicio (hoy
+  `servicioId` es obligatorio).
+- El INSERT lleva `WHERE NOT EXISTS (turno reservado que se superpone)`, el espejo de 2.1.
+  Si no inserta → 409.
+- `tipo = 'descanso'`, `origen` según el rol, `motivo = null`.
+
+**2.6 Endpoint de la Agenda.** `GET /api/admin/agenda?fecha=YYYY-MM-DD` (barbero: el
+propio; admin: `barbero_id`). Devuelve en una sola respuesta:
+- `turnos` del día (lo que hoy devuelve `getTurnos`);
+- `suspensiones` del día, de los dos tipos, con su rango efectivo, `tipo` y `origen`;
+- `grilla`: los inicios de slot de todos los bloques del barbero ese día, cada uno con
+  `{ inicio, fin, estado: 'libre' | 'turno' | 'descanso' | 'suspension' }`;
+- `duracion_slot_minutos` y el horario del local ese día (para el rango del timeline).
+
+Así la grilla y qué es seleccionable lo calcula **el backend con el mismo algoritmo del
+turnero**, y el front solo dibuja. Una llamada en vez de cuatro (importa por la latencia
+a Supabase, ver `performance_frontends.md`). Lo único que el front chequea por su cuenta
+es `inicio > ahora`, porque el tiempo corre con la pantalla abierta.
+
+**Verificación de la fase:** controllers con `req`/`res` simulados contra el tenant demo,
+sin servidor ni Bruno. Casos: reserva sobre un descanso → 409; descanso sobre un turno →
+409; descanso desalineado / fuera de bloque / pasado → 400; liberar uno propio, uno
+ajeno, uno del admin; terminar uno en curso y ver que el slot siguiente vuelve a
+`/disponibilidad`; suspensión con turnos afectados → cancela y crea en una sola
+sentencia.
+
+#### Fase 3 — Front del barbero: grilla
+
+- `Agenda.jsx` pasa a consumir `GET /admin/agenda` (reemplaza `getTurnos` + `getTenant`
+  en esta pantalla).
+- Línea punteada gris (`theme.hairlineSoft`, `dashed`) en cada inicio de slot, desde
+  `OFFSET_IZQ`. Las líneas de hora en punto quedan como están (sólidas, con label).
+- Descanso: bloque neutro (`surfaceAlt` con rayado sutil) con el texto "Descanso".
+  Suspensión: mismo estilo con "Ausencia" (+ motivo si hay).
+- Los turnos ya ocupan todos los slots que les tocan (se dimensionan por `inicio`/`fin`).
+- Leer `sistema_de_disenio.md` antes de tocar UI.
+
+#### Fase 4 — Front del barbero: selección y descanso
+
+- Los slots `libre` y futuros son tocables (área táctil ≥ 44px: a 80px/hora y slots de
+  30 min da 40px; ajustar `PX_POR_HORA` si hace falta).
+- Reglas de selección de D4. La selección se ve con un borde/fondo de acento.
+- Con algo seleccionado aparece un `StickyFooter`: "Marcar descanso · 13:00–14:00" +
+  "Cancelar". Confirma con `ConfirmDialog`.
+- Tocar un descanso propio abre un detalle con "Liberar" (si no empezó) o "Terminar
+  descanso" (si está en curso). Las suspensiones del admin se ven, pero sin acciones.
+- 409 al guardar → mensaje "Ese horario se acaba de ocupar" + recarga de la agenda.
+- La pestaña "Suspensiones" de `Gestion.jsx` lista solo `tipo = 'suspension'`.
+- La lógica de selección (pura, sin React) va a `utils/` con su propio comentario, porque
+  tiene reglas propias y conviene leerla aislada.
+
+#### Fase 5 — Panel de gestión (`frontend/`)
+
+**5.1 Agenda del día (`SeccionTurnero`, vista Agenda).** Dibujar los descansos y las
+ausencias en la columna de cada barbero, con el mismo estilo neutro que en la app del
+barbero. Click → detalle chico: rango, tipo, quién lo creó y cuándo. Es la vista operativa: el
+dueño mira el día y ve "Juan está de descanso 13–14".
+- Backend: `GET /admin/suspensiones?desde=&hasta=` sin `barbero_id` ya devuelve todas
+  (2.3).
+
+**5.2 Ausencias (`TabBarberos` → modal de agenda → "Ausencias").** Lista solo
+`tipo = 'suspension'`, para que los descansos no la ensucien. El borrar pasa a "Liberar"
+(2.4).
+
+**5.3 Registro de descansos (control, D10-a).** En **Planillas**, que es donde el dueño ya
+revisa a cada barbero por semana para pagarle:
+- Resumen: columna "Descansos" por barbero, con cantidad y tiempo total
+  (ej. `3 · 1 h 30 m`).
+- Modal de detalle del barbero: lista de los descansos de la semana, cada uno con
+  - día y rango (ej. `mar 14 · 13:00–14:00`);
+  - duración efectiva;
+  - **antelación**: cuánto antes de empezar lo marcó (`desde − created_at`);
+  - **estado**: cumplido / liberado antes de empezar / terminado antes (y cuándo).
+- Indicadores de la semana: total de minutos de descanso y **% de la jornada** (minutos de
+  descanso sobre minutos de bloque horario de la semana), para comparar barberos con
+  jornadas distintas.
+- Backend: extender el endpoint de planilla (o uno nuevo `/admin/planilla/descansos`) con
+  los descansos de la semana por barbero.
+- Alternativa evaluada: un sub-tab "Descansos" en el modal de `TabBarberos`. Descartada
+  como lugar principal porque ahí se configura, no se controla.
+
+### Fuera de alcance / posterior
+
+- **Tope de minutos de descanso por día** (D10-b): columna en `tenant` y validación en
+  2.5. Solo si el registro muestra abuso.
+- Descansos recurrentes (D2).
+- Validar en el servidor que el `inicio` de un turno caiga en la grilla y dentro del
+  bloque del barbero (el resto de la deuda de 2.1).
+
+---
+
+## Feature 2 — Planillas: cortes con turno vs. sin turno
+
+### Objetivo
+
+En las planillas (la del barbero, `MiPlanilla`, y la del dueño, `SeccionPlanillas`) se
+distingue qué corte vino de un turno y cuál fue un cliente de la calle, sin turno.
+
+La Agenda **no** muestra los cortes sin turno: su fuente es el turnero (turnos y
+descansos). Se descartó marcar los cortes hechos durante un descanso: un barbero que
+quiera inventar cortes lo puede hacer desde el iPad igual, así que la marca no agregaba
+control real.
+
+### Cómo está hoy
+
+- El dato ya existe: `corte.turno_id` es `NULL` en los cortes sin turno (los que se
+  registran desde el iPad sin turno previo).
+- `detalleSemanal` (`planillaService.js`) ya hace `LEFT JOIN turno`, pero solo para sacar
+  `cliente_nombre`. No devuelve si el corte tenía turno. Hoy la única pista indirecta es
+  que los cortes sin turno no traen nombre de cliente.
+- `resumenSemanal` cuenta todos los cortes juntos (`cantidad_cortes`).
+- Las dos planillas consumen los mismos endpoints (`/api/admin/planilla` y
+  `/api/admin/planilla/resumen`); el backend scopea al barbero cuando el rol es barbero.
+  Un cambio en el backend sirve para los dos fronts.
+
+### Decisiones
+
+| # | Decisión | Por qué |
+|---|---|---|
+| P1 | El backend devuelve el dato explícito: `con_turno` (boolean, `c.turno_id IS NOT NULL`) en cada corte del detalle, y `cortes_con_turno` / `cortes_sin_turno` en el resumen (`COUNT(c.id) FILTER (WHERE ...)`). | Que el front no lo infiera de `cliente_nombre`: es una regla implícita que se rompe sola si mañana un corte sin turno guarda un cliente. Sin cambios de schema. |
+| P2 | `cantidad_cortes` se mantiene (es la suma de los dos). | No rompe nada de lo que ya lo usa (comisión fija, KPIs, Excel). |
+
+### Fases
+
+#### Fase A — Backend
+
+- `detalleSemanal`: sumar `con_turno` al SELECT y al objeto de cada corte.
+- `resumenSemanal`: sumar `cortes_con_turno` y `cortes_sin_turno` por barbero y en
+  `totales`.
+- Verificación: controllers con `req`/`res` simulados contra el tenant demo, con una semana
+  que tenga cortes de los dos tipos; los dos conteos suman `cantidad_cortes`.
+
+#### Fase B — App del barbero (`MiPlanilla`)
+
+- En la fila de cada corte, junto a la pill de forma de pago, una pill de origen:
+  "Turno" o "Sin turno" (estilo neutro, para no competir con la de forma de pago).
+- En el resumen de la semana, el número de cortes con el desglose
+  (ej. `12 cortes · 8 con turno · 4 sin turno`).
+
+#### Fase C — Panel de gestión (`SeccionPlanillas`)
+
+- Tab Detalle: columna "Origen" ("Turno" / "Sin turno") en la tabla.
+- Tab Resumen: columnas "Con turno" y "Sin turno" al lado de "Cortes", también en la fila
+  de totales.
+- Modal de detalle del barbero: el desglose en las cifras de la semana.
+- Excel de los dos tabs: columna "Origen" en el Detalle; "Con turno" y "Sin turno" en el
+  Resumen.
+
+**La UI de las fases B y C no está cerrada.** Lo de arriba (pills, columnas "Origen",
+"Con turno" / "Sin turno") es la primera propuesta. El usuario prefiere evaluar una
+alternativa: diferenciar los cortes por color en lugar de sumar columnas. Se decide con
+el usuario al llegar a esas fases, antes de escribir código. La fase A no depende de esa
+decisión: `con_turno` y los conteos sirven para cualquiera de las dos.
+
+Leer `sistema_de_disenio.md` antes de las fases B y C.
+
+### Orden respecto de la Feature 1
+
+Es independiente de la Feature 1 y mucho más chica (sin cambios de schema). Se puede
+hacer antes, en el mismo branch.
+
+---
+
+## Próximos cambios en la app del barbero
+
+_(Se agregan acá a medida que se definen.)_
