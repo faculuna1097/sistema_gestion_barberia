@@ -1,6 +1,6 @@
 # Ruta del proyecto - Sistema de Gestion de Barberia
 
-Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y actualizado por última vez el 2026-10-01 (árbol de `frontend/` regenerado: color de montos).
+Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y actualizado por última vez el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
 
 Este documento lista las carpetas y archivos del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP. Para mantenerlo, regenerar los arboles desde `git ls-files` en vez de parchearlos a mano.
 
@@ -31,12 +31,14 @@ docs/
 |-- convenciones_tecnicas.md
 |-- decisiones_acceso_barberos.md
 |-- decisiones_horario_atencion.md
+|-- decisiones_landing_ia.md
 |-- decisiones_login_operativo.md
 |-- decisiones_mail_entregabilidad.md
 |-- decisiones_mail_recordatorio.md
 |-- decisiones_movimientos_extra.md
 |-- decisiones_redisenio_panel_gestion.md
 |-- decisiones_turnero.md
+|-- decisiones_turnero_ux.md
 |-- deudas_tecnicas_frontend.md
 |-- estado_actual.md
 |-- onboarding.md
@@ -380,19 +382,14 @@ frontend-turnero/
 |-- vercel.json
 |-- vite.config.js
 |-- public/
-|   |-- favicon.png
-|   `-- icons.svg
+|   `-- favicon.png
 `-- src/
-    |-- App.css
     |-- App.jsx
     |-- index.css
     |-- main.jsx
-    |-- assets/
-    |   |-- hero.png
-    |   |-- react.svg
-    |   `-- vite.svg
     |-- components/
     |   `-- ui/
+    |       |-- AgregarAlCalendario.jsx
     |       |-- AvatarIniciales.jsx
     |       |-- Button.jsx
     |       |-- Card.jsx
@@ -400,33 +397,43 @@ frontend-turnero/
     |       |-- EmptyState.jsx
     |       |-- Field.jsx
     |       |-- IconoAlerta.jsx
+    |       |-- IconoPin.jsx
     |       |-- index.js
-    |       |-- MiniCalendario.jsx
     |       |-- PageContainer.jsx
     |       |-- Progress.jsx
+    |       |-- ResumenTurno.jsx
     |       |-- ScreenHeader.jsx
+    |       |-- SelectorDiaHorario.jsx
     |       |-- Skeleton.jsx
     |       |-- SlotChip.jsx
     |       |-- StatusPill.jsx
     |       |-- StickyFooter.jsx
     |       |-- SummaryRow.jsx
     |       `-- TopBar.jsx
+    |-- hooks/
+    |   |-- useDisponibilidad.js
+    |   |-- useEleccionConPausa.js
+    |   |-- useListaRemota.js
+    |   `-- useNavegacion.js
     |-- screens/
-    |   |-- Confirmacion.jsx
-    |   |-- DatosCliente.jsx
+    |   |-- ConfirmarTurno.jsx
     |   |-- GestionTurno.jsx
     |   |-- Landing.jsx
-    |   |-- SeleccionBarbero.jsx
-    |   |-- SeleccionFecha.jsx
-    |   |-- SeleccionHorario.jsx
-    |   `-- SeleccionServicio.jsx
+    |   |-- SeleccionCuando.jsx
+    |   |-- SeleccionServicio.jsx
+    |   `-- TurnoConfirmado.jsx
     |-- services/
     |   `-- api.js
     |-- theme/
     |   `-- tokens.js
     `-- utils/
+        |-- calendario.js
         |-- fecha.js
-        `-- formato.js
+        |-- formato.js
+        |-- mapa.js
+        |-- movimiento.js
+        |-- rutas.js
+        `-- telefono.js
 ```
 
 ## Frontend landing

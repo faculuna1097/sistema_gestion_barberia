@@ -23,6 +23,9 @@ CREATE TABLE public.tenant (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   nombre_negocio text NOT NULL,
   pin_admin text NOT NULL,
+  -- Claves que lee el código: recordatorio.activo (mail de recordatorio), whatsapp
+  -- (E.164) y resena_url (https, link de reseñas de Google) que expone el turnero.
+  -- Ver onboarding.md → Notas.
   configuracion jsonb DEFAULT '{}'::jsonb,
   activo boolean DEFAULT true,
   created_at timestamp with time zone DEFAULT now(),
@@ -200,6 +203,10 @@ CREATE TABLE public.turno (
   cancelado_en timestamp with time zone,
   cancelado_por text CHECK (cancelado_por = ANY (ARRAY['cliente'::text, 'barbero'::text, 'admin'::text, 'suspension'::text])),
   recordatorio_enviado_en timestamp with time zone,
+  -- Por qué link llegó el cliente al turnero (el ?origen= de la URL, ej. 'instagram',
+  -- 'qr'). Solo lo graba el turnero público; null si no vino o no cumple el formato
+  -- (la reserva no se rechaza). Agregada el 2026-10-08. No confundir con origen_creacion.
+  origen_link text CONSTRAINT turno_origen_link_formato CHECK (origen_link ~ '^[a-z0-9_-]{1,30}$'),
   CONSTRAINT turno_pkey PRIMARY KEY (id),
   CONSTRAINT turno_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
   CONSTRAINT turno_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.cliente(id),

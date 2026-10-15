@@ -2,7 +2,8 @@
 // Algoritmo de cálculo de slots disponibles para un (barbero, servicio, fecha)
 // y su variante "Cualquier barbero": la unión de los horarios de todos los
 // barberos activos, con el barbero que se asigna a cada horario.
-// Cobertura: plan_turnero_v2.md sección 7 y plan_turnero_ux.md (Backend).
+// Decisiones: docs/decisiones_turnero.md y docs/decisiones_turnero_ux.md
+// ("Decisiones técnicas — backend").
 //
 // Toda la aritmética de fechas se hace con luxon en TZ Argentina para evitar
 // confusiones con UTC al sumar minutos y cruzar bloques horarios.

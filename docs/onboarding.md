@@ -167,6 +167,9 @@ Debe entrar al panel de admin sin errores. Si rebota con 401 o 402, algo está m
 Pasarle al cliente:
 
 - URL de acceso: `https://<subdominio>.barbermanager.app`
+- Link del turnero para la bio de Instagram: `https://<subdominio>.barbermanager.app/turnos?origen=instagram`
+  (el `?origen=` queda guardado en cada turno, en `turno.origen_link`; para otro canal, otro valor:
+  minúsculas, dígitos, `-` o `_`, hasta 30)
 - Usuario y password operativos (para el iPad del local)
 - PIN inicial (recordarle que lo cambie desde Gestión → Seguridad apenas entre)
 - El manual del cliente (ver `manual_cliente.md` cuando exista)
@@ -266,6 +269,39 @@ WHERE subdominio = '<subdominio>';
 > todavía no existe. Si en el futuro hay claves anidadas a preservar (ej. `hora_envio`), cambiar a `jsonb_set`.
 > Ojo: si los barberos del tenant tienen `email = NULL`, sus turnos no sincronizan con Calendar,
 > pero los **clientes** igual reciben el recordatorio → flip deliberado.
+
+### Cargar el WhatsApp y el link de reseñas de Google del local
+
+El turnero muestra el botón de WhatsApp y el link "Dejanos tu reseña en Google" **solo si el dato
+está cargado** en `tenant.configuracion`. Sin dato, no aparecen. Se ven en la próxima carga del
+turnero, sin invalidar el caché (el caché del middleware no guarda `configuracion`).
+
+```sql
+-- Ver estado actual
+SELECT subdominio, configuracion FROM tenant WHERE subdominio = '<subdominio>';
+
+-- WhatsApp: en E.164, y un celular argentino CON el 9 (+549 + característica sin 0 + número sin 15)
+UPDATE tenant
+SET configuracion = COALESCE(configuracion, '{}'::jsonb) || '{"whatsapp": "+5491133111686"}'::jsonb
+WHERE subdominio = '<subdominio>';
+
+-- Link de reseñas: el que da el dueño desde "Pedir reseñas" de su Perfil de Empresa de Google
+UPDATE tenant
+SET configuracion = COALESCE(configuracion, '{}'::jsonb) || '{"resena_url": "https://g.page/r/XXXX/review"}'::jsonb
+WHERE subdominio = '<subdominio>';
+
+-- SACAR una clave (deja de mostrarse)
+UPDATE tenant SET configuracion = configuracion - 'whatsapp' WHERE subdominio = '<subdominio>';
+```
+
+- `getTenant` valida los dos: `whatsapp` tiene que ser E.164 (`+` y de 8 a 15 dígitos) y
+  `resena_url` una URL `https://`. Si no cumplen, el turnero los recibe en `null` y no los muestra
+  (no da error): si después de cargarlos no aparecen, revisar el formato.
+- **QR de la puerta:** apunta a `https://<subdominio>.barbermanager.app/turnos/resena?origen=qr`, no
+  al link de Google. Esa ruta redirige a `resena_url`: si Google cambia el link, se actualiza el dato
+  y el cartel impreso sigue andando. Sin `resena_url`, la ruta lleva a la landing del turnero.
+- **Reglas de Google:** no ofrecer nada a cambio de la reseña y no pedírsela solo a los clientes
+  contentos (el link es para todos).
 
 ### Cargar el email de un barbero (activa la sync con Google Calendar)
 

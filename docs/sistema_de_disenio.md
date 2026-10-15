@@ -38,18 +38,21 @@ prioridades**.
 
 ## 1. Fuente de verdad
 
-La implementación de referencia vive en **`frontend-turnero/src/`**:
+La implementación de referencia vive en **`frontend/src/`** (el panel de
+gestión) desde el 2026-10-08. Antes era el turnero, pero el turnero pasó a
+tener identidad propia (§3.8) y ya no sirve de molde para los demás fronts.
 
 | Carpeta | Contenido |
 |---|---|
-| `theme/tokens.js` | Tokens (colores, tipo, spacing, radii). Una sola fuente. |
-| `utils/formato.js` | `fmtPesos`. |
-| `utils/fecha.js` | `fmtFechaCorta`, `fmtFechaLarga`, `fmtHora`, `fmtFechaHora`, `generarProximosDias`, `esHoy`, `diaSemana`, etc. |
+| `theme/tokens.js` | Tokens de "Luz" (colores, tipo, spacing, radii). Una sola fuente. |
+| `utils/formato.js` | `fmtPesos` y otros formatos. |
+| `utils/fecha.js` | Formatos y cálculos de fechas. |
 | `components/ui/` | Primitivos React reutilizables (ver inventario abajo). |
 | `index.css` | Reset + carga de Geist + `@keyframes`. |
 
 **Cualquier chat que toque UI debería leer estos archivos antes de escribir
-código nuevo.** No re-inventar.
+código nuevo.** No re-inventar. Para una tarea en el turnero, la referencia
+son los mismos archivos de `frontend-turnero/src/` más §3.8.
 
 ---
 
@@ -58,12 +61,12 @@ código nuevo.** No re-inventar.
 Lista corta de prohibiciones explícitas. Alinea rápido a cualquier chat nuevo.
 
 - ❌ `alert()`, `confirm()`, `prompt()` nativos. Usar `ConfirmDialog`.
-- ❌ CSS classes globales. Excepción: `index.css` para reset / fonts / keyframes. La landing suma unas pocas clases `om-` porque se pre-renderiza (ver §4.1).
-- ❌ Múltiples colores de acento. Solo `theme.accent` (indigo).
+- ❌ CSS classes globales. Excepción: `index.css` para reset / fonts / keyframes. La landing suma unas pocas clases `om-` porque se pre-renderiza, y el turnero unas `tt-` de movimiento (ver §4.1).
+- ❌ Múltiples colores de acento. Un solo `theme.accent` por front: indigo en el panel, el barbero y la landing; casi negro en el turnero (§3.8).
 - ❌ Indigo en un monto. El color de la plata sigue §3.1.1.
-- ❌ Sombras pesadas, glow, gradientes.
+- ❌ Sombras pesadas, glow, gradientes. Única excepción: el degradado del hero del turnero, que oscurece la foto para que se lea el texto (§3.8).
 - ❌ Glassmorphism, blurs decorativos.
-- ❌ Animaciones decorativas. Solo animaciones funcionales (`om-fade` al cambiar pantalla, `om-pop` en success).
+- ❌ Animaciones decorativas. Solo animaciones funcionales (cambio de pantalla, la tilde del éxito, el skeleton; en el turnero, las de §3.8). Todas respetan `prefers-reduced-motion`.
 - ❌ `<p>Cargando...</p>` o `<p>Error</p>`. Usar `Skeleton` / `EmptyState`.
 - ❌ `onPointerDown` en botones. Siempre `onClick`.
 - ❌ Tamaños/colores hardcodeados. Todo desde `theme`.
@@ -74,7 +77,9 @@ Lista corta de prohibiciones explícitas. Alinea rápido a cualquier chat nuevo.
 
 ## 3. Tema visual fijado: **Luz**
 
-Inspirado en Stripe / Clerk. Neutral claro + acento indigo.
+Inspirado en Stripe / Clerk. Neutral claro + acento indigo. Lo usan el panel
+de gestión, la app del barbero y la landing. El turnero parte de Luz con
+identidad propia en blanco y negro: ver §3.8.
 
 ### 3.1 Colores
 - Neutros: `zinc` (`bg`, `surface`, `surfaceAlt`, `ink`, `inkSoft`, `muted`, `mutedSoft`, `hairline`, `hairlineSoft`).
@@ -177,6 +182,52 @@ Reglas para íconos:
 - `strokeWidth` típico **1.5–1.75**; `2` para íconos que deben pesar (acción primaria).
 - **Nunca decorativos**. Si un ícono no aporta información o reduce cognición, sacarlo.
 
+### 3.8 Turnero: identidad propia
+
+Decidido el 2026-10-05 en el rediseño del turnero (núcleo de decisiones en
+[`decisiones_turnero_ux.md`](./decisiones_turnero_ux.md)). El turnero lo usa
+el **cliente final** de la barbería, no la barbería: no tiene por qué verse como
+el panel. Casi todos entran desde el link de Instagram, en iPhone.
+
+**Qué cambia respecto de Luz** (`frontend-turnero/src/theme/tokens.js`):
+- Fondo blanco (`bg: #FFFFFF`).
+- Acento casi negro: `accent` zinc-900 (`#18181B`), `accentHover` zinc-800
+  (`#27272A`; sobre negro, un filtro de brillo no se nota) y `accentSoft` neutro
+  (`#F4F4F5`). El anillo de foco de `index.css` usa el mismo negro.
+- Tokens del hero de la landing: `heroScrim` (el degradado), `heroInkSoft` y
+  `heroSuccess` (el punto "abierto" sobre fondo oscuro).
+
+**Qué se mantiene**: Geist, la escala de tamaños, pesos, spacing y radios, los
+estados (`success`, `danger`, `warning`) y todas las reglas de §2, §4 y §5. Sin
+tema por barbería: la identidad es del turnero, no de cada tenant.
+
+**El degradado del hero** es la única excepción a "sin gradientes": oscurece
+solo la franja del texto sobre la foto del local para que el texto pase AA
+aunque la foto sea blanca (peor caso medido: título 7:1, estado 6,8:1).
+
+**Movimiento** (clases `tt-` de `index.css`, documentadas ahí):
+- `tt-pantalla`: entrada de cada pantalla, ~240 ms ease-out. La dirección sale
+  de la navegación: adelante entra desde la derecha, atrás desde la izquierda.
+- `tt-presionable`: se achica apenas al tocar (`:active`).
+- `tt-aparecer`: fundido del contenido que reemplaza a un skeleton.
+- `tt-escalonado`: listas que aparecen escalonadas (20 ms por ítem, tope 200 ms).
+- La opción tocada queda marcada ~150 ms antes de avanzar
+  (`useEleccionConPausa`, `utils/movimiento.js`).
+- La tilde del éxito entra sin rebote (`om-pop`).
+- Con `prefers-reduced-motion: reduce`, todo queda en un fundido corto o nada:
+  sin pausa al elegir, la tilde ya dibujada y el skeleton quieto.
+- Las entradas usan fill-mode `backwards`, no `both`: si retuvieran el
+  `transform`, el contenedor pasaría a ser bloque contenedor de los
+  `position: fixed` y el overlay de `ConfirmDialog` quedaría atado a la columna.
+
+**Íconos**: el turnero no usa Lucide (§3.7). Sus pocos íconos son SVG inline
+con el mismo trazo (1.5–1.75, `currentColor`); los que se repiten viven en
+`components/ui/` (`IconoAlerta`, `IconoPin`).
+
+**Lo que no se copia**: `tokens.js` e `index.css` del turnero divergen a
+propósito del resto. Un front nuevo copia los del panel (§8), nunca los del
+turnero, y un cambio en Luz no se replica en el turnero sin decidirlo.
+
 ---
 
 ## 4. Convenciones de implementación
@@ -227,6 +278,14 @@ resuelve con CSS, en un bloque comentado de su `index.css` con prefijo `om-`:
 El corte es 768 px. En la landing no se usa `useIsDesktop`: el layout responsive
 va por CSS o por flex-wrap inline. El resto de los estilos sigue inline. Detalle
 en [`decisiones_landing_ia.md`](./decisiones_landing_ia.md).
+
+**Excepción del turnero (2026-10-08)**: los keyframes del movimiento y los
+pseudo-estados (`:active`) no se pueden escribir inline. Van en un bloque
+comentado de su `index.css` con prefijo `tt-` (`tt-pantalla`, `tt-presionable`,
+`tt-aparecer`, `tt-escalonado`; ver §3.8). Las animaciones que se aplican con
+`animation` inline (`om-pop`, `om-stroke`, `om-shimmer`, `om-dialog-in`) no se
+pueden pisar con una regla: para "reducir movimiento" se redefinen sus
+keyframes dentro del `@media`.
 
 **Caveat conocido**: esta decisión escala bien para mobile/turnero, pero
 no está validada para tablas densas del panel de gestión. Ver §9.8.
@@ -369,6 +428,10 @@ El primitivo `Field` debe garantizar:
 
 Si construís un input que no usa `Field`, replicá estas tres reglas.
 
+El `Field` del turnero las cumple desde el 2026-10-08 (con `useId`), y
+`CampoTelefono` (local de `ConfirmarTurno`) también. En el panel y el barbero,
+sin verificar.
+
 ### 5.3 Contraste
 
 Objetivo mínimo: **WCAG AA** (4.5:1 para texto normal, 3:1 para texto ≥18 px
@@ -411,18 +474,18 @@ pantalla.
 
 | Componente | Para qué |
 |---|---|
-| `Button` | 4 variantes: `primary`, `secondary`, `ghost`, `danger`. |
+| `Button` | 4 variantes: `primary`, `secondary`, `ghost`, `danger`. En el turnero acepta `href` (+ `externo`) y se dibuja como `<a>`, y `form` para un submit fuera del `<form>`. |
 | `Card` | Contenedor con border, hover, selected, accesible con teclado. |
-| `Field` | Input + label + helper + error invalid. |
+| `Field` | Input + label + helper + error invalid. En el turnero acepta `name`, `autoComplete`, `inputMode` y `ref`. |
 | `TopBar` | Header con "← Volver" + slot derecho opcional. |
 | `ScreenHeader` | Eyebrow + title + subtitle. |
-| `StickyFooter` | Footer anclado abajo con border-top, safe-area iOS. |
+| `StickyFooter` | Footer anclado abajo con border-top, safe-area iOS. No está en el panel: si un front nuevo lo necesita, se copia del barbero. |
 | `EmptyState` | Glyph + title + body + acción opcional. |
 | `Skeleton` | Bloque con shimmer. |
 | `StatusPill` | Pill chiquito con dot + label de estado. |
 | `PageContainer` | Wrapper raíz, max-width responsive, fondo lateral. |
 | `ConfirmDialog` | Modal de confirmación (ESC + click fuera + loading state). |
-| `AvatarIniciales` | Círculo con iniciales y tono determinístico por nombre. |
+| `AvatarIniciales` | Círculo con iniciales y tono determinístico por nombre (en el turnero, un tono neutro único). |
 | `SummaryRow` | Fila label/value con border-bottom sutil. |
 
 Propios del panel de gestión (`frontend/src/components/ui/`, no están en el
@@ -439,19 +502,27 @@ Balances y Planillas. Los colores de los montos y de sus barras siguen §3.1.1
 signo). Si algún día hace falta un gráfico de verdad (ejes,
 series temporales), se evalúa una librería cargada solo al usarla, como `xlsx`.
 
-### 6.2 Específicas del wizard de reserva (NO usar en otros fronts)
+### 6.2 Específicas del flujo de reserva (NO usar en otros fronts)
 
 | Componente | Por qué es exclusivo |
 |---|---|
-| `Progress` | Stepper "01/06" — hace sentido en wizards lineales, no en dashboards. |
-| `MiniCalendario` | Calendario 7× para elegir UNA fecha de N próximos días. Para gestión/dashboard, hace falta otro picker (con navegación de mes, multi-selección, etc). |
-| `SlotChip` | Chip de horario. Si el contexto cambia, repensar. |
+| `Progress` | Barra fina de 3 tramos (`role="progressbar"`, "Paso N de 3: X"). Tiene sentido en un flujo lineal corto, no en dashboards. |
+| `SelectorDiaHorario` | Grilla semanal de los próximos días (lunes a domingo, sin scroll) + los horarios del día elegido en una sola grilla. Solo dibuja: los datos los trae el hook `useDisponibilidad`. Lo usan "¿Cuándo?" y la reprogramación. Para gestión hace falta otro picker (navegación de mes, multi-selección). Reemplazó a `MiniCalendario` el 2026-10-08. |
+| `SlotChip` | Chip de horario, de alto fijo (`ALTO_SLOT`, 48) para que el skeleton no salte. |
+| `ResumenTurno` | Tarjeta del turno (día y hora, servicio, quién atiende, dirección). La comparten la confirmación y el éxito. |
+| `AgregarAlCalendario` | Botón "Agregar al calendario": `.ics` en iPhone/iPad/Mac y Google Calendar en el resto, con la otra opción como link. Lo usan el éxito y la gestión del turno. |
+
+Hooks del flujo (`frontend-turnero/src/hooks/`): `useNavegacion` (pila de
+pantallas integrada al historial, así el "atrás" del celular vuelve un paso),
+`useListaRemota` (servicios y barberos, cargados una vez en `App`),
+`useDisponibilidad` (días y horarios, descarta respuestas viejas) y
+`useEleccionConPausa` (la pausa de ~150 ms al elegir).
 
 ### 6.3 Propias de `frontend-barbero` (todavía no compartidas)
 
 Construidas en `frontend-barbero` durante su rediseño. Viven en su propio
-`components/ui/` y **aún no se promovieron** a la fuente de verdad del turnero
-(§7.5: un componente se comparte recién cuando un segundo front lo necesita).
+`components/ui/` y **aún no se promovieron** a la fuente de verdad (§7.5: un
+componente se comparte recién cuando un segundo front lo necesita).
 
 | Componente | Para qué |
 |---|---|
@@ -497,7 +568,7 @@ y querés "warning". **Agregá la variante al primitivo**, no crees `WarningButt
 ### 7.5 Necesito un componente que no existe en ningún front (ej. `DataTable`)
 
 1. Lo construís en el front que lo necesita primero, en `/components/ui/` de
-   ese front (no en turnero).
+   ese front.
 2. Si después otro front lo necesita, ver §8 (estrategia de duplicado).
 
 ---
@@ -507,15 +578,17 @@ y querés "warning". **Agregá la variante al primitivo**, no crees `WarningButt
 Hoy cada front tiene su propio `/src/components/ui/`. **Hasta nuevo aviso,
 la estrategia es duplicar**:
 
-**Lo que se copia de `frontend-turnero` a cualquier front nuevo**:
+**Lo que se copia de `frontend/` (el panel) a cualquier front nuevo**:
 - `theme/tokens.js` *(idéntico)*.
 - `utils/formato.js`, `utils/fecha.js` *(idénticos)*.
 - `index.css` *(idéntico; la landing suma sus clases `om-`, ver §4.1)*.
-- Los 13 primitivos universales (sección 6.1).
+- Los primitivos universales (sección 6.1). `StickyFooter`, del barbero.
 
 **Lo que NO se copia**:
-- `Progress`, `MiniCalendario`, `SlotChip` (wizard-only).
-- Cualquier componente específico de turnero (Landing, etc.).
+- Nada del turnero: sus tokens e `index.css` divergen a propósito (§3.8).
+- `Progress`, `SelectorDiaHorario`, `SlotChip`, `ResumenTurno`,
+  `AgregarAlCalendario` (solo del flujo de reserva).
+- Cualquier componente específico de una pantalla (Landing, etc.).
 
 Si en algún momento el dolor de mantener los duplicados es alto, evaluar
 mover todo a un paquete compartido (`packages/ui/`) con npm/pnpm
@@ -530,8 +603,8 @@ divergir** legítimamente cuando un front necesita capacidades que el
 otro no — esto **no es deuda técnica**.
 
 Ejemplos válidos de divergencia:
-- `Field` del admin acepta props HTML adicionales (`disabled`,
-  `autoComplete`, etc.) que el del turnero no necesita.
+- `Field` del admin acepta props HTML adicionales (`disabled`, etc.) que
+  el del turnero no necesita, y el del turnero acepta `ref` e `inputMode`.
 - `ConfirmDialog` del admin acepta `children` para mostrar detalle
   estructurado del recurso a eliminar; el del turnero no lo necesita
   (sus confirmaciones son más simples).
@@ -545,7 +618,8 @@ reflejar 1:1 lo del primer front. La consistencia que importa es
 
 **Cuándo sí es deuda real**: cuando los **estilos** divergen (un mismo
 primitivo se ve distinto entre fronts sin razón). Eso sí hay que
-reconciliarlo.
+reconciliarlo. El turnero es la excepción decidida: su acento y su fondo
+difieren a propósito (§3.8).
 
 ---
 
@@ -557,7 +631,7 @@ actualizá este doc.**
 1. ~~`App.jsx` del turnero — loading/error states pelados (`<p>Cargando...</p>`).~~ — **Resuelto**: la carga usa `Skeleton` y el error `EmptyState`.
 2. ~~`esDomingo` hardcodeado~~ — **Resuelto**: `MiniCalendario` grisa los días que el negocio no atiende y los feriados, leyendo `horario_atencion` + `feriados` de `GET /api/turnero/tenant`.
 3. ~~**Falta endpoint de disponibilidad por día (precisión por barbero).**~~ — **Resuelto**: el endpoint `GET /api/turnero/dias-disponibles` (`calcularDiasConDisponibilidad` en `disponibilidadService.js`) calcula, dado `barbero_id` + `servicio_id` + un rango de fechas, qué días tienen ≥1 slot reservable, con un set fijo de queries independiente del tamaño del rango. `MiniCalendario` ahora recibe `diasDisponibles` y grisa cualquier día que no esté en esa lista; se eliminó la lógica client-side de días cerrados/feriados (el backend pasó a ser la fuente única de qué día es reservable). Lo consumen `SeleccionFecha` y la reprogramación de `GestionTurno`.
-4. Cortes de turno (13:00 y 20:00) hardcodeados en `SeleccionHorario.jsx` — debería ser por tenant.
+4. ~~Cortes de turno (13:00 y 20:00) hardcodeados en `SeleccionHorario.jsx` — debería ser por tenant.~~ — **Sin objeto** (2026-10-08): "¿Cuándo?" muestra los horarios en una sola grilla, sin agrupar por mañana, tarde y noche.
 5. ~~Validación de teléfono solo AR (10 dígitos) hardcodeada en `DatosCliente.jsx`.~~ — **Resuelto**: reemplazada por `libphonenumber-js`. `DatosCliente` ahora tiene un selector de país (Argentina default + limítrofes + EE.UU.), formatea el número a medida que se escribe (`AsYouType`), valida por país (`isValidPhoneNumber`) y guarda el teléfono en formato E.164 (`parsePhoneNumber`). El backend no valida formato de teléfono, así que el cambio de formato guardado es seguro. El campo compuesto `[select país | input]` vive en el componente local `CampoTelefono` (no extiende el primitivo universal `Field`).
 6. ~~Catálogos (`servicios`, `barberos`) sin `ORDER BY` explícito en backend.~~ — **Resuelto**: servicios ordenan por precio y barberos por nombre (`controllers/turnero.js`, `barberos.js`, `servicios.js`).
 7. ~~`MiniCalendario` "2 semanas" hardcodeado~~ — **Resuelto**: el sublabel se deriva de `dias.length` como "N días".
@@ -565,6 +639,7 @@ actualizá este doc.**
 9. **Contraste WCAG no verificado** — `mutedSoft` sobre `surfaceAlt`, `inkSoft` sobre `bg`, blanco sobre `accent`. Auditar con WebAIM antes de release público. Medido en la landing (2026-10-01):
    - `mutedSoft` sobre blanco da ≈2.6:1. Por eso las notas al pie (`NotaAlPie`) pasaron a `muted` a 14 px: 4.8:1 sobre blanco y 4.6:1 sobre `bg`.
    - `muted` sobre `surfaceAlt` queda en ≈4.4:1, apenas debajo de AA. Le pasa a la nota de "números de ejemplo", que está en una sección `tone="alt"`.
+   - En el turnero (2026-10-08): `mutedSoft` sobre blanco da 2,56:1 y `muted` sobre `surfaceAlt` 4,40:1. `mutedSoft` ya no se usa como texto que haya que leer (solo en los días sin lugar de la grilla).
 10. ~~**Iconografía sin librería elegida**~~ — **Resuelto**: se eligió Lucide (`lucide-react`). Ver §3.7.
 11. ~~**`<html lang="es">`** — verificar que esté en `index.html` de cada front.~~ — **Resuelto**: presente en los cuatro fronts (verificado 2026-09-29).
 12. **Focus visible global** — auditar que todos los primitivos tengan estilo de `:focus-visible`. Hoy `Card` y `Button` sí; el resto, sin verificar.
@@ -572,10 +647,17 @@ actualizá este doc.**
 14. ~~**Rango horario del timeline hardcodeado**~~ — **Resuelto**: `Agenda.jsx` de `frontend-barbero` ya no usa `7:00`–`22:00` fijo. El rango se deriva por día con `calcularRangoHoras(horarioAtencion, fecha, turnos)`: trae `horario_atencion` del local (`getTenant()`, fetch best-effort una sola vez al montar) y muestra desde `apertura - 1h` hasta `cierre + 1h` del día visible (`floor`/`ceil` para líneas de hora prolijas con horarios no enteros como `10:30`). El rango se expande para que cualquier turno fuera de esa franja siga visible (clamp al min/max entre horario y turnos). Día cerrado: deriva de los turnos del día (±1h) o, sin turnos, cae al default `7`–`22` — mismo camino al que cae si `getTenant()` falla (red de seguridad). `HORA_INICIO`/`HORA_FIN`/`ALTO_TOTAL` pasaron de constantes de módulo a valores derivados por render que bajan por props a `Timeline`/`BloqueTurno`. (Emparenta con la deuda 4, aún abierta en el turnero.)
 15. **`getMisClientes` sin paginación** — la pantalla Clientes de `frontend-barbero` trae todos los clientes históricos del barbero y filtra en cliente. Con 500+ clientes, el render de cards con hover-state (ver deuda 8) puede sentirse lento. Mitigación: paginar el endpoint o virtualizar la lista.
 16. **Toast inline → flotante global.** El primitivo `Toast` es hoy inline / render-state (cada caller mantiene el estado y lo monta en su layout; ver §4.8). El **target** es un Toast **flotante, centrado y con auto-dismiss** servido por un provider global con API imperativa (`toast.show()`). Migrar implica: (1) crear el provider/portal + dispatcher; (2) migrar **todos** los call-sites inline actuales (`BloqueImagenes`, los 6 handlers de export de xlsx vía `errorExport`, y cualquier otro feedback efímero); (3) recién ahí poder centralizar el feedback de error de `cargarChunk`. Hasta entonces, el patrón vigente es el inline (§4.8).
+17. **Estilo de etiqueta "eyebrow" copiado a mano** (mono, 11 px, mayúsculas, `muted`) en unos diez lugares del turnero (`ScreenHeader`, `Field`, `CampoTelefono`, `SelectorDiaHorario`, `SeleccionCuando`, `GestionTurno`…). Candidato a un estilo compartido (ej. un primitivo `Eyebrow`). Visto en el rediseño del turnero (2026-10-08).
+18. **`index.css` repite a mano colores de `tokens.js`** (fondo, anillo de foco, scrollbar) porque el CSS no puede importar el JS; está comentado en cada lugar. Para una sola fuente: exponer los tokens como variables CSS. Visto en el turnero; como `index.css` se copia entre fronts (§8), seguramente pasa en todos.
+19. **Hover con `useState` en pantallas táctiles** (§4.2): iOS dispara `mouseenter` al tocar y el estado queda "pegado" hasta tocar otra cosa (borde gris en `Card`/`SlotChip`, `accentHover` en el primario). Casi no se nota porque la pantalla cambia, pero sí donde no se navega (chips de la reprogramación del turnero). Emparenta con #8: un `:hover` real dentro de `@media (hover: hover)` lo resolvería.
+20. **`Card` tiene `padding` por defecto 14**, fuera de la escala 4/8/12/16/24/32 (§3.3).
+21. **Touch target de los días de `SelectorDiaHorario`**: ~46 px de ancho en 375 px, pero ~41 px dentro de la tarjeta de la reprogramación y ~37 px en pantallas de 320 px, debajo de los 44 de §5.4 (el alto es 48). Al `MiniCalendario` le pasaba lo mismo.
 
 ---
 
-*Última actualización: 2026-10-01 — §3.1.1 nueva (color en montos: verde solo en resultados, rojo en salidas, ningún monto en indigo); §2 suma la prohibición; §3.1 corrige `success` a green-700 (es #15803D); §6.1 remite a §3.1.1.*
+*Última actualización: 2026-10-08 — rediseño del turnero: la fuente de verdad pasa a `frontend/src/` (§1); §3.8 nueva (identidad propia del turnero: acento casi negro, hero, movimiento `tt-`); §2, §4.1, §5.2, §6.1, §6.2 y §8 actualizados; deuda #4 sin objeto; deudas #17–#21 nuevas.*
+
+*2026-10-01 — §3.1.1 nueva (color en montos: verde solo en resultados, rojo en salidas, ningún monto en indigo); §2 suma la prohibición; §3.1 corrige `success` a green-700 (es #15803D); §6.1 remite a §3.1.1.*
 
 *2026-09-30 — §4.4 suma el patrón de fila de tabla clickeable; §6.1 suma los gráficos sin librería (`BarraProporcional`, `DesgloseMontos`).*
 

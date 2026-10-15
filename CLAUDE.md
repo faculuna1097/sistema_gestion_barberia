@@ -52,7 +52,7 @@ Léelos cuando vayas a escribir código por primera vez en una sesión, o cuando
 
 Excepción: podés leer los archivos `.md` de contexto general (los que están en este mapa de documentos) cuando sean **estrictamente necesarios** para la tarea que te pedí.
 
-**Excepción adicional para tareas de UI**: podés leer sin pedir permiso los archivos de la "fuente de verdad" del sistema de diseño (`frontend-turnero/src/theme/tokens.js`, `utils/formato.js`, `utils/fecha.js`, `components/ui/*`, `index.css`). Son referencia, no código que vayas a modificar sin avisar.
+**Excepción adicional para tareas de UI**: podés leer sin pedir permiso los archivos de la "fuente de verdad" del sistema de diseño (`frontend/src/theme/tokens.js`, `utils/formato.js`, `utils/fecha.js`, `components/ui/*`, `index.css`), y los mismos archivos del front en el que estés trabajando (ej. `frontend-turnero/src/…`, que tiene identidad propia). Son referencia, no código que vayas a modificar sin avisar.
 
 ### Mapa de documentos
 
@@ -69,6 +69,7 @@ Excepción: podés leer los archivos `.md` de contexto general (los que están e
 | `/docs/decisiones_mail_recordatorio.md` | **Archivado.** Núcleo de decisiones del mail de recordatorio (lote diario, noche anterior): modelo elegido, claim atómico, Railway Cron, opt-in. En producción. La activación opt-in en kingsai está pendiente en `estado_actual.md`. |
 | `/docs/decisiones_mail_entregabilidad.md` | **Archivado.** Núcleo de decisiones de la migración del mail a Resend (API HTTP vía fetch) + autenticación de dominio (SPF/DKIM/DMARC): por qué Resend, por qué dominio propio, capa de proveedor, progresión DMARC. En producción. Residuales time-gated (DMARC, Outlook) en `estado_actual.md`. |
 | `/docs/decisiones_turnero.md` | **Archivado.** Núcleo de decisiones del turnero (3 frontends, disponibilidad al vuelo, EXCLUDE GIST sin transacción, Calendar Arquitectura A, endpoints por audiencia). En producción. |
+| `/docs/decisiones_turnero_ux.md` | **Archivado.** Núcleo de decisiones del rediseño UX/UI del turnero (landing vidriera, flujo de 3 pasos con "Cualquier barbero", identidad en blanco y negro, navegación con historial, calendario, reseñas, origen del cliente, por qué no hay login). Merge y deploy pendientes en `estado_actual.md`. |
 | `/docs/decisiones_horario_atencion.md` | **Archivado.** Núcleo de decisiones del horario de atención + feriados del tenant (modelado, validación write-time, cascada). En producción. |
 | `/docs/decisiones_login_operativo.md` | **Archivado.** Núcleo de decisiones del login del modo operativo (credenciales en `tenant`, token operativo 30d, rationale de seguridad). En producción. |
 | `/docs/decisiones_acceso_barberos.md` | **Archivado.** Núcleo de decisiones del acceso de barberos al panel por PIN (unicidad de PIN, login unificado, vista reducida). En producción. |
