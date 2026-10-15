@@ -565,13 +565,13 @@ export const reprogramarTurno = async (req, res) => {
 
     // ── UPDATE con captura de 23P01 y sin pisar suspensiones ───────────────
     // El chequeo de suspensión va en la misma sentencia (NOT EXISTS) y compara
-    // contra el barbero del propio turno. Sin filas actualizadas = la pisaba
-    // (el turno existe: lo acabamos de leer).
+    // contra el barbero del propio turno. El estado también va en el WHERE: si
+    // lo cancelaron entre la lectura de arriba y acá, no se reprograma.
     let updateRes;
     try {
       updateRes = await query(
         `UPDATE turno SET inicio = $1, fin = $2
-         WHERE id = $3 AND tenant_id = $4
+         WHERE id = $3 AND tenant_id = $4 AND estado = 'reservado'
            AND NOT EXISTS (
              SELECT 1 FROM barbero_suspension bs
              WHERE bs.tenant_id = turno.tenant_id AND bs.barbero_id = turno.barbero_id
@@ -586,7 +586,18 @@ export const reprogramarTurno = async (req, res) => {
       }
       throw err;
     }
+    // Sin filas actualizadas: o cambió el estado, o el nuevo horario pisa una
+    // suspensión. Una lectura solo decide qué 409 devolver.
     if (updateRes.rowCount === 0) {
+      const estadoRes = await query(
+        `SELECT estado FROM turno WHERE id = $1 AND tenant_id = $2`,
+        [r.id, req.tenant_id]
+      );
+      const estadoActual = estadoRes.rows[0]?.estado;
+      if (estadoActual !== 'reservado') {
+        console.warn('[turnero] reprogramarTurno — el turno cambió de estado antes del UPDATE | turno_id:', r.id, '| estado:', estadoActual);
+        return res.status(409).json({ error: `El turno está en estado "${estadoActual}" y no se puede reprogramar` });
+      }
       console.warn('[turnero] reprogramarTurno — el nuevo horario pisa una suspensión | turno_id:', r.id);
       return res.status(409).json({ error: MENSAJE_SLOT_OCUPADO });
     }

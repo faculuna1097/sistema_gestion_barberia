@@ -231,7 +231,7 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
   | `/api/cortes`, `/api/turnos`, `/api/barberos`, `/api/servicios`, `/api/productos`, `/api/categorias` | operativo, admin |
   | `/api/ventas`, `/api/gastos` (rol por método, dentro del router) | `POST`: operativo, admin · `GET /mensual`, `PUT`, `DELETE`: admin |
   | `/api/caja`, `/api/inicio`, `/api/balances` | admin |
-  | `/api/admin/{turnos, horarios, suspensiones, clientes, planilla}` | admin, barbero (el controller scopea por barbero) |
+  | `/api/admin/{turnos, horarios, suspensiones, descansos, agenda, clientes, planilla}` | admin, barbero (el controller scopea por barbero) |
   | `/api/admin/{barberos, servicios, productos, negocio, turnero/config, operativo, feriados, imagenes, socios}` | admin |
   | `/api/admin/horario-atencion` (dentro del router) | `GET`: admin, barbero · `PUT`: admin |
   | `POST /api/plataforma/cache/invalidate` | fuera de tenant/JWT; header `X-Platform-Key` |
@@ -261,6 +261,14 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
      - Tocar los días de la grilla con el dedo sin errarle al vecino (~45 px; ~41 en la reprogramación).
   6. **Regresión:** crear un turno desde la app del barbero (usa `/disponibilidad` con `barbero_id`).
   7. Si el `.ics` no abre dentro de Instagram: evaluar adjuntarlo al mail de confirmación.
+- **Bug del horario de las suspensiones: arreglado en `feature/descansos-agenda`, pendiente de deploy.**
+  - **El bug (en producción):** las ausencias que se cargan desde el panel o desde la app del
+    barbero se guardan 3 h antes. Una de 10:00 a 12:00 queda de 07:00 a 09:00, porque los fronts
+    mandan el `datetime-local` sin zona y Postgres lo toma como UTC.
+  - **El arreglo:** el backend lo interpreta en hora argentina (`parsearInstante`;
+    `plan_app_barbero.md` → "Cómo quedó el paso 3").
+  - **Al desplegar:** revisar las ausencias futuras de kingsai, que siguen corridas 3 h aunque
+    el código ya esté arreglado.
 - **Base de clientes — próxima feature, con su propio plan** (el usuario quiere tratarla en detalle; conviene encararla apenas salga el rediseño del turnero, mientras casi nadie lo usa). Alcance conversado: identidad del cliente por teléfono, con el E.164 con el 9 en Argentina (hoy se guarda sin él); unificar duplicados (el barbero crea un cliente nuevo por cada turno sin email); asociar a un cliente los cortes sin turno; ficha del cliente en el panel (visitas, faltas, cancelaciones, gasto, barbero habitual, origen, reseña pedida o marcada a mano); conteo de escaneos del QR. Google no informa qué cliente dejó la reseña.
 - **(opcional) Mails del turnero en negro.** Los mails siguen con el botón indigo de Luz; pasarlos al negro del turnero es un cambio chico en `backend/src/services/mail/mailer.js`.
 - **Balances — separar servicios y productos en el histórico (analizar después del deploy de los modales de detalle).** `GET /balances/historico` trae servicios y productos sumados dentro de `ingresos_brutos`, así que el modal del mes los muestra en un solo renglón ("Servicios y productos" = ingresos brutos − otros ingresos). Opción: que el endpoint devuelva también `ingresos_servicios` e `ingresos_productos` (campos nuevos, no rompen nada) y el modal los muestre por separado, como el mensual.

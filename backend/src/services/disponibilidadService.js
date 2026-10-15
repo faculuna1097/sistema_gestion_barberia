@@ -1,9 +1,10 @@
 // /backend/src/services/disponibilidadService.js
 // Algoritmo de cálculo de slots disponibles para un (barbero, servicio, fecha)
 // y su variante "Cualquier barbero": la unión de los horarios de todos los
-// barberos activos, con el barbero que se asigna a cada horario.
-// Decisiones: docs/decisiones_turnero.md y docs/decisiones_turnero_ux.md
-// ("Decisiones técnicas — backend").
+// barberos activos, con el barbero que se asigna a cada horario. También arma
+// la grilla de slots de la Agenda del barbero (calcularGrillaDelDia).
+// Decisiones: docs/decisiones_turnero.md, docs/decisiones_turnero_ux.md
+// ("Decisiones técnicas — backend") y docs/plan_app_barbero.md (Feature 1).
 //
 // Toda la aritmética de fechas se hace con luxon en TZ Argentina para evitar
 // confusiones con UTC al sumar minutos y cruzar bloques horarios.
@@ -46,11 +47,21 @@ const armarDateTime = (fecha, hora) => {
 };
 
 /**
+ * ¿El rango [aIni, aFin) se superpone con [bIni, bFin)? Rangos semiabiertos: dos
+ * rangos que solo se tocan en un extremo (uno termina cuando empieza el otro) no
+ * se superponen. Lo comparten el cálculo de slots reservables y la grilla.
+ * @param {DateTime} aIni @param {DateTime} aFin @param {DateTime} bIni @param {DateTime} bFin
+ * @returns {boolean}
+ */
+const solapa = (aIni, aFin, bIni, bFin) => aIni < bFin && bIni < aFin;
+
+/**
  * computarSlotsDeUnDia
  * Recorre los bloques horarios de un día y arma los inicios de slot
- * reservables. Es cómputo puro en memoria: no toca la DB. Lo usan tanto
- * `calcularSlotsDisponibles` (un día) como `calcularDiasConDisponibilidad`
- * (rango), para no duplicar el algoritmo.
+ * reservables. Es cómputo puro en memoria: no toca la DB. Lo usan
+ * `calcularSlotsDisponibles` (un día), `calcularDiasConDisponibilidad`
+ * (rango) y `calcularGrillaDelDia` (sin turnos ni suspensiones, para el
+ * esqueleto de la grilla), para no duplicar el algoritmo.
  *
  * @param {Object} params
  * @param {DateTime} params.fechaArg - Fecha del día, en TZ Argentina
@@ -67,9 +78,6 @@ const computarSlotsDeUnDia = ({
   fechaArg, bloquesHorario, turnos, suspensiones,
   duracionSlotMin, duracionServicioMin, umbralMinimo, soloPrimero = false,
 }) => {
-  // ¿el rango [aIni,aFin) solapa con [bIni,bFin)?
-  const solapa = (aIni, aFin, bIni, bFin) => aIni < bFin && bIni < aFin;
-
   const slots = [];
 
   for (const bloque of bloquesHorario) {
@@ -171,9 +179,12 @@ const parsearRango = (desde, hasta) => {
  * Sin `barberoIds` ("Cualquier barbero"), primero busca los barberos activos
  * del tenant, porque sus ids filtran el resto de las queries.
  *
+ * Sin `servicioId` (la grilla de la Agenda) no consulta el servicio y la
+ * duración a reservar es un slot. El turnero siempre lo pasa.
+ *
  * @param {Object} params
  * @param {string} params.tenantId
- * @param {string} params.servicioId
+ * @param {string} [params.servicioId] - Si se omite, la duración es de un slot
  * @param {string[]} [params.barberoIds] - Barberos a cargar; si se omite, todos los activos del tenant
  * @param {string} params.desde - 'YYYY-MM-DD' (inclusive), ya validada
  * @param {string} params.hasta - 'YYYY-MM-DD' (inclusive), ya validada
@@ -181,8 +192,11 @@ const parsearRango = (desde, hasta) => {
  *   agendas: [{ id, nombre, bloquesPorDia, turnos, suspensiones }] — una por barbero;
  *     `nombre` solo viene cuando se cargan los activos; `bloquesPorDia` es un
  *     Map dia_semana (0=domingo..6=sábado) → bloques ordenados por hora_inicio;
- *     `turnos` y `suspensiones` son [{ inicio, fin }] en DateTime de luxon,
+ *     `turnos` son [{ inicio, fin }] y `suspensiones` [{ inicio, fin, tipo }],
+ *     en DateTime de luxon (las suspensiones con su rango efectivo),
  *   diasAbiertosNegocio: Set<number> — días de semana en que abre el negocio,
+ *   horarioNegocioPorDia: Map<number, { hora_inicio, hora_fin }> — horario del
+ *     local por día de semana, en 'HH:MM' (solo los días que abre),
  *   feriados: Set<string> — feriados del rango, 'YYYY-MM-DD',
  *   duracionSlotMin: number, duracionServicioMin: number }
  * @throws {DisponibilidadError} 'tenant_no_encontrado' | 'servicio_no_encontrado'
@@ -207,10 +221,12 @@ const cargarDatosAgenda = async ({ tenantId, servicioId, barberoIds, desde, hast
       `SELECT duracion_slot_minutos FROM tenant WHERE id = $1 AND activo = true`,
       [tenantId]
     ),
-    query(
-      `SELECT cantidad_slots FROM servicio WHERE id = $1 AND tenant_id = $2 AND activo = true`,
-      [servicioId, tenantId]
-    ),
+    servicioId
+      ? query(
+        `SELECT cantidad_slots FROM servicio WHERE id = $1 AND tenant_id = $2 AND activo = true`,
+        [servicioId, tenantId]
+      )
+      : null,
     query(
       `SELECT barbero_id, dia_semana, hora_inicio, hora_fin
        FROM barbero_horario
@@ -231,7 +247,7 @@ const cargarDatosAgenda = async ({ tenantId, servicioId, barberoIds, desde, hast
     // Rango efectivo: una suspensión liberada (o terminada antes) solo bloquea
     // hasta liberada_en, y si se liberó antes de empezar no bloquea nada.
     query(
-      `SELECT bs.barbero_id, bs.desde, ${finEfectivoSql('bs')} AS hasta
+      `SELECT bs.barbero_id, bs.desde, ${finEfectivoSql('bs')} AS hasta, bs.tipo
        FROM barbero_suspension bs
        WHERE bs.tenant_id = $1
          AND bs.barbero_id = ANY($2::uuid[])
@@ -239,7 +255,8 @@ const cargarDatosAgenda = async ({ tenantId, servicioId, barberoIds, desde, hast
       [tenantId, ids, inicioRango, finRango]
     ),
     query(
-      `SELECT dia_semana FROM tenant_horario_atencion WHERE tenant_id = $1`,
+      `SELECT dia_semana, to_char(hora_inicio, 'HH24:MI') AS hora_inicio, to_char(hora_fin, 'HH24:MI') AS hora_fin
+       FROM tenant_horario_atencion WHERE tenant_id = $1`,
       [tenantId]
     ),
     query(
@@ -253,7 +270,7 @@ const cargarDatosAgenda = async ({ tenantId, servicioId, barberoIds, desde, hast
   if (tenantRes.rows.length === 0) {
     throw new DisponibilidadError('tenant_no_encontrado', 'Tenant no encontrado');
   }
-  if (servicioRes.rows.length === 0) {
+  if (servicioRes && servicioRes.rows.length === 0) {
     throw new DisponibilidadError('servicio_no_encontrado', 'Servicio no encontrado o inactivo');
   }
 
@@ -274,37 +291,55 @@ const cargarDatosAgenda = async ({ tenantId, servicioId, barberoIds, desde, hast
     agendaPorId.get(s.barbero_id).suspensiones.push({
       inicio: DateTime.fromJSDate(s.desde, { zone: TZ }),
       fin:    DateTime.fromJSDate(s.hasta, { zone: TZ }),
+      tipo:   s.tipo,
     });
   }
 
   const duracionSlotMin = tenantRes.rows[0].duracion_slot_minutos;
+  const cantidadSlots = servicioRes ? servicioRes.rows[0].cantidad_slots : 1;
   return {
     agendas,
     diasAbiertosNegocio: new Set(horarioTenantRes.rows.map(r => r.dia_semana)),
+    horarioNegocioPorDia: new Map(horarioTenantRes.rows.map(r =>
+      [r.dia_semana, { hora_inicio: r.hora_inicio, hora_fin: r.hora_fin }]
+    )),
     feriados: new Set(feriadoRes.rows.map(r => r.fecha)),
     duracionSlotMin,
-    duracionServicioMin: duracionSlotMin * servicioRes.rows[0].cantidad_slots,
+    duracionServicioMin: duracionSlotMin * cantidadSlots,
   };
 };
 
 /**
- * negocioAbreElDia
- * Indica si un día es reservable a nivel negocio, sin mirar a ningún barbero:
- * no pasó, no es feriado y el negocio abre ese día de la semana.
+ * negocioAtiendeElDia
+ * Indica si el negocio atiende un día, sin mirar si ya pasó ni a ningún
+ * barbero: no es feriado y el negocio abre ese día de la semana.
  *
  * @param {Object} datos - Resultado de cargarDatosAgenda
  * @param {DateTime} fechaArg - Día a evaluar, a las 00:00 en TZ Argentina
- * @param {DateTime} ahora - Momento actual en TZ Argentina
  * @returns {boolean} true si el negocio atiende ese día
  */
-const negocioAbreElDia = (datos, fechaArg, ahora) => {
-  // Fecha pasada → no reservable.
-  if (fechaArg.endOf('day') < ahora) return false;
+const negocioAtiendeElDia = (datos, fechaArg) => {
   // Feriado → el negocio cierra el día completo.
   if (datos.feriados.has(fechaArg.toISODate())) return false;
   // dia_semana en convención PostgreSQL/JavaScript: 0=domingo..6=sábado.
   // Luxon devuelve 1=lunes...7=domingo, por eso el módulo 7.
   return datos.diasAbiertosNegocio.has(fechaArg.weekday % 7);
+};
+
+/**
+ * negocioAbreElDia
+ * Indica si un día es reservable a nivel negocio, sin mirar a ningún barbero:
+ * no pasó y el negocio atiende ese día (negocioAtiendeElDia).
+ *
+ * @param {Object} datos - Resultado de cargarDatosAgenda
+ * @param {DateTime} fechaArg - Día a evaluar, a las 00:00 en TZ Argentina
+ * @param {DateTime} ahora - Momento actual en TZ Argentina
+ * @returns {boolean} true si el día es reservable
+ */
+const negocioAbreElDia = (datos, fechaArg, ahora) => {
+  // Fecha pasada → no reservable.
+  if (fechaArg.endOf('day') < ahora) return false;
+  return negocioAtiendeElDia(datos, fechaArg);
 };
 
 /**
@@ -531,3 +566,79 @@ export const calcularDiasConDisponibilidad = ({ tenantId, barberoId, servicioId,
  */
 export const calcularDiasCualquiera = ({ tenantId, servicioId, desde, hasta }) =>
   calcularDias({ tenantId, servicioId, desde, hasta });
+
+// ─── Grilla de la Agenda (app del barbero) ──────────────────────────────────
+// La dibuja la Agenda y valida la creación de un descanso.
+// Ver plan_app_barbero.md → Feature 1 (2.5 y 2.6).
+
+/**
+ * estadoDelSlot
+ * Estado de un slot de la grilla según lo que se le superpone. Si cae en más de
+ * uno, gana turno, después descanso, después suspensión.
+ *
+ * @param {DateTime} inicio - Inicio del slot
+ * @param {DateTime} fin - Fin del slot
+ * @param {Object} agenda - Una de `datos.agendas` (turnos reservados y suspensiones
+ *   con su rango efectivo, en DateTime)
+ * @returns {'libre'|'turno'|'descanso'|'suspension'}
+ */
+const estadoDelSlot = (inicio, fin, agenda) => {
+  if (agenda.turnos.some(t => solapa(inicio, fin, t.inicio, t.fin))) return 'turno';
+  const suspensiones = agenda.suspensiones.filter(s => solapa(inicio, fin, s.inicio, s.fin));
+  if (suspensiones.some(s => s.tipo === 'descanso')) return 'descanso';
+  if (suspensiones.length > 0) return 'suspension';
+  return 'libre';
+};
+
+/**
+ * calcularGrillaDelDia
+ * Todos los slots de los bloques horarios de un barbero en un día, cada uno con
+ * su estado. Usa el mismo anclaje que el turnero (computarSlotsDeUnDia): cada
+ * bloque arranca en su hora_inicio y avanza de a duracion_slot_minutos, y un
+ * slot existe si entra completo en el bloque. Un slot `libre` es uno que el
+ * turnero ofrecería con un servicio de un slot, sin contar la antelación mínima.
+ *
+ * No decide pasado o futuro (lo resuelven el front y quien valida) ni verifica
+ * que el barbero exista: sin bloques ese día, la grilla es vacía. Día cerrado o
+ * feriado: grilla vacía y horarioLocal null.
+ *
+ * @param {Object} params
+ * @param {string} params.tenantId
+ * @param {string} params.barberoId
+ * @param {string} params.fecha - 'YYYY-MM-DD', ya validada
+ * @returns {Promise<{ grilla: Array<{ inicio: DateTime, fin: DateTime, estado: string }>,
+ *   duracionSlotMin: number, horarioLocal: { hora_inicio: string, hora_fin: string } | null }>}
+ *   grilla ordenada por inicio; horarioLocal en 'HH:MM'
+ * @throws {DisponibilidadError} 'fecha_invalida' | 'tenant_no_encontrado'
+ */
+export const calcularGrillaDelDia = async ({ tenantId, barberoId, fecha }) => {
+  const fechaArg = parsearFecha(fecha);
+  const datos = await cargarDatosAgenda({ tenantId, barberoIds: [barberoId], desde: fecha, hasta: fecha });
+  const { duracionSlotMin } = datos;
+
+  if (!negocioAtiendeElDia(datos, fechaArg)) {
+    return { grilla: [], duracionSlotMin, horarioLocal: null };
+  }
+
+  const diaSemana = fechaArg.weekday % 7;
+  const agenda = datos.agendas[0];
+
+  // Esqueleto: todos los inicios de slot, sin turnos ni suspensiones que descartar.
+  const inicios = computarSlotsDeUnDia({
+    fechaArg,
+    bloquesHorario: agenda.bloquesPorDia.get(diaSemana) ?? [],
+    turnos: [],
+    suspensiones: [],
+    duracionSlotMin,
+    duracionServicioMin: duracionSlotMin,
+    umbralMinimo: null,
+  });
+
+  const grilla = inicios.map((iso) => {
+    const inicio = DateTime.fromISO(iso, { zone: TZ });
+    const fin = inicio.plus({ minutes: duracionSlotMin });
+    return { inicio, fin, estado: estadoDelSlot(inicio, fin, agenda) };
+  });
+
+  return { grilla, duracionSlotMin, horarioLocal: datos.horarioNegocioPorDia.get(diaSemana) };
+};

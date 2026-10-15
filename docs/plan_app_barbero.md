@@ -8,7 +8,7 @@ Creado: 2026-10-15.
 
 | # | Feature | Estado |
 |---|---|---|
-| 1 | Grilla de slots y descansos en la Agenda | En curso: Fase 1 y 2.1–2.4 hechas (2026-10-15), sin deploy |
+| 1 | Grilla de slots y descansos en la Agenda | En curso: Fases 1 y 2 hechas (2026-10-15), sin deploy; siguen los fronts (3, 4, 5) |
 | 2 | Planillas: cortes con turno vs. sin turno | Hecha (2026-10-15), sin deploy |
 
 ---
@@ -70,7 +70,7 @@ a `main`. Cada fase se verifica antes de pasar a la siguiente.
 1. Migración de arriba (la ejecuta el usuario en el SQL editor de Supabase).
 2. `SQL_Schema.md` actualizado.
 
-#### Fase 2 — Backend (2.1–2.4 ✅ 2026-10-15; 2.5 y 2.6 pendientes)
+#### Fase 2 — Backend ✅ (2026-10-15)
 
 **2.1 ✅ Cerrar el agujero de la reserva sobre una suspensión** (deuda abierta en
 `estado_actual.md`). Hoy `POST /api/turnero/turnos`, `/reprogramar` y
@@ -151,7 +151,7 @@ SELECT (SELECT row_to_json(nueva) FROM nueva) AS suspension,
   el código (404 / 403 / 409). Un id con formato inválido da 404 en vez de 500.
 - `TIPOS_SUSPENSION` en `utils/constantes.js`; `MENSAJE_SLOT_OCUPADO` en `turnosService`.
 
-**2.5 Crear descanso.** `POST /api/admin/descansos` con `{ desde, hasta }`. El barbero
+**2.5 ✅ Crear descanso.** `POST /api/admin/descansos` con `{ desde, hasta }`. El barbero
 crea los propios (se fuerza `req.barbero_id`) y el admin puede pasar `barbero_id`.
 Validaciones (todas en el servidor, que es la fuente de verdad):
 - Mismo día, `desde` posterior a ahora y `hasta > desde`.
@@ -166,7 +166,7 @@ Validaciones (todas en el servidor, que es la fuente de verdad):
   Si no inserta → 409.
 - `tipo = 'descanso'`, `origen` según el rol, `motivo = null`.
 
-**2.6 Endpoint de la Agenda.** `GET /api/admin/agenda?fecha=YYYY-MM-DD` (barbero: el
+**2.6 ✅ Endpoint de la Agenda.** `GET /api/admin/agenda?fecha=YYYY-MM-DD` (barbero: el
 propio; admin: `barbero_id`). Devuelve en una sola respuesta:
 - `turnos` del día (lo que hoy devuelve `getTurnos`);
 - `suspensiones` del día, de los dos tipos, con su rango efectivo, `tipo` y `origen`;
@@ -178,6 +178,63 @@ Así la grilla y qué es seleccionable lo calcula **el backend con el mismo algo
 turnero**, y el front solo dibuja. Una llamada en vez de cuatro (importa por la latencia
 a Supabase, ver `performance_frontends.md`). Lo único que el front chequea por su cuenta
 es `inicio > ahora`, porque el tiempo corre con la pantalla abierta.
+
+**Cómo quedó el paso 3 (2026-10-15): horario de las suspensiones, 2.5 y 2.6, desvíos del plan:**
+- **Arreglo previo (A): horario de las suspensiones.** Los dos fronts mandan `desde`/`hasta` de
+  un `datetime-local` (sin zona) y la sesión de la DB está en UTC: una ausencia de 10 a 12 se
+  guardaba de 7 a 9. Ahora el backend los interpreta en hora argentina con `parsearInstante`
+  (`utils/validarFecha.js`): sin zona → hora argentina, con zona u offset → se respeta, inválido
+  → 400. Exige fecha y hora (luxon solo aceptaría `'10:00'` como "hoy a las 10"). La regla quedó
+  en `convenciones_tecnicas.md` §4. Los fronts no cambian.
+  - `GET /admin/suspensiones?barbero_id=<no-uuid>` → 400 (`22P02`).
+  - `reprogramarTurno`: `estado = 'reservado'` en el `WHERE` del `UPDATE`. Si no actualiza, una
+    lectura elige el 409: "el turno está en estado X" o "slot ocupado".
+- **Grilla:** `calcularGrillaDelDia` en `disponibilidadService`.
+  - **El esqueleto** sale de `computarSlotsDeUnDia` sin turnos ni suspensiones (mismo anclaje
+    que el turnero), y a cada slot se le pone el estado con el mismo `solapa` (ahora a nivel de
+    módulo).
+  - **`cargarDatosAgenda`** acepta no tener servicio (duración de un slot) y suma, sin cambiar
+    lo que ya devolvía, el `tipo` de cada suspensión y el horario del local por día.
+  - **`negocioAtiendeElDia`** (feriado + día de semana) se separó de `negocioAbreElDia`, porque
+    la grilla no mira "pasado".
+  - **Regresión:** las 4 funciones públicas del turnero dan lo mismo que antes (34
+    comparaciones contra `HEAD`).
+  - Solo los turnos `reservado` marcan `turno`: el slot de un turno completado o "no asistió"
+    sale `libre`. La Agenda dibuja los turnos desde `turnos`, no desde la grilla.
+- **2.5:**
+  - **Validación:** en vez de `computarSlotsDeUnDia` con `umbralMinimo`, se valida contra la
+    grilla con `tramoDeLaGrilla`. El rango tiene que empezar en un slot, seguir con slots
+    continuos y terminar justo en el fin del último. Si no → 400 (desalineado, fuera de bloque,
+    entre dos bloques, multi-día). Primer slot no posterior a ahora → 400 (sin antelación
+    mínima). Algún slot no libre → 409.
+  - **`INSERT`:** además del `NOT EXISTS` de turnos, lleva el de suspensiones vigentes. Va con
+    `{ reintentar: false }`.
+  - **Dónde vive:** el service va en un archivo nuevo, `descansosService.js`. Adentro de
+    `suspensionesService` armaba un import circular.
+  - **Admin:** un `barbero_id` ajeno, inexistente, inactivo o no-uuid da **404**, igual que
+    `crearTurnoAdmin`.
+  - **Respuesta:** `201 { descanso }`.
+- **2.6:**
+  - **Respuesta:** `{ fecha, barbero_id, duracion_slot_minutos, horario_atencion, turnos,
+    suspensiones, grilla }`.
+  - **`horario_atencion`** es `null` también en feriado.
+  - **Formato de los instantes:** la `grilla` va con offset `-03:00` (como `/disponibilidad`).
+    `turnos` y `suspensiones` salen como hoy, en UTC (`...Z`), porque se reusan `listarTurnos` y
+    `listarSuspensiones` tal cual.
+  - **Admin:** el barbero se valida antes de las queries en paralelo (un barbero inactivo da
+    404). La app del barbero no paga esa vuelta.
+- **Datos de prueba en demo** (pasos 2 y 3; se dejan como datos de prueba de las fases 3 a 5):
+  - **Alejo, 20/10:**
+    - turnos `reservado`: T1 09:00 (`ccf6fe6b`), T2 12:00 (`512be05c`), T3 12:30 (`1e17feba`);
+    - turno cancelado a las 17:00 (`b05a2caf`);
+    - S4, suspensión vigente 17:00–18:00 (`744f83c2`);
+    - suspensiones vigentes del paso 3: 10:00–10:30 (`b42c9538`) y 10:30–11:00 (`8d1474e1`);
+    - descanso vigente 15:00–16:00, del admin (`1ef1c05b`);
+    - descanso 14:00–14:30, liberado antes de empezar (`7ac8bc78`);
+    - suspensiones del paso 2 liberadas antes de empezar: 10–11, 12–13 y 15–16.
+  - **Facundo, 15/10:**
+    - descanso 19:00–19:30, terminado a las 19:01 (`ccef5603`);
+    - suspensión 14:31–17:01, terminada a las 15:01 (`cbcd6c67`).
 
 **Verificación de la fase:** controllers con `req`/`res` simulados contra el tenant demo,
 sin servidor ni Bruno. Casos: reserva sobre un descanso → 409; descanso sobre un turno →

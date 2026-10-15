@@ -4,7 +4,7 @@
 
 import { listarSuspensiones, crearSuspension, liberarSuspension } from '../services/suspensionesService.js';
 import { armarLinkTurnero } from '../services/turnosService.js';
-import { esFechaISO } from '../utils/validarFecha.js';
+import { esFechaISO, parsearInstante } from '../utils/validarFecha.js';
 import { TIPOS_SUSPENSION } from '../utils/constantes.js';
 
 /**
@@ -41,6 +41,10 @@ export const getSuspensiones = async (req, res) => {
     const suspensiones = await listarSuspensiones(req.tenant_id, { barberoId, desde, hasta, tipo });
     res.json(suspensiones);
   } catch (err) {
+    // UUID mal formado (22P02): el único uuid que llega del cliente es barbero_id.
+    if (err.code === '22P02') {
+      return res.status(400).json({ error: 'barbero_id debe ser un UUID válido' });
+    }
     console.error('[suspensiones] Error en getSuspensiones:', err);
     res.status(500).json({ error: 'Error al listar suspensiones' });
   }
@@ -51,7 +55,8 @@ export const getSuspensiones = async (req, res) => {
  * Crea suspensión. Si pisa turnos reservados y no viene confirmar_cancelacion,
  * devuelve 409 con la lista de turnos afectados. Reenviar con
  * confirmar_cancelacion: true para ejecutar.
- * @param {Object} req.body - { barbero_id, desde, hasta, motivo?, confirmar_cancelacion? }
+ * @param {Object} req.body - { barbero_id, desde, hasta, motivo?, confirmar_cancelacion? };
+ *   desde/hasta: 'YYYY-MM-DDTHH:MM' en hora argentina, o ISO con 'Z' u offset (parsearInstante)
  * @returns {JSON} 201 { suspension, turnos_cancelados } o 409 { turnos_afectados }
  */
 export const postSuspension = async (req, res) => {
@@ -64,7 +69,14 @@ export const postSuspension = async (req, res) => {
   if (!barberoId || !desde || !hasta) {
     return res.status(400).json({ error: 'barbero_id, desde y hasta son requeridos' });
   }
-  if (new Date(hasta) <= new Date(desde)) {
+  // Los fronts mandan el valor de un datetime-local (sin zona): se interpreta en
+  // hora argentina, no en la de la sesión de la DB (UTC).
+  const desdeDT = parsearInstante(desde);
+  const hastaDT = parsearInstante(hasta);
+  if (!desdeDT || !hastaDT) {
+    return res.status(400).json({ error: 'desde y hasta deben ser fecha y hora válidas (YYYY-MM-DDTHH:MM)' });
+  }
+  if (hastaDT <= desdeDT) {
     return res.status(400).json({ error: 'hasta debe ser posterior a desde' });
   }
 
@@ -73,8 +85,8 @@ export const postSuspension = async (req, res) => {
     const resultado = await crearSuspension({
       tenantId: req.tenant_id,
       barberoId,
-      desde,
-      hasta,
+      desde: desdeDT.toISO(),
+      hasta: hastaDT.toISO(),
       motivo,
       origen,
       confirmarCancelacion: confirmar_cancelacion,

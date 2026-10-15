@@ -1,11 +1,15 @@
 // /backend/src/utils/validarFecha.js
-// Validadores centrales de fechas de calendario ('YYYY-MM-DD') que llegan por
-// query string o body. Todo el cómputo es en hora argentina (TZ) con luxon.
+// Validadores centrales de fechas de calendario ('YYYY-MM-DD') y de instantes
+// (fecha y hora) que llegan por query string o body. Todo el cómputo es en hora
+// argentina (TZ) con luxon.
 
 import { DateTime } from 'luxon';
 import { TZ } from './constantes.js';
 
 const REGEX_FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+// Prefijo obligatorio de un instante: fecha + 'T' + hora y minutos. Lo que sigue
+// (segundos, fracción, 'Z' u offset) lo valida luxon.
+const REGEX_INSTANTE_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
 
 /**
  * hoyISO
@@ -29,6 +33,25 @@ export function esFechaISO(valor) {
   if (typeof valor !== 'string' || !REGEX_FECHA_ISO.test(valor)) return false;
   const fecha = DateTime.fromISO(valor, { zone: TZ });
   return fecha.isValid && fecha.year >= 1;
+}
+
+/**
+ * parsearInstante
+ * Convierte un instante (fecha y hora) que llega del cliente en un DateTime en
+ * hora argentina. Sin zona ('2026-10-20T10:00', lo que da un
+ * <input type="datetime-local">) se interpreta en hora argentina, no en la zona
+ * de la sesión de la DB (UTC). Con 'Z' u offset ('...-03:00') se respeta y se
+ * convierte a TZ.
+ * Exige fecha y hora: luxon también acepta '10:00' (hoy a esa hora) o una fecha
+ * sola (medianoche), y ninguno de los dos es un instante válido del cliente.
+ * Mismo criterio que esFechaISO con el año 0000.
+ * @param {*} valor - Valor recibido de la query o del body.
+ * @returns {DateTime|null} El instante en TZ, o null si no es válido.
+ */
+export function parsearInstante(valor) {
+  if (typeof valor !== 'string' || !REGEX_INSTANTE_ISO.test(valor)) return null;
+  const instante = DateTime.fromISO(valor, { zone: TZ });
+  return instante.isValid && instante.year >= 1 ? instante : null;
 }
 
 /**

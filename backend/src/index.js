@@ -32,6 +32,8 @@ import turnosOperativoRoutes from './routes/turnosOperativo.js';
 import turnosAdminRoutes   from './routes/turnos.js';
 import horariosAdminRoutes     from './routes/horarios.js';
 import suspensionesAdminRoutes  from './routes/suspensiones.js';
+import descansosAdminRoutes     from './routes/descansos.js';
+import agendaAdminRoutes        from './routes/agenda.js';
 import clientesAdminRoutes     from './routes/clientes.js';
 import planillaAdminRoutes     from './routes/planilla.js';
 import adminBarberosRoutes    from './routes/adminBarberos.js';
@@ -219,6 +221,9 @@ app.use('/api/balances',  verificarToken, requiereRol('admin'), balancesRouter);
 app.use('/api/admin/turnos',    verificarToken, requiereRol('admin', 'barbero'), turnosAdminRoutes);
 app.use('/api/admin/horarios',      verificarToken, requiereRol('admin', 'barbero'), horariosAdminRoutes);
 app.use('/api/admin/suspensiones',  verificarToken, requiereRol('admin', 'barbero'), suspensionesAdminRoutes);
+app.use('/api/admin/descansos',     verificarToken, requiereRol('admin', 'barbero'), descansosAdminRoutes);
+// agenda: turnos + suspensiones + grilla de slots de un día, en una sola respuesta.
+app.use('/api/admin/agenda',        verificarToken, requiereRol('admin', 'barbero'), agendaAdminRoutes);
 app.use('/api/admin/clientes',      verificarToken, requiereRol('admin', 'barbero'), clientesAdminRoutes);
 // planilla: admin + barbero (excluye operativo; el scoping por barbero lo hace el controller).
 app.use('/api/admin/planilla',      verificarToken, requiereRol('admin', 'barbero'), planillaAdminRoutes);

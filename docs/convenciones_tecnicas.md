@@ -112,6 +112,16 @@ Las fechas de calendario (`'YYYY-MM-DD'`) que llegan por query o body se validan
 `esFechaISO` de `utils/validarFecha.js` (formato + fecha real: `2026-02-31` es inválida), y "hoy"
 en hora argentina sale de `hoyISO()`. No redeclarar un regex de fecha en cada controller.
 
+Los **instantes** (fecha y hora, columnas `timestamptz`) que llegan del cliente se parsean con
+`parsearInstante` del mismo archivo, **nunca** se pasan crudos al SQL ni se comparan con `new Date()`:
+- sin zona (`'2026-10-20T10:00'`, lo que manda un `<input type="datetime-local">`) → **hora argentina**.
+  Si el string llega crudo a Postgres, la sesión (UTC) lo toma como UTC y el horario se corre 3 h;
+- con `Z` u offset (`'...-03:00'`) → se respeta;
+- inválido, sin hora o solo hora → `null` → el controller responde 400.
+
+Devuelve un `DateTime` en `TZ` (ver la excepción para instantes más abajo); a la DB se le pasa
+`.toISO()`, que lleva el offset.
+
 ### Normalización canónica vs presentación
 Son dos capas distintas; no mezclarlas:
 
