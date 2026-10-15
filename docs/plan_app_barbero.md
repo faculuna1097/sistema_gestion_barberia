@@ -9,7 +9,7 @@ Creado: 2026-10-15.
 | # | Feature | Estado |
 |---|---|---|
 | 1 | Grilla de slots y descansos en la Agenda | Planificada |
-| 2 | Planillas: cortes con turno vs. sin turno | Planificada |
+| 2 | Planillas: cortes con turno vs. sin turno | Hecha (2026-10-15), sin deploy |
 
 ---
 
@@ -280,13 +280,44 @@ control real.
 - Excel de los dos tabs: columna "Origen" en el Detalle; "Con turno" y "Sin turno" en el
   Resumen.
 
-**La UI de las fases B y C no está cerrada.** Lo de arriba (pills, columnas "Origen",
-"Con turno" / "Sin turno") es la primera propuesta. El usuario prefiere evaluar una
-alternativa: diferenciar los cortes por color en lugar de sumar columnas. Se decide con
-el usuario al llegar a esas fases, antes de escribir código. La fase A no depende de esa
-decisión: `con_turno` y los conteos sirven para cualquiera de las dos.
+Lo de arriba fue la primera propuesta. Lo que se hizo está en "Cómo quedó".
 
-Leer `sistema_de_disenio.md` antes de las fases B y C.
+### Cómo quedó (2026-10-15)
+
+Las fases A, B y C están hechas en `feature/descansos-agenda`, sin deploy. El backend tiene que
+salir antes que los fronts, o junto con ellos: sin `con_turno`, los fronts no muestran el origen
+(ver abajo).
+
+**Decisión de UI: texto, sin color.** Se evaluó diferenciar los cortes por color y se descartó:
+- el sistema tiene un solo acento, y el verde y el índigo ya los usa la pill de forma de pago;
+- el color no puede ir solo (daltonismo, `sistema_de_disenio.md` §3.1.1);
+- la librería de Excel (`xlsx`, versión gratuita) no escribe estilos de celda;
+- en el Resumen lo que hay son cantidades, no filas para pintar.
+
+**Fase A (backend), como estaba planeada.** `con_turno` en cada corte del detalle;
+`cortes_con_turno` / `cortes_sin_turno` por barbero y en `totales`; `cantidad_cortes` sin cambios.
+
+**Fase B (`MiPlanilla`), desvíos del plan:**
+- Los cortes **con turno no llevan pill**: los identifica el nombre del cliente. Los **sin turno**
+  llevan una pill neutra "Sin turno", con contorno y sin relleno para no competir con la de forma
+  de pago (`muted` sobre blanco pasa AA; sobre `surfaceAlt`, no).
+- **Sin desglose en el KPI "Cortes"**: se probó ("8 con turno / 4 sin turno") y el usuario lo
+  sacó.
+
+**Fase C (`SeccionPlanillas`), desvíos del plan:**
+- **Tab Detalle:** en vez de una columna "Origen", una columna **"Cliente"**: el nombre del cliente
+  si el corte vino de un turno, `sin turno` (en minúsculas) si no.
+- **Tab Resumen:** una sola columna **"Con turno"** con `N de M` (ej. `8 de 15`), también en la
+  fila TOTAL. Los sin turno salen de la resta. Así la tabla no suma dos columnas.
+- **Modal del barbero:** en vez de sumar el desglose a las cifras, una lista **"Por origen"** (Con
+  turno / Sin turno, con cortes y total generado) con `ListaConBarras`, la misma de "Por forma de
+  pago". Muestra cuánta plata entra por el turnero.
+- **Excel del Detalle:** columna "Cliente", igual que la pantalla. **Excel del Resumen:** "Con
+  turno" y "Sin turno" como dos columnas numéricas, para poder sumar y filtrar.
+
+**Tolerancia a un backend sin el campo:** si `con_turno` no viene, los dos fronts no muestran el
+origen. En el panel aparece "—" y la app del barbero no muestra la pill. Antes se rotulaban
+todos los cortes como "Sin turno". Pasó en la prueba visual, con el backend sin actualizar.
 
 ### Orden respecto de la Feature 1
 

@@ -61,6 +61,7 @@ export const detalleSemanal = async ({ tenantId, semana, barberoId }) => {
        c.precio                                            AS monto_servicios,
        c.propina,
        c.forma_pago,
+       (c.turno_id IS NOT NULL)                            AS con_turno,
        c.id                                                AS corte_id,
        c.timestamp
      FROM barbero b
@@ -98,6 +99,8 @@ export const detalleSemanal = async ({ tenantId, semana, barberoId }) => {
       monto_servicios: Number(row.monto_servicios),
       propina: Number(row.propina),
       forma_pago: row.forma_pago,
+      // true si el corte vino de un turno; false si fue un cliente sin turno.
+      con_turno: row.con_turno,
     });
   }
 
@@ -129,6 +132,8 @@ export const resumenSemanal = async ({ tenantId, semana, barberoId }) => {
        b.comision_tipo,
        b.comision_valor,
        COUNT(c.id)::int                          AS cantidad_cortes,
+       COUNT(c.id) FILTER (WHERE c.turno_id IS NOT NULL)::int AS cortes_con_turno,
+       COUNT(c.id) FILTER (WHERE c.turno_id IS NULL)::int     AS cortes_sin_turno,
        COALESCE(SUM(c.precio), 0)                AS monto_servicios,
        COALESCE(SUM(c.propina), 0)               AS propinas
      FROM barbero b
@@ -164,6 +169,9 @@ export const resumenSemanal = async ({ tenantId, semana, barberoId }) => {
       comision_tipo: b.comision_tipo,
       comision_valor: comisionValor,
       cantidad_cortes: cantidadCortes,
+      // Desglose de cantidad_cortes: siempre suman lo mismo.
+      cortes_con_turno: Number(b.cortes_con_turno),
+      cortes_sin_turno: Number(b.cortes_sin_turno),
       monto_servicios: montoServicios,
       propinas,
       total_generado: totalGenerado,
@@ -173,6 +181,8 @@ export const resumenSemanal = async ({ tenantId, semana, barberoId }) => {
 
   const totales = {
     cantidad_cortes: barberos.reduce((s, b) => s + b.cantidad_cortes, 0),
+    cortes_con_turno: barberos.reduce((s, b) => s + b.cortes_con_turno, 0),
+    cortes_sin_turno: barberos.reduce((s, b) => s + b.cortes_sin_turno, 0),
     monto_servicios: barberos.reduce((s, b) => s + b.monto_servicios, 0),
     propinas:        barberos.reduce((s, b) => s + b.propinas, 0),
     total_generado:  barberos.reduce((s, b) => s + b.total_generado, 0),

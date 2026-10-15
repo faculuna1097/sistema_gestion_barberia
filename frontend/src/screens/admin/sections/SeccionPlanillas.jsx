@@ -16,7 +16,13 @@
 //   - Tabla consolidada por barbero con totales de la semana + columna
 //     "A pagar" opcional (comisión + propinas; toggle global).
 //   - Al tocar un barbero se abre ModalDetalleBarbero: cifras de la semana,
-//     pago, total generado por día y por forma de pago. También en modo barbero.
+//     pago, total generado por día, por forma de pago y por origen. También en
+//     modo barbero.
+//
+// Origen de un corte (`con_turno` del backend): si vino de un turno o fue un
+// cliente que llegó sin reservar. En la tabla del Detalle y su Excel, la
+// columna "Cliente" muestra el nombre o "sin turno"; en el Resumen, la columna
+// "Con turno" (en su Excel, "Con turno" y "Sin turno").
 //
 // Qué barberos se listan lo decide el backend (planillaService): los activos,
 // aunque no hayan cortado (en 0), más los dados de baja que cortaron esa
@@ -94,6 +100,21 @@ function sumarCortes(cortes) {
   const servicios = cortes.reduce((s, c) => s + c.monto_servicios, 0);
   const propinas  = cortes.reduce((s, c) => s + c.propina, 0);
   return { servicios, propinas, total: servicios + propinas };
+}
+
+/**
+ * Texto de la columna "Cliente" de un corte: el nombre del cliente si vino de
+ * un turno, o "sin turno" si fue alguien que llegó sin reservar.
+ * Lo usan la tabla del Detalle y su Excel.
+ * @param {{con_turno?: boolean, cliente_nombre: string|null}} corte
+ * @returns {string} El nombre, 'sin turno', o '—' si el backend no mandó
+ *   `con_turno` (así un backend viejo no rotula todo como "sin turno") o si el
+ *   turno no tiene nombre de cliente.
+ */
+function textoCliente(corte) {
+  if (corte.con_turno === false) return 'sin turno';
+  if (corte.con_turno === true) return corte.cliente_nombre || '—';
+  return '—';
 }
 
 /**
@@ -210,7 +231,8 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
       const infoComision = resumenData?.barberos.find((b) => b.barbero_id === barbero.barbero_id);
       filas.push({
         Barbero: `── ${barbero.barbero_nombre} ──`,
-        Fecha: '', Hora: '', Servicio: '', 'Monto ($)': '', 'Propina ($)': '', 'Total ($)': '',
+        // Esta primera fila fija el orden de las columnas del Excel (json_to_sheet).
+        Fecha: '', Hora: '', Servicio: '', Cliente: '', 'Monto ($)': '', 'Propina ($)': '', 'Total ($)': '',
         ...(mostrarComisiones ? { 'A pagar ($)': '' } : {}),
         'Forma de pago': '',
       });
@@ -218,6 +240,7 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
         cd.forEach((c) => {
           filas.push({
             Barbero: '', Fecha: formatFechaCorta(c.fecha), Hora: c.hora, Servicio: c.servicio_nombre,
+            Cliente: textoCliente(c),
             'Monto ($)': c.monto_servicios, 'Propina ($)': c.propina,
             'Total ($)': c.monto_servicios + c.propina,
             ...(mostrarComisiones ? { 'A pagar ($)': '' } : {}),
@@ -236,7 +259,7 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
           // que el "Pago" del día en pantalla y la comisión semanal del backend:
           // así los subtotales de los días suman lo del subtotal de la semana.
           filas.push({
-            Barbero: `Subtotal (${cd.length} cortes)`, Fecha: '', Hora: '', Servicio: '',
+            Barbero: `Subtotal (${cd.length} cortes)`, Fecha: '', Hora: '', Servicio: '', Cliente: '',
             'Monto ($)': montoDelDia,
             'Propina ($)': propinaDelDia,
             'Total ($)': totalDelDia,
@@ -246,12 +269,12 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
       });
       const { servicios: totalMonto, propinas: totalPropina, total: totalSemana } = sumarCortes(barbero.cortes);
       filas.push({
-        Barbero: `Subtotal semana (${barbero.cortes.length} cortes)`, Fecha: '', Hora: '', Servicio: '',
+        Barbero: `Subtotal semana (${barbero.cortes.length} cortes)`, Fecha: '', Hora: '', Servicio: '', Cliente: '',
         'Monto ($)': totalMonto, 'Propina ($)': totalPropina, 'Total ($)': totalSemana,
         ...(mostrarComisiones && infoComision ? { 'A pagar ($)': infoComision.comision } : {}),
         'Forma de pago': '',
       });
-      filas.push({ Barbero: '', Fecha: '', Hora: '', Servicio: '', 'Monto ($)': '', 'Propina ($)': '', 'Total ($)': '', 'Forma de pago': '' });
+      filas.push({ Barbero: '', Fecha: '', Hora: '', Servicio: '', Cliente: '', 'Monto ($)': '', 'Propina ($)': '', 'Total ($)': '', 'Forma de pago': '' });
     });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Detalle semanal');
@@ -270,8 +293,11 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
       setErrorExport(err.message);
       return;
     }
+    // En el Excel, con y sin turno van en dos columnas (en pantalla es una sola,
+    // "N de M"): así se pueden sumar y filtrar como números.
     const filas = resumenData.barberos.map((b) => ({
       Barbero: b.barbero_nombre, Cortes: b.cantidad_cortes,
+      'Con turno': b.cortes_con_turno, 'Sin turno': b.cortes_sin_turno,
       'Monto servicios ($)': b.monto_servicios, 'Propinas ($)': b.propinas,
       'Total generado ($)': b.total_generado,
       ...(mostrarComisiones ? { 'A pagar ($)': b.comision } : {}),
@@ -279,6 +305,7 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
     const t = resumenData.totales;
     filas.push({
       Barbero: 'TOTAL', Cortes: t.cantidad_cortes,
+      'Con turno': t.cortes_con_turno, 'Sin turno': t.cortes_sin_turno,
       'Monto servicios ($)': t.monto_servicios, 'Propinas ($)': t.propinas,
       'Total generado ($)': t.total_generado,
       ...(mostrarComisiones ? { 'A pagar ($)': t.comision } : {}),
@@ -553,6 +580,7 @@ function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisi
               <tr>
                 <ThCelda>Hora</ThCelda>
                 <ThCelda>Servicio</ThCelda>
+                <ThCelda>Cliente</ThCelda>
                 <ThCelda alinear="right">Monto</ThCelda>
                 <ThCelda alinear="right">Propina</ThCelda>
                 <ThCelda alinear="right">Total</ThCelda>
@@ -564,6 +592,7 @@ function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisi
                 <tr key={c.corte_id} className="om-fila-hover">
                   <TdCelda>{c.hora}</TdCelda>
                   <TdCelda>{c.servicio_nombre}</TdCelda>
+                  <TdCelda>{textoCliente(c)}</TdCelda>
                   <TdCelda alinear="right">{fmtPesos(c.monto_servicios)}</TdCelda>
                   <TdCelda alinear="right">
                     {c.propina > 0
@@ -579,7 +608,8 @@ function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisi
         )}
         <tfoot>
           <tr style={{ borderTop: `2px solid ${theme.accent}` }}>
-            <td colSpan={2} style={{ ...tdTotalBase, color: theme.ink }}>
+            {/* Hora, Servicio y Cliente. */}
+            <td colSpan={3} style={{ ...tdTotalBase, color: theme.ink }}>
               Subtotal — {cortesDelDia.length} corte{cortesDelDia.length !== 1 ? 's' : ''}
             </td>
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>{fmtPesos(totalMonto)}</td>
@@ -616,6 +646,21 @@ function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisi
 // ─── Sub-componente: TablaResumen ─────────────────────────────────────────────
 
 /**
+ * Contenido de la celda "Con turno" del Resumen: cuántos de los cortes vinieron
+ * de un turno (ej. "8 de 15"). Los sin turno son la resta.
+ * @param {number|undefined} conTurno - `cortes_con_turno` del resumen.
+ * @param {number} total - `cantidad_cortes` del resumen.
+ * @returns {JSX.Element|string} "N de M", o un "—" gris si no hay cortes o si
+ *   el backend no mandó el dato.
+ */
+function textoConTurno(conTurno, total) {
+  if (typeof conTurno !== 'number' || total === 0) {
+    return <span style={{ color: theme.mutedSoft }}>—</span>;
+  }
+  return `${conTurno} de ${total}`;
+}
+
+/**
  * TablaResumen
  * Tabla consolidada del tab Resumen. Una fila por barbero + fila TOTAL.
  * Cada fila de barbero abre su detalle: click en cualquier parte de la fila y,
@@ -641,6 +686,7 @@ function TablaResumen({ resumenData, mostrarComisiones, onVerDetalle }) {
           <tr>
             <ThCelda>Barbero</ThCelda>
             <ThCelda alinear="right">Cortes</ThCelda>
+            <ThCelda alinear="right">Con turno</ThCelda>
             <ThCelda alinear="right">Monto servicios</ThCelda>
             <ThCelda alinear="right">Propinas</ThCelda>
             <ThCelda alinear="right">Total generado</ThCelda>
@@ -660,6 +706,7 @@ function TablaResumen({ resumenData, mostrarComisiones, onVerDetalle }) {
             >
               <TdCelda bold>{b.barbero_nombre}</TdCelda>
               <TdCelda alinear="right">{b.cantidad_cortes}</TdCelda>
+              <TdCelda alinear="right">{textoConTurno(b.cortes_con_turno, b.cantidad_cortes)}</TdCelda>
               <TdCelda alinear="right">{fmtPesos(b.monto_servicios)}</TdCelda>
               <TdCelda alinear="right">{fmtPesos(b.propinas)}</TdCelda>
               <TdCelda alinear="right" bold>{fmtPesos(b.total_generado)}</TdCelda>
@@ -699,6 +746,9 @@ function TablaResumen({ resumenData, mostrarComisiones, onVerDetalle }) {
           <tr style={{ borderTop: `2px solid ${theme.accent}` }}>
             <td style={tdTotalBase}>TOTAL</td>
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>{totales.cantidad_cortes}</td>
+            <td style={{ ...tdTotalBase, textAlign: 'right' }}>
+              {textoConTurno(totales.cortes_con_turno, totales.cantidad_cortes)}
+            </td>
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>{fmtPesos(totales.monto_servicios)}</td>
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>{fmtPesos(totales.propinas)}</td>
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>
@@ -800,6 +850,26 @@ function filasPorFormaPago(cortes) {
 }
 
 /**
+ * filasPorOrigen
+ * Dos filas, con turno y sin turno, con sus cortes y el total generado
+ * (servicios + propinas) de cada una: cuánto entra por el turnero y cuánto por
+ * clientes que llegan sin turno.
+ * @param {Array} cortes - Cortes del barbero en la semana (/admin/planilla).
+ * @returns {Array<{clave: string, label: string, cantidad: number, total: number}>}
+ *   Filas para ListaConBarras.
+ */
+function filasPorOrigen(cortes) {
+  return [
+    { clave: 'con_turno', label: 'Con turno', valor: true },
+    { clave: 'sin_turno', label: 'Sin turno', valor: false },
+  ].map(({ clave, label, valor }) => {
+    // Comparación estricta: un corte sin el dato (backend viejo) no cae en ninguna.
+    const delOrigen = cortes.filter((c) => c.con_turno === valor);
+    return { clave, label, cantidad: delOrigen.length, total: sumarCortes(delOrigen).total };
+  });
+}
+
+/**
  * CifrasSemana
  * Las cuatro cifras de la semana del barbero en recuadros: cortes, servicios,
  * propinas y total generado. Salen tal cual del resumen del backend.
@@ -867,7 +937,7 @@ function CifrasSemana({ resumen }) {
  * monto. Las filas sin cortes quedan en gris con "—" (así se ven los huecos).
  * La barra va en gris, como las neutras de DesgloseMontos: son ingresos
  * (sistema_de_disenio §3.1.1).
- * La usan "Total generado por día" y "Por forma de pago" del modal.
+ * La usan "Total generado por día", "Por forma de pago" y "Por origen" del modal.
  * @param {string} props.titulo - Eyebrow mono sobre la lista.
  * @param {Array<{clave: string, label: string, cantidad: number, total: number}>} props.filas
  * @param {number} [props.maximo] - Total que ocupa la barra entera. Default: la
@@ -941,9 +1011,10 @@ function ListaConBarras({ titulo, filas, maximo }) {
 /**
  * ModalDetalleBarbero
  * Detalle de la semana de un barbero, desde el tab Resumen: las cuatro cifras
- * de la semana, el pago (solo con comisiones), el total generado por día y por
- * forma de pago. En modo barbero se ve igual: son sus propios números. No
- * calcula comisiones: usa la fila del resumen y suma los cortes del detalle.
+ * de la semana, el pago (solo con comisiones), el total generado por día, por
+ * forma de pago y por origen (con / sin turno). En modo barbero se ve igual:
+ * son sus propios números. No calcula comisiones: usa la fila del resumen y
+ * suma los cortes del detalle.
  * @param {object|null} props.resumen - Fila del barbero en /admin/planilla/resumen;
  *   null = cerrado.
  * @param {Array}   props.cortes            - Cortes del barbero en la semana (/admin/planilla).
@@ -998,6 +1069,12 @@ function ModalDetalleBarbero({ resumen, cortes, semana, mostrarComisiones, onClo
           <ListaConBarras
             titulo="Por forma de pago"
             filas={filasPorFormaPago(cortes)}
+            maximo={resumen.total_generado}
+          />
+          {/* Misma escala: qué parte de la semana vino de turnos y qué parte no. */}
+          <ListaConBarras
+            titulo="Por origen"
+            filas={filasPorOrigen(cortes)}
             maximo={resumen.total_generado}
           />
         </div>

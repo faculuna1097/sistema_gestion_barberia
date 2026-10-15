@@ -619,34 +619,66 @@ const FORMA_PAGO_PILL = {
 };
 
 /**
+ * Pill
+ * Chip chico de la fila de un corte. Base común de PillFormaPago y PillSinTurno.
+ * @param {string} props.bg - Fondo (token de theme).
+ * @param {string} props.fg - Color del texto (token de theme).
+ * @param {string} [props.borde] - Color del borde; sin borde si no se pasa.
+ * @param {React.ReactNode} props.children - Texto del chip.
+ * @returns {JSX.Element}
+ */
+function Pill({ bg, fg, borde, children }) {
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '2px 8px',
+      borderRadius: theme.radiusSm,
+      // Sin borde, uno transparente: así las dos pills miden lo mismo de alto.
+      border: `1px solid ${borde ?? 'transparent'}`,
+      fontFamily: theme.body,
+      fontSize: theme.sizeMicro,
+      fontWeight: theme.weightMedium,
+      letterSpacing: '0.02em',
+      whiteSpace: 'nowrap',
+      background: bg,
+      color: fg,
+    }}>
+      {children}
+    </span>
+  );
+}
+
+/**
  * PillFormaPago
  * Chip chico de color con la forma de pago del corte.
  * @param {string} props.forma - 'efectivo' | 'mercado_pago' | otro
  */
 function PillFormaPago({ forma }) {
   const v = FORMA_PAGO_PILL[forma] || { bg: theme.surfaceAlt, fg: theme.muted, label: forma };
+  return <Pill bg={v.bg} fg={v.fg}>{v.label}</Pill>;
+}
+
+/**
+ * PillSinTurno
+ * Chip neutro "Sin turno" para los cortes de clientes que llegaron sin
+ * reservar. Los cortes con turno no llevan pill: los identifica el nombre del
+ * cliente. Va con contorno y sin relleno para no competir con la pill de forma
+ * de pago, que es la de color (`muted` sobre blanco pasa AA; sobre
+ * `surfaceAlt`, no).
+ */
+function PillSinTurno() {
   return (
-    <span style={{
-      display: 'inline-block',
-      padding: '2px 8px',
-      borderRadius: theme.radiusSm,
-      fontFamily: theme.body,
-      fontSize: theme.sizeMicro,
-      fontWeight: theme.weightMedium,
-      letterSpacing: '0.02em',
-      whiteSpace: 'nowrap',
-      background: v.bg,
-      color: v.fg,
-    }}>
-      {v.label}
-    </span>
+    <Pill bg={theme.surface} fg={theme.muted} borde={theme.hairline}>
+      Sin turno
+    </Pill>
   );
 }
 
 /**
  * CorteFila
  * Fila de un corte dentro de la card del día (sin borde propio; el separador
- * lo da la card). Hora + servicio + pill de pago a la izquierda; $monto y
+ * lo da la card). Hora + servicio + pill de pago + cliente (o pill "Sin
+ * turno" si no vino de un turno) a la izquierda; $monto y
  * $propina a la derecha. Si la propina es 0, no se muestra.
  * @param {boolean} props.ultimo - true en el último corte del día (sin separador)
  */
@@ -686,7 +718,7 @@ function CorteFila({ corte, ultimo }) {
         }}>
           {corte.servicio_nombre || 'Servicio'}
         </div>
-        {(corte.forma_pago || corte.cliente_nombre) && (
+        {(corte.forma_pago || corte.cliente_nombre || corte.con_turno === false) && (
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -695,6 +727,10 @@ function CorteFila({ corte, ultimo }) {
             flexWrap: 'wrap',
           }}>
             {corte.forma_pago && <PillFormaPago forma={corte.forma_pago} />}
+            {/* Comparación estricta: un backend sin `con_turno` (ej. el front
+                desplegado antes que el backend) no debe rotular todos los
+                cortes como "Sin turno". Los con turno ya muestran el cliente. */}
+            {corte.con_turno === false && <PillSinTurno />}
             {corte.cliente_nombre && (
               <span style={{
                 fontFamily: theme.body,
