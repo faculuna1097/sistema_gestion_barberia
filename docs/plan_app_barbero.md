@@ -8,7 +8,7 @@ Creado: 2026-10-15.
 
 | # | Feature | Estado |
 |---|---|---|
-| 1 | Grilla de slots y descansos en la Agenda | En curso: Fases 1 y 2 hechas (2026-10-15), sin deploy; siguen los fronts (3, 4, 5) |
+| 1 | Grilla de slots y descansos en la Agenda | En curso: Fases 1 a 4 hechas (2026-10-15 / 2026-10-19), sin deploy; falta la prueba visual de 3 y 4 y sigue la 5 (panel de gestión) |
 | 2 | Planillas: cortes con turno vs. sin turno | Hecha (2026-10-15), sin deploy |
 
 ---
@@ -126,6 +126,8 @@ SELECT (SELECT row_to_json(nueva) FROM nueva) AS suspension,
   de los dos fronts, que todavía dicen "Eliminar suspensión" / "no se puede deshacer"
   (`Gestion.jsx` y `SubPanelAusencias`). En el paso de backend solo se ocultó el botón en
   la app del barbero para las suspensiones con `origen = 'admin'`.
+  - **Actualización (2026-10-19, Fase 4):** los textos de la app del barbero (`Gestion.jsx`)
+    ya hablan de liberar. Siguen pendientes los de `SubPanelAusencias` (5.2) y el renombre.
 
 **Cómo quedó 1 y 2.1–2.4 (2026-10-15), desvíos del plan:**
 - **Migración:** `barbero_suspension_rango_valido` (`hasta > desde`) ya existía en la DB sin
@@ -243,7 +245,7 @@ ajeno, uno del admin; terminar uno en curso y ver que el slot siguiente vuelve a
 `/disponibilidad`; suspensión con turnos afectados → cancela y crea en una sola
 sentencia.
 
-#### Fase 3 — Front del barbero: grilla
+#### Fase 3 — Front del barbero: grilla ✅ (2026-10-19, falta la prueba visual)
 
 - `Agenda.jsx` pasa a consumir `GET /admin/agenda` (reemplaza `getTurnos` + `getTenant`
   en esta pantalla).
@@ -254,7 +256,7 @@ sentencia.
 - Los turnos ya ocupan todos los slots que les tocan (se dimensionan por `inicio`/`fin`).
 - Leer `sistema_de_disenio.md` antes de tocar UI.
 
-#### Fase 4 — Front del barbero: selección y descanso
+#### Fase 4 — Front del barbero: selección y descanso ✅ (2026-10-19, falta la prueba visual)
 
 - Los slots `libre` y futuros son tocables (área táctil ≥ 44px: a 80px/hora y slots de
   30 min da 40px; ajustar `PX_POR_HORA` si hace falta).
@@ -267,6 +269,89 @@ sentencia.
 - La pestaña "Suspensiones" de `Gestion.jsx` lista solo `tipo = 'suspension'`.
 - La lógica de selección (pura, sin React) va a `utils/` con su propio comentario, porque
   tiene reglas propias y conviene leerla aislada.
+
+**Cómo quedó el paso 4 (2026-10-19): arreglos de backend y fases 3 y 4, desvíos del plan:**
+- **Arreglos de backend (hallazgos del paso 3):**
+  - `postSuspension` (admin) valida el `barbero_id` con `barberoActivoEnTenant`: ajeno,
+    inexistente, inactivo o no-uuid → 404. El FK de `barbero_suspension` no es compuesto con
+    `tenant_id`, así que antes se podía cargar una suspensión a un barbero de otro tenant.
+  - `parsearInstante` también en `crearTurno`, `reprogramarTurno` y `crearTurnoAdmin`: `'10:00'`,
+    una fecha sola o `'...T10'` → 400. El turnero y la app del barbero mandan el ISO con offset
+    de `/disponibilidad` y no cambian; el panel no crea turnos.
+  - Los mensajes de `liberarSuspension` dicen "descanso" o "suspensión" según `tipo`. El DELETE
+    mantiene la clave `suspension` (renombrarla rompía a los fronts) y el objeto suma `tipo`.
+  - `GET /admin/turnos?desde=&hasta=` pasa los instantes crudos al SQL: anotado en
+    `estado_actual.md`, sin arreglar.
+- **Fase 3:**
+  - **Altura de los slots:** `pxPorHora = max(80, 48 × 60 / duracion_slot_minutos)`. Slots de
+    15 min → 192 px/h; de 30 → 96; de 45 o más → 80 (la escala de antes). Cualquier slot mide
+    ≥ 48 px: área táctil ≥ 44 y un turno de un solo slot muestra sus dos renglones. Un
+    `PX_POR_HORA` fijo no alcanzaba porque la duración del slot es configurable por negocio.
+  - **La agenda se ordena por los slots, no por las horas** (pedido del usuario después de dos
+    versiones con horas en punto, que chocaban con los horarios de los slots):
+    - la columna izquierda muestra **solo el inicio de cada slot**: con slots de 50 min desde
+      las 08:00 se ve 08:00, 08:50, 09:40… Sin horas en punto ni sus líneas. Van en `muted`
+      (4,8:1), alineados con el primer renglón de un turno;
+    - **cada slot es una celda con borde** (`hairline`, `radiusSm`), separada 2 px de la
+      siguiente (`cajaVertical`). Turnos, bloques, la selección y los botones de los slots usan
+      la misma geometría. Una celda tocable mide el alto del slot menos 2 px (≥ 46);
+    - **rango:** del primer slot (o turno) al último (`calcularRango`), sin margen de horas
+      alrededor del horario del local. Un turno fuera de la grilla lo agranda. Los descansos y
+      las ausencias se recortan y no lo agrandan (una ausencia de varios días lo estiraría a 24 h);
+    - **día sin slots ni turnos:** en vez de un timeline vacío con el rango 7–22 por defecto,
+      un `EmptyState` ("No tenés horario de trabajo este día" / "El local no abre este día").
+      El alto por defecto solo dimensiona el skeleton de la primera carga.
+  - **Bloques:** el descanso, liso (`surfaceAlt`) con ícono `Coffee`; la ausencia, rayada
+    (`repeating-linear-gradient` de `surfaceAlt` y `hairline`) con ícono `CalendarOff` y el
+    motivo. Texto en `inkSoft` a 14 px (≥ 11,7:1 sobre los dos fondos). Ícono y texto van
+    centrados en el bloque, en los dos tipos.
+  - **Fechas:** `prepararAgenda` pasa la respuesta a ms una sola vez (`Date.parse`, los dos
+    formatos) y todo se ubica en minutos desde la medianoche del día visible.
+  - **Además:** un reloj de "ahora" cada 30 s (antes la línea roja se movía solo al recargar);
+    si se cambia de día rápido, la respuesta de un día anterior se descarta; después de una
+    acción la agenda se recarga sin skeleton.
+- **Fase 4:**
+  - **Selección:** `utils/seleccionSlots.js` (`esSlotTocable`, `tocarSlot`, `depurarSeleccion`),
+    probada con un script de node: 29 casos de D3 y D4, todos OK. La selección se depura en cada
+    render: si un slot elegido empieza o se ocupa, sale solo.
+  - **Slots tocables:** botones del tamaño de su celda, con `aria-label` ("13:00, libre") y
+    `aria-pressed`. Por dentro van vacíos (la hora está a la izquierda); elegidos, muestran
+    una tilde. Hover solo si el dispositivo tiene `(hover: hover)` (`sistema_de_disenio.md`
+    §9 #19). La selección se dibuja como un solo bloque `accentSoft` con borde de acento,
+    que tapa la separación entre celdas.
+  - **Pista:** arriba del timeline, "Tocá un horario libre para marcar un descanso", solo si
+    hay slots para tocar. No se va al elegir uno, para que el timeline no salte.
+  - **Footer:** `StickyFooter` suma `sobreBottomNav` para pegarse encima de la barra
+    (`BottomNav` exporta `ALTO_BOTTOM_NAV`). Los avisos de error de la Agenda, también los de
+    turnos, pasaron del banner de arriba al footer: arriba quedaban fuera de vista al scrollear.
+  - **Marcar:** `ConfirmDialog` → `POST /admin/descansos` con el ISO de la grilla. El diálogo
+    queda en "Procesando…" mientras responde el servidor, y con esa respuesta el descanso se
+    dibuja al instante (`agregarDescanso`), sin el rato con el slot vacío que había mientras
+    se recargaba la agenda; la recarga sigue después, sin skeleton. 409 → "Ese horario se
+    acaba de ocupar" y recarga; 400 → el mensaje del servidor; otro → un genérico.
+  - **Descansos pegados, un solo bloque** (pedido del usuario): marcar 13:00 y después 13:30
+    se ve y se comporta como marcar 13:00–14:00 de una vez. La unión es **al dibujar**
+    (`unirDescansosSeguidos`): en la base siguen siendo dos filas, cada una con su
+    antelación. Se descartó extender la fila en el servidor porque se perdería la antelación
+    de la segunda marca, que es el dato de control del dueño (D10, 5.3): un barbero podría
+    marcar 13:00 con días y extenderlo a último momento sin que se note. Solo se unen
+    descansos del mismo origen (el barbero no puede liberar los del admin), nunca ausencias.
+  - **Detalle del descanso:** "Liberar" y "Terminar descanso" van directo, **sin
+    `ConfirmDialog`**: no tocan a ningún cliente y el botón dentro del detalle ya es un paso
+    deliberado. En un descanso unido se liberan todas las partes que no terminaron (un DELETE
+    por fila, en paralelo). El detalle queda en "Procesando…" hasta que la agenda recargada
+    ya no lo muestra. Uno del admin muestra "Solo el administrador lo puede liberar". El
+    detalle del turno y el del descanso comparten la cáscara (`ModalDetalle`).
+  - **Gestión → Suspensiones:** lista con `?tipo=suspension`. "Eliminar" pasó a "Liberar"
+    ("Terminar" si está en curso), sin "no se puede deshacer" y avisando que los turnos que se
+    cancelaron al crearla no vuelven. En `api.js`, `eliminarSuspension` → `liberarSuspension`;
+    `Button` acepta `ariaLabel`.
+- **Verificación:** lint y build limpios, script de selección 29/29; las funciones puras de la
+  geometría, de la unión de descansos y del alta instantánea, probadas en node. La prueba
+  visual contra demo (Alejo, martes 20/10) la hace el usuario.
+- **Para la Fase 5:** como un descanso puede ser varias filas pegadas, la Agenda del panel
+  (5.1) tiene que unirlas igual al dibujar, y el registro (5.3) tiene que decidir si cuenta
+  filas o bloques unidos (cada fila conserva su antelación).
 
 #### Fase 5 — Panel de gestión (`frontend/`)
 

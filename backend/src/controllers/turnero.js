@@ -24,7 +24,7 @@ import { barberoActivoEnTenant, listarBarberosActivos } from '../services/barber
 import { obtenerHorarioCrudo, validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { obtenerFeriados, existeFeriado } from '../services/feriadosService.js';
 import { TZ } from '../utils/constantes.js';
-import { esFechaISO, hoyISO } from '../utils/validarFecha.js';
+import { esFechaISO, hoyISO, parsearInstante } from '../utils/validarFecha.js';
 import { validarContacto, esTelefonoE164, esUrlHttps, normalizarOrigen } from '../utils/validarTexto.js';
 
 /**
@@ -291,9 +291,11 @@ export const crearTurno = async (req, res) => {
   // Origen del cliente: dato de marketing, nunca rechaza la reserva.
   const origenLink = normalizarOrigen(req.body.origen);
 
-  const inicioDT = DateTime.fromISO(inicio, { zone: TZ });
-  if (!inicioDT.isValid) {
-    return res.status(400).json({ error: 'inicio debe ser un ISO timestamp válido' });
+  // El turnero manda el inicio que le dio /disponibilidad (ISO con offset). Fecha
+  // y hora obligatorias: un '10:00' o una fecha sola no son un instante (→ 400).
+  const inicioDT = parsearInstante(inicio);
+  if (!inicioDT) {
+    return res.status(400).json({ error: 'inicio debe ser una fecha y hora válidas (ISO)' });
   }
   if (!inicioPosteriorAhora(inicioDT)) {
     return res.status(400).json({ error: 'inicio debe ser futuro' });
@@ -510,9 +512,11 @@ export const reprogramarTurno = async (req, res) => {
   if (!inicio) {
     return res.status(400).json({ error: 'inicio es requerido' });
   }
-  const inicioDT = DateTime.fromISO(inicio, { zone: TZ });
-  if (!inicioDT.isValid) {
-    return res.status(400).json({ error: 'inicio debe ser un ISO timestamp válido' });
+  // El turnero manda el inicio que le dio /disponibilidad (ISO con offset). Fecha
+  // y hora obligatorias: un '10:00' o una fecha sola no son un instante (→ 400).
+  const inicioDT = parsearInstante(inicio);
+  if (!inicioDT) {
+    return res.status(400).json({ error: 'inicio debe ser una fecha y hora válidas (ISO)' });
   }
   if (!inicioPosteriorAhora(inicioDT)) {
     return res.status(400).json({ error: 'inicio debe ser futuro' });

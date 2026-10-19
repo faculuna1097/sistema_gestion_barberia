@@ -3,7 +3,6 @@
 // Thin wrapper: arma filtros según req.rol y req.barbero_id, delega al
 // turnosService. Cobertura: plan_turnero_v2.md sección 5 (/api/admin/turnos).
 
-import { DateTime } from 'luxon';
 import {
   listarTurnos, calcularDuracionServicio, upsertCliente, insertarTurno,
   enriquecerTurno, armarLinkGestion, sincronizarCalendarCreacion,
@@ -13,8 +12,8 @@ import {
 import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { existeFeriado } from '../services/feriadosService.js';
-import { TZ } from '../utils/constantes.js';
 import { validarContacto } from '../utils/validarTexto.js';
+import { parsearInstante } from '../utils/validarFecha.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
 
 const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -84,9 +83,11 @@ export const crearTurnoAdmin = async (req, res) => {
     return res.status(400).json({ error: contacto.error });
   }
 
-  const inicioDT = DateTime.fromISO(inicio, { zone: TZ });
-  if (!inicioDT.isValid) {
-    return res.status(400).json({ error: 'inicio debe ser un ISO timestamp válido' });
+  // Fecha y hora obligatorias: sin zona se toma en hora argentina; un '10:00' o
+  // una fecha sola no son un instante (→ 400). Ver parsearInstante.
+  const inicioDT = parsearInstante(inicio);
+  if (!inicioDT) {
+    return res.status(400).json({ error: 'inicio debe ser una fecha y hora válidas (ISO)' });
   }
   if (!inicioPosteriorAhora(inicioDT)) {
     return res.status(400).json({ error: 'inicio debe ser futuro' });

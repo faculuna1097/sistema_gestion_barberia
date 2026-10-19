@@ -194,6 +194,27 @@ export const getTurnos = async (filtros = {}) => {
 };
 
 /**
+ * getAgenda
+ * Agenda de un día del barbero autenticado, en una sola llamada: turnos,
+ * descansos y ausencias, y la grilla de slots (plan_app_barbero.md, Feature 1, 2.6).
+ * Los instantes de `grilla` llegan con offset '-03:00'; los de `turnos` y
+ * `suspensiones`, en UTC ('...Z'): compararlos siempre como fechas, nunca como texto.
+ * @param {string} fecha - 'YYYY-MM-DD'
+ * @returns {Promise<Object>} {
+ *   fecha, barbero_id, duracion_slot_minutos,
+ *   horario_atencion: { hora_inicio, hora_fin } | null — horario del local ese día ('HH:MM'),
+ *   turnos: [...] — misma forma que getTurnos (todos los estados),
+ *   suspensiones: [{ id, desde, hasta, tipo: 'suspension'|'descanso', origen, motivo, ... }],
+ *   grilla: [{ inicio, fin, estado: 'libre'|'turno'|'descanso'|'suspension' }]
+ * }
+ */
+export const getAgenda = async (fecha) => {
+  const res = await apiFetch(`/admin/agenda?fecha=${fecha}`);
+  if (!res.ok) throw new Error('Error al obtener la agenda');
+  return res.json();
+};
+
+/**
  * crearTurnoAdmin
  * Crea un turno manual desde la app del barbero.
  * @param {Object} datos - { servicio_id, barbero_id, inicio, nombre, telefono?, email? }
@@ -282,11 +303,16 @@ export const putHorarios = async (barberoId, bloques) => {
 
 /**
  * getSuspensiones
- * Obtiene suspensiones futuras del barbero autenticado.
+ * Obtiene las suspensiones y descansos del barbero autenticado que todavía no
+ * terminaron.
+ * @param {Object} [filtros]
+ * @param {'suspension'|'descanso'} [filtros.tipo] - si se omite, los dos
  * @returns {Promise<Array>} suspensiones
  */
-export const getSuspensiones = async () => {
-  const res = await apiFetch('/admin/suspensiones');
+export const getSuspensiones = async ({ tipo } = {}) => {
+  const params = new URLSearchParams();
+  if (tipo) params.set('tipo', tipo);
+  const res = await apiFetch(`/admin/suspensiones?${params}`);
   if (!res.ok) throw new Error('Error al obtener suspensiones');
   return res.json();
 };
@@ -317,18 +343,50 @@ export const crearSuspension = async (datos) => {
 };
 
 /**
- * eliminarSuspension
- * Elimina una suspensión por su id.
+ * liberarSuspension
+ * Libera una suspensión o un descanso: si no empezó, deja de bloquear entero;
+ * si está en curso, termina en este momento. La fila no se borra (queda como
+ * registro para el dueño). El endpoint sigue siendo el DELETE de siempre.
  * @param {string} suspensionId
- * @returns {Promise<Object>} { ok: true }
+ * @returns {Promise<Object>} { ok: true, suspension: { id, tipo, desde, hasta, liberada_en, liberada_por } }
+ * @throws {Error} con el mensaje del servidor y `status` (403 del admin, 404, 409 ya liberada/terminada)
  */
-export const eliminarSuspension = async (suspensionId) => {
+export const liberarSuspension = async (suspensionId) => {
   const res = await apiFetch(`/admin/suspensiones/${suspensionId}`, {
     method: 'DELETE',
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Error al eliminar suspensión');
+    const err = new Error(body.error || 'Error al liberar');
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+};
+
+/**
+ * crearDescanso
+ * Marca un descanso propio sobre slots libres y futuros de un día
+ * (plan_app_barbero.md, Feature 1, 2.5). El rango tiene que coincidir con slots
+ * seguidos de la grilla: se mandan el inicio del primero y el fin del último tal
+ * como los dio GET /admin/agenda.
+ * @param {Object} rango
+ * @param {string} rango.desde - ISO con offset (inicio del primer slot)
+ * @param {string} rango.hasta - ISO con offset (fin del último slot)
+ * @returns {Promise<Object>} { descanso }
+ * @throws {Error} con el mensaje del servidor y `status` (400 rango inválido o
+ *   no futuro, 409 algún slot se ocupó)
+ */
+export const crearDescanso = async ({ desde, hasta }) => {
+  const res = await apiFetch('/admin/descansos', {
+    method: 'POST',
+    body: JSON.stringify({ desde, hasta }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(body.error || 'Error al marcar el descanso');
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 };

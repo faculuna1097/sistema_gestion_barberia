@@ -365,6 +365,10 @@ Deudas detectadas durante el rediseño del turnero (2026-10), verificadas contra
 - **Turnero, `HorarioSemanal` sin feriados:** en un feriado, el hero dice "Cerrado" pero la fila de hoy muestra el horario normal. Ya pasaba antes.
 - **Turnero, menores:** en desktop, con más barberos que ancho, la fila del equipo muestra la scrollbar horizontal del estilo global; una dirección de dos renglones centra el pin entre los dos; `fecha.js` tiene `fmtFechaCorta` sin uso en el turnero; `fmtDiaAccesible` también arma texto visible ("Te esperamos el jueves 8 de octubre") y el nombre quedó corto.
 
+Deudas detectadas durante la Feature 1 de la app del barbero (2026-10-15), verificadas contra los docs:
+
+- **`GET /api/admin/turnos?desde=&hasta=` pasa los instantes crudos al SQL.** `getTurnos` (`controllers/turnos.js`) no valida ni interpreta `desde`/`hasta`: llegan tal cual a `listarTurnos` (`t.inicio >= $n AND t.inicio < $m`). Un valor sin zona (`2026-10-20T10:00`) Postgres lo toma como UTC y corre el rango 3 h; uno inválido da 500 en vez de 400. Hoy no lo usa ningún front. Arreglo: `parsearInstante` + 400, como el resto de los instantes (`convenciones_tecnicas.md` §4).
+
 ### Deudas vivas del frontend del panel (consolidadas del registro archivado)
 
 El rediseño del panel de gestión cerró todas sus deudas accionables; quedan estas, **todas de prioridad baja**. Historia completa de cómo se resolvió cada deuda del rediseño en [`deudas_tecnicas_frontend.md`](./deudas_tecnicas_frontend.md) (archivado). Se conservan los números `#NN` originales para las referencias cruzadas en commits y docs.

@@ -249,13 +249,36 @@ export const crearSuspension = async ({
  * Arma un error tipado de liberarSuspension que el controller mapea a HTTP.
  * @param {string} code - 'NO_ENCONTRADA' | 'ORIGEN_ADMIN' | 'YA_LIBERADA' | 'YA_TERMINADA'
  * @param {string} mensaje - texto para el usuario
+ * @param {string} [tipo] - 'suspension' | 'descanso', si se conoce (para el log del controller)
  * @returns {Error}
  */
-const errorLiberar = (code, mensaje) => {
+const errorLiberar = (code, mensaje, tipo) => {
   const err = new Error(mensaje);
   err.code = code;
+  err.tipo = tipo;
   return err;
 };
+
+/**
+ * Textos de los errores de liberarSuspension según el tipo de la fila: "descanso"
+ * es masculino y "suspensión", femenino.
+ * @param {string} tipo - 'suspension' | 'descanso'
+ * @returns {{ origenAdmin: string, yaLiberada: string, yaTerminada: string }}
+ */
+const textosLiberar = (tipo) => (tipo === 'descanso'
+  ? {
+    origenAdmin: 'Este descanso lo cargó el administrador; no lo podés liberar',
+    yaLiberada: 'El descanso ya fue liberado',
+    yaTerminada: 'El descanso ya terminó',
+  }
+  : {
+    origenAdmin: 'Esta suspensión la cargó el administrador; no la podés liberar',
+    yaLiberada: 'La suspensión ya fue liberada',
+    yaTerminada: 'La suspensión ya terminó',
+  });
+
+// Sin fila no se sabe el tipo: el texto nombra los dos.
+const MENSAJE_NO_ENCONTRADA = 'No se encontró la suspensión o el descanso';
 
 /**
  * Libera una suspensión (o descanso): completa liberada_en = now() y liberada_por.
@@ -265,13 +288,14 @@ const errorLiberar = (code, mensaje) => {
  *
  * Todas las reglas van en el WHERE del UPDATE, así dos pedidos simultáneos no
  * pueden liberarla dos veces. Si no actualiza nada, una lectura posterior solo
- * decide qué error devolver.
+ * decide qué error devolver. Los mensajes dicen "descanso" o "suspensión" según
+ * el tipo de la fila.
  * @param {string} suspensionId
  * @param {string} tenantId
  * @param {string} rol - 'admin' | 'barbero' (se graba en liberada_por)
  * @param {string|null} barberoId - si es barbero, solo puede liberar las propias
- * @returns {Promise<Object>} { id, desde, hasta, liberada_en, liberada_por }
- * @throws {{ code: 'NO_ENCONTRADA' | 'ORIGEN_ADMIN' | 'YA_LIBERADA' | 'YA_TERMINADA' }}
+ * @returns {Promise<Object>} { id, tipo, desde, hasta, liberada_en, liberada_por }
+ * @throws {{ code: 'NO_ENCONTRADA' | 'ORIGEN_ADMIN' | 'YA_LIBERADA' | 'YA_TERMINADA', tipo?: string }}
  */
 export const liberarSuspension = async (suspensionId, tenantId, rol, barberoId) => {
   // $1 id, $2 tenant, $3 barbero (o NULL si es admin: no filtra), $4 rol.
@@ -287,26 +311,27 @@ export const liberarSuspension = async (suspensionId, tenantId, rol, barberoId) 
           AND NOT ($4::text = 'barbero' AND bs.origen = 'admin')
           AND bs.liberada_en IS NULL
           AND ${finEfectivoSql('bs')} > now()
-        RETURNING bs.id, bs.desde, bs.hasta, bs.liberada_en, bs.liberada_por`,
+        RETURNING bs.id, bs.tipo, bs.desde, bs.hasta, bs.liberada_en, bs.liberada_por`,
       params
     );
   } catch (err) {
     // UUID mal formado (22P02): no puede ser ninguna suspensión → 404, no 500.
-    if (err.code === '22P02') throw errorLiberar('NO_ENCONTRADA', 'Suspensión no encontrada');
+    if (err.code === '22P02') throw errorLiberar('NO_ENCONTRADA', MENSAJE_NO_ENCONTRADA);
     throw err;
   }
   if (result.rows.length > 0) return result.rows[0];
 
   // No se liberó: averiguar por qué (mismo scoping que el UPDATE).
   const fila = await query(
-    `SELECT bs.origen, bs.liberada_en FROM barbero_suspension bs WHERE ${scoping}`,
+    `SELECT bs.origen, bs.liberada_en, bs.tipo FROM barbero_suspension bs WHERE ${scoping}`,
     params.slice(0, 3)
   );
   const s = fila.rows[0];
-  if (!s) throw errorLiberar('NO_ENCONTRADA', 'Suspensión no encontrada');
+  if (!s) throw errorLiberar('NO_ENCONTRADA', MENSAJE_NO_ENCONTRADA);
+  const textos = textosLiberar(s.tipo);
   if (rol === 'barbero' && s.origen === 'admin') {
-    throw errorLiberar('ORIGEN_ADMIN', 'Esta suspensión la cargó el administrador; no la podés liberar');
+    throw errorLiberar('ORIGEN_ADMIN', textos.origenAdmin, s.tipo);
   }
-  if (s.liberada_en) throw errorLiberar('YA_LIBERADA', 'La suspensión ya fue liberada');
-  throw errorLiberar('YA_TERMINADA', 'La suspensión ya terminó');
+  if (s.liberada_en) throw errorLiberar('YA_LIBERADA', textos.yaLiberada, s.tipo);
+  throw errorLiberar('YA_TERMINADA', textos.yaTerminada, s.tipo);
 };

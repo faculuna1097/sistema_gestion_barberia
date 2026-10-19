@@ -6,6 +6,15 @@
 import { useState } from 'react';
 import { theme } from '../../theme/tokens.js';
 
+// Alto de cada ítem (≥ 44 de touch target, MD §5.4).
+const ALTO_ITEM = 56;
+
+/**
+ * Alto de la barra sin la safe-area de iOS: los ítems más el borde superior de
+ * 1 px. Lo usa StickyFooter para pararse encima de la barra.
+ */
+export const ALTO_BOTTOM_NAV = ALTO_ITEM + 1;
+
 /**
  * BottomNav
  * Barra inferior de navegación con N slots equiwidth (ícono + label).
@@ -70,7 +79,7 @@ function NavItem({ item, activo, onClick }) {
       aria-current={activo ? 'page' : undefined}
       style={{
         flex: 1,
-        minHeight: 56,
+        minHeight: ALTO_ITEM,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',

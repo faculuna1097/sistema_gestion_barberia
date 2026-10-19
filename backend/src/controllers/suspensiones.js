@@ -4,6 +4,7 @@
 
 import { listarSuspensiones, crearSuspension, liberarSuspension } from '../services/suspensionesService.js';
 import { armarLinkTurnero } from '../services/turnosService.js';
+import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { esFechaISO, parsearInstante } from '../utils/validarFecha.js';
 import { TIPOS_SUSPENSION } from '../utils/constantes.js';
 
@@ -55,16 +56,19 @@ export const getSuspensiones = async (req, res) => {
  * Crea suspensión. Si pisa turnos reservados y no viene confirmar_cancelacion,
  * devuelve 409 con la lista de turnos afectados. Reenviar con
  * confirmar_cancelacion: true para ejecutar.
+ * Si rol=barbero, es siempre propia (ignora barbero_id del body); si rol=admin,
+ * barbero_id tiene que ser un barbero activo del tenant.
  * @param {Object} req.body - { barbero_id, desde, hasta, motivo?, confirmar_cancelacion? };
  *   desde/hasta: 'YYYY-MM-DDTHH:MM' en hora argentina, o ISO con 'Z' u offset (parsearInstante)
- * @returns {JSON} 201 { suspension, turnos_cancelados } o 409 { turnos_afectados }
+ * @returns {JSON} 201 { suspension, turnos_cancelados } | 404 barbero | 409 { turnos_afectados }
  */
 export const postSuspension = async (req, res) => {
   const { desde, hasta, motivo, confirmar_cancelacion } = req.body;
 
   // barbero_id: si es barbero, forzar el propio
-  const barberoId = req.rol === 'barbero' ? req.barbero_id : req.body.barbero_id;
-  const origen = req.rol === 'barbero' ? 'barbero' : 'admin';
+  const esBarbero = req.rol === 'barbero';
+  const barberoId = esBarbero ? req.barbero_id : req.body.barbero_id;
+  const origen = esBarbero ? 'barbero' : 'admin';
 
   if (!barberoId || !desde || !hasta) {
     return res.status(400).json({ error: 'barbero_id, desde y hasta son requeridos' });
@@ -81,6 +85,15 @@ export const postSuspension = async (req, res) => {
   }
 
   try {
+    // El barbero_id del admin llega del body: tiene que ser un barbero activo del
+    // tenant. El FK de barbero_suspension no es compuesto con tenant_id, así que
+    // sin este chequeo se podría cargar una suspensión a un barbero de otro tenant.
+    // El del barbero viene del token.
+    if (!esBarbero && !(await barberoActivoEnTenant(barberoId, req.tenant_id))) {
+      console.warn('[suspensiones] postSuspension — barbero no pertenece al tenant o inactivo | barbero_id:', barberoId);
+      return res.status(404).json({ error: 'Barbero no encontrado o inactivo' });
+    }
+
     const linkTurnero = armarLinkTurnero(req);
     const resultado = await crearSuspension({
       tenantId: req.tenant_id,
@@ -113,12 +126,15 @@ export const postSuspension = async (req, res) => {
 
 /**
  * DELETE /api/admin/suspensiones/:id
- * Libera la suspensión (no la borra): completa liberada_en/liberada_por. Si está
- * en curso, termina en este momento. No recupera turnos cancelados.
+ * Libera la suspensión o el descanso (no lo borra): completa liberada_en/liberada_por.
+ * Si está en curso, termina en este momento. No recupera turnos cancelados.
  * Path y verbo se mantienen por compatibilidad con los dos fronts; el renombre a
  * POST .../:id/liberar está anotado en plan_app_barbero.md.
  * Si rol=barbero, solo puede liberar las propias, y no las cargadas por el admin.
- * @returns {JSON} 200 { ok: true, suspension } | 403 origen admin | 404 | 409 ya liberada o terminada
+ * La clave de la respuesta sigue siendo `suspension` (los fronts la leen así); el
+ * objeto trae `tipo` para distinguir un descanso.
+ * @returns {JSON} 200 { ok: true, suspension: { id, tipo, desde, hasta, liberada_en, liberada_por } } |
+ *   403 origen admin | 404 | 409 ya liberada o terminada
  */
 export const deleteSuspension = async (req, res) => {
   const barberoId = req.rol === 'barbero' ? req.barbero_id : null;
@@ -126,20 +142,20 @@ export const deleteSuspension = async (req, res) => {
 
   try {
     const suspension = await liberarSuspension(req.params.id, req.tenant_id, rol, barberoId);
-    console.log('[suspensiones] deleteSuspension — suspensión liberada | suspension_id:', req.params.id, '| por:', rol);
+    console.log('[suspensiones] deleteSuspension — liberada | suspension_id:', req.params.id, '| tipo:', suspension.tipo, '| por:', rol);
     res.json({ ok: true, suspension });
   } catch (err) {
     if (err.code === 'NO_ENCONTRADA') {
       return res.status(404).json({ error: err.message });
     }
     if (err.code === 'ORIGEN_ADMIN') {
-      console.warn('[suspensiones] deleteSuspension — barbero intentó liberar una suspensión del admin | suspension_id:', req.params.id);
+      console.warn('[suspensiones] deleteSuspension — barbero intentó liberar una fila del admin | suspension_id:', req.params.id, '| tipo:', err.tipo);
       return res.status(403).json({ error: err.message });
     }
     if (err.code === 'YA_LIBERADA' || err.code === 'YA_TERMINADA') {
       return res.status(409).json({ error: err.message });
     }
     console.error('[suspensiones] Error en deleteSuspension:', err);
-    res.status(500).json({ error: 'Error al liberar la suspensión' });
+    res.status(500).json({ error: 'Error al liberar la suspensión o el descanso' });
   }
 };
