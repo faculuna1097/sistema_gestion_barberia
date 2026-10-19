@@ -8,7 +8,7 @@ Creado: 2026-10-15.
 
 | # | Feature | Estado |
 |---|---|---|
-| 1 | Grilla de slots y descansos en la Agenda | En curso: Fases 1 a 4 hechas (2026-10-15 / 2026-10-19), sin deploy; falta la prueba visual de 3 y 4 y sigue la 5 (panel de gestión) |
+| 1 | Grilla de slots y descansos en la Agenda | En curso: Fases 1 a 4 hechas (2026-10-15 / 2026-10-19) y la limpieza de la Agenda (paso 5a, 2026-10-19), probadas en pantalla contra demo, sin deploy; sigue la 5 (panel de gestión) |
 | 2 | Planillas: cortes con turno vs. sin turno | Hecha (2026-10-15), sin deploy |
 
 ---
@@ -245,7 +245,7 @@ ajeno, uno del admin; terminar uno en curso y ver que el slot siguiente vuelve a
 `/disponibilidad`; suspensión con turnos afectados → cancela y crea en una sola
 sentencia.
 
-#### Fase 3 — Front del barbero: grilla ✅ (2026-10-19, falta la prueba visual)
+#### Fase 3 — Front del barbero: grilla ✅ (2026-10-19, probada en pantalla en el paso 5a)
 
 - `Agenda.jsx` pasa a consumir `GET /admin/agenda` (reemplaza `getTurnos` + `getTenant`
   en esta pantalla).
@@ -256,7 +256,7 @@ sentencia.
 - Los turnos ya ocupan todos los slots que les tocan (se dimensionan por `inicio`/`fin`).
 - Leer `sistema_de_disenio.md` antes de tocar UI.
 
-#### Fase 4 — Front del barbero: selección y descanso ✅ (2026-10-19, falta la prueba visual)
+#### Fase 4 — Front del barbero: selección y descanso ✅ (2026-10-19, probada en pantalla en el paso 5a)
 
 - Los slots `libre` y futuros son tocables (área táctil ≥ 44px: a 80px/hora y slots de
   30 min da 40px; ajustar `PX_POR_HORA` si hace falta).
@@ -320,7 +320,8 @@ sentencia.
     §9 #19). La selección se dibuja como un solo bloque `accentSoft` con borde de acento,
     que tapa la separación entre celdas.
   - **Pista:** arriba del timeline, "Tocá un horario libre para marcar un descanso", solo si
-    hay slots para tocar. No se va al elegir uno, para que el timeline no salte.
+    hay slots para tocar. No se va al elegir uno, para que el timeline no salte. **Se sacó en
+    el paso 5a** (pedido del usuario).
   - **Footer:** `StickyFooter` suma `sobreBottomNav` para pegarse encima de la barra
     (`BottomNav` exporta `ALTO_BOTTOM_NAV`). Los avisos de error de la Agenda, también los de
     turnos, pasaron del banner de arriba al footer: arriba quedaban fuera de vista al scrollear.
@@ -348,10 +349,50 @@ sentencia.
     `Button` acepta `ariaLabel`.
 - **Verificación:** lint y build limpios, script de selección 29/29; las funciones puras de la
   geometría, de la unión de descansos y del alta instantánea, probadas en node. La prueba
-  visual contra demo (Alejo, martes 20/10) la hace el usuario.
+  visual contra demo (Alejo, martes 20/10) se hizo en el paso 5a.
 - **Para la Fase 5:** como un descanso puede ser varias filas pegadas, la Agenda del panel
   (5.1) tiene que unirlas igual al dibujar, y el registro (5.3) tiene que decidir si cuenta
   filas o bloques unidos (cada fila conserva su antelación).
+
+**Cómo quedó el paso 5a (2026-10-19): limpieza de la Agenda del barbero.**
+- **`Agenda.jsx` partido en `components/agenda/`** (refactor, sin cambio de comportamiento).
+  `Agenda.jsx` queda como orquestador. Las piezas:
+  - `datosAgenda.js` y `geometria.js`: funciones puras (la respuesta en minutos, y minutos → px);
+  - `NavegadorDia`, `Timeline` y `BloquesTimeline` (turno, descanso/ausencia, slot tocable);
+  - `ModalDetalle` (cáscara + `DatoDetalle`), `DetalleTurnoModal` y `DetalleDescansoModal`.
+
+  Las 35 declaraciones de `HEAD` están idénticas en los archivos nuevos, y las funciones puras
+  dan lo mismo que las de `HEAD` (36/36 casos). `ModalDetalle`, `DatoDetalle` (parecido a
+  `SummaryRow`) y `PUEDE_HOVER` podrían servir fuera de la Agenda: quedan donde están hasta que
+  aparezca un segundo uso (`sistema_de_disenio.md` §7.1).
+- **Fechas:** `fmtFechaHora` mostraba el día siguiente desde las 21:00 (recortaba el ISO en
+  UTC); `generarProximosDias` tenía el mismo bug. Se trajeron `fechaLocalISO` y `fechaDeISO`
+  del turnero. `fechaHoyISO` y `sumarDias` pasaron a `utils/fecha.js`: había copias en
+  Agenda, CrearTurno, Dashboard y MiPlanilla (`formatearFechaISO`, `sumarSemanas`, `domingoDe`).
+- **Acciones de turnos (convenciones §8):** completar, no asistió y cancelar dibujan el cambio
+  con el `{ id, estado }` que devuelve el servidor (`aplicarEstadoDeTurno`). Si fallan, el
+  aviso y una recarga, porque el turno pudo cambiar por otro lado.
+- **14 px:** los dos renglones de `BloqueTurno` (con interlineado de 18 px: a 1,5 no entraban
+  en un slot de 48), "Volver a hoy" y las filas de Gestión → Suspensiones.
+- **`crearSuspension`** tira el error con `status` (y `turnos_afectados` en el 409), como
+  `crearDescanso`; `Gestion.jsx` abre el diálogo de conflicto desde el `catch`.
+- **Pedidos del usuario durante la prueba:** se sacó la pista de arriba del timeline. "Volver
+  a hoy" se veía raro: hasta que corría el efecto de carga, se dibujaba el timeline del día
+  anterior bajo la fecha nueva, y el scroll a "ahora" arrancaba sobre él y se repetía. Ahora
+  el skeleton aparece en el mismo render que la fecha (`irADia`).
+- **Quedó para decidir:**
+  - el salto de 52 px cuando "Volver a hoy" desaparece (alternativa: "Hoy" dentro de la barra
+    de fecha);
+  - en Gestión → Suspensiones, a 375 px, "hasta martes, 20 de octubre · 23:00 hs" ocupa dos
+    renglones al lado del botón "Liberar" (alternativa: "hasta 23:00 hs" si es el mismo día).
+- **Pendiente fuera de la Agenda:** el Inicio (`Dashboard.jsx`) tiene las mismas tres acciones
+  de turnos sin la convención de §8. Los demás textos de 12 px de la app están en
+  `sistema_de_disenio.md` §9 #22.
+- **Datos de prueba en demo** (Alejo, 20/10, creados desde la app y sin email):
+  - turnos C1 13:00 completado (`a33d738b`), C2 13:50 no asistió (`c45adee2`) y C3 18:00
+    cancelado (`b39d3054`);
+  - descanso 13:00–14:40, liberado (`7567b1a8`);
+  - suspensión 21:30–23:00, liberada (`bb538ff1`).
 
 #### Fase 5 — Panel de gestión (`frontend/`)
 

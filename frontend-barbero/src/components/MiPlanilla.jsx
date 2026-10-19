@@ -11,7 +11,9 @@ import { ChevronLeft, ChevronRight, ChevronDown, ClipboardX, TrendingUp, Trendin
 import { getPlanilla, getResumenPlanilla } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { fmtPesos } from '../utils/formato.js';
-import { fmtFechaCorta, fmtFechaLarga } from '../utils/fecha.js';
+import {
+  fmtFechaCorta, fmtFechaLarga, fechaLocalISO, fechaHoyISO, sumarDias,
+} from '../utils/fecha.js';
 
 import {
   Card,
@@ -24,16 +26,6 @@ import {
 // ─── Helpers locales de semana ─────────────────────────────────────────────
 
 /**
- * formatearFechaISO
- * Helper privado: convierte una instancia Date a YYYY-MM-DD (zona local).
- * @param {Date} d
- * @returns {string}
- */
-function formatearFechaISO(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/**
  * lunesDeEstaSemana
  * Devuelve el lunes de la semana actual en formato YYYY-MM-DD.
  * @returns {string}
@@ -44,7 +36,7 @@ function lunesDeEstaSemana() {
   const diff = dia === 0 ? -6 : 1 - dia; // domingo cuenta como fin de semana previa
   const lunes = new Date(hoy);
   lunes.setDate(hoy.getDate() + diff);
-  return formatearFechaISO(lunes);
+  return fechaLocalISO(lunes);
 }
 
 /**
@@ -55,9 +47,7 @@ function lunesDeEstaSemana() {
  * @returns {string}
  */
 function sumarSemanas(fecha, semanas) {
-  const d = new Date(fecha + 'T12:00:00');
-  d.setDate(d.getDate() + semanas * 7);
-  return formatearFechaISO(d);
+  return sumarDias(fecha, semanas * 7);
 }
 
 /**
@@ -67,9 +57,7 @@ function sumarSemanas(fecha, semanas) {
  * @returns {string}
  */
 function domingoDe(lunes) {
-  const d = new Date(lunes + 'T12:00:00');
-  d.setDate(d.getDate() + 6);
-  return formatearFechaISO(d);
+  return sumarDias(lunes, 6);
 }
 
 /**
@@ -456,7 +444,7 @@ function DesgloseSemanal({ resumen, cantidadCortes }) {
  * @param {Array<{ fecha: string, cortes: Array }>} props.diasConCortes
  */
 function DetalleCortes({ diasConCortes, comisionTipo, comisionValor }) {
-  const hoy = formatearFechaISO(new Date());
+  const hoy = fechaHoyISO();
   // Sólo el día de hoy arranca desplegado (igual que el panel de gestión).
   // En semanas pasadas, hoy no está en la lista → arrancan todos contraídos.
   const [expandidos, setExpandidos] = useState(() => new Set([hoy]));

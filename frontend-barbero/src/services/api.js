@@ -319,25 +319,25 @@ export const getSuspensiones = async ({ tipo } = {}) => {
 
 /**
  * crearSuspension
- * Crea una nueva suspensión.
+ * Crea una nueva suspensión. Si pisa turnos reservados y no viene
+ * `confirmar_cancelacion`, el servidor no la crea y responde 409 con la lista
+ * de turnos afectados.
  * @param {Object} datos - { barbero_id, desde, hasta, motivo?, confirmar_cancelacion? }
- * @returns {Promise<Object>} { suspension, turnos_cancelados } o error 409 con turnos_afectados
+ * @returns {Promise<Object>} { suspension, turnos_cancelados } (turnos_cancelados: cantidad)
+ * @throws {Error} con el mensaje del servidor y `status`; el 409 de turnos
+ *   afectados suma `turnos_afectados` ([{ inicio, cliente_nombre, ... }])
  */
 export const crearSuspension = async (datos) => {
   const res = await apiFetch('/admin/suspensiones', {
     method: 'POST',
     body: JSON.stringify(datos),
   });
-  if (res.status === 409) {
-    const body = await res.json();
-    const err = new Error(body.error || 'Hay turnos afectados');
-    err.status = 409;
-    err.turnos_afectados = body.turnos_afectados;
-    return { conflicto: true, ...body };
-  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Error al crear suspensión');
+    const err = new Error(body.error || 'Error al crear suspensión');
+    err.status = res.status;
+    if (body.turnos_afectados) err.turnos_afectados = body.turnos_afectados;
+    throw err;
   }
   return res.json();
 };

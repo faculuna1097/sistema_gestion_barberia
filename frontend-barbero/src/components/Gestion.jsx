@@ -601,8 +601,9 @@ function TabSuspensiones({ barbero }) {
 
   /**
    * crear
-   * POST a /api/admin/suspensiones. Si devuelve conflicto (409), abre el modal
-   * con los turnos afectados y queda esperando confirmación.
+   * POST a /api/admin/suspensiones. Si pisa turnos reservados (409 con
+   * `turnos_afectados`), abre el modal con esos turnos y queda esperando
+   * confirmación.
    * @param {boolean} confirmarCancelacion - true tras pasar por el modal de conflicto.
    */
   const crear = async (confirmarCancelacion = false) => {
@@ -626,16 +627,16 @@ function TabSuspensiones({ barbero }) {
       };
       const res = await crearSuspension(datos);
 
-      if (res.conflicto) {
-        setConflicto(res);
-        return;
-      }
-
       mostrarFeedback('ok', `Suspensión creada. ${res.turnos_cancelados || 0} turnos cancelados.`);
       setConflicto(null);
       limpiarForm();
       await cargar();
     } catch (err) {
+      // Pisa turnos reservados: no es un error, es la pregunta de si cancelarlos.
+      if (err.status === 409 && err.turnos_afectados) {
+        setConflicto({ turnos_afectados: err.turnos_afectados });
+        return;
+      }
       console.error('[Gestion/Suspensiones] Error creando:', err.message);
       mostrarFeedback('error', `Error al crear: ${err.message}`);
     } finally {
@@ -876,7 +877,7 @@ function FilaSuspension({ suspension, onLiberar }) {
           </div>
           <div style={{
             fontFamily: theme.body,
-            fontSize: theme.sizeMicro + 1,
+            fontSize: theme.sizeBody,
             color: theme.muted,
             marginTop: 2,
           }}>
@@ -885,7 +886,7 @@ function FilaSuspension({ suspension, onLiberar }) {
           {suspension.motivo && (
             <div style={{
               fontFamily: theme.body,
-              fontSize: theme.sizeMicro + 1,
+              fontSize: theme.sizeBody,
               color: theme.inkSoft,
               marginTop: 6,
               fontStyle: 'italic',

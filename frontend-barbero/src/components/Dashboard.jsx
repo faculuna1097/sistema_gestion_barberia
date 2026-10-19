@@ -16,7 +16,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, RefreshCw, CalendarX } from 'lucide-react';
 
 import { getTurnos, patchEstadoTurno, cancelarTurno } from '../services/api.js';
-import { fmtHora, fmtFechaLarga } from '../utils/fecha.js';
+import { fmtHora, fmtFechaLarga, fechaHoyISO } from '../utils/fecha.js';
 import { theme } from '../theme/tokens.js';
 
 import {
@@ -30,21 +30,6 @@ import {
   TurnoListItem,
   AvatarIniciales,
 } from './ui';
-
-// ─── Helpers locales ────────────────────────────────────────────────────────
-
-/**
- * fechaHoyISO
- * Devuelve la fecha de hoy en formato YYYY-MM-DD (zona local).
- * @returns {string}
- */
-function fechaHoyISO() {
-  const ahora = new Date();
-  const anio = ahora.getFullYear();
-  const mes  = String(ahora.getMonth() + 1).padStart(2, '0');
-  const dia  = String(ahora.getDate()).padStart(2, '0');
-  return `${anio}-${mes}-${dia}`;
-}
 
 // Configuración del ConfirmDialog según la acción a ejecutar.
 // Centralizar acá evita 3 if/else en el render.

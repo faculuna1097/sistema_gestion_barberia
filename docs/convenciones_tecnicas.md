@@ -194,11 +194,11 @@ No se eliminan registros en ABMs. Se usa el campo `activo` (true/false) para pre
 ### Después de una acción: la pantalla nunca queda vieja ni vacía
 Decidido el 2026-10-19, en la Agenda del barbero. Cuando el usuario confirma una acción que cambia datos (crear, liberar, cancelar…), entre que confirma y la recarga la pantalla no muestra un rato el estado anterior ni un hueco vacío:
 - **Mientras responde el servidor**, el diálogo (o el botón) queda en "Procesando…".
-- **Con la respuesta**, el cambio se dibuja al instante con los datos que devolvió el servidor, no con lo que el front supone que pasó. Recién ahí se cierra el diálogo. Después se recarga por detrás, sin skeleton, para confirmar. Ej.: `agregarDescanso` en `Agenda.jsx` dibuja el descanso con la fila que devolvió `POST /admin/descansos`.
+- **Con la respuesta**, el cambio se dibuja al instante con los datos que devolvió el servidor, no con lo que el front supone que pasó. Recién ahí se cierra el diálogo. Después se recarga por detrás, sin skeleton, para confirmar. Ej.: `agregarDescanso` (`frontend-barbero/src/components/agenda/datosAgenda.js`) dibuja el descanso con la fila que devolvió `POST /admin/descansos`.
 - **Si la respuesta no alcanza para dibujar el cambio** (ej. liberar un descanso en curso, que lo acorta y vuelve a abrir slots), el diálogo sigue en "Procesando…" hasta que termina la recarga, y se cierra con la pantalla ya actualizada.
 - **Nada se dibuja antes de que responda el servidor** (sin UI optimista): si falla (409, 400), no hay nada que deshacer.
 
-Dónde está aplicada: en la Agenda del barbero, al marcar un descanso y al liberarlo. Falta en las acciones de turnos de la misma Agenda (completar, no asistió, cancelar) y en el resto de los fronts, que no están relevados.
+Dónde está aplicada: en todas las acciones de la Agenda del barbero. Marcar un descanso lo dibuja con `agregarDescanso`; liberarlo espera la recarga. Completar, no asistió y cancelar un turno lo dibujan con `aplicarEstadoDeTurno`, con el `{ id, estado }` que devuelve el servidor. Falta en el Inicio de la misma app (`Dashboard.jsx`), que tiene las mismas tres acciones de turnos y todavía recarga después de cerrar el diálogo, y en el resto de los fronts, que no están relevados.
 
 ### Estructura del panel admin
 - Cada `SeccionXxx` es autónoma y carga sus datos en `useEffect([])`.
