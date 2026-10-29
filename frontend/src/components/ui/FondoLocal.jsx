@@ -29,6 +29,7 @@
 
 import { useState, useEffect } from 'react';
 import { theme } from '../../theme/tokens.js';
+import { ALTO_VISIBLE } from '../../utils/pantalla.js';
 
 // ─── Presentación del fondo ───────────────────────────────────────────────────
 // Constantes pensadas para iterar el look sin tocar a los consumidores.
@@ -154,7 +155,9 @@ function FondoLocal({ imagenLocal, children, esperarImagen = false, blurPx = BLU
       style={{
         position: 'relative',
         width: '100vw',
-        height: '100vh',
+        // Alto visible (dvh): con 100vh, en Safari la caja queda más alta que lo
+        // que se ve y el panel centrado se corta abajo (ver utils/pantalla.js).
+        height: ALTO_VISIBLE,
         overflow: 'hidden',
         display: 'flex',
         alignItems: 'center',
@@ -172,6 +175,10 @@ function FondoLocal({ imagenLocal, children, esperarImagen = false, blurPx = BLU
           style={{
             position: 'absolute',
             inset: 0,
+            // Recorta la foto agrandada (scale 1.1): sin esto sobresale ~5% por
+            // lado y vuelve scrolleable al contenedor; el navegador lo corría solo
+            // (al enfocar un botón) y el panel perdía su marco de arriba.
+            overflow: 'hidden',
             opacity: esperarImagen || fotoCargada ? 1 : 0,
             transition: transicionOpacidad,
           }}

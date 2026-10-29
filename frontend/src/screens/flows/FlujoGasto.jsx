@@ -18,6 +18,7 @@ import {
   BotonOpcion,
   CampoTexto,
   CampoMonto,
+  TarjetaResumen,
   FilaResumen,
   FilaTotal,
   PantallaExito,
@@ -207,19 +208,27 @@ export default function FlujoGasto({ onVolver, categorias, imagenLocal }) {
   // ─── PASO 5 — Resumen y confirmación ─────────────────────────────────────────
   if (paso === 5) {
     return (
-      <PanelWizard paso={5} total={5} titulo="Confirmá el gasto" onVolver={retroceder} imagenLocal={imagenLocal} maxAncho={560}>
-        <div style={wizardStyles.resumenCard}>
+      <PanelWizard
+        paso={5}
+        total={5}
+        titulo="Confirmá el gasto"
+        onVolver={retroceder}
+        imagenLocal={imagenLocal}
+        maxAncho={560}
+        pie={
+          <>
+            {error && <p style={wizardStyles.errorTexto}>{error}</p>}
+            <Button variant="primary" disabled={enviando} onClick={confirmarGasto} style={wizardStyles.btnGrande}>
+              {enviando ? "Guardando..." : "Confirmar gasto"}
+            </Button>
+          </>
+        }
+      >
+        <TarjetaResumen total={<FilaTotal label="Monto" value={fmtPesos(montoFinal)} color={theme.danger} />}>
           <FilaResumen label="Categoría" value={categoriaSeleccionada?.nombre} />
           <FilaResumen label="Descripción" value={descripcion} />
           <FilaResumen label="Pago" value={<BadgeFormaPago forma={formaPago} />} ultima />
-          <FilaTotal label="Monto" value={fmtPesos(montoFinal)} color={theme.danger} />
-        </div>
-
-        {error && <p style={wizardStyles.errorTexto}>{error}</p>}
-
-        <Button variant="primary" disabled={enviando} onClick={confirmarGasto} style={wizardStyles.btnGrande}>
-          {enviando ? "Guardando..." : "Confirmar gasto"}
-        </Button>
+        </TarjetaResumen>
       </PanelWizard>
     );
   }

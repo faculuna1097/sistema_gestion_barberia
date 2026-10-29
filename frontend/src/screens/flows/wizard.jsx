@@ -6,19 +6,22 @@
 // sistema usa para los primitivos wizard-only del turnero (§6.2).
 //
 // Exporta:
-//   PanelWizard   — marco de un paso (FondoLocal + panel + header + progreso).
-//   BotonOpcion   — card táctil de selección.
-//   CampoTexto    — textarea con el lenguaje visual de Field.
-//   CampoMonto    — input numérico grande ($).
-//   FilaResumen   — fila label/valor del resumen (densidad kiosko).
-//   FilaTotal     — fila de total (color parametrizable: ink ingreso / danger egreso).
-//   PantallaExito — confirmación con checkmark animado + monto.
-//   wizardStyles  — estilos de layout reusables por los flujos (grillas, botón grande, etc.).
+//   PanelWizard    — marco de un paso (FondoLocal + panel + header + progreso);
+//                    con `pie`, el modo de los pasos de confirmación.
+//   BotonOpcion    — card táctil de selección.
+//   CampoTexto     — textarea con el lenguaje visual de Field.
+//   CampoMonto     — input numérico grande ($).
+//   TarjetaResumen — card gris del resumen: filas con scroll interno + total fijo.
+//   FilaResumen    — fila label/valor del resumen (densidad kiosko).
+//   FilaTotal      — fila de total (color parametrizable: ink ingreso / danger egreso).
+//   PantallaExito  — confirmación con checkmark animado + monto.
+//   wizardStyles   — estilos de layout reusables por los flujos (grillas, botón grande, etc.).
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { theme } from "../../theme/tokens.js";
 import { fmtPesos } from "../../utils/formato.js";
+import { ALTO_VISIBLE } from "../../utils/pantalla.js";
 import { FondoLocal } from "../../components/ui";
 
 // ─── PanelWizard ──────────────────────────────────────────────────────────────
@@ -39,10 +42,16 @@ import { FondoLocal } from "../../components/ui";
  * @param {number} [props.maxAncho=960] — ancho máximo del contenido centrado.
  *   Ancho (~960) para grillas de muchas opciones; angosto (~520) para pasos de
  *   un solo campo (input/resumen) y que no queden absurdamente anchos.
+ * @param {React.ReactNode} [props.pie] — pie fijo del paso (ej. error + botón
+ *   "Confirmar"). Sin `pie`, el cuerpo del panel scrollea entero (pasos con
+ *   grillas o campos). Con `pie`, el cuerpo NO scrollea: el contenido (ej. una
+ *   `TarjetaResumen`) se achica al espacio libre y scrollea adentro, y el pie
+ *   queda siempre visible debajo. Para los pasos de confirmación.
  * @param {React.ReactNode} props.children   — contenido del paso
  * @returns {JSX.Element}
  */
-export function PanelWizard({ paso, total, titulo, subtitulo, onVolver, imagenLocal, maxAncho = 960, children }) {
+export function PanelWizard({ paso, total, titulo, subtitulo, onVolver, imagenLocal, maxAncho = 960, pie, children }) {
+  const conPie = Boolean(pie);
   return (
     <FondoLocal imagenLocal={imagenLocal}>
       {/* Press feedback de los botones de opción: scale al tocar, sin onPointerDown.
@@ -78,10 +87,13 @@ export function PanelWizard({ paso, total, titulo, subtitulo, onVolver, imagenLo
           <span style={styles.indicadorPaso}>Paso {paso} de {total}</span>
         </div>
 
-        {/* Cuerpo del paso (se anima en cada cambio de paso). */}
-        <div key={paso} style={styles.pasoBody}>
-          <div style={{ ...styles.pasoInner, maxWidth: maxAncho }}>
-            <div style={styles.contenido}>{children}</div>
+        {/* Cuerpo del paso (se anima en cada cambio de paso). Con pie, el cuerpo
+            queda fijo y cada nivel se puede achicar (minHeight 0) hasta que la
+            zona con scroll del contenido absorbe lo que no entra. */}
+        <div key={paso} style={conPie ? { ...styles.pasoBody, ...styles.pasoBodyFijo } : styles.pasoBody}>
+          <div style={{ ...styles.pasoInner, ...(conPie && styles.pasoInnerFijo), maxWidth: maxAncho }}>
+            <div style={conPie ? styles.contenidoFijo : styles.contenido}>{children}</div>
+            {conPie && <div style={styles.pie}>{pie}</div>}
           </div>
         </div>
       </div>
@@ -242,6 +254,62 @@ export function CampoMonto({ value, onChange }) {
   );
 }
 
+// ─── TarjetaResumen ─────────────────────────────────────────────────────────────
+/**
+ * TarjetaResumen
+ * Card gris del resumen de un paso de confirmación. Las filas scrollean adentro
+ * de la card si no entran; el total queda fijo abajo, siempre a la vista junto
+ * al botón de confirmar. Se usa dentro de un `PanelWizard` con `pie`, que es el
+ * que le da el alto disponible.
+ *
+ * Mientras quedan filas por ver abajo, el borde del total muestra una línea y
+ * una sombra hacia arriba (`theme.shadowScroll`): en el iPad la barra de scroll
+ * se esconde sola y el sistema no usa degradados (§2).
+ *
+ * @param {Object} props
+ * @param {React.ReactNode} props.total — la fila de total (`FilaTotal`)
+ * @param {React.ReactNode} props.children — las filas (`FilaResumen`)
+ * @returns {JSX.Element}
+ */
+export function TarjetaResumen({ total, children }) {
+  const refFilas = useRef(null);
+  const [hayMasAbajo, setHayMasAbajo] = useState(false);
+
+  // ¿Queda contenido sin ver debajo de la zona con scroll? Tolerancia de 1px
+  // por el redondeo de scrollTop con zoom o pantallas de alta densidad.
+  const medir = useCallback(() => {
+    const el = refFilas.current;
+    if (!el) return;
+    setHayMasAbajo(el.scrollHeight - el.scrollTop - el.clientHeight > 1);
+  }, []);
+
+  // Re-medir cuando cambia el alto disponible (resize, rotación del iPad, el
+  // mensaje de error que aparece en el pie y le quita espacio).
+  useEffect(() => {
+    const el = refFilas.current;
+    if (!el) return undefined;
+    const observador = new ResizeObserver(medir);
+    observador.observe(el);
+    return () => observador.disconnect();
+  }, [medir]);
+
+  return (
+    <div style={styles.tarjeta}>
+      <div ref={refFilas} onScroll={medir} style={styles.tarjetaFilas}>
+        {children}
+      </div>
+      <div
+        style={{
+          ...styles.tarjetaTotal,
+          boxShadow: hayMasAbajo ? `inset 0 1px 0 ${theme.hairline}, ${theme.shadowScroll}` : "none",
+        }}
+      >
+        {total}
+      </div>
+    </div>
+  );
+}
+
 // ─── FilaResumen ────────────────────────────────────────────────────────────────
 /**
  * FilaResumen
@@ -262,7 +330,7 @@ export function FilaResumen({ label, value, ultima = false }) {
         justifyContent: "space-between",
         alignItems: "baseline",
         gap: 16,
-        padding: "16px 0",
+        padding: "12px 0",
         borderBottom: ultima ? "none" : `1px solid ${theme.hairline}`,
       }}
     >
@@ -404,15 +472,6 @@ export const wizardStyles = {
     fontSize: 18,
     fontWeight: theme.weightHeading,
   },
-  // Card de resumen.
-  resumenCard: {
-    display: "flex",
-    flexDirection: "column",
-    background: theme.surfaceAlt,
-    borderRadius: theme.radiusLg,
-    border: `1px solid ${theme.hairline}`,
-    padding: "8px 28px",
-  },
   errorTexto: {
     color: theme.danger,
     fontFamily: theme.body,
@@ -429,7 +488,7 @@ const styles = {
     zIndex: 1,
     // Panel grande con la foto del local (FondoLocal) asomando como marco (~36px).
     width: "calc(100vw - 72px)",
-    height: "calc(100vh - 72px)",
+    height: `calc(${ALTO_VISIBLE} - 72px)`,
     background: theme.surface,
     borderRadius: theme.radiusLg,
     border: `1px solid ${theme.hairline}`,
@@ -494,6 +553,11 @@ const styles = {
     alignItems: "center",
     animation: "om-fade 0.18s ease",
   },
+  // Modo con pie: el cuerpo no scrollea (scrollea la zona interna del contenido).
+  pasoBodyFijo: {
+    overflowY: "hidden",
+    paddingBottom: 24,
+  },
   // Contenido centrado. `margin: auto 0` lo centra verticalmente cuando sobra
   // espacio y, a diferencia de justify-content:center, no recorta al hacer scroll
   // si el contenido excede el alto. El maxWidth lo fija PanelWizard por paso.
@@ -503,6 +567,52 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     gap: 24,
+  },
+  // Modo con pie: se achica al alto del cuerpo (minHeight 0) en vez de crecer
+  // más allá; el gap contenido↔pie es el mismo que había entre card y botón.
+  pasoInnerFijo: {
+    flex: "0 1 auto",
+    minHeight: 0,
+    gap: 16,
+  },
+  contenidoFijo: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 16,
+    flex: "0 1 auto",
+    minHeight: 0,
+  },
+  pie: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 16,
+    flexShrink: 0,
+  },
+  // TarjetaResumen: card que se achica al espacio libre; las filas scrollean y
+  // el total queda fijo abajo.
+  tarjeta: {
+    display: "flex",
+    flexDirection: "column",
+    flex: "0 1 auto",
+    minHeight: 0,
+    overflow: "hidden",
+    background: theme.surfaceAlt,
+    borderRadius: theme.radiusLg,
+    border: `1px solid ${theme.hairline}`,
+  },
+  tarjetaFilas: {
+    flex: "0 1 auto",
+    minHeight: 0,
+    overflowY: "auto",
+    padding: "8px 28px 0",
+  },
+  // position relative: la sombra del total se pinta encima de las filas.
+  tarjetaTotal: {
+    position: "relative",
+    flexShrink: 0,
+    padding: "0 28px 8px",
+    background: theme.surfaceAlt,
+    transition: `box-shadow ${theme.transitionFast}`,
   },
   tituloArea: {
     textAlign: "center",
@@ -532,8 +642,7 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "baseline",
     gap: 16,
-    padding: "20px 0 10px",
-    marginTop: 6,
+    padding: "16px 0 8px",
     borderTop: `2px solid ${theme.accent}`,
   },
   totalLabel: {

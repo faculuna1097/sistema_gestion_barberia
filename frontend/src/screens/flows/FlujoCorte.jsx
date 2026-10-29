@@ -19,6 +19,7 @@ import {
   PanelWizard,
   BotonOpcion,
   CampoMonto,
+  TarjetaResumen,
   FilaResumen,
   FilaTotal,
   PantallaExito,
@@ -347,22 +348,30 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
   if (paso === 6) {
     const hayPropina = propinaFinal > 0;
     return (
-      <PanelWizard paso={6} total={6} titulo="Confirmá el corte" onVolver={retroceder} imagenLocal={imagenLocal} maxAncho={560}>
-        <div style={wizardStyles.resumenCard}>
+      <PanelWizard
+        paso={6}
+        total={6}
+        titulo="Confirmá el corte"
+        onVolver={retroceder}
+        imagenLocal={imagenLocal}
+        maxAncho={560}
+        pie={
+          <>
+            {error && <p style={wizardStyles.errorTexto}>{error}</p>}
+            <Button variant="primary" disabled={enviando} onClick={confirmarCorte} style={wizardStyles.btnGrande}>
+              {enviando ? "Guardando..." : "Confirmar corte"}
+            </Button>
+          </>
+        }
+      >
+        <TarjetaResumen total={<FilaTotal label="Total" value={fmtPesos(montoTotal)} />}>
           <FilaResumen label="Barbero" value={barberoSeleccionado?.nombre} />
           {turnoSeleccionado && <FilaResumen label="Cliente" value={turnoSeleccionado.cliente_nombre} />}
           <FilaResumen label="Servicio" value={servicioSeleccionado?.nombre} />
           <FilaResumen label="Precio" value={fmtPesos(servicioSeleccionado?.precio)} />
           <FilaResumen label="Pago" value={<BadgeFormaPago forma={formaPago} />} ultima={!hayPropina} />
           {hayPropina && <FilaResumen label="Propina" value={fmtPesos(propinaFinal)} ultima />}
-          <FilaTotal label="Total" value={fmtPesos(montoTotal)} />
-        </div>
-
-        {error && <p style={wizardStyles.errorTexto}>{error}</p>}
-
-        <Button variant="primary" disabled={enviando} onClick={confirmarCorte} style={wizardStyles.btnGrande}>
-          {enviando ? "Guardando..." : "Confirmar corte"}
-        </Button>
+        </TarjetaResumen>
       </PanelWizard>
     );
   }

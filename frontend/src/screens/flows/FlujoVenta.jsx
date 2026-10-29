@@ -15,6 +15,7 @@ import { Button, BadgeFormaPago } from "../../components/ui";
 import {
   PanelWizard,
   BotonOpcion,
+  TarjetaResumen,
   FilaResumen,
   FilaTotal,
   PantallaExito,
@@ -235,20 +236,28 @@ export default function FlujoVenta({ onVolver, productos, imagenLocal }) {
   // ─── PASO 4 — Resumen y confirmación ─────────────────────────────────────────
   if (paso === 4) {
     return (
-      <PanelWizard paso={4} total={4} titulo="Confirmá la venta" onVolver={retroceder} imagenLocal={imagenLocal} maxAncho={560}>
-        <div style={wizardStyles.resumenCard}>
+      <PanelWizard
+        paso={4}
+        total={4}
+        titulo="Confirmá la venta"
+        onVolver={retroceder}
+        imagenLocal={imagenLocal}
+        maxAncho={560}
+        pie={
+          <>
+            {error && <p style={wizardStyles.errorTexto}>{error}</p>}
+            <Button variant="primary" disabled={enviando} onClick={confirmarVenta} style={wizardStyles.btnGrande}>
+              {enviando ? "Guardando..." : "Confirmar venta"}
+            </Button>
+          </>
+        }
+      >
+        <TarjetaResumen total={<FilaTotal label="Total" value={fmtPesos(montoTotal)} />}>
           <FilaResumen label="Producto" value={productoSeleccionado?.nombre} />
           <FilaResumen label="Precio unitario" value={fmtPesos(productoSeleccionado?.precio)} />
           <FilaResumen label="Cantidad" value={cantidad} />
           <FilaResumen label="Pago" value={<BadgeFormaPago forma={formaPago} />} ultima />
-          <FilaTotal label="Total" value={fmtPesos(montoTotal)} />
-        </div>
-
-        {error && <p style={wizardStyles.errorTexto}>{error}</p>}
-
-        <Button variant="primary" disabled={enviando} onClick={confirmarVenta} style={wizardStyles.btnGrande}>
-          {enviando ? "Guardando..." : "Confirmar venta"}
-        </Button>
+        </TarjetaResumen>
       </PanelWizard>
     );
   }
