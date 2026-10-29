@@ -196,7 +196,7 @@ export const getTurnos = async (filtros = {}) => {
 /**
  * getAgenda
  * Agenda de un día del barbero autenticado, en una sola llamada: turnos,
- * descansos y ausencias, y la grilla de slots (plan_app_barbero.md, Feature 1, 2.6).
+ * descansos y ausencias, y la grilla de slots (decisiones_descansos.md).
  * Los instantes de `grilla` llegan con offset '-03:00'; los de `turnos`,
  * `suspensiones` y `descansos`, en UTC ('...Z'): compararlos siempre como fechas,
  * nunca como texto.
@@ -373,7 +373,7 @@ export const liberarSuspension = async (suspensionId) => {
 /**
  * crearDescanso
  * Marca un descanso propio sobre slots libres y futuros de un día
- * (plan_app_barbero.md, Feature 1, 2.5). El rango tiene que coincidir con slots
+ * (decisiones_descansos.md). El rango tiene que coincidir con slots
  * seguidos de la grilla: se mandan el inicio del primero y el fin del último tal
  * como los dio GET /admin/agenda.
  * @param {Object} rango

@@ -156,6 +156,14 @@ Escala fija: **4, 8, 12, 16, 24, 32**. No usar paddings arbitrarios.
 Mínimas. `shadowSm` para botones primarios, `shadowMd` para cards flotantes
 (ej. modales). **Sin glow, sin gradientes, sin glassmorphism.**
 
+`shadowScroll` (`0 -8px 8px -8px rgba(0,0,0,0.12)`, desde el 2026-10-29) es una
+sombra hacia arriba que avisa "hay más contenido abajo" en una zona con scroll
+interno. Es funcional, no decorativa: en el iPad la barra de scroll se esconde
+sola, y un degradado de desvanecido iría contra §2. Va junto a una línea
+`hairline` en el borde de lo que queda fijo debajo, y solo mientras queda algo
+por ver (se apaga al llegar al final). Hoy la usa `TarjetaResumen` (§6.4). Está
+en el panel, el barbero y la landing; el turnero no la tiene (§3.8).
+
 ### 3.6 Densidad por superficie
 
 El producto tiene tres superficies con públicos y objetivos distintos.
@@ -166,6 +174,16 @@ La densidad visual debe acompañar.
 | **Turnero** (cliente final) | Visitante esporádico, mobile-first | **Aireada** | 16–24 | 24–32 |
 | **Panel barbero** (uso diario) | Empleado, mobile + desktop | **Intermedia** | 12–16 | 16–24 |
 | **Panel gestión** (admin) | Dueño, desktop, sesiones largas | **Compacta** | 8–12 | 12–16 |
+| **Kiosko** (modo operativo, iPad del mostrador) | Barbero o recepción, de pie y a distancia, al cobrar | **Grande** | 16–28 | 16–24 |
+
+**Kiosko (escala propia, decidida el 2026-10-29).** Los flujos de Corte, Venta y
+Gasto (`wizard.jsx`, §6.4) se leen de pie, a un brazo del iPad, y se tocan
+rápido entre cliente y cliente. Por eso usan una escala más grande que la de
+§3.2, que es una excepción escrita y no un descuido: 19 en las opciones y el
+textarea, 18 en los valores del resumen y el botón grande, 13 en las etiquetas
+mono del resumen, 15 en el subtítulo, 22 / 32 en la etiqueta y el monto del
+total, 40 / 56 en el campo de monto y 48 en el monto del éxito. Lo que falta es
+escribirla con nombre en vez de números sueltos (§9 #23).
 
 Reglas que cambian según densidad:
 - **Tipografía**: el turnero puede usar `sizeHeading` (18) generosamente; gestión prioriza `sizeBody` (14) incluso en títulos de card. **No bajar nunca de 14 en texto leíble**.
@@ -556,6 +574,56 @@ componente se comparte recién cuando un segundo front lo necesita).
 | `TurnoListItem` | Card de turno: hora/cliente/servicio + acciones según estado. |
 | `SearchInput` | Input de búsqueda con lupa + botón limpiar. |
 
+### 6.4 Wizard del modo operativo (iPad del local)
+
+Piezas de la superficie kiosko (los flujos de Corte, Venta y Gasto del iPad del
+mostrador). Viven en `frontend/src/screens/flows/wizard.jsx`, no en
+`components/ui/`: son del flujo, con el mismo criterio que §6.2.
+
+| Componente | Para qué |
+|---|---|
+| `PanelWizard` | Marco de un paso: `FondoLocal` + panel claro casi a pantalla completa, barra de progreso y header (volver · título · "Paso X de Y"). Con `pie`, el modo de los pasos de confirmación (abajo). |
+| `BotonOpcion` | Card táctil de selección (barbero, turno, servicio, forma de pago). |
+| `CampoTexto` / `CampoMonto` | Textarea e input de monto grande, con el lenguaje visual de `Field`. |
+| `TarjetaResumen` | Card gris del resumen: filas con scroll interno y total fijo abajo. |
+| `FilaResumen` / `FilaTotal` | Fila label/valor del resumen y fila de total (monto en el color de §3.1.1). |
+| `PantallaExito` / `AvisoExito` | Confirmación con la tilde y el monto, y un aviso en tono warning debajo. |
+
+**Paso de confirmación (desde el 2026-10-29).** El botón de confirmar tiene que
+verse siempre, sin scrollear, aunque el resumen sea largo (una venta con muchos
+productos) y aunque la barra de Safari le quite alto a la pantalla:
+
+```jsx
+<PanelWizard paso={4} total={4} titulo="Confirmá el gasto" maxAncho={560}
+  pie={
+    <>
+      {error && <p style={wizardStyles.errorTexto}>{error}</p>}
+      <Button variant="primary" onClick={confirmar} style={wizardStyles.btnGrande}>Confirmar gasto</Button>
+    </>
+  }
+>
+  <TarjetaResumen total={<FilaTotal label="Monto" value={fmtPesos(monto)} color={theme.danger} />}>
+    <FilaResumen label="Categoría" value={categoria} />
+    <FilaResumen label="Pago" value={<BadgeFormaPago forma={formaPago} />} ultima />
+  </TarjetaResumen>
+</PanelWizard>
+```
+
+- **Con `pie`, el panel no scrollea.** El contenido se achica al espacio libre
+  (`minHeight: 0` en cada nivel) y el pie, con el error y el botón, queda fijo
+  debajo. Sin `pie` (pasos con grillas o campos), el cuerpo scrollea entero.
+- **El resumen scrollea adentro de su tarjeta.** Las filas tienen scroll propio;
+  el total queda fijo al pie de la tarjeta, a la vista junto al botón.
+- **Indicador de "hay más abajo":** mientras quedan filas por ver, el borde de
+  arriba del total muestra una línea `hairline` y `theme.shadowScroll` (§3.5).
+  Se re-mide al scrollear y con un `ResizeObserver` (rotación del iPad, el error
+  que aparece en el pie).
+- **Alto de la pantalla:** el panel y `FondoLocal` miden `ALTO_VISIBLE`
+  (`utils/pantalla.js`): `100dvh` si el navegador lo soporta, si no `100vh`. En
+  Safari, `100vh` incluye el alto de la barra y el borde de abajo quedaba tapado.
+- Un paso de confirmación nuevo usa este patrón. No se arma un resumen a mano
+  con su propio scroll.
+
 ---
 
 ## 7. Reglas para extender el sistema
@@ -678,10 +746,13 @@ actualizá este doc.**
 20. **`Card` tiene `padding` por defecto 14**, fuera de la escala 4/8/12/16/24/32 (§3.3).
 21. **Touch target de los días de `SelectorDiaHorario`**: ~46 px de ancho en 375 px, pero ~41 px dentro de la tarjeta de la reprogramación y ~37 px en pantallas de 320 px, debajo de los 44 de §5.4 (el alto es 48). Al `MiniCalendario` le pasaba lo mismo.
 22. ~~**Textos de 12 px en `frontend-barbero`**~~ — **Resuelto (2026-10-19)**: pasaron a 14 (`sizeBody`), con el valor de `SummaryRow` (13) y la ayuda y el error de `Field` (12). `StatusPill` pasó de 10 a 11 (`sizeMicro`). Quedan en 11, a propósito, las pills de categoría y las etiquetas de la `BottomNav` (excepciones de §3.6). Texto original: (`theme.sizeMicro + 1`), debajo del mínimo de 14 de §3.6: Clientes, CrearTurno, Dashboard, Gestión (tab Horarios, `FilaDia`), Más, MiPlanilla, `KPI` y `TurnoListItem`; `StatusPill` usa 10. Los 12 de `Field` y los 13 de `SummaryRow` ya están en `estado_actual.md` ("Tamaños escritos a mano"). La Agenda y las filas de Gestión → Suspensiones pasaron a 14 el 2026-10-19. Ojo al subirlos: en un bloque de alto fijo, 14 px con el interlineado global (1,5 → 21 px por renglón) puede no entrar; el bloque de turno de la Agenda usa un interlineado de 18 px (`INTERLINEADO_TURNO`). Visto en el paso 5a de la app del barbero.
+23. **La escala del kiosko está escrita como números sueltos** en `frontend/src/screens/flows/wizard.jsx` (19, 18, 13, 15, 22, 32, 40, 56, 48; ver §3.6). Los tamaños son intencionales; lo que falta es nombrarlos: una escala local al archivo (ej. `TAM_KIOSKO = { opcion: 19, valorResumen: 18, … }`), no en `tokens.js`, porque hoy la usa un solo archivo (§7.1). Si otro front o superficie la necesita, se promueve. Visto el 2026-10-29 al documentar §6.4.
 
 ---
 
-*Última actualización: 2026-10-19 — paso 5b de la app del barbero: §3.1.1 aplicada en `frontend-barbero`; §3.6 suma las excepciones en `sizeMicro`; §4.2 suma el hook `useHover`; deuda #22 resuelta y #19 resuelta en el barbero (falta el turnero).*
+*Última actualización: 2026-10-29 — cierre de la Feature 1 de la app del barbero: §3.5 suma `shadowScroll`; §3.6 suma la superficie kiosko y su escala; §6.4 nueva (wizard del modo operativo y el patrón del paso de confirmación); deuda #23 nueva.*
+
+*2026-10-19 — paso 5b de la app del barbero: §3.1.1 aplicada en `frontend-barbero`; §3.6 suma las excepciones en `sizeMicro`; §4.2 suma el hook `useHover`; deuda #22 resuelta y #19 resuelta en el barbero (falta el turnero).*
 
 *2026-10-19 — paso 5a de la app del barbero: deuda #22 nueva (textos de 12 px que quedan en `frontend-barbero`); #19 anota `PUEDE_HOVER` de la Agenda.*
 

@@ -30,6 +30,7 @@ docs/
 |-- auditoria_2026-07.md
 |-- convenciones_tecnicas.md
 |-- decisiones_acceso_barberos.md
+|-- decisiones_descansos.md
 |-- decisiones_horario_atencion.md
 |-- decisiones_landing_ia.md
 |-- decisiones_login_operativo.md
@@ -43,6 +44,7 @@ docs/
 |-- estado_actual.md
 |-- onboarding.md
 |-- performance_frontends.md
+|-- plan_app_barbero.md
 |-- postmortem_golive_turnero.md
 |-- ruta_proyecto.md
 |-- sistema_de_disenio.md

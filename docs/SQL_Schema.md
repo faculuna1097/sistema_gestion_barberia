@@ -183,8 +183,8 @@ CREATE TABLE public.barbero_suspension (
   motivo text,
   origen text NOT NULL DEFAULT 'admin'::text CHECK (origen = ANY (ARRAY['admin'::text, 'barbero'::text, 'whatsapp'::text])),
   created_at timestamp with time zone DEFAULT now(),
-  -- tipo, liberada_en y liberada_por: agregadas el 2026-10-15 (plan_app_barbero.md,
-  -- Feature 1). Un descanso es una fila con tipo = 'descanso'. Las filas no se borran:
+  -- tipo, liberada_en y liberada_por: agregadas el 2026-10-15
+  -- (decisiones_descansos.md). Un descanso es una fila con tipo = 'descanso'. Las filas no se borran:
   -- liberar (o terminar antes) completa liberada_en/liberada_por.
   -- Rango efectivo: [desde, LEAST(hasta, COALESCE(liberada_en, hasta))); vacío si se
   -- liberó antes de empezar. El backend lo calcula en un solo lugar

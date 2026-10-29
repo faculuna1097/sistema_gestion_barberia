@@ -129,7 +129,7 @@ export const postSuspension = async (req, res) => {
  * Libera la suspensión o el descanso (no lo borra): completa liberada_en/liberada_por.
  * Si está en curso, termina en este momento. No recupera turnos cancelados.
  * Path y verbo se mantienen por compatibilidad con los dos fronts; el renombre a
- * POST .../:id/liberar está anotado en plan_app_barbero.md.
+ * POST .../:id/liberar está anotado en estado_actual.md.
  * Si rol=barbero, solo puede liberar las propias, y no las cargadas por el admin.
  * La clave de la respuesta sigue siendo `suspension` (los fronts la leen así); el
  * objeto trae `tipo` para distinguir un descanso.

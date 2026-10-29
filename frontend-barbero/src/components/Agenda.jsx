@@ -4,7 +4,7 @@
 // en que no tiene slots, los turnos y los bloques de descanso y de ausencia.
 // Navegable por día.
 // Todo sale de una sola llamada por día, GET /api/admin/agenda
-// (plan_app_barbero.md, Feature 1, fases 3 y 4).
+// (decisiones_descansos.md).
 // - Al tocar un turno se abre su detalle; las acciones pasan por ConfirmDialog.
 // - Los slots libres y futuros se pueden tocar para elegir un descanso (reglas
 //   en utils/seleccionSlots.js); con algo elegido aparece un footer para
@@ -198,7 +198,7 @@ export default function Agenda() {
     }
   }, [cargando, esHoy]);
 
-  // Slots que se pueden tocar ahora (libres y futuros, D3) y la selección
+  // Slots que se pueden tocar ahora (libres y futuros) y la selección
   // depurada contra ellos: si un slot elegido empezó o se ocupó, sale solo.
   const iniciosTocables = useMemo(
     () => new Set(
@@ -228,7 +228,7 @@ export default function Agenda() {
 
   /**
    * tocarSlotLibre
-   * Suma o saca un slot de la selección con las reglas de D4.
+   * Suma o saca un slot de la selección con las reglas de utils/seleccionSlots.js.
    * @param {Object} slot - slot tocable de la grilla
    */
   const tocarSlotLibre = (slot) => setSeleccion(tocarSlot(seleccionVigente, slot));
@@ -320,7 +320,7 @@ export default function Agenda() {
   /**
    * liberarDescanso
    * Libera el descanso abierto en el detalle (DELETE /admin/suspensiones/:id): si
-   * no empezó lo anula entero; si está en curso, lo termina ahora (D8). Un
+   * no empezó lo anula entero; si está en curso, lo termina ahora. Un
    * descanso unido (varias partes pegadas) son varias filas: se liberan todas las
    * partes que todavía no terminaron (una ya terminada daría 409).
    * El detalle queda en "Procesando…" hasta que la agenda recargada ya no muestra

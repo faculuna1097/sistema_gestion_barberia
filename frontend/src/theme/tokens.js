@@ -1,7 +1,8 @@
 // /frontend/src/theme/tokens.js
 // Tokens del sistema de diseño — tema "Luz" (Stripe/Clerk look).
 // Single source of truth para colores, tipografía, spacing, radios.
-// Idéntico al de frontend-turnero — la fuente de verdad vive allá.
+// Fuente de verdad de Luz (sistema_de_disenio.md §1): frontend-barbero y
+// frontend-landing tienen copias; el turnero diverge a propósito (§3.8).
 // Se importa así:   import { theme } from '../theme/tokens';
 
 /**

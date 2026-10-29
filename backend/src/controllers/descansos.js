@@ -3,7 +3,7 @@
 // bloques y crearlos. Thin wrapper con scoping por rol; la lógica vive en
 // descansosService.
 // Liberar un descanso es DELETE /api/admin/suspensiones/:id (controllers/suspensiones.js).
-// Plan: plan_app_barbero.md → Feature 1 → 2.5 y Fase 5.
+// Decisiones: docs/decisiones_descansos.md.
 
 import { crearDescanso, listarBloquesDescanso, bloqueDelDescanso } from '../services/descansosService.js';
 import { barberoActivoEnTenant } from '../services/barberosService.js';

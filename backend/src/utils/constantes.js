@@ -20,7 +20,7 @@ export const ANTELACION_MINIMA_MINUTOS = 5;
 export const DIAS_MAXIMOS_RANGO_DISPONIBILIDAD = 62;
 
 // Valores de barbero_suspension.tipo (mismo CHECK que la DB). Un descanso es una
-// suspensión corta que el barbero marca sobre slots libres (plan_app_barbero.md, D1).
+// suspensión corta que el barbero marca sobre slots libres (decisiones_descansos.md).
 export const TIPOS_SUSPENSION = ['suspension', 'descanso'];
 
 // Hora local (ART) a la que se envía el lote de recordatorios. Hoy la respeta

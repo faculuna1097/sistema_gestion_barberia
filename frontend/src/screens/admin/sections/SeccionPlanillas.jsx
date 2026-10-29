@@ -16,7 +16,7 @@
 //   - Tabla consolidada por barbero con totales de la semana + columna
 //     "A pagar" opcional (comisión + propinas; toggle global).
 //   - Columna "Descansos": cuántos se tomó y cuánto tiempo (registro de
-//     descansos, /admin/planilla/descansos; plan_app_barbero.md fase 5.3).
+//     descansos, /admin/planilla/descansos; decisiones_descansos.md).
 //   - Al tocar un barbero se abre ModalDetalleBarbero: cifras de la semana,
 //     pago, total generado por día, por forma de pago y por origen, y el
 //     registro de sus descansos (aunque no haya cortado). También en modo

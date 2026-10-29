@@ -1,7 +1,7 @@
 // /backend/src/services/descansosService.js
 // Lógica de negocio de los descansos: el barbero (o el admin) marca slots libres
 // y futuros de un día como "no atiendo". Un descanso es una fila de
-// barbero_suspension con tipo = 'descanso' (plan_app_barbero.md, Feature 1, D1).
+// barbero_suspension con tipo = 'descanso' (decisiones_descansos.md).
 // Se libera con el mismo DELETE /api/admin/suspensiones/:id (liberarSuspension).
 //
 // Acá vive también la ÚNICA definición de "descansos pegados = un solo bloque"
@@ -64,7 +64,7 @@ const tramoDeLaGrilla = (grilla, desde, hasta) => {
  * Valida contra la grilla del barbero (calcularGrillaDelDia, el mismo anclaje que
  * el turnero): el rango tiene que coincidir con slots consecutivos de un bloque,
  * el primero tiene que empezar después de ahora y todos tienen que estar libres.
- * Un descanso nunca cancela turnos (D6).
+ * Un descanso nunca cancela turnos (decisiones_descansos.md).
  *
  * El INSERT repite los chequeos de ocupación en la misma sentencia (NOT EXISTS de
  * turnos reservados y de suspensiones vigentes que se superpongan): cubre una

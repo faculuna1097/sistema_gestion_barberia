@@ -64,6 +64,9 @@ export const theme = {
   // ── Sombras ───────────────────────────────────────────────────
   shadowSm: '0 1px 2px rgba(0,0,0,0.06)',
   shadowMd: '0 4px 12px rgba(0,0,0,0.06)',
+  // Sombra hacia arriba que marca "hay más contenido abajo" en una zona con
+  // scroll interno (ej. TarjetaResumen del wizard). Funcional, no decorativa.
+  shadowScroll: '0 -8px 8px -8px rgba(0,0,0,0.12)',
 
   // ── Transiciones ──────────────────────────────────────────────
   transitionFast:   '.12s ease-out',

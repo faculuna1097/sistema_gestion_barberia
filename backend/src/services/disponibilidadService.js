@@ -4,7 +4,7 @@
 // barberos activos, con el barbero que se asigna a cada horario. También arma
 // la grilla de slots de la Agenda del barbero (calcularGrillaDelDia).
 // Decisiones: docs/decisiones_turnero.md, docs/decisiones_turnero_ux.md
-// ("Decisiones técnicas — backend") y docs/plan_app_barbero.md (Feature 1).
+// ("Decisiones técnicas — backend") y docs/decisiones_descansos.md.
 //
 // Toda la aritmética de fechas se hace con luxon en TZ Argentina para evitar
 // confusiones con UTC al sumar minutos y cruzar bloques horarios.
@@ -569,7 +569,7 @@ export const calcularDiasCualquiera = ({ tenantId, servicioId, desde, hasta }) =
 
 // ─── Grilla de la Agenda (app del barbero) ──────────────────────────────────
 // La dibuja la Agenda y valida la creación de un descanso.
-// Ver plan_app_barbero.md → Feature 1 (2.5 y 2.6).
+// Ver decisiones_descansos.md.
 
 /**
  * estadoDelSlot

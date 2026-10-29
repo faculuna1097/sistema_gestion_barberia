@@ -98,8 +98,8 @@ rationale explícito** (abajo) — no es trabajo olvidado, es deuda evaluada y a
    inválidos que más importan (doble turno, referencia cross-tenant), y el helper
    de stock compensa best-effort. El residual es corrupción improbable bajo carrera
    estrecha, no fuga ni DoS.
-   - **Reserva vs. suspensión/descanso (agregado 2026-10-15, `plan_app_barbero.md`
-     2.1).** La reserva (`insertarTurno`, el `UPDATE` de `reprogramarTurno`) chequea
+   - **Reserva vs. suspensión/descanso (agregado 2026-10-15,
+     `decisiones_descansos.md`).** La reserva (`insertarTurno`, el `UPDATE` de `reprogramarTurno`) chequea
      las suspensiones en la misma sentencia (`NOT EXISTS`), y `crearSuspension`
      cancela los turnos que pisa en la misma sentencia que la inserta (CTEs). Queda
      una ventana de milisegundos: si una reserva y una suspensión (o un descanso) del

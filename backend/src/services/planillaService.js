@@ -207,8 +207,8 @@ const antelacionUltimaParte = (bloque) =>
     .antelacion_minutos;
 
 /**
- * Registro semanal de descansos por barbero (Planillas, plan_app_barbero.md fase
- * 5.3). Los descansos pegados llegan como un solo bloque (regla en
+ * Registro semanal de descansos por barbero (Planillas; decisiones_descansos.md →
+ * "Registro del dueño"). Los descansos pegados llegan como un solo bloque (regla en
  * descansosService → unirDescansos) e incluye los liberados antes de empezar,
  * que se listan pero no cuentan en cantidad ni en minutos.
  *

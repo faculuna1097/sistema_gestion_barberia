@@ -1,6 +1,6 @@
 // /frontend-barbero/src/utils/seleccionSlots.js
 // Reglas para elegir los slots de un descanso en la Agenda
-// (plan_app_barbero.md, Feature 1, D3 y D4). Lógica pura, sin React: se puede
+// (decisiones_descansos.md → "Selección"). Lógica pura, sin React: se puede
 // leer y probar aislada.
 //
 // La selección es siempre un bloque continuo de slots (un descanso = un rango =
@@ -11,7 +11,7 @@
 
 /**
  * esSlotTocable
- * Un slot se puede tocar si está libre y todavía no empezó (D3). El slot en
+ * Un slot se puede tocar si está libre y todavía no empezó. El slot en
  * curso no: el turnero ya no lo ofrece, así que no hace falta bloquearlo.
  * @param {{ inicioMs: number, estado: string }} slot - slot de la grilla
  * @param {number} ahora - "ahora" en ms epoch
@@ -23,7 +23,7 @@ export function esSlotTocable(slot, ahora) {
 
 /**
  * tocarSlot
- * Nueva selección después de tocar un slot (D4):
+ * Nueva selección después de tocar un slot:
  * - sin selección → queda ese slot solo;
  * - un slot ya seleccionado → sale junto con todo lo que tiene debajo (si es el
  *   primero, la selección queda vacía);

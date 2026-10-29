@@ -14,7 +14,7 @@ import { enviarCancelacionAutomatica, construirContextoMail } from './mail/maile
 // ese momento, y si fue antes de `desde` el rango queda vacío y no bloquea nada.
 // Esta es la ÚNICA definición del rango en el backend: toda lectura de la tabla
 // (disponibilidad, listado, validación de reservas, liberar) usa estos helpers.
-// Ver plan_app_barbero.md → Feature 1 → "Modelo de datos".
+// Ver decisiones_descansos.md → "Liberar, no borrar".
 
 /**
  * Expresión SQL del fin efectivo de una suspensión.
@@ -282,9 +282,9 @@ const MENSAJE_NO_ENCONTRADA = 'No se encontró la suspensión o el descanso';
 
 /**
  * Libera una suspensión (o descanso): completa liberada_en = now() y liberada_por.
- * La fila no se borra (registro para el dueño, plan_app_barbero.md D7). Si todavía
- * no empezó, deja de bloquear entera; si está en curso, termina en este momento
- * (D8). No recupera turnos cancelados.
+ * La fila no se borra (registro para el dueño, decisiones_descansos.md). Si todavía
+ * no empezó, deja de bloquear entera; si está en curso, termina en este momento.
+ * No recupera turnos cancelados.
  *
  * Todas las reglas van en el WHERE del UPDATE, así dos pedidos simultáneos no
  * pueden liberarla dos veces. Si no actualiza nada, una lectura posterior solo

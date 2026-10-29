@@ -2,7 +2,7 @@
 // Controller de la Agenda del día de un barbero (/api/admin/agenda): turnos,
 // ausencias, descansos (como bloques) y la grilla de slots en una sola respuesta, para que el
 // front haga una llamada en vez de cuatro.
-// Plan: plan_app_barbero.md → Feature 1 → 2.6.
+// Decisiones: docs/decisiones_descansos.md.
 
 import { listarTurnos } from '../services/turnosService.js';
 import { listarSuspensiones } from '../services/suspensionesService.js';

@@ -1,8 +1,8 @@
 // /frontend-landing/src/theme/tokens.js
 // Tokens del sistema de diseño — tema "Luz" (Stripe/Clerk look).
-// Copia de la fuente de verdad (frontend-turnero/src/theme/tokens.js) más
-// algunos tokens propios de la landing (anchos de columna y separación entre
-// secciones), que el turnero no necesita por ser mobile-first de 480px.
+// Copia de la fuente de verdad (frontend/src/theme/tokens.js, el panel) más
+// algunos tokens propios de la landing (anchos de columna, separación entre
+// secciones y tamaños de marketing), que la app no necesita.
 // Se importa así:   import { theme } from '../theme/tokens';
 
 /**
@@ -79,6 +79,9 @@ export const theme = {
   // ── Sombras ───────────────────────────────────────────────────
   shadowSm: '0 1px 2px rgba(0,0,0,0.06)',
   shadowMd: '0 4px 12px rgba(0,0,0,0.06)',
+  // Sombra hacia arriba que marca "hay más contenido abajo" en una zona con
+  // scroll interno (ej. TarjetaResumen del wizard). Funcional, no decorativa.
+  shadowScroll: '0 -8px 8px -8px rgba(0,0,0,0.12)',
   shadowLg: '0 12px 32px rgba(0,0,0,0.10)',  // mockups/capturas flotantes (landing)
 
   // ── Transiciones ──────────────────────────────────────────────

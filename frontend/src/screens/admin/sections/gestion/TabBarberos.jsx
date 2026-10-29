@@ -478,7 +478,7 @@ function aplicarLiberacion(lista, liberada) {
  * tipo 'suspension': los descansos se ven en la agenda del Turnero y en
  * Planillas. La creación maneja el flujo de conflicto 409 (turnos que se
  * cancelarían). Liberar ("Terminar" si está en curso) no borra la fila: queda
- * como registro (plan_app_barbero.md D7). Usa confirmación inline de 2 pasos
+ * como registro (decisiones_descansos.md). Usa confirmación inline de 2 pasos
  * (sin ConfirmDialog anidado dentro del modal).
  *
  * @param {object} props

@@ -62,7 +62,7 @@ export const getResumen = async (req, res) => {
 
 /**
  * GET /api/admin/planilla/descansos?semana=YYYY-MM-DD&barbero_id=X
- * Registro de descansos de la semana por barbero (plan_app_barbero.md fase 5.3).
+ * Registro de descansos de la semana por barbero (decisiones_descansos.md → "Registro del dueño").
  * Misma regla de scoping que getPlanilla: el barbero ve solo el suyo.
  * @returns {JSON} array de { barbero_id, barbero_nombre, cantidad, minutos,
  *   minutos_jornada, porcentaje, bloques: [...] } (ver descansosSemanal)

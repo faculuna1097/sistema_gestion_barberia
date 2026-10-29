@@ -9,7 +9,7 @@ import { ModalDetalle, DatoDetalle } from './ModalDetalle.jsx';
 /**
  * DetalleDescansoModal
  * Detalle de un descanso: rango, estado, quién lo marcó y la acción que
- * corresponde (plan_app_barbero.md D8 y D9):
+ * corresponde (decisiones_descansos.md):
  * - lo marcó el administrador → sin acciones (el barbero no lo puede liberar);
  * - no empezó → "Liberar": lo anula entero;
  * - en curso → "Terminar descanso": termina ahora y lo que queda se vuelve a ofrecer;
