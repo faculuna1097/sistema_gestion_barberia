@@ -30,6 +30,9 @@ export function limitesDelDia(fecha) {
  *   crear un descanso.
  * - bloques: descansos y ausencias, recortados al día visible (una ausencia de
  *   varios días llega entera). Conservan su rango completo en desdeMs/hastaMs.
+ *   Los descansos llegan ya como bloques (los pegados, unidos en uno: la regla
+ *   vive en el backend, descansosService → unirDescansos); los liberados antes
+ *   de empezar no se dibujan.
  * - fueraDeHorario: las horas del local en las que el barbero no tiene slots,
  *   en celdas grises (celdasFueraDeHorario), cada una con el ISO de su inicio
  *   para mostrar la hora.
@@ -65,9 +68,12 @@ export function prepararAgenda(data, fecha) {
     };
   });
 
-  const bloques = data.suspensiones
-    .map((s) => aBloque(s, fecha))
-    .filter((b) => b.minFin > b.minInicio);
+  const bloques = [
+    ...data.suspensiones.map((s) => aBloque(s, 'suspension', fecha)),
+    ...data.descansos
+      .filter((d) => d.estado !== 'liberado')
+      .map((d) => aBloque(d, 'descanso', fecha)),
+  ].filter((b) => b.minFin > b.minInicio);
 
   const fueraDeHorario = celdasFueraDeHorario(data.horario_atencion, slots, data.duracion_slot_minutos)
     .map((c) => ({ ...c, inicioIso: new Date(inicioDia + c.minInicio * 60000).toISOString() }));
@@ -179,21 +185,29 @@ function cortarTramo({ desde, hasta, vieneDeSlot, vaASlot }, duracion) {
 
 /**
  * aBloque
- * Una fila de suspensión o descanso (de GET /admin/agenda, o el descanso que
- * devuelve POST /admin/descansos: tienen la misma forma) como bloque del
- * timeline: el rango completo en ms y recortado al día visible en minutos.
+ * Una ausencia, un bloque de descanso (de GET /admin/agenda o de
+ * POST /admin/descansos) o, si el servidor no pudo devolver el bloque, la fila
+ * del descanso recién creado, como bloque del timeline: el rango completo en ms
+ * y recortado al día visible en minutos. `partes` son las filas que hay que
+ * liberar para liberar el bloque: las del bloque de descanso, o la fila misma.
  * Función pura.
- * @param {{ id, tipo, origen, motivo, desde: string, hasta: string }} s - `hasta` es el fin efectivo
+ * @param {{ id, origen, motivo?, desde: string, hasta: string, partes? }} s - `hasta` es el fin efectivo
+ * @param {'suspension'|'descanso'} tipo
  * @param {string} fecha - 'YYYY-MM-DD' del día visible
- * @returns {Object} { id, tipo, origen, motivo, desdeIso, hastaIso, desdeMs, hastaMs, minInicio, minFin }
+ * @returns {Object} { id, tipo, origen, motivo, desdeIso, hastaIso, desdeMs, hastaMs,
+ *   minInicio, minFin, partes: [{ id, desdeMs, hastaMs }] }
  */
-function aBloque(s, fecha) {
+function aBloque(s, tipo, fecha) {
   const { inicioDia, finDia } = limitesDelDia(fecha);
   const desdeMs = Date.parse(s.desde);
   const hastaMs = Date.parse(s.hasta);
+  const partes = s.partes
+    ? s.partes.map((p) => ({ id: p.id, desdeMs: Date.parse(p.desde), hastaMs: Date.parse(p.hasta) }))
+    : [{ id: s.id, desdeMs, hastaMs }];
   return {
     id: s.id,
-    tipo: s.tipo,
+    tipo,
+    partes,
     origen: s.origen,
     motivo: s.motivo,
     desdeIso: s.desde,
@@ -208,19 +222,22 @@ function aBloque(s, fecha) {
 /**
  * agregarDescanso
  * Suma a la agenda ya preparada el descanso que acaba de devolver
- * POST /admin/descansos: su bloque, y sus slots pasan a 'descanso' (dejan de
- * ser tocables). Así aparece al instante, sin esperar la recarga, que después
- * lo confirma con los datos del servidor. Función pura.
+ * POST /admin/descansos: el bloque que lo contiene (ya unido con los descansos
+ * pegados por el servidor) reemplaza a los bloques que absorbió, y sus slots
+ * pasan a 'descanso' (dejan de ser tocables). Así aparece al instante y ya
+ * unido, sin esperar la recarga, que después lo confirma. Si el servidor no
+ * devolvió el bloque, se dibuja la fila sola hasta la recarga. Función pura.
  * @param {Object} agenda - de prepararAgenda
- * @param {Object} descanso - la fila que devolvió el servidor
+ * @param {Object} bloqueOFila - `bloque` de la respuesta o, si vino null, `descanso`
  * @param {string} fecha - 'YYYY-MM-DD' del día visible
  * @returns {Object} la agenda nueva (no muta la recibida)
  */
-export function agregarDescanso(agenda, descanso, fecha) {
-  const bloque = aBloque(descanso, fecha);
+export function agregarDescanso(agenda, bloqueOFila, fecha) {
+  const bloque = aBloque(bloqueOFila, 'descanso', fecha);
+  const absorbido = (b) => b.tipo === 'descanso' && bloque.partes.some((p) => p.id === b.id);
   return {
     ...agenda,
-    bloques: [...agenda.bloques, bloque],
+    bloques: [...agenda.bloques.filter((b) => !absorbido(b)), bloque],
     slots: agenda.slots.map((s) => (
       s.inicioMs < bloque.hastaMs && s.finMs > bloque.desdeMs ? { ...s, estado: 'descanso' } : s
     )),
@@ -260,43 +277,4 @@ export function aplicarEstadoDeTurno(agenda, { id, estado }) {
   ));
 
   return { ...agenda, turnos, slots };
-}
-
-/**
- * unirDescansosSeguidos
- * Junta en un solo bloque los descansos pegados (uno termina justo cuando
- * empieza el otro) del mismo origen: marcar 13:00 y después 13:30 se ve y se
- * comporta igual que marcar 13:00–14:00 de una vez.
- * En la base siguen siendo filas separadas, cada una con su antelación (el
- * registro del dueño, plan D10): el bloque unido las lleva en `partes`, y
- * liberarlo libera cada una.
- * No une descansos de distinto origen (el barbero no puede liberar los del
- * admin) ni ausencias. Función pura.
- * @param {Array} bloques - de prepararAgenda, sin unir
- * @returns {Array} las ausencias tal cual y los descansos unidos; cada descanso
- *   con `partes: [{ id, desdeMs, hastaMs }]`
- */
-export function unirDescansosSeguidos(bloques) {
-  const ausencias = bloques.filter((b) => b.tipo !== 'descanso');
-  const descansos = bloques
-    .filter((b) => b.tipo === 'descanso')
-    .sort((a, b) => a.desdeMs - b.desdeMs);
-
-  const unidos = [];
-  for (const d of descansos) {
-    const parte = { id: d.id, desdeMs: d.desdeMs, hastaMs: d.hastaMs };
-    const anterior = unidos[unidos.length - 1];
-    if (anterior && anterior.origen === d.origen && anterior.hastaMs === d.desdeMs) {
-      unidos[unidos.length - 1] = {
-        ...anterior,
-        hastaIso: d.hastaIso,
-        hastaMs: d.hastaMs,
-        minFin: d.minFin,
-        partes: [...anterior.partes, parte],
-      };
-    } else {
-      unidos.push({ ...d, partes: [parte] });
-    }
-  }
-  return [...ausencias, ...unidos];
 }

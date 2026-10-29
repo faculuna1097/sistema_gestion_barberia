@@ -352,6 +352,30 @@ export function PantallaExito({ imagenLocal, titulo, monto, montoColor = theme.i
   );
 }
 
+// ─── AvisoExito ─────────────────────────────────────────────────────────────────
+/**
+ * AvisoExito
+ * Cuadro de aviso en tono warning dentro de una PantallaExito: algo que el
+ * operador tiene que leer después de guardar (ej. actualizar el stock, o que el
+ * corte quedó sin turno). Quien lo usa da más tiempo antes de volver al inicio.
+ *
+ * @param {Object} props
+ * @param {React.ComponentType} props.Icon — ícono Lucide del aviso
+ * @param {React.ReactNode} props.children — texto del aviso
+ * @returns {JSX.Element}
+ */
+export function AvisoExito(props) {
+  // Desestructurado acá y no en la firma: no-unused-vars no ve el uso de un
+  // parámetro que solo aparece como JSX (ver estado_actual.md, lint del panel).
+  const { Icon, children } = props;
+  return (
+    <div style={styles.aviso}>
+      <Icon size={20} strokeWidth={1.75} color={theme.warning} style={{ flexShrink: 0, marginTop: 2 }} />
+      <p style={styles.avisoTexto}>{children}</p>
+    </div>
+  );
+}
+
 // ─── Estilos de layout reusables por los flujos ──────────────────────────────────
 // Lo que cada flujo compone dentro del PanelWizard (grillas de opciones, botón
 // grande, card de resumen). Se exporta para no redefinirlo en los 3 archivos.
@@ -537,6 +561,24 @@ const styles = {
     flexDirection: "column",
     alignItems: "center",
     gap: 8,
+  },
+  aviso: {
+    marginTop: 24,
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 12,
+    background: theme.warningSoft,
+    border: `1px solid ${theme.hairline}`,
+    borderRadius: theme.radius,
+    padding: "14px 16px",
+    textAlign: "left",
+  },
+  avisoTexto: {
+    fontFamily: theme.body,
+    fontSize: theme.sizeBody,
+    color: theme.inkSoft,
+    margin: 0,
+    lineHeight: 1.5,
   },
   exitoTexto: {
     fontFamily: theme.body,

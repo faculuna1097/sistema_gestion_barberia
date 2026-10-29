@@ -6,7 +6,7 @@
 import { theme } from '../../theme/tokens.js';
 import { fmtHora } from '../../utils/fecha.js';
 import { OFFSET_IZQ, cajaVertical, topDesdeMinutos } from './geometria.js';
-import { limitesDelDia, unirDescansosSeguidos } from './datosAgenda.js';
+import { limitesDelDia } from './datosAgenda.js';
 import { BloqueNeutro, SlotTocable, BloqueTurno } from './BloquesTimeline.jsx';
 
 // Hora de inicio de una celda, en la columna izquierda (alineada con el primer
@@ -18,6 +18,35 @@ const ESTILO_HORA = {
   fontSize: theme.sizeMicro,
   color: theme.muted,
 };
+
+// Texto solo para lectores de pantalla: no se ve, pero se lee después de la hora.
+// Se usa en vez de un aria-label porque las celdas son divs sin rol, y en esos
+// los lectores ignoran el aria-label.
+const SOLO_LECTOR = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+};
+
+// Estado de un slot de la grilla, en palabras, para el lector de pantalla.
+const ESTADO_LEGIBLE = {
+  turno: 'con turno',
+  descanso: 'descanso',
+  suspension: 'ausencia',
+};
+
+/**
+ * Describe el estado de una celda de slot que no se puede tocar (los tocables
+ * ya lo dicen en el aria-label de su botón).
+ * @param {Object} slot - slot de la grilla (prepararAgenda), con `estado`
+ * @returns {string} ej. "con turno", "libre, ya empezó" (no se puede marcar)
+ */
+function estadoDelSlot(slot) {
+  return ESTADO_LEGIBLE[slot.estado] ?? 'libre, ya empezó';
+}
 
 /**
  * Timeline
@@ -51,9 +80,9 @@ export default function Timeline({
   const origen = rango.minInicio;
   const iniciosSeleccionados = new Set(seleccion.map((s) => s.inicioMs));
 
-  // Descansos (los pegados, unidos en uno) y ausencias, recortados al rango
-  // visible (no lo agrandan).
-  const bloquesVisibles = unirDescansosSeguidos(bloques)
+  // Descansos (los pegados ya vienen unidos en uno desde el servidor) y
+  // ausencias, recortados al rango visible (no lo agrandan).
+  const bloquesVisibles = bloques
     .map((b) => ({
       ...b,
       minInicio: Math.max(b.minInicio, rango.minInicio),
@@ -85,6 +114,7 @@ export default function Timeline({
             {celda.conHora && (
               <span style={{ ...ESTILO_HORA, top: caja.top + 4 }}>
                 {fmtHora(celda.inicioIso)}
+                <span style={SOLO_LECTOR}>, sin horario de trabajo</span>
               </span>
             )}
             <div
@@ -108,10 +138,14 @@ export default function Timeline({
           referencia de hora del timeline. */}
       {slots.map((slot) => {
         const caja = cajaVertical(slot.minInicio, slot.minFin, origen, pxPorHora);
+        // Un slot tocable ya dice su hora y su estado en el botón (SlotTocable):
+        // la hora de la izquierda se oculta al lector para no leerla dos veces.
+        const tocable = iniciosTocables.has(slot.inicioMs);
         return (
           <div key={`celda-${slot.inicioMs}`}>
-            <span style={{ ...ESTILO_HORA, top: caja.top + 4 }}>
+            <span aria-hidden={tocable || undefined} style={{ ...ESTILO_HORA, top: caja.top + 4 }}>
               {fmtHora(slot.inicioIso)}
+              {!tocable && <span style={SOLO_LECTOR}>, {estadoDelSlot(slot)}</span>}
             </span>
             <div
               aria-hidden="true"

@@ -257,7 +257,7 @@ export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
           }}>
             <KPI label="Pendientes"  value={reservados.length}   tone="accent" />
             <KPI label="Completados" value={completados.length}  tone="success" />
-            <KPI label="No asistieron" value={noAsistieron.length} tone="warning" />
+            <KPI label="Faltaron"    value={noAsistieron.length}  tone="warning" />
           </div>
           {cancelados.length > 0 && (
             <div style={{
@@ -337,15 +337,15 @@ export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
       {!cargando && !errorCarga && turnos.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {turnosOrdenados.map((turno) => {
-            // Un turno que todavía no empezó no puede marcarse como "no asistió"
-            // (el servidor también lo rechaza).
+            // Un turno que todavía no empezó solo se cancela; uno que ya empezó
+            // solo se marca "no asistió" (el servidor rechaza lo otro en cada caso).
             const esFuturo = new Date(turno.inicio) > new Date();
             return (
               <TurnoListItem
                 key={turno.id}
                 turno={turno}
                 onNoAsistio={esFuturo ? undefined : () => pedirConfirmacion(turno, 'no_asistio')}
-                onCancelar={() => pedirConfirmacion(turno, 'cancelar')}
+                onCancelar={esFuturo ? () => pedirConfirmacion(turno, 'cancelar') : undefined}
                 bloqueado={procesando && confirma.turno?.id === turno.id}
               />
             );

@@ -1,6 +1,6 @@
 # Ruta del proyecto - Sistema de Gestion de Barberia
 
-Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y actualizado por última vez el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`). Antes, el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
+Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y actualizado por última vez el 2026-10-29 (`frontend/src/utils/descansos.js`). Antes, el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
 
 Este documento lista las carpetas y archivos del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP. Para mantenerlo, regenerar los arboles desde `git ls-files` en vez de parchearlos a mano.
 
@@ -310,6 +310,7 @@ frontend/
     `-- utils/
         |-- cargarChunk.js
         |-- colorMonto.js
+        |-- descansos.js
         |-- fecha.js
         |-- formato.js
         `-- movimientos.js

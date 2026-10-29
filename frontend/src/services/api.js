@@ -282,7 +282,10 @@ export const getTurnosDelDia = async (barberoId, fecha) => {
  * Si datos incluye turno_id, el backend vincula el corte al turno y lo marca
  * como completado.
  * @param {Object} datos - { barbero_id, servicio_id, precio, forma_pago, propina, turno_id? }
- * @returns {Promise<Object>} { message, corte_id, monto_total }
+ * @returns {Promise<Object>} { message, corte_id, monto_total, turno_vinculado }
+ *   turno_vinculado es false si vino turno_id pero el turno se había cancelado y
+ *   el corte quedó sin turno.
+ * @throws {Error} con `status` (409: el turno ya está completado o cambió).
  */
 export const registrarCorte = async (datos) => {
   const response = await apiFetchOperativo('/cortes', {
@@ -291,7 +294,9 @@ export const registrarCorte = async (datos) => {
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al registrar el corte');
+    const err = new Error(data.error || 'Error al registrar el corte');
+    err.status = response.status;
+    throw err;
   }
   return response.json();
 };
@@ -477,7 +482,8 @@ export const patchAdminTurnoEstado = async (turnoId, estado) => {
 
 /**
  * completarAdminTurno
- * Completa un turno reservado desde el backoffice REGISTRANDO el corte
+ * Completa un turno reservado (o, el admin, uno marcado "no asistió") desde el
+ * backoffice REGISTRANDO el corte
  * (forma de pago + monto). Reemplaza a patchAdminTurnoEstado(id, 'completado')
  * para este caso: aquel solo cambiaba el estado y NO dejaba registro financiero
  * (el turno quedaba completado sin corte → sin forma_pago ni impacto en Caja).
@@ -579,13 +585,47 @@ export const getAdminHorarioAtencion = async () => {
 
 /**
  * getAdminSuspensiones
- * Obtiene suspensiones futuras de un barbero.
- * @param {string} barberoId
- * @returns {Promise<Array>} suspensiones con id, desde, hasta, motivo, origen
+ * Obtiene las suspensiones (y descansos) cuyo rango efectivo se superpone con el
+ * rango pedido. Sin `desde` arranca ahora (las que no terminaron); las liberadas
+ * antes de empezar no vienen.
+ * @param {string|null} barberoId - el barbero; null = todos (solo admin)
+ * @param {Object} [filtros]
+ * @param {string} [filtros.desde] - 'YYYY-MM-DD' (inclusive)
+ * @param {string} [filtros.hasta] - 'YYYY-MM-DD' (inclusive)
+ * @param {'suspension'|'descanso'} [filtros.tipo] - sin él, los dos
+ * @returns {Promise<Array>} con id, barbero_id, desde, hasta (efectivo), hasta_programada,
+ *   motivo, origen, tipo, liberada_en, liberada_por, created_at, barbero_nombre
  */
-export const getAdminSuspensiones = async (barberoId) => {
-  const res = await apiFetch(`/admin/suspensiones?barbero_id=${barberoId}`);
+export const getAdminSuspensiones = async (barberoId, { desde, hasta, tipo } = {}) => {
+  const params = new URLSearchParams();
+  if (barberoId) params.set('barbero_id', barberoId);
+  if (desde) params.set('desde', desde);
+  if (hasta) params.set('hasta', hasta);
+  if (tipo) params.set('tipo', tipo);
+  const res = await apiFetch(`/admin/suspensiones?${params}`);
   if (!res.ok) throw new Error('Error al obtener suspensiones');
+  return res.json();
+};
+
+/**
+ * getAdminDescansos
+ * Descansos de un rango de días como bloques: los pegados vienen unidos en uno
+ * (la regla vive en el backend, descansosService → unirDescansos). Incluye los
+ * liberados antes de empezar (estado 'liberado'), que una agenda no dibuja.
+ * @param {Object} filtros
+ * @param {string} filtros.desde - 'YYYY-MM-DD' (inclusive)
+ * @param {string} filtros.hasta - 'YYYY-MM-DD' (inclusive)
+ * @param {string|null} [filtros.barberoId] - el barbero; null = todos (solo admin)
+ * @returns {Promise<Array>} bloques { id, barbero_id, barbero_nombre, origen, desde,
+ *   hasta (efectivo), hasta_programada, estado, liberado_en, liberado_por, minutos,
+ *   creado_en, antelacion_minutos, partes }; estado: 'pendiente' | 'en_curso' |
+ *   'cumplido' | 'terminado_antes' | 'liberado'
+ */
+export const getAdminDescansos = async ({ desde, hasta, barberoId }) => {
+  const params = new URLSearchParams({ desde, hasta });
+  if (barberoId) params.set('barbero_id', barberoId);
+  const res = await apiFetch(`/admin/descansos?${params}`);
+  if (!res.ok) throw new Error('Error al obtener los descansos');
   return res.json();
 };
 
@@ -614,18 +654,22 @@ export const crearAdminSuspension = async (datos) => {
 };
 
 /**
- * eliminarAdminSuspension
- * Elimina una suspensión por su id.
+ * liberarAdminSuspension
+ * Libera una suspensión (o un descanso): la fila no se borra, queda como
+ * registro. Si no empezó, deja de bloquear entera; si está en curso, termina en
+ * este momento. Los turnos que se cancelaron al crearla no se recuperan. El path
+ * y el verbo siguen siendo DELETE /admin/suspensiones/:id.
  * @param {string} suspensionId
- * @returns {Promise<Object>} confirmación
+ * @returns {Promise<Object>} { ok, suspension: { id, tipo, desde, hasta, liberada_en, liberada_por } }
+ * @throws {Error} con el mensaje del servidor (404 no existe, 409 ya terminó o ya se liberó)
  */
-export const eliminarAdminSuspension = async (suspensionId) => {
+export const liberarAdminSuspension = async (suspensionId) => {
   const res = await apiFetch(`/admin/suspensiones/${suspensionId}`, {
     method: 'DELETE',
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al eliminar suspensión');
+    throw new Error(data.error || 'Error al liberar la suspensión');
   }
   return res.json();
 };

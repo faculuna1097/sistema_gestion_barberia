@@ -46,6 +46,7 @@ import {
   CalendarDays,
   Hourglass,
   RefreshCw,
+  Coffee,
 } from 'lucide-react';
 
 import {
@@ -53,12 +54,18 @@ import {
   getServiciosAdmin,
   getAdminTurnos,
   getAdminHorarioAtencion,
+  getAdminSuspensiones,
+  getAdminDescansos,
   patchAdminTurnoEstado,
   completarAdminTurno,
   cancelarAdminTurno,
 } from '../../../services/api';
-import { getFechaHoy, formatHora, aHoraCorta, TZ } from '../../../utils/fecha';
+import {
+  getFechaHoy, formatHora, aHoraCorta, TZ,
+  fechaDeInstante, formatInstante, formatDuracion, formatAntelacion,
+} from '../../../utils/fecha';
 import { fmtPesos } from '../../../utils/formato';
+import { textoEstadoBloque } from '../../../utils/descansos';
 import { theme } from '../../../theme/tokens.js';
 import {
   LoadingState,
@@ -205,26 +212,49 @@ function duracionMinutos(turno) {
 }
 
 /**
- * formatDuracion
- * "30 min" / "1 h" / "1 h 30 min".
- * @param {number} mins
- * @returns {string}
- */
-function formatDuracion(mins) {
-  if (mins < 60) return `${mins} min`;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (m === 0) return `${h} h`;
-  return `${h} h ${m} min`;
-}
-
-/**
  * esHoy
  * @param {string} fechaStr - 'YYYY-MM-DD'
  * @returns {boolean}
  */
 function esHoy(fechaStr) {
   return fechaStr === getFechaHoy();
+}
+
+/**
+ * minutosEnFecha
+ * Ubica un instante en el día visible, en minutos desde su 00:00 (TZ Argentina).
+ * Un instante de un día anterior da 0 y uno de un día posterior, 24 × 60: así una
+ * ausencia de varios días ocupa el día entero sin pasarse.
+ * @param {string} iso - Timestamp ISO
+ * @param {string} fecha - 'YYYY-MM-DD' del día visible
+ * @returns {number}
+ */
+function minutosEnFecha(iso, fecha) {
+  const dia = fechaDeInstante(iso);
+  if (dia < fecha) return 0;
+  if (dia > fecha) return 24 * 60;
+  return minutosDelDia(iso);
+}
+
+/**
+ * armarBloquesNeutros
+ * Junta los descansos (ya unidos por el backend: los pegados vienen como un solo
+ * bloque) y las ausencias del día en una sola lista para dibujar. Descarta los
+ * descansos liberados antes de empezar, que no bloquearon nada.
+ * @param {Array} descansos - de getAdminDescansos
+ * @param {Array} ausencias - de getAdminSuspensiones con tipo 'suspension'
+ * @returns {Array<{ key: string, tipo: 'descanso'|'ausencia', barbero_id: string,
+ *   desde: string, hasta: string, datos: Object }>} `hasta` es el fin efectivo;
+ *   `datos`, la fila original (para el detalle)
+ */
+function armarBloquesNeutros(descansos, ausencias) {
+  return [
+    ...descansos
+      .filter((d) => d.estado !== 'liberado')
+      .map((d) => ({ key: `d-${d.id}`, tipo: 'descanso', barbero_id: d.barbero_id, desde: d.desde, hasta: d.hasta, datos: d })),
+    ...ausencias
+      .map((a) => ({ key: `a-${a.id}`, tipo: 'ausencia', barbero_id: a.barbero_id, desde: a.desde, hasta: a.hasta, datos: a })),
+  ];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -501,13 +531,182 @@ function LineaAhora({ rangoInicio, rangoFin }) {
   );
 }
 
+// Debajo de esta altura, un bloque de descanso o ausencia no lleva texto (solo
+// el ícono, si entra): a 60 px por hora, son menos de 24 minutos.
+const ALTO_MIN_TEXTO_BLOQUE = 24;
+const ALTO_MIN_ICONO_BLOQUE = 18;
+
+/**
+ * BloqueNeutroAgenda
+ * Un descanso o una ausencia en la columna del barbero, con el mismo estilo
+ * neutro que la Agenda de la app del barbero: el descanso liso (`surfaceAlt`)
+ * con ícono de café; la ausencia rayada, con ícono de calendario tachado y el
+ * motivo. Va debajo de los turnos. Se recorta al rango visible; si queda muy
+ * bajo, va sin texto y el rango queda en el aria-label.
+ * @param {Object} props
+ * @param {Object} props.bloque - de armarBloquesNeutros
+ * @param {string} props.fecha - 'YYYY-MM-DD' del día visible
+ * @param {number} props.rangoInicio - minutos del día en la parte de arriba de la agenda
+ * @param {number} props.rangoFin - minutos del día en la parte de abajo
+ * @param {() => void} props.onClick - abre el detalle
+ * @returns {JSX.Element|null} null si el bloque cae fuera del rango
+ */
+function BloqueNeutroAgenda({ bloque, fecha, rangoInicio, rangoFin, onClick }) {
+  const [hover, setHover] = useState(false);
+  const ini = Math.max(minutosEnFecha(bloque.desde, fecha), rangoInicio);
+  const fin = Math.min(minutosEnFecha(bloque.hasta, fecha), rangoFin);
+  if (fin <= ini) return null;
+
+  const top = ((ini - rangoInicio) / 60) * ALTO_HORA_PX;
+  const alto = ((fin - ini) / 60) * ALTO_HORA_PX - 2;
+  const esDescanso = bloque.tipo === 'descanso';
+  const Icono = esDescanso ? Coffee : CalendarOff;
+  const motivo = !esDescanso && bloque.datos.motivo;
+  const texto = esDescanso ? 'Descanso' : `Ausencia${motivo ? ` · ${motivo}` : ''}`;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      aria-label={`${texto}, de ${formatHora(bloque.desde)} a ${formatHora(bloque.hasta)}`}
+      style={{
+        position: 'absolute',
+        top: `${top}px`,
+        left: 4,
+        right: 4,
+        height: `${Math.max(alto, 4)}px`,
+        // La ausencia va rayada (como en la app del barbero) para distinguirse
+        // del descanso sin depender solo del texto, que en un bloque bajo no entra.
+        background: esDescanso
+          ? theme.surfaceAlt
+          : `repeating-linear-gradient(135deg, ${theme.surfaceAlt} 0 8px, ${theme.hairline} 8px 10px)`,
+        border: 'none',
+        borderLeft: `3px solid ${esDescanso ? theme.mutedSoft : theme.muted}`,
+        borderRadius: theme.radiusSm,
+        padding: '0 8px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        color: theme.inkSoft,
+        fontFamily: theme.body,
+        fontSize: theme.sizeBody,
+        fontWeight: theme.weightMedium,
+        cursor: 'pointer',
+        overflow: 'hidden',
+        boxShadow: hover ? theme.shadowSm : 'none',
+        transition: `box-shadow ${theme.transitionFast}`,
+        zIndex: 1,
+      }}
+    >
+      {alto >= ALTO_MIN_ICONO_BLOQUE && <Icono size={16} strokeWidth={1.75} aria-hidden="true" style={{ flexShrink: 0 }} />}
+      {alto >= ALTO_MIN_TEXTO_BLOQUE && (
+        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{texto}</span>
+      )}
+    </button>
+  );
+}
+
+/**
+ * estadoDeAusencia
+ * Estado de una ausencia para el detalle, con el mismo criterio que el de los
+ * bloques de descanso del backend: terminó antes si su fin efectivo es anterior
+ * al programado.
+ * @param {Object} a - fila de getAdminSuspensiones (hasta efectivo, hasta_programada)
+ * @returns {string} 'pendiente' | 'en_curso' | 'cumplido' | 'terminado_antes'
+ */
+function estadoDeAusencia(a) {
+  const ahora = Date.now();
+  if (Date.parse(a.hasta) < Date.parse(a.hasta_programada)) return 'terminado_antes';
+  if (ahora < Date.parse(a.desde)) return 'pendiente';
+  if (ahora < Date.parse(a.hasta)) return 'en_curso';
+  return 'cumplido';
+}
+
+/**
+ * rangoDelBloque
+ * El rango de un descanso o una ausencia para el detalle: solo las horas si
+ * empieza y termina el día visible; si no, con el día.
+ * @param {string} desde - ISO
+ * @param {string} hasta - ISO
+ * @param {string} fecha - 'YYYY-MM-DD' del día visible
+ * @returns {string} Ej: '13:00 – 14:00' o 'Lunes 19/10 · 10:00 – Miércoles 21/10 · 20:00'
+ */
+function rangoDelBloque(desde, hasta, fecha) {
+  if (fechaDeInstante(desde) === fecha && fechaDeInstante(hasta) === fecha) {
+    return `${formatHora(desde)} – ${formatHora(hasta)}`;
+  }
+  return `${formatInstante(desde)} – ${formatInstante(hasta)}`;
+}
+
+/**
+ * ModalDetalleBloque
+ * Detalle de un descanso o una ausencia de la agenda: rango (y el programado si
+ * terminó antes), estado, quién lo cargó y cuándo, y la antelación. Un descanso
+ * unido (varias partes pegadas) lo dice, con la antelación de cada parte. Solo
+ * lectura: las ausencias se liberan desde Gestión → Barberos → Ausencias, y los
+ * descansos, desde la app del barbero.
+ * @param {Object} props
+ * @param {Object} props.bloque - de armarBloquesNeutros
+ * @param {string} props.fecha - 'YYYY-MM-DD' del día visible
+ * @param {() => void} props.onCerrar
+ * @returns {JSX.Element}
+ */
+function ModalDetalleBloque({ bloque, fecha, onCerrar }) {
+  const esDescanso = bloque.tipo === 'descanso';
+  const d = bloque.datos;
+  const estado = esDescanso ? d.estado : estadoDeAusencia(d);
+  const creadoEn = esDescanso ? d.creado_en : d.created_at;
+  const antelacion = esDescanso
+    ? d.antelacion_minutos
+    : Math.round((Date.parse(d.desde) - Date.parse(d.created_at)) / 60000);
+  const partes = esDescanso ? d.partes : [];
+  const textoEstado = textoEstadoBloque(estado, d.hasta);
+
+  const filas = [
+    { label: 'Tipo', valor: esDescanso ? 'Descanso' : 'Ausencia' },
+    { label: 'Barbero', valor: d.barbero_nombre },
+    { label: 'Horario', valor: rangoDelBloque(d.desde, d.hasta, fecha) },
+    ...(estado === 'terminado_antes'
+      ? [{ label: 'Programado hasta', valor: formatHora(d.hasta_programada) }]
+      : []),
+    { label: 'Estado', valor: textoEstado },
+    ...(!esDescanso && d.motivo ? [{ label: 'Motivo', valor: d.motivo }] : []),
+    { label: 'Lo cargó', valor: d.origen === 'admin' ? 'El administrador' : d.barbero_nombre },
+    { label: 'Cuándo', valor: formatInstante(creadoEn) },
+    { label: 'Antelación', valor: `${formatAntelacion(antelacion)} antes` },
+  ];
+
+  return (
+    <Modal open title={esDescanso ? 'Detalle del descanso' : 'Detalle de la ausencia'} onClose={onCerrar} maxWidth={460}>
+      <DetalleRecurso filas={filas} />
+      {partes.length > 1 && (
+        <div style={{ marginTop: 12 }}>
+          <p style={{ margin: '0 0 6px', fontSize: theme.sizeBody, color: theme.inkSoft, lineHeight: 1.5 }}>
+            Se marcó en {partes.length} partes pegadas, que cuentan como un solo descanso:
+          </p>
+          <DetalleRecurso
+            filas={partes.map((p) => ({
+              label: `${formatHora(p.desde)} – ${formatHora(p.hasta_programada)}`,
+              valor: `marcada ${formatAntelacion(p.antelacion_minutos)} antes`,
+            }))}
+          />
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 /**
  * AgendaVista
  * Grilla barbero × hora. Columna izq fija con etiquetas de hora (cada hora
  * completa). Filas/columnas dibujadas con border + position absolute para
- * los bloques.
+ * los bloques: turnos y, debajo, descansos y ausencias (`bloquesNeutros`, de
+ * armarBloquesNeutros).
  */
-function AgendaVista({ turnos, barberosVisibles, rangoInicio, rangoFin, fecha, onTurnoClick }) {
+function AgendaVista({ turnos, bloquesNeutros, barberosVisibles, rangoInicio, rangoFin, fecha, onTurnoClick, onBloqueClick }) {
   const totalHoras = (rangoFin - rangoInicio) / 60;
   const horas = Array.from({ length: totalHoras + 1 }, (_, i) => rangoInicio + i * 60);
 
@@ -611,6 +810,17 @@ function AgendaVista({ turnos, barberosVisibles, rangoInicio, rangoFin, fecha, o
                   height: 0,
                   borderTop: `1px solid ${theme.hairlineSoft}`,
                 }}
+              />
+            ))}
+            {/* Descansos y ausencias (debajo de los turnos) */}
+            {bloquesNeutros.filter((bl) => bl.barbero_id === b.id).map((bl) => (
+              <BloqueNeutroAgenda
+                key={bl.key}
+                bloque={bl}
+                fecha={fecha}
+                rangoInicio={rangoInicio}
+                rangoFin={rangoFin}
+                onClick={() => onBloqueClick(bl)}
               />
             ))}
             {/* Bloques de turnos */}
@@ -958,6 +1168,12 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
   }[modo];
 
   const esReservado = turno.estado === 'reservado';
+  // Un turno marcado "no asistió" se puede completar igual (el cliente vino y
+  // la falta estaba mal marcada): registra el cobro y pasa a completado. Solo
+  // el mismo día del turno, y solo el admin (el backend controla las dos cosas;
+  // el modo barbero es de solo lectura).
+  const esNoAsistio = turno.estado === 'no_asistio';
+  const completableNoAsistio = esNoAsistio && fechaDeInstante(turno.inicio) === getFechaHoy();
   // Si el turno ya comenzó (hora de inicio <= ahora) ocultamos "Cancelar
   // turno" — a esa altura las opciones reales son completado o no asistió.
   // Antes de que empiece, al revés: "No asistió" no aparece (el servidor
@@ -1064,10 +1280,30 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
               )}
             </>
           )}
+
+          {completableNoAsistio && !readonly && (
+            <div style={{ display: 'flex', marginTop: 20 }}>
+              <Button
+                variant="primary"
+                full={false}
+                onClick={() => setModo('completando')}
+                disabled={accionando}
+                style={{ flex: 1 }}
+              >
+                <Check size={14} strokeWidth={2.5} />
+                Completar
+              </Button>
+            </div>
+          )}
         </>
       ) : modo === 'completando' ? (
         // ── Modo completar: registra el corte (forma de pago + monto) ─────
         <>
+          {esNoAsistio && (
+            <p style={{ margin: '0 0 12px', fontSize: theme.sizeBody, color: theme.inkSoft, lineHeight: 1.5 }}>
+              Estaba marcado como “no asistió”. Al completarlo se registra el cobro y el turno pasa a completado.
+            </p>
+          )}
           <DetalleRecurso filas={[{ label: 'Cliente', valor: turno.cliente_nombre }]} />
 
           {/* Servicio — editable. Default = el del turno; el precio lo sigue.
@@ -1246,6 +1482,9 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
   const [accionando, setAccionando]       = useState(null);
   const [errorAccion, setErrorAccion]     = useState(null);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState(null);
+  // Descansos y ausencias del día (armarBloquesNeutros) y el que tiene el detalle abierto.
+  const [bloquesNeutros, setBloquesNeutros] = useState([]);
+  const [bloqueSeleccionado, setBloqueSeleccionado] = useState(null);
 
   // El auto-dismiss del banner de error vive dentro del primitivo Toast
   // (autoDismissMs=6000). El `key` con el texto del error fuerza remount
@@ -1305,9 +1544,10 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
     cargar();
   }, []);
 
-  // ── Carga de turnos (cuando cambia fecha / barbero / intento) ───────────
-  // Nota: el fetch trae todos los estados; el descarte de cancelados se hace
-  // client-side al derivar `turnosDelDia` (no impacta la request).
+  // ── Carga de turnos, descansos y ausencias (cuando cambia fecha / barbero / intento)
+  // Nota: el fetch de turnos trae todos los estados; el descarte de cancelados se
+  // hace client-side al derivar `turnosDelDia` (no impacta la request). Los
+  // descansos llegan ya unidos (los pegados, en un solo bloque) desde el backend.
   useEffect(() => {
     let cancelado = false;
     const cargar = async () => {
@@ -1317,8 +1557,15 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
         // En modo barbero el backend scopea por token; pasar el id propio
         // mantiene la UI coherente (inocuo para el filtro server-side).
         const barberoIdFetch = modoBarbero ? barberoSesion?.id : barberoActivo;
-        const data = await getAdminTurnos(fecha, barberoIdFetch);
-        if (!cancelado) setTurnos(data);
+        const [data, descansos, ausencias] = await Promise.all([
+          getAdminTurnos(fecha, barberoIdFetch),
+          getAdminDescansos({ desde: fecha, hasta: fecha, barberoId: barberoIdFetch }),
+          getAdminSuspensiones(barberoIdFetch, { desde: fecha, hasta: fecha, tipo: 'suspension' }),
+        ]);
+        if (!cancelado) {
+          setTurnos(data);
+          setBloquesNeutros(armarBloquesNeutros(descansos, ausencias));
+        }
       } catch (err) {
         console.error('[seccionTurnero] Error en cargarTurnos:', err.message);
         if (!cancelado) setError('No se pudieron cargar los turnos.');
@@ -1349,7 +1596,7 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
     }
   };
 
-  // Completar un turno reservado = registrar el corte (forma de pago + monto) y
+  // Completar un turno reservado (o, el admin, uno "no asistió") = registrar el corte (forma de pago + monto) y
   // marcarlo completado, en una sola llamada. Distinto de cambiarEstado: aquel
   // solo cambiaba el estado y no dejaba registro financiero (sin corte).
   const completarTurno = async (turnoId, datos) => {
@@ -1555,6 +1802,8 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
 
       {!cargando && !error && barberosVisibles.length > 0 && !(localCerrado && turnosDelDia.length === 0) && vista === 'agenda' && (
         <AgendaVista
+          bloquesNeutros={bloquesNeutros}
+          onBloqueClick={setBloqueSeleccionado}
           turnos={turnosVisibles}
           barberosVisibles={barberosVisibles}
           rangoInicio={rangoAgenda.inicio}
@@ -1584,6 +1833,15 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
           accionando={accionando === turnoSeleccionado.id}
           servicios={servicios}
           readonly={modoBarbero}
+        />
+      )}
+
+      {bloqueSeleccionado && (
+        <ModalDetalleBloque
+          key={bloqueSeleccionado.key}
+          bloque={bloqueSeleccionado}
+          fecha={fecha}
+          onCerrar={() => setBloqueSeleccionado(null)}
         />
       )}
     </div>

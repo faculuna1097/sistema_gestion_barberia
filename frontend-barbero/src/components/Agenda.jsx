@@ -277,11 +277,11 @@ export default function Agenda() {
     setProcesando(true);
     try {
       if (esDescanso) {
-        const { descanso } = await crearDescanso({
+        const { descanso, bloque } = await crearDescanso({
           desde: seleccionVigente[0].inicioIso,
           hasta: seleccionVigente[seleccionVigente.length - 1].finIso,
         });
-        setAgenda((actual) => (actual ? agregarDescanso(actual, descanso, fecha) : actual));
+        setAgenda((actual) => (actual ? agregarDescanso(actual, bloque ?? descanso, fecha) : actual));
         setSeleccion([]);
       } else {
         const cambio = accion === 'cancelar'
@@ -321,7 +321,7 @@ export default function Agenda() {
    * liberarDescanso
    * Libera el descanso abierto en el detalle (DELETE /admin/suspensiones/:id): si
    * no empezó lo anula entero; si está en curso, lo termina ahora (D8). Un
-   * descanso unido (unirDescansosSeguidos) son varias filas: se liberan todas las
+   * descanso unido (varias partes pegadas) son varias filas: se liberan todas las
    * partes que todavía no terminaron (una ya terminada daría 409).
    * El detalle queda en "Procesando…" hasta que la agenda recargada ya no muestra
    * el descanso. Recarga también si falla: pudo haber cambiado (ya liberado, ya terminado).

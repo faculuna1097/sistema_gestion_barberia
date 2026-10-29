@@ -37,8 +37,8 @@ const INTERLINEADO_TURNO = 18;
  * El descanso es un botón (abre su detalle); la ausencia no tiene acciones en la
  * Agenda, así que es un bloque sin interacción.
  * Usa la misma geometría que las celdas de la grilla (cajaVertical); el ícono y
- * el texto van centrados en el bloque. Un descanso unido (unirDescansosSeguidos)
- * es un solo bloque.
+ * el texto van centrados en el bloque. Un descanso unido (varias partes pegadas,
+ * unidas por el servidor) es un solo bloque.
  * @param {Object} props.bloque - de prepararAgenda, ya recortado al rango visible
  * @param {number} props.origen - minuto del día que queda arriba del timeline
  * @param {number} props.pxPorHora - escala vertical

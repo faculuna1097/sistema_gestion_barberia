@@ -28,7 +28,7 @@ import {
   getAdminHorarioAtencion,
   getAdminSuspensiones,
   crearAdminSuspension,
-  eliminarAdminSuspension,
+  liberarAdminSuspension,
 } from '../../../../services/api';
 import { TZ, DIAS, aHoraCorta } from '../../../../utils/fecha';
 import {
@@ -446,10 +446,40 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
 
 // ─── Tab Ausencias (dentro del modal de agenda) ───────────────────────────────
 /**
+ * ausenciaEnCurso
+ * True si la ausencia ya empezó: liberarla la termina en este momento.
+ * @param {{ desde: string }} ausencia
+ * @returns {boolean}
+ */
+function ausenciaEnCurso(ausencia) {
+  return new Date(ausencia.desde) <= new Date();
+}
+
+/**
+ * aplicarLiberacion
+ * Aplica a la lista la ausencia liberada tal como la devolvió el servidor
+ * (convenciones §8): si se liberó antes de empezar, sale de la lista (ya no
+ * bloquea nada); si estaba en curso, queda con su nuevo fin (el momento en que
+ * se terminó). Función pura.
+ * @param {Array} lista - ausencias de getAdminSuspensiones
+ * @param {{ id, desde, liberada_en }} liberada - `suspension` de la respuesta
+ * @returns {Array} la lista nueva
+ */
+function aplicarLiberacion(lista, liberada) {
+  if (new Date(liberada.liberada_en) <= new Date(liberada.desde)) {
+    return lista.filter((s) => s.id !== liberada.id);
+  }
+  return lista.map((s) => (s.id === liberada.id ? { ...s, hasta: liberada.liberada_en } : s));
+}
+
+/**
  * SubPanelAusencias
- * Lista, crea y elimina ausencias (suspensiones) de un barbero. La creación
- * maneja el flujo de conflicto 409 (turnos que se cancelarían). El borrado usa
- * confirmación inline de 2 pasos (sin ConfirmDialog anidado dentro del modal).
+ * Lista, crea y libera ausencias (suspensiones) de un barbero. Lista solo las de
+ * tipo 'suspension': los descansos se ven en la agenda del Turnero y en
+ * Planillas. La creación maneja el flujo de conflicto 409 (turnos que se
+ * cancelarían). Liberar ("Terminar" si está en curso) no borra la fila: queda
+ * como registro (plan_app_barbero.md D7). Usa confirmación inline de 2 pasos
+ * (sin ConfirmDialog anidado dentro del modal).
  *
  * @param {object} props
  * @param {object} props.barbero - { id, nombre }
@@ -465,7 +495,7 @@ function SubPanelAusencias({ barbero }) {
   const [conflicto, setConflicto]   = useState(null);
   const [feedback, setFeedback]     = useState(null); // { tone, texto } | null
 
-  const [eliminando, setEliminando]       = useState(null); // id en proceso de borrado
+  const [liberando, setLiberando]         = useState(null); // id que se está liberando
   const [confirmandoId, setConfirmandoId] = useState(null); // id en confirmación inline
 
   const vivoRef = useRef(true);
@@ -480,11 +510,12 @@ function SubPanelAusencias({ barbero }) {
   const puedeCrear = formDesde !== '' && formHasta !== '' && !rangoInvalido;
 
   /**
-   * cargarSuspensiones — fetch de ausencias futuras del barbero.
+   * cargarSuspensiones — fetch de las ausencias del barbero que no terminaron
+   * (solo tipo 'suspension').
    */
   const cargarSuspensiones = async () => {
     try {
-      const data = await getAdminSuspensiones(barbero.id);
+      const data = await getAdminSuspensiones(barbero.id, { tipo: 'suspension' });
       if (vivoRef.current) setSuspensiones(data);
     } catch (err) {
       console.error('[tabBarberos/Ausencias] Error cargando:', err.message);
@@ -539,22 +570,33 @@ function SubPanelAusencias({ barbero }) {
   };
 
   /**
-   * eliminar — borra una ausencia por id (tras confirmación inline).
-   * @param {string} id
+   * liberar — libera (o termina, si está en curso) una ausencia, tras la
+   * confirmación inline. El cambio se dibuja con la respuesta del servidor
+   * (aplicarLiberacion) y después se recarga por detrás (convenciones §8). Si
+   * falla, el aviso y la recarga: pudo haber cambiado por otro lado (ya liberada,
+   * ya terminada).
+   * @param {Object} ausencia
    */
-  const eliminar = async (id) => {
-    setEliminando(id);
+  const liberar = async (ausencia) => {
+    const enCurso = ausenciaEnCurso(ausencia);
+    setLiberando(ausencia.id);
+    setFeedback(null);
     try {
-      await eliminarAdminSuspension(id);
+      const { suspension } = await liberarAdminSuspension(ausencia.id);
       if (!vivoRef.current) return;
+      setSuspensiones((lista) => aplicarLiberacion(lista, suspension));
       setConfirmandoId(null);
-      await cargarSuspensiones();
+      setFeedback({ tone: 'success', texto: enCurso ? 'Ausencia terminada.' : 'Ausencia liberada.' });
     } catch (err) {
-      console.error('[tabBarberos/Ausencias] Error eliminando:', err.message);
-      if (vivoRef.current) setFeedback({ tone: 'danger', texto: `Error: ${err.message}` });
+      console.error('[tabBarberos/Ausencias] Error liberando:', err.message);
+      if (vivoRef.current) {
+        setConfirmandoId(null);
+        setFeedback({ tone: 'danger', texto: `No se pudo ${enCurso ? 'terminar' : 'liberar'}: ${err.message}` });
+      }
     } finally {
-      if (vivoRef.current) setEliminando(null);
+      if (vivoRef.current) setLiberando(null);
     }
+    cargarSuspensiones();
   };
 
   if (cargando) return <LoadingState />;
@@ -618,7 +660,7 @@ function SubPanelAusencias({ barbero }) {
         </div>
 
         {rangoInvalido && (
-          <span style={{ fontFamily: theme.body, fontSize: 12, color: theme.danger }}>
+          <span style={{ fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.danger }}>
             La fecha "Desde" debe ser anterior a "Hasta".
           </span>
         )}
@@ -690,60 +732,88 @@ function SubPanelAusencias({ barbero }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {suspensiones.map((s) => {
             const confirmando = confirmandoId === s.id;
+            const enCurso = ausenciaEnCurso(s);
+            const procesando = liberando === s.id;
             return (
               <div
                 key={s.id}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
                   border: `1px solid ${theme.hairline}`,
                   borderRadius: theme.radius,
                   padding: '10px 12px',
                 }}
               >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                  <span style={{
-                    fontFamily: theme.body,
-                    fontWeight: theme.weightMedium,
-                    fontSize: theme.sizeBody,
-                    color: theme.ink,
-                  }}>
-                    {fmtFechaHora(s.desde)} → {fmtFechaHora(s.hasta)}
-                  </span>
-                  {s.motivo && (
-                    <span style={{ fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.muted }}>
-                      {s.motivo}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                    <span style={{
+                      fontFamily: theme.body,
+                      fontWeight: theme.weightMedium,
+                      fontSize: theme.sizeBody,
+                      color: theme.ink,
+                    }}>
+                      {fmtFechaHora(s.desde)} → {fmtFechaHora(s.hasta)}
                     </span>
+                    {s.motivo && (
+                      <span style={{ fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.muted }}>
+                        {s.motivo}
+                      </span>
+                    )}
+                    <span style={{
+                      fontFamily: theme.mono,
+                      fontSize: theme.sizeMicro,
+                      letterSpacing: '0.02em',
+                      textTransform: 'uppercase',
+                      color: theme.mutedSoft,
+                    }}>
+                      {enCurso ? 'En curso · ' : ''}Cargada por {s.origen === 'admin' ? 'el administrador' : 'el barbero'}
+                    </span>
+                  </div>
+
+                  {!confirmando && (
+                    <div style={{ flexShrink: 0 }}>
+                      <Button
+                        variant="secondary"
+                        full={false}
+                        onClick={() => setConfirmandoId(s.id)}
+                        ariaLabel={`${enCurso ? 'Terminar' : 'Liberar'} la ausencia del ${fmtFechaHora(s.desde)}`}
+                      >
+                        {enCurso ? 'Terminar' : 'Liberar'}
+                      </Button>
+                    </div>
                   )}
-                  <span style={{
-                    fontFamily: theme.mono,
-                    fontSize: theme.sizeMicro,
-                    letterSpacing: '0.02em',
-                    textTransform: 'uppercase',
-                    color: theme.mutedSoft,
-                  }}>
-                    Origen: {s.origen}
-                  </span>
                 </div>
 
-                {confirmando ? (
-                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                    <Button variant="danger" onClick={() => eliminar(s.id)} disabled={eliminando === s.id} full={false}>
-                      {eliminando === s.id ? 'Eliminando…' : 'Sí, eliminar'}
-                    </Button>
-                    <Button variant="ghost" onClick={() => setConfirmandoId(null)} disabled={eliminando === s.id} full={false}>
-                      No
-                    </Button>
+                {/* Confirmación inline: dice qué pasa con los horarios y que los
+                    turnos cancelados al crearla no vuelven. */}
+                {confirmando && (
+                  <div style={{
+                    marginTop: 10,
+                    paddingTop: 10,
+                    borderTop: `1px solid ${theme.hairlineSoft}`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                  }}>
+                    <span style={{ fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.inkSoft, lineHeight: 1.5 }}>
+                      {enCurso
+                        ? 'La ausencia termina ahora y los horarios que quedan vuelven a estar disponibles para reservar.'
+                        : 'La ausencia se libera y esos horarios vuelven a estar disponibles para reservar.'}
+                      {' '}Los turnos que se cancelaron al crearla no se recuperan.
+                    </span>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <Button variant="primary" onClick={() => liberar(s)} disabled={procesando} full={false}>
+                        {procesando ? 'Procesando…' : (enCurso ? 'Sí, terminar' : 'Sí, liberar')}
+                      </Button>
+                      <Button variant="ghost" onClick={() => setConfirmandoId(null)} disabled={procesando} full={false}>
+                        Volver
+                      </Button>
+                    </div>
                   </div>
-                ) : (
-                  <BotonIconoFila
-                    tono="danger"
-                    ariaLabel="Eliminar ausencia"
-                    icono={<Trash2 size={14} strokeWidth={1.75} />}
-                    onClick={() => setConfirmandoId(s.id)}
-                  />
                 )}
               </div>
             );

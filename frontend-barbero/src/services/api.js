@@ -197,14 +197,18 @@ export const getTurnos = async (filtros = {}) => {
  * getAgenda
  * Agenda de un día del barbero autenticado, en una sola llamada: turnos,
  * descansos y ausencias, y la grilla de slots (plan_app_barbero.md, Feature 1, 2.6).
- * Los instantes de `grilla` llegan con offset '-03:00'; los de `turnos` y
- * `suspensiones`, en UTC ('...Z'): compararlos siempre como fechas, nunca como texto.
+ * Los instantes de `grilla` llegan con offset '-03:00'; los de `turnos`,
+ * `suspensiones` y `descansos`, en UTC ('...Z'): compararlos siempre como fechas,
+ * nunca como texto.
  * @param {string} fecha - 'YYYY-MM-DD'
  * @returns {Promise<Object>} {
  *   fecha, barbero_id, duracion_slot_minutos,
  *   horario_atencion: { hora_inicio, hora_fin } | null — horario del local ese día ('HH:MM'),
  *   turnos: [...] — misma forma que getTurnos (todos los estados),
- *   suspensiones: [{ id, desde, hasta, tipo: 'suspension'|'descanso', origen, motivo, ... }],
+ *   suspensiones: [{ id, desde, hasta, tipo: 'suspension', origen, motivo, ... }] — solo las ausencias,
+ *   descansos: [{ id, desde, hasta, origen, estado, partes: [{ id, desde, hasta }], ... }] —
+ *     bloques: los descansos pegados vienen unidos en uno; estado 'liberado' = liberado
+ *     antes de empezar (no se dibuja),
  *   grilla: [{ inicio, fin, estado: 'libre'|'turno'|'descanso'|'suspension' }]
  * }
  */
@@ -375,7 +379,8 @@ export const liberarSuspension = async (suspensionId) => {
  * @param {Object} rango
  * @param {string} rango.desde - ISO con offset (inicio del primer slot)
  * @param {string} rango.hasta - ISO con offset (fin del último slot)
- * @returns {Promise<Object>} { descanso }
+ * @returns {Promise<Object>} { descanso, bloque }: la fila creada y el bloque que
+ *   la contiene, ya unido con los descansos pegados (null si el servidor no lo pudo leer)
  * @throws {Error} con el mensaje del servidor y `status` (400 rango inválido o
  *   no futuro, 409 algún slot se ocupó)
  */

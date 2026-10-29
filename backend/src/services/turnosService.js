@@ -408,7 +408,9 @@ export const cambiarEstado = async (turnoId, nuevoEstado, tenantId, barberoId) =
  * Completa un turno registrando su corte. Es la única vía del backoffice para
  * completar un turno (cambiarEstado rechaza 'completado'), y deja el registro
  * financiero del turno — es el equivalente backoffice del flujo operativo del
- * iPad: completar = registrar el corte. Valida (scoped) que el turno exista y siga 'reservado'. El servicio
+ * iPad: completar = registrar el corte. Valida (scoped) que el turno exista y siga
+ * 'reservado'; el admin también puede completar uno marcado 'no_asistio' (el
+ * cliente vino y la falta estaba mal marcada). El servicio
  * del corte es por defecto el del turno; opcionalmente se acepta un override
  * (servicioId) que se valida contra el catálogo (tenant + activo). Delega en
  * registrarCorte (cortesService), que inserta el corte, marca el turno
@@ -417,12 +419,14 @@ export const cambiarEstado = async (turnoId, nuevoEstado, tenantId, barberoId) =
  * @param {string} datos.turnoId
  * @param {string} datos.tenantId
  * @param {string|null} datos.barberoId - si es barbero, solo completa los suyos
+ *   (y solo reservados); null = admin
  * @param {string} datos.formaPago - 'efectivo' | 'mercado_pago'
  * @param {number} datos.precio    - monto cobrado por el servicio
  * @param {number} [datos.propina] - propina (default 0)
  * @param {string} [datos.servicioId] - override del servicio (default: el del turno)
  * @returns {Promise<{ id, estado: 'completado', servicio_id, corte_id, monto_total }>}
- * @throws {{ code: 'NO_ENCONTRADO' | 'ESTADO_INVALIDO' | 'SERVICIO_INVALIDO' | 'TURNO_YA_VINCULADO' }}
+ * @throws {{ code: 'NO_ENCONTRADO' | 'ESTADO_INVALIDO' | 'SERVICIO_INVALIDO' |
+ *   'TURNO_YA_VINCULADO' | 'TURNO_YA_COMPLETADO' | 'TURNO_INEXISTENTE' }}
  */
 export const completarTurnoConCorte = async ({ turnoId, tenantId, barberoId, formaPago, precio, propina, servicioId }) => {
   // Lookup con scoping: el barbero solo puede completar los suyos
@@ -443,8 +447,12 @@ export const completarTurnoConCorte = async ({ turnoId, tenantId, barberoId, for
     throw err;
   }
 
+  // Estados que se pueden completar: reservado y, solo el admin, no_asistio (este
+  // solo el mismo día del turno: lo controla registrarCorte en la misma sentencia).
+  const estadosCompletables = barberoId ? ['reservado'] : ['reservado', 'no_asistio'];
+
   const turno = lookupRes.rows[0];
-  if (turno.estado !== 'reservado') {
+  if (!estadosCompletables.includes(turno.estado)) {
     const err = new Error(`El turno está en estado "${turno.estado}" y no se puede completar`);
     err.code = 'ESTADO_INVALIDO';
     throw err;
@@ -480,9 +488,10 @@ export const completarTurnoConCorte = async ({ turnoId, tenantId, barberoId, for
 
   // Insertador central compartido con el flujo del iPad. barbero_id sale del turno
   // (autoritativo); servicioFinal es el override validado o el del turno. registrarCorte
-  // marca el turno 'completado' y sincroniza turno.servicio_id. Puede lanzar
-  // TURNO_YA_VINCULADO si entre el lookup y el insert el iPad registró el corte
-  // (carrera) → el controller lo mapea a 409.
+  // marca el turno 'completado' y sincroniza turno.servicio_id en la misma sentencia.
+  // Sin canceladoComoSinTurno: acá se completa ESE turno; si entre el lookup y el
+  // insert cambió (se canceló, el iPad registró el corte), no se inserta nada y
+  // lanza ESTADO_INVALIDO / TURNO_YA_COMPLETADO → el controller lo mapea a 409.
   const { corte_id, monto_total } = await registrarCorte({
     tenantId,
     barberoId: turno.barbero_id,
@@ -491,23 +500,27 @@ export const completarTurnoConCorte = async ({ turnoId, tenantId, barberoId, for
     formaPago,
     propina,
     turnoId,
+    estadosCompletables,
   });
 
   return { id: turnoId, estado: 'completado', servicio_id: servicioFinal, corte_id, monto_total };
 };
 
 /**
- * Cancela un turno por id (desde backoffice). Dispara best-effort Calendar
- * y mail de cancelación.
+ * Cancela un turno por id (desde backoffice). Solo un turno reservado que todavía
+ * no empezó: uno que ya empezó se marca "no asistió", no se cancela. Dispara
+ * best-effort Calendar y mail de cancelación, solo si el UPDATE canceló de verdad.
+ * La cancelación del cliente desde el turnero va por otro camino, con sus reglas.
  * @param {string} turnoId
  * @param {string} canceladoPor - 'admin' | 'barbero'
  * @param {string} tenantId
  * @param {string|null} barberoId - si es barbero, solo puede cancelar los suyos
  * @returns {Promise<Object>} { id, estado: 'cancelado' }
- * @throws {{ code: 'NO_ENCONTRADO' | 'ESTADO_INVALIDO' }}
+ * @throws {{ code: 'NO_ENCONTRADO' | 'ESTADO_INVALIDO' | 'TURNO_YA_EMPEZO' }}
  */
 export const cancelarTurnoPorId = async (turnoId, canceladoPor, tenantId, barberoId) => {
-  // Buscar turno con scoping + datos enriquecidos para services
+  // Buscar turno con scoping + datos enriquecidos para services. Si ya empezó se
+  // calcula en la base, con su reloj (como en cambiarEstado).
   const params = [turnoId, tenantId];
   let where = 't.id = $1 AND t.tenant_id = $2';
   if (barberoId) {
@@ -516,11 +529,11 @@ export const cancelarTurnoPorId = async (turnoId, canceladoPor, tenantId, barber
   }
 
   const lookupRes = await query(
-    `SELECT t.id, t.estado, t.google_event_id, t.inicio, t.fin,
+    `SELECT t.id, t.estado, t.google_event_id, t.inicio, t.fin, t.inicio <= now() AS empezo,
             b.nombre AS barbero_nombre, b.email AS barbero_email,
             s.nombre AS servicio_nombre,
             c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
-            tn.nombre_negocio AS tenant_nombre
+            tn.nombre_negocio AS tenant_nombre, tn.direccion AS tenant_direccion
      FROM turno t
      JOIN barbero  b ON b.id = t.barbero_id
      JOIN servicio s ON s.id = t.servicio_id
@@ -541,17 +554,30 @@ export const cancelarTurnoPorId = async (turnoId, canceladoPor, tenantId, barber
     err.code = 'ESTADO_INVALIDO';
     throw err;
   }
+  if (r.empezo) {
+    const err = new Error('El turno ya empezó: marcalo como "no asistió"');
+    err.code = 'TURNO_YA_EMPEZO';
+    throw err;
+  }
 
+  // Las dos reglas también en el WHERE: si entre el lookup y acá el turno cambió
+  // (lo canceló el cliente, se registró su corte), no se pisa ni se avisa nada.
   // tenant_id redundante (defensa en profundidad, auditoría 2.2): el turnoId ya
   // salió del lookup scopeado por tenant de arriba.
-  await query(
+  const updateRes = await query(
     `UPDATE turno
        SET estado = 'cancelado',
            cancelado_en = now(),
            cancelado_por = $1
-     WHERE id = $2 AND tenant_id = $3`,
+     WHERE id = $2 AND tenant_id = $3 AND estado = 'reservado' AND inicio > now()`,
     [canceladoPor, turnoId, tenantId]
   );
+  if (updateRes.rowCount === 0) {
+    console.warn('[turnosService] cancelarTurnoPorId — el turno cambió antes del UPDATE | turno_id:', turnoId);
+    const err = new Error('El turno cambió de estado mientras se procesaba');
+    err.code = 'ESTADO_INVALIDO';
+    throw err;
+  }
   console.log('[turnosService] cancelarTurnoPorId — turno cancelado | turno_id:', turnoId);
 
   // Best-effort: Google Calendar + mail

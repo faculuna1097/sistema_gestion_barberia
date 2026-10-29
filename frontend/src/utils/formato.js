@@ -21,6 +21,16 @@ export function fmtPesos(n) {
 }
 
 /**
+ * fmtPorcentaje
+ * Formatea un porcentaje con hasta un decimal, en formato es-AR.
+ * @param {number} n - Porcentaje (ej. 4.5 = 4,5 %)
+ * @returns {string} Ej: "4,5 %", "12 %"
+ */
+export function fmtPorcentaje(n) {
+  return `${Number(n).toLocaleString('es-AR', { maximumFractionDigits: 1 })} %`;
+}
+
+/**
  * formatPago
  * Convierte el código de forma de pago al label legible.
  * @param {string} forma — 'efectivo' o cualquier otro valor (default: 'Mercado Pago').

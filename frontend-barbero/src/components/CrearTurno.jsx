@@ -18,7 +18,7 @@ import {
   buscarClientes,
 } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
-import { fmtPesos } from '../utils/formato.js';
+import { fmtPesos, capitalizar } from '../utils/formato.js';
 import { fmtHora, fmtFechaLarga, fechaHoyISO } from '../utils/fecha.js';
 import { useHover } from '../hooks/useHover.js';
 
@@ -354,9 +354,8 @@ function PasoFecha({ fecha, onCambiarFecha, onContinuar }) {
             fontFamily: theme.body,
             fontSize: theme.sizeBody,
             color: theme.inkSoft,
-            textTransform: 'capitalize',
           }}>
-            {fmtFechaLarga(fecha)}
+            {capitalizar(fmtFechaLarga(fecha))}
           </div>
         </Card>
       )}

@@ -128,6 +128,8 @@ SELECT (SELECT row_to_json(nueva) FROM nueva) AS suspension,
   la app del barbero para las suspensiones con `origen = 'admin'`.
   - **Actualización (2026-10-19, Fase 4):** los textos de la app del barbero (`Gestion.jsx`)
     ya hablan de liberar. Siguen pendientes los de `SubPanelAusencias` (5.2) y el renombre.
+  - **Actualización (2026-10-29, Fase 5):** los de `SubPanelAusencias` también. Queda solo el
+    renombre del endpoint, que no se hizo.
 
 **Cómo quedó 1 y 2.1–2.4 (2026-10-15), desvíos del plan:**
 - **Migración:** `barbero_suspension_rango_valido` (`hasta > desde`) ya existía en la DB sin
@@ -148,7 +150,8 @@ SELECT (SELECT row_to_json(nueva) FROM nueva) AS suspension,
 - **2.3:** `hasta` es el **fin efectivo** y se suma `hasta_programada` (el original), además de
   `tipo`, `liberada_en`, `liberada_por`. Sin `desde` el rango arranca ahora; sin `hasta`, no
   tiene fin. Las liberadas antes de empezar quedan fuera: el registro de la 5.3 va a necesitar
-  verlas (endpoint de planilla o un flag `incluir_liberadas`).
+  verlas (endpoint de planilla o un flag `incluir_liberadas`). **(2026-10-29)** Resuelto en la
+  Fase 5 con `listarBloquesDescanso`, que lee los descansos por su rango original.
 - **2.4:** un `UPDATE` con todas las reglas en el `WHERE`; si no actualiza, una lectura elige
   el código (404 / 403 / 409). Un id con formato inválido da 404 en vez de 500.
 - `TIPOS_SUSPENSION` en `utils/constantes.js`; `MENSAJE_SLOT_OCUPADO` en `turnosService`.
@@ -340,6 +343,8 @@ sentencia.
     de la segunda marca, que es el dato de control del dueño (D10, 5.3): un barbero podría
     marcar 13:00 con días y extenderlo a último momento sin que se note. Solo se unen
     descansos del mismo origen (el barbero no puede liberar los del admin), nunca ausencias.
+    **(2026-10-29, Fase 5)** La unión pasó al backend (`unirDescansos`) y se borró
+    `unirDescansosSeguidos`: ver "Cómo quedó la Fase 5".
   - **Detalle del descanso:** "Liberar" y "Terminar descanso" van directo, **sin
     `ConfirmDialog`**: no tocan a ningún cliente y el botón dentro del detalle ya es un paso
     deliberado. En un descanso unido se liberan todas las partes que no terminaron (un DELETE
@@ -355,7 +360,9 @@ sentencia.
   visual contra demo (Alejo, martes 20/10) se hizo en el paso 5a.
 - **Para la Fase 5:** como un descanso puede ser varias filas pegadas, la Agenda del panel
   (5.1) tiene que unirlas igual al dibujar, y el registro (5.3) tiene que decidir si cuenta
-  filas o bloques unidos (cada fila conserva su antelación).
+  filas o bloques unidos (cada fila conserva su antelación). **(2026-10-29) Resuelto:** la
+  regla vive en el backend y las dos agendas y el registro reciben bloques ya unidos; el
+  registro cuenta bloques.
 
 **Cómo quedó el paso 5a (2026-10-19): limpieza de la Agenda del barbero.**
 - **`Agenda.jsx` partido en `components/agenda/`** (refactor, sin cambio de comportamiento).
@@ -459,7 +466,7 @@ sentencia.
   - `09ec79ac` (Facundo, 16/05): completado con el corte `1eb5ea32` ($ 6.500, efectivo);
   - `ccf6fe6b` (Alejo, 20/10 09:00): cancelado desde el Inicio, sin mail (cliente sin email).
 
-#### Fase 5 — Panel de gestión (`frontend/`)
+#### Fase 5 — Panel de gestión (`frontend/`) ✅ (2026-10-29, revisada en pantalla por el usuario)
 
 **5.1 Agenda del día (`SeccionTurnero`, vista Agenda).** Dibujar los descansos y las
 ausencias en la columna de cada barbero, con el mismo estilo neutro que en la app del
@@ -488,6 +495,97 @@ revisa a cada barbero por semana para pagarle:
   los descansos de la semana por barbero.
 - Alternativa evaluada: un sub-tab "Descansos" en el modal de `TabBarberos`. Descartada
   como lugar principal porque ahí se configura, no se controla.
+
+**Cómo quedó la Fase 5 (2026-10-29), desvíos del plan:**
+- **Remanentes del paso 5b** (se hicieron antes de la 5.1):
+  - **`cancelarTurnoPorId`:** el `UPDATE` lleva `estado = 'reservado' AND inicio > now()`. Un
+    turno que ya empezó → 400 ("marcalo como no asistió"); uno que cambió de estado → 409, sin
+    mail ni Calendar. El lookup trae `tn.direccion` (el mail de cancelación salía sin
+    dirección).
+  - **`registrarCorte`, en una sola sentencia:** un CTE marca el turno completado e inserta el
+    corte. Ya no inserta a ciegas cuando el turno dejó de estar reservado:
+    - desde el iPad, si el turno se canceló mientras tanto, el corte entra como cliente sin
+      turno (`turno_vinculado: false`), y el iPad lo avisa. El cobro existió y no se pierde;
+    - un turno ya completado → 409 ("si su cobro no está cargado, registralo como cliente sin
+      turno");
+    - un turno de otro barbero → 400 en el iPad y 404 en el panel.
+  - **Decisión del usuario: el admin puede completar un turno "no asistió"** (la falta estaba
+    mal marcada). Registra el cobro y pasa a completado, **solo el mismo día del turno** (hora
+    argentina): así un turno de meses atrás no aparece cobrado en la semana actual. La regla
+    está en la misma sentencia de `registrarCorte` y vale también para el iPad (elegir un
+    turno "no asistió" ahí dice que el cliente vino). El barbero no puede. En el panel,
+    "Completar" aparece en esos turnos con una nota.
+  - **App del barbero:**
+    - "Cancelar" aparece solo en los turnos que no empezaron, en la Agenda y en el Inicio;
+    - `capitalizar` (`utils/formato.js`) reemplaza el `textTransform: 'capitalize'`, que
+      ponía "De" en mayúscula;
+    - se borraron `diaSemana`, `diaNumero`, `nombreMes` y `esHoy`, que no se usaban;
+    - el `fontSize` de `Button` pasó al token `sizeBody`;
+    - el KPI "No asistieron" se llama "Faltaron" (a 375 px se partía en dos renglones);
+    - las celdas de la grilla le dicen su estado al lector de pantalla.
+- **La regla de unir descansos pasó al backend** (`descansosService.unirDescansos`, única
+  definición). Antes estaba en el front del barbero. La necesitan las dos agendas y el
+  registro: en el front habría quedado en dos copias, y el registro la necesita igual en el
+  servidor.
+  - Dos partes se unen si son del mismo barbero y del mismo origen, están pegadas por su
+    rango **original** y convivieron: la segunda se marcó antes de que terminara la primera.
+  - Cada parte se suma al bloque cuya última parte se une con ella, que no siempre es la
+    anterior: un horario liberado se puede volver a marcar, y la fila nueva queda ordenada
+    entre la liberada y su continuación.
+  - Estado del bloque: `liberado` (todas sus partes se liberaron antes de empezar),
+    `terminado_antes`, `pendiente`, `en_curso` o `cumplido`. La antelación del bloque es la de
+    su primera parte; cada parte trae la suya.
+  - Llega como bloques en `GET /admin/agenda` (`descansos`), en `GET /admin/descansos` (nuevo)
+    y en el registro. `POST /admin/descansos` devuelve también el `bloque` que contiene al
+    descanso creado, ya unido, y la app del barbero lo dibuja con eso.
+- **5.1:** en vez de `GET /admin/suspensiones` (que no une), un endpoint nuevo,
+  `GET /admin/descansos?desde=&hasta=&barbero_id=`. Las ausencias se piden con
+  `tipo=suspension`.
+  - Dibujo: descanso en gris liso, ausencia rayada, los dos con un borde a la izquierda; el
+    texto y el ícono, solo si entran en el alto del bloque.
+  - El detalle (`ModalDetalleBloque`) es de solo lectura. Muestra tipo, barbero, horario,
+    hasta cuándo estaba programado (si terminó antes), estado, motivo, quién lo cargó, cuándo
+    y la antelación; en un descanso unido, también sus partes con la antelación de cada una.
+- **5.2:** como el plan. "Liberar" ("Terminar" si está en curso) pide confirmación en la misma
+  fila, con los textos de `Gestion.jsx`. El cambio se dibuja con la respuesta del servidor
+  (convenciones §8). En `api.js`, `eliminarAdminSuspension` pasó a `liberarAdminSuspension`. El
+  `fmtFechaHora` del panel no tenía el bug de las 21:00 (formatea con `timeZone`).
+- **5.3:** `GET /admin/planilla/descansos?semana=` (`planillaService.descansosSemanal`), con el
+  mismo conjunto de barberos que el resumen.
+  - Los liberados antes de empezar se listan pero no cuentan en cantidad ni en tiempo.
+  - **Jornada** (el divisor del %): los bloques de horario del barbero en los días en que abre
+    el local, sin feriados, menos sus ausencias (con multirange: dos ausencias superpuestas no
+    se restan dos veces). **Limitación:** usa el horario actual del barbero; en una semana
+    pasada en la que tenía otro horario, el % es aproximado.
+  - **Resumen:** columna "Descansos" (`3 · 1 h 30 min`), también en el TOTAL.
+  - **Modal:** sección "Descansos" con tres cifras (cantidad, tiempo y "5,6 % de 54 h") y un
+    renglón por bloque. Se ve aunque el barbero no tenga cortes. En uno unido muestra la
+    antelación de la primera parte y la de la marcada más tarde, que es la que delata una
+    extensión de último momento.
+  - **Excel del Resumen:** columnas "Descansos", "Descanso (min)" y "% jornada", y una segunda
+    hoja "Descansos" con un renglón por bloque (antelaciones en minutos, para ordenar).
+  - En modo barbero, cada barbero ve su propio registro.
+- **Centralizado:** `textoEstadoBloque` (`utils/descansos.js`, nuevo) lo usan el Turnero y
+  Planillas. `fechaDeInstante`, `formatInstante`, `formatDuracion` y `formatAntelacion` van en
+  `utils/fecha.js`, y `fmtPorcentaje` en `utils/formato.js`. `AvisoExito` pasó a `wizard.jsx`
+  y lo usan `FlujoCorte` y `FlujoGasto`.
+- **`SummaryRow` del panel a 14 px:** con esto las tres copias quedan iguales. En el panel
+  todavía no lo usa ninguna pantalla.
+- **Verificación:**
+  - pruebas de controllers con `req`/`res` simulados contra demo: 12 de los remanentes, 11
+    casos puros de la regla de unir, el registro de dos semanas (jornada comparada a mano) y
+    el rechazo de un "no asistió" de otro día (iPad y panel, sin escribir nada);
+  - lint y build de los dos fronts sin errores nuevos (el panel sigue en 7 errores + 1 warning);
+  - revisión en pantalla del usuario.
+- **Datos de prueba en demo** (todos de Alejo salvo que se indique):
+  - turno `666a2238` (05/11 10:00), creado y cancelado;
+  - cortes `c8d43c66` (sobre un turno cancelado: quedó sin turno), `792e01a6` (sin turno),
+    `3a21a5e6` (completó el "no asistió" `9b15434c`, del 16/05) y `e9c03b46` (Facundo,
+    completó el "no asistió" `0b6642ac`);
+  - descansos del 21/10: `a6bc1d70` (12:10–13:00) y `527166cc` (13:00–13:50), que forman un
+    bloque unido, y `02dba1d8` (16:20–17:10, terminado a las 16:40). Se cargaron con `INSERT`
+    directo, con `created_at` a mano;
+  - descansos del 03/11 `cafd10f1` y `fcbff562` (admin), creados por el endpoint y liberados.
 
 ### Fuera de alcance / posterior
 

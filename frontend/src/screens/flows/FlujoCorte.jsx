@@ -9,7 +9,7 @@
 // pre-selección del servicio del turno, payload) se mantiene intacta.
 
 import { useState, useEffect } from "react";
-import { Banknote, Check, X, CalendarOff } from "lucide-react";
+import { Banknote, Check, X, CalendarOff, CalendarX } from "lucide-react";
 import { registrarCorte, getTurnosDelDia } from "../../services/api";
 import { getFechaHoy, formatHora } from "../../utils/fecha.js";
 import { theme } from "../../theme/tokens.js";
@@ -22,6 +22,7 @@ import {
   FilaResumen,
   FilaTotal,
   PantallaExito,
+  AvisoExito,
   wizardStyles,
 } from "./wizard.jsx";
 
@@ -48,6 +49,9 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState(null);
   const [exito, setExito] = useState(false);
+  // true si se eligió un turno pero el backend registró el corte sin turno (el
+  // turno se había cancelado mientras tanto): la pantalla de éxito lo avisa.
+  const [quedoSinTurno, setQuedoSinTurno] = useState(false);
 
   // ── Estado del paso 2 (turnos del día) ──────────────────────────────────────
   // turnoSeleccionado: turno elegido, o null si el corte es walk-in (sin reserva).
@@ -120,14 +124,19 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
     setEnviando(true);
     setError(null);
     try {
-      await registrarCorte(payload);
+      const res = await registrarCorte(payload);
+      const sinTurno = Boolean(turnoSeleccionado) && res.turno_vinculado === false;
+      setQuedoSinTurno(sinTurno);
       setExito(true);
+      // Con el aviso de "sin turno" se da más tiempo para leerlo.
       setTimeout(() => {
         onVolver();
-      }, 2500);
+      }, sinTurno ? 4500 : 2500);
     } catch (err) {
       console.error('[flujoCorte] Error en confirmarCorte:', err.message);
-      setError("Error al guardar el corte. Intentá de nuevo.");
+      // 409: el turno ya está completado o cambió. Reintentar no sirve (o
+      // cargaría el cobro dos veces): se muestra el motivo del servidor.
+      setError(err.status === 409 ? err.message : "Error al guardar el corte. Intentá de nuevo.");
     } finally {
       setEnviando(false);
     }
@@ -140,7 +149,13 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
         imagenLocal={imagenLocal}
         titulo="¡Corte registrado!"
         monto={montoTotal}
-      />
+      >
+        {quedoSinTurno && (
+          <AvisoExito Icon={CalendarX}>
+            El turno se había cancelado: el corte quedó registrado como cliente sin turno.
+          </AvisoExito>
+        )}
+      </PantallaExito>
     );
   }
 

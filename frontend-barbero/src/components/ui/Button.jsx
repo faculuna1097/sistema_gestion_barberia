@@ -36,7 +36,7 @@ function Button({
     padding: '12px 16px',
     fontFamily: theme.body,
     fontWeight: theme.weightMedium,
-    fontSize: 14,
+    fontSize: theme.sizeBody,
     letterSpacing: '-0.005em',
     border: '1px solid transparent',
     borderRadius: theme.radius,

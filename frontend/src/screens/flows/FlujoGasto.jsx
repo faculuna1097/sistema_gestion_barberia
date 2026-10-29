@@ -21,6 +21,7 @@ import {
   FilaResumen,
   FilaTotal,
   PantallaExito,
+  AvisoExito,
   wizardStyles,
 } from "./wizard.jsx";
 
@@ -93,13 +94,10 @@ export default function FlujoGasto({ onVolver, categorias, imagenLocal }) {
         montoColor={theme.danger}
       >
         {categoriaSeleccionada?.nombre === "Productos" && (
-          <div style={styles.recordatorio}>
-            <Package size={20} strokeWidth={1.75} color={theme.warning} style={{ flexShrink: 0, marginTop: 2 }} />
-            <p style={styles.recordatorioTexto}>
-              Si compraste productos para vender, recordá actualizar el stock en{" "}
-              <strong style={{ color: theme.ink }}>Gestión → Productos</strong>
-            </p>
-          </div>
+          <AvisoExito Icon={Package}>
+            Si compraste productos para vender, recordá actualizar el stock en{" "}
+            <strong style={{ color: theme.ink }}>Gestión → Productos</strong>
+          </AvisoExito>
         )}
       </PantallaExito>
     );
@@ -227,24 +225,3 @@ export default function FlujoGasto({ onVolver, categorias, imagenLocal }) {
   }
 }
 
-// ─── Estilos específicos del flujo ────────────────────────────────────────────
-const styles = {
-  recordatorio: {
-    marginTop: 24,
-    display: "flex",
-    alignItems: "flex-start",
-    gap: 12,
-    background: theme.warningSoft,
-    border: `1px solid ${theme.hairline}`,
-    borderRadius: theme.radius,
-    padding: "14px 16px",
-    textAlign: "left",
-  },
-  recordatorioTexto: {
-    fontFamily: theme.body,
-    fontSize: theme.sizeBody,
-    color: theme.inkSoft,
-    margin: 0,
-    lineHeight: 1.5,
-  },
-};

@@ -219,7 +219,9 @@ export const patchEstado = async (req, res) => {
  * 'completado'), y deja el registro financiero del turno — es el equivalente
  * backoffice del flujo operativo del iPad. Acepta servicio_id opcional para cambiar el servicio al
  * completar (default: el del turno); si se cambia, el corte Y el turno quedan con
- * ese servicio. Si rol=barbero, solo puede completar turnos propios.
+ * ese servicio. Si rol=barbero, solo puede completar turnos propios y reservados;
+ * el admin también uno marcado 'no_asistio' (el cliente vino). Si el turno cambió
+ * mientras tanto → 409 y no se registra nada.
  * @param {Object} req.body - { forma_pago, precio, propina?, servicio_id? }
  * @returns {JSON} 201 { id, estado: 'completado', servicio_id, corte_id, monto_total }
  */
@@ -259,7 +261,10 @@ export const completarTurno = async (req, res) => {
     if (err.code === 'SERVICIO_INVALIDO') {
       return res.status(400).json({ error: err.message });
     }
-    if (err.code === 'ESTADO_INVALIDO' || err.code === 'TURNO_YA_VINCULADO') {
+    if (err.code === 'TURNO_INEXISTENTE') {
+      return res.status(404).json({ error: err.message });
+    }
+    if (err.code === 'ESTADO_INVALIDO' || err.code === 'TURNO_YA_VINCULADO' || err.code === 'TURNO_YA_COMPLETADO') {
       return res.status(409).json({ error: err.message });
     }
     console.error('[turnos] Error en completarTurno:', err);
@@ -269,7 +274,9 @@ export const completarTurno = async (req, res) => {
 
 /**
  * DELETE /api/admin/turnos/:id
- * Cancela el turno. Si rol=barbero, solo puede cancelar los propios.
+ * Cancela el turno. Si rol=barbero, solo puede cancelar los propios. Solo un
+ * turno reservado que no empezó: uno que ya empezó → 400 (se marca "no asistió");
+ * uno que no está reservado → 409.
  * Dispara best-effort Calendar + mail.
  * @returns {JSON} { id, estado: 'cancelado' }
  */
@@ -282,6 +289,9 @@ export const deleteTurno = async (req, res) => {
     console.log('[turnos] deleteTurno completado | turno_id:', resultado.id);
     res.json(resultado);
   } catch (err) {
+    if (err.code === 'TURNO_YA_EMPEZO') {
+      return res.status(400).json({ error: err.message });
+    }
     if (err.code === 'NO_ENCONTRADO') {
       return res.status(404).json({ error: err.message });
     }

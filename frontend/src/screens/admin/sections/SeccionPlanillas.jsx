@@ -15,9 +15,14 @@
 // Tab Resumen semanal:
 //   - Tabla consolidada por barbero con totales de la semana + columna
 //     "A pagar" opcional (comisión + propinas; toggle global).
+//   - Columna "Descansos": cuántos se tomó y cuánto tiempo (registro de
+//     descansos, /admin/planilla/descansos; plan_app_barbero.md fase 5.3).
 //   - Al tocar un barbero se abre ModalDetalleBarbero: cifras de la semana,
-//     pago, total generado por día, por forma de pago y por origen. También en
-//     modo barbero.
+//     pago, total generado por día, por forma de pago y por origen, y el
+//     registro de sus descansos (aunque no haya cortado). También en modo
+//     barbero: ve su propio registro.
+//   - El Excel del Resumen suma las columnas de descansos y una segunda hoja
+//     "Descansos" con un renglón por descanso.
 //
 // Origen de un corte (`con_turno` del backend): si vino de un turno o fue un
 // cliente que llegó sin reservar. En la tabla del Detalle y su Excel, la
@@ -50,8 +55,13 @@ import {
   semanaAFechaLunes,
   semanaALabel,
   desplazarDia,
+  fechaDeInstante,
+  formatHora,
+  formatDuracion,
+  formatAntelacion,
 } from '../../../utils/fecha';
-import { fmtPesos, formatPago, OPCIONES_FORMA_PAGO } from '../../../utils/formato';
+import { fmtPesos, fmtPorcentaje, formatPago, OPCIONES_FORMA_PAGO } from '../../../utils/formato';
+import { textoEstadoBloque } from '../../../utils/descansos';
 import { cargarChunk } from '../../../utils/cargarChunk';
 import {
   Tabs,
@@ -148,6 +158,54 @@ function elegirBarberoInicial(detalle, barberoPrevio) {
   return (primeroConCortes ?? detalle[0])?.barbero_id ?? null;
 }
 
+/**
+ * Suma el registro de descansos de varios barberos: cantidad, minutos y el %
+ * sobre la suma de sus jornadas (fila TOTAL del Resumen y de su Excel).
+ * @param {Array<{cantidad: number, minutos: number, minutos_jornada: number}>} registros
+ * @returns {{cantidad: number, minutos: number, minutos_jornada: number, porcentaje: number|null}}
+ *   `porcentaje` con un decimal, null si no hay jornada.
+ */
+function sumarDescansos(registros) {
+  const cantidad = registros.reduce((s, r) => s + r.cantidad, 0);
+  const minutos = registros.reduce((s, r) => s + r.minutos, 0);
+  const jornada = registros.reduce((s, r) => s + r.minutos_jornada, 0);
+  return {
+    cantidad,
+    minutos,
+    minutos_jornada: jornada,
+    porcentaje: jornada > 0 ? Math.round((minutos / jornada) * 1000) / 10 : null,
+  };
+}
+
+/**
+ * Rango horario de un bloque de descanso como texto. Uno liberado antes de
+ * empezar no tiene rango efectivo: se muestra el que se había marcado.
+ * @param {{ desde: string, hasta: string, hasta_programada: string, estado: string }} bloque
+ *   - de /admin/planilla/descansos
+ * @returns {string} Ej: '13:00 – 14:00'
+ */
+function rangoDescanso(bloque) {
+  const fin = bloque.estado === 'liberado' ? bloque.hasta_programada : bloque.hasta;
+  return `${formatHora(bloque.desde)} – ${formatHora(fin)}`;
+}
+
+/**
+ * Cuánto antes se marcó un descanso, como texto. En uno de varias partes
+ * pegadas dice también la de la parte marcada más tarde, que es la que delata
+ * una extensión de último momento.
+ * @param {{ partes: Array, antelacion_minutos: number, antelacion_ultima_minutos: number }} bloque
+ *   - de /admin/planilla/descansos
+ * @returns {string} Ej: 'marcado 1 día 2 h antes', '2 partes · la primera, 1 día
+ *   antes; la última, 5 min antes'
+ */
+function textoAntelacionDescanso(bloque) {
+  if (bloque.partes.length > 1) {
+    return `${bloque.partes.length} partes · la primera, ${formatAntelacion(bloque.antelacion_minutos)} antes; `
+      + `la última, ${formatAntelacion(bloque.antelacion_ultima_minutos)} antes`;
+  }
+  return `marcado ${formatAntelacion(bloque.antelacion_minutos)} antes`;
+}
+
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const TABS_PRINCIPALES = [
   { key: 'detalle', label: 'Detalle por barbero' },
@@ -170,6 +228,8 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
   const [tabActiva, setTabActiva]                 = useState('detalle');
   const [detalleData, setDetalleData]             = useState([]);
   const [resumenData, setResumenData]             = useState(null);
+  // Registro de descansos por barbero_id (/admin/planilla/descansos).
+  const [descansosData, setDescansosData]         = useState(new Map());
   const [barberoActivo, setBarberoActivo]         = useState(null);
   const [mostrarComisiones, setMostrarComisiones] = useState(true);
   const [cargando, setCargando]                   = useState(false);
@@ -192,15 +252,21 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
       setError(null);
       try {
         const fechaLunes = semanaAFechaLunes(semana);
-        const [resDetalle, resResumen] = await Promise.all([
+        const [resDetalle, resResumen, resDescansos] = await Promise.all([
           apiFetch(`/admin/planilla?semana=${fechaLunes}`),
           apiFetch(`/admin/planilla/resumen?semana=${fechaLunes}`),
+          apiFetch(`/admin/planilla/descansos?semana=${fechaLunes}`),
         ]);
-        if (!resDetalle.ok || !resResumen.ok) throw new Error('Error en la respuesta del servidor');
-        const [detalle, resumen] = await Promise.all([resDetalle.json(), resResumen.json()]);
+        if (!resDetalle.ok || !resResumen.ok || !resDescansos.ok) {
+          throw new Error('Error en la respuesta del servidor');
+        }
+        const [detalle, resumen, descansos] = await Promise.all([
+          resDetalle.json(), resResumen.json(), resDescansos.json(),
+        ]);
         if (cancelado) return;
         setDetalleData(detalle);
         setResumenData(resumen);
+        setDescansosData(new Map(descansos.map((d) => [d.barbero_id, d])));
         setBarberoActivo((prev) => elegirBarberoInicial(detalle, prev));
         setDiasExpandidos(new Set([getFechaHoy()]));
       } catch (err) {
@@ -294,13 +360,20 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
       return;
     }
     // En el Excel, con y sin turno van en dos columnas (en pantalla es una sola,
-    // "N de M"): así se pueden sumar y filtrar como números.
+    // "N de M"): así se pueden sumar y filtrar como números. Lo mismo los
+    // descansos: cantidad, minutos y % de la jornada, en columnas numéricas.
+    const columnasDescansos = (d) => ({
+      Descansos: d?.cantidad ?? 0,
+      'Descanso (min)': d?.minutos ?? 0,
+      '% jornada': d?.porcentaje ?? '',
+    });
     const filas = resumenData.barberos.map((b) => ({
       Barbero: b.barbero_nombre, Cortes: b.cantidad_cortes,
       'Con turno': b.cortes_con_turno, 'Sin turno': b.cortes_sin_turno,
       'Monto servicios ($)': b.monto_servicios, 'Propinas ($)': b.propinas,
       'Total generado ($)': b.total_generado,
       ...(mostrarComisiones ? { 'A pagar ($)': b.comision } : {}),
+      ...columnasDescansos(descansosData.get(b.barbero_id)),
     }));
     const t = resumenData.totales;
     filas.push({
@@ -309,9 +382,32 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
       'Monto servicios ($)': t.monto_servicios, 'Propinas ($)': t.propinas,
       'Total generado ($)': t.total_generado,
       ...(mostrarComisiones ? { 'A pagar ($)': t.comision } : {}),
+      ...columnasDescansos(sumarDescansos([...descansosData.values()])),
     });
+
+    // Segunda hoja: un renglón por descanso, también los liberados antes de
+    // empezar (no cuentan en el tiempo, pero quedan registrados). Las
+    // antelaciones van en minutos para poder ordenar por la más corta.
+    const filasDescansos = [...descansosData.values()].flatMap((d) =>
+      d.bloques.map((bl) => ({
+        Barbero: d.barbero_nombre,
+        Día: formatFechaCorta(fechaDeInstante(bl.desde)),
+        Desde: formatHora(bl.desde),
+        Hasta: formatHora(bl.hasta),
+        'Programado hasta': formatHora(bl.hasta_programada),
+        Minutos: bl.minutos,
+        Estado: textoEstadoBloque(bl.estado, bl.hasta),
+        'Antelación (min)': bl.antelacion_minutos,
+        'Antelación de la última parte (min)': bl.antelacion_ultima_minutos,
+        Partes: bl.partes.length,
+        'Lo cargó': bl.origen === 'admin' ? 'Administrador' : 'Barbero',
+      })));
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Resumen semanal');
+    if (filasDescansos.length > 0) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasDescansos), 'Descansos');
+    }
     XLSX.writeFile(wb, `resumen-semanal-${semana}.xlsx`);
   };
 
@@ -324,6 +420,7 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
   // El modal lee las dos respuestas (misma dependencia entre tabs que la #28).
   const resumenDetalle = resumenData?.barberos.find((b) => b.barbero_id === barberoDetalle) ?? null;
   const cortesDetalle  = detalleData.find((b) => b.barbero_id === barberoDetalle)?.cortes ?? [];
+  const descansosDetalle = descansosData.get(barberoDetalle) ?? null;
 
   /**
    * Alterna la expansión de un bloque de día.
@@ -471,6 +568,7 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
         ) : (
           <TablaResumen
             resumenData={resumenData}
+            descansos={descansosData}
             mostrarComisiones={mostrarComisiones}
             onVerDetalle={setBarberoDetalle}
           />
@@ -480,6 +578,7 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
       <ModalDetalleBarbero
         resumen={resumenDetalle}
         cortes={cortesDetalle}
+        descansos={descansosDetalle}
         semana={semana}
         mostrarComisiones={mostrarComisiones}
         onClose={() => setBarberoDetalle(null)}
@@ -661,6 +760,20 @@ function textoConTurno(conTurno, total) {
 }
 
 /**
+ * Contenido de la celda "Descansos" del Resumen: cuántos y cuánto tiempo.
+ * @param {{cantidad: number, minutos: number}|undefined} registro - del barbero
+ *   en /admin/planilla/descansos (o la suma, en la fila TOTAL).
+ * @returns {JSX.Element|string} Ej: "3 · 1 h 30 min", o un "—" gris si no se
+ *   tomó ninguno o no llegó el dato.
+ */
+function textoDescansos(registro) {
+  if (!registro || registro.cantidad === 0) {
+    return <span style={{ color: theme.mutedSoft }}>—</span>;
+  }
+  return `${registro.cantidad} · ${formatDuracion(registro.minutos)}`;
+}
+
+/**
  * TablaResumen
  * Tabla consolidada del tab Resumen. Una fila por barbero + fila TOTAL.
  * Cada fila de barbero abre su detalle: click en cualquier parte de la fila y,
@@ -669,11 +782,13 @@ function textoConTurno(conTurno, total) {
  *
  * @param {object} props
  * @param {{ barberos: Array, totales: object }} props.resumenData
+ * @param {Map<string, object>} props.descansos - Registro de descansos por barbero_id.
  * @param {boolean} props.mostrarComisiones
  * @param {(barberoId: string) => void} props.onVerDetalle - Abre el detalle del barbero.
  */
-function TablaResumen({ resumenData, mostrarComisiones, onVerDetalle }) {
+function TablaResumen({ resumenData, descansos, mostrarComisiones, onVerDetalle }) {
   const { barberos, totales } = resumenData;
+  const totalDescansos = sumarDescansos([...descansos.values()]);
   return (
     <div style={{
       background: theme.surface,
@@ -687,6 +802,7 @@ function TablaResumen({ resumenData, mostrarComisiones, onVerDetalle }) {
             <ThCelda>Barbero</ThCelda>
             <ThCelda alinear="right">Cortes</ThCelda>
             <ThCelda alinear="right">Con turno</ThCelda>
+            <ThCelda alinear="right">Descansos</ThCelda>
             <ThCelda alinear="right">Monto servicios</ThCelda>
             <ThCelda alinear="right">Propinas</ThCelda>
             <ThCelda alinear="right">Total generado</ThCelda>
@@ -707,6 +823,7 @@ function TablaResumen({ resumenData, mostrarComisiones, onVerDetalle }) {
               <TdCelda bold>{b.barbero_nombre}</TdCelda>
               <TdCelda alinear="right">{b.cantidad_cortes}</TdCelda>
               <TdCelda alinear="right">{textoConTurno(b.cortes_con_turno, b.cantidad_cortes)}</TdCelda>
+              <TdCelda alinear="right">{textoDescansos(descansos.get(b.barbero_id))}</TdCelda>
               <TdCelda alinear="right">{fmtPesos(b.monto_servicios)}</TdCelda>
               <TdCelda alinear="right">{fmtPesos(b.propinas)}</TdCelda>
               <TdCelda alinear="right" bold>{fmtPesos(b.total_generado)}</TdCelda>
@@ -749,6 +866,7 @@ function TablaResumen({ resumenData, mostrarComisiones, onVerDetalle }) {
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>
               {textoConTurno(totales.cortes_con_turno, totales.cantidad_cortes)}
             </td>
+            <td style={{ ...tdTotalBase, textAlign: 'right' }}>{textoDescansos(totalDescansos)}</td>
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>{fmtPesos(totales.monto_servicios)}</td>
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>{fmtPesos(totales.propinas)}</td>
             <td style={{ ...tdTotalBase, textAlign: 'right' }}>
@@ -877,14 +995,26 @@ function filasPorOrigen(cortes) {
  * @returns {JSX.Element}
  */
 function CifrasSemana({ resumen }) {
-  const cifras = [
-    { label: 'Cortes',         valor: resumen.cantidad_cortes },
-    { label: 'Servicios',      valor: fmtPesos(resumen.monto_servicios) },
-    { label: 'Propinas',       valor: fmtPesos(resumen.propinas) },
-    { label: 'Total generado', valor: fmtPesos(resumen.total_generado) },
-  ];
+  return (
+    <CifrasRecuadros cifras={[
+      { label: 'Cortes',         valor: resumen.cantidad_cortes },
+      { label: 'Servicios',      valor: fmtPesos(resumen.monto_servicios) },
+      { label: 'Propinas',       valor: fmtPesos(resumen.propinas) },
+      { label: 'Total generado', valor: fmtPesos(resumen.total_generado) },
+    ]} />
+  );
+}
 
-  // auto-fit: 4 columnas si entran; si no, pasan a 2.
+/**
+ * CifrasRecuadros
+ * Cifras en recuadros: rótulo mono arriba, valor grande abajo y, opcional, una
+ * nota chica que le da contexto (ej. "de 38 h"). La usan las cifras de la
+ * semana y las de los descansos del modal.
+ * @param {Array<{label: string, valor: string|number, nota?: string}>} props.cifras
+ * @returns {JSX.Element}
+ */
+function CifrasRecuadros({ cifras }) {
+  // auto-fit: todas en una fila si entran; si no, pasan a la siguiente.
   return (
     <dl style={{
       display: 'grid',
@@ -924,6 +1054,17 @@ function CifrasSemana({ resumen }) {
             fontVariantNumeric: 'tabular-nums',
           }}>
             {c.valor}
+            {c.nota && (
+              <span style={{
+                marginLeft: 6,
+                fontSize: theme.sizeBody,
+                fontWeight: theme.weightRegular,
+                color: theme.muted,
+                letterSpacing: 0,
+              }}>
+                {c.nota}
+              </span>
+            )}
           </dd>
         </div>
       ))}
@@ -949,17 +1090,7 @@ function ListaConBarras({ titulo, filas, maximo }) {
 
   return (
     <div>
-      <div style={{
-        marginBottom: 4,
-        fontFamily: theme.mono,
-        fontWeight: theme.weightHeading,
-        fontSize: theme.sizeMicro,
-        letterSpacing: '0.06em',
-        textTransform: 'uppercase',
-        color: theme.inkSoft,
-      }}>
-        {titulo}
-      </div>
+      <TituloSeccion>{titulo}</TituloSeccion>
 
       {/* role="list": Safari les saca la semántica de lista a las <ul> con
           list-style none. */}
@@ -1009,22 +1140,126 @@ function ListaConBarras({ titulo, filas, maximo }) {
 }
 
 /**
+ * TituloSeccion
+ * Eyebrow mono en mayúsculas sobre una sección del modal del barbero.
+ * @param {ReactNode} props.children - El título
+ * @returns {JSX.Element}
+ */
+function TituloSeccion({ children }) {
+  return (
+    <div style={{
+      marginBottom: 4,
+      fontFamily: theme.mono,
+      fontWeight: theme.weightHeading,
+      fontSize: theme.sizeMicro,
+      letterSpacing: '0.06em',
+      textTransform: 'uppercase',
+      color: theme.inkSoft,
+    }}>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * RegistroDescansos
+ * Sección "Descansos" del modal del barbero: cuántos se tomó en la semana,
+ * cuánto tiempo y qué parte de su jornada, y la lista de cada uno (día, rango,
+ * duración, estado, antelación y si lo cargó el administrador). Los liberados
+ * antes de empezar se listan en gris y no suman. Los descansos pegados son uno
+ * solo (los une el backend).
+ * @param {object} props.registro - Del barbero en /admin/planilla/descansos:
+ *   { cantidad, minutos, minutos_jornada, porcentaje, bloques }
+ * @returns {JSX.Element}
+ */
+function RegistroDescansos({ registro }) {
+  const { cantidad, minutos, minutos_jornada: jornada, porcentaje, bloques } = registro;
+  const sinTomar = cantidad === 0;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <TituloSeccion>Descansos</TituloSeccion>
+      <CifrasRecuadros cifras={[
+        { label: 'Descansos', valor: cantidad },
+        { label: 'Tiempo', valor: sinTomar ? '—' : formatDuracion(minutos) },
+        {
+          label: 'De la jornada',
+          valor: porcentaje === null ? '—' : fmtPorcentaje(porcentaje),
+          nota: jornada > 0 ? `de ${formatDuracion(jornada)}` : undefined,
+        },
+      ]} />
+
+      {bloques.length === 0 ? (
+        <p style={{ margin: '4px 0 0', fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.muted }}>
+          Sin descansos esta semana.
+        </p>
+      ) : (
+        <ul role="list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+          {bloques.map((bl) => {
+            const liberado = bl.estado === 'liberado';
+            const detalle = [
+              textoEstadoBloque(bl.estado, bl.hasta)
+                + (bl.estado === 'terminado_antes' ? ` (era hasta ${formatHora(bl.hasta_programada)})` : ''),
+              textoAntelacionDescanso(bl),
+              ...(bl.origen === 'admin' ? ['lo cargó el administrador'] : []),
+            ].join(' · ');
+            return (
+              <li
+                key={bl.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'baseline',
+                  gap: 12,
+                  padding: '8px 0',
+                  borderBottom: `1px solid ${theme.hairlineSoft}`,
+                  fontFamily: theme.body,
+                  fontSize: theme.sizeBody,
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                  <span style={{ color: liberado ? theme.muted : theme.ink, fontWeight: theme.weightMedium }}>
+                    {formatFechaCorta(fechaDeInstante(bl.desde))} · {rangoDescanso(bl)}
+                  </span>
+                  <span style={{ color: theme.muted, lineHeight: 1.5 }}>{detalle}</span>
+                </div>
+                <span style={{
+                  flexShrink: 0,
+                  color: liberado ? theme.mutedSoft : theme.ink,
+                  fontWeight: theme.weightMedium,
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {liberado ? '—' : formatDuracion(bl.minutos)}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
  * ModalDetalleBarbero
  * Detalle de la semana de un barbero, desde el tab Resumen: las cuatro cifras
  * de la semana, el pago (solo con comisiones), el total generado por día, por
- * forma de pago y por origen (con / sin turno). En modo barbero se ve igual:
- * son sus propios números. No calcula comisiones: usa la fila del resumen y
- * suma los cortes del detalle.
+ * forma de pago y por origen (con / sin turno), y el registro de sus descansos.
+ * Sin cortes, la parte de plata se reemplaza por un aviso, pero los descansos
+ * se ven igual. En modo barbero se ve igual: son sus propios números. No
+ * calcula comisiones: usa la fila del resumen y suma los cortes del detalle.
  * @param {object|null} props.resumen - Fila del barbero en /admin/planilla/resumen;
  *   null = cerrado.
  * @param {Array}   props.cortes            - Cortes del barbero en la semana (/admin/planilla).
+ * @param {object|null} props.descansos     - Su registro en /admin/planilla/descansos;
+ *   null si no llegó (no se muestra la sección).
  * @param {string}  props.semana            - Semana 'YYYY-WNN'.
  * @param {boolean} props.mostrarComisiones - Estado del toggle de comisiones.
  * @param {() => void} props.onClose        - Cierra el modal.
  * @param {(barberoId: string) => void} props.onVerCortes - Pasa al tab Detalle con ese barbero.
  * @returns {JSX.Element|null}
  */
-function ModalDetalleBarbero({ resumen, cortes, semana, mostrarComisiones, onClose, onVerCortes }) {
+function ModalDetalleBarbero({ resumen, cortes, descansos, semana, mostrarComisiones, onClose, onVerCortes }) {
   if (!resumen) return null;
 
   const sinCortes = resumen.cantidad_cortes === 0;
@@ -1048,6 +1283,7 @@ function ModalDetalleBarbero({ resumen, cortes, semana, mostrarComisiones, onClo
         </div>
       }
     >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {sinCortes ? (
         <EmptyState
           glyph={<Scissors size={28} strokeWidth={1.5} />}
@@ -1055,7 +1291,7 @@ function ModalDetalleBarbero({ resumen, cortes, semana, mostrarComisiones, onClo
           body="No hay cortes registrados en la semana seleccionada."
         />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <>
           <CifrasSemana resumen={resumen} />
           {mostrarComisiones && (
             <DesgloseMontos
@@ -1077,8 +1313,10 @@ function ModalDetalleBarbero({ resumen, cortes, semana, mostrarComisiones, onClo
             filas={filasPorOrigen(cortes)}
             maximo={resumen.total_generado}
           />
-        </div>
+        </>
       )}
+      {descansos && <RegistroDescansos registro={descansos} />}
+      </div>
     </Modal>
   );
 }

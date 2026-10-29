@@ -1,6 +1,7 @@
 // /frontend/src/components/ui/SummaryRow.jsx
 // Fila label/value usada en pantallas de resumen.
-// Copia idéntica del primitivo de frontend-turnero.
+// Nació como copia del primitivo de frontend-turnero; acá el valor va en
+// theme.sizeBody (14 px), el mínimo de texto del panel.
 
 import { theme } from '../../theme/tokens.js';
 
@@ -34,7 +35,7 @@ function SummaryRow({ label, value }) {
       <div style={{
         fontFamily: theme.body,
         fontWeight: theme.weightMedium,
-        fontSize: 13,
+        fontSize: theme.sizeBody,
         color: theme.ink,
         textAlign: 'right',
         minWidth: 0,

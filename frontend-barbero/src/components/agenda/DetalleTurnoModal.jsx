@@ -20,8 +20,9 @@ export default function DetalleTurnoModal({ turno, onCerrar, onAccion }) {
   if (!turno) return null;
 
   const esReservado = turno.estado === 'reservado';
-  // Un turno que aún no empezó sólo puede cancelarse: marcar que el cliente no
-  // vino recién tiene sentido cuando empezó (el servidor también lo rechaza).
+  // Un turno que aún no empezó solo puede cancelarse, y uno que ya empezó solo
+  // marcarse "no asistió": el cliente no vino recién se sabe cuando empezó, y uno
+  // que empezó ya no se cancela (el servidor rechaza lo otro en cada caso).
   // Completar no está acá: un turno se completa al registrar su corte, desde el
   // iPad o el panel.
   const esFuturo = new Date(turno.inicio) > new Date();
@@ -51,21 +52,17 @@ export default function DetalleTurnoModal({ turno, onCerrar, onAccion }) {
         )}
       </div>
 
-      {/* Acciones — sólo si está reservado. Turnos futuros: sólo cancelar. */}
+      {/* Acción — solo si está reservado: cancelar si no empezó, "no asistió" si ya empezó. */}
       {esReservado && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: esFuturo ? '1fr' : '1fr 1fr',
-          gap: 8,
-          marginTop: 20,
-        }}>
-          {!esFuturo && (
+        <div style={{ marginTop: 20 }}>
+          {esFuturo ? (
+            <Button variant="danger" onClick={() => onAccion(turno, 'cancelar')}>Cancelar</Button>
+          ) : (
             <Button variant="secondary" onClick={() => onAccion(turno, 'no_asistio')}>
               <UserX size={16} strokeWidth={1.75} aria-hidden="true" />
               No asistió
             </Button>
           )}
-          <Button variant="danger" onClick={() => onAccion(turno, 'cancelar')}>Cancelar</Button>
         </div>
       )}
     </ModalDetalle>

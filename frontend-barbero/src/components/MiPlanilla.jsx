@@ -14,7 +14,7 @@ import { ChevronLeft, ChevronRight, ChevronDown, ClipboardX, TrendingUp, Trendin
 
 import { getPlanilla, getResumenPlanilla } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
-import { fmtPesos } from '../utils/formato.js';
+import { fmtPesos, capitalizar } from '../utils/formato.js';
 import { colorResultado } from '../utils/colorMonto.js';
 import { useHover } from '../hooks/useHover.js';
 import {
@@ -550,12 +550,11 @@ function DiaConCortes({ fecha, cortes, comisionTipo, comisionValor, expandido, e
             fontWeight: theme.weightMedium,
             fontSize: theme.sizeBody,
             color: theme.ink,
-            textTransform: 'capitalize',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           }}>
-            {fmtFechaLarga(fecha)}
+            {capitalizar(fmtFechaLarga(fecha))}
           </span>
           {esHoy && (
             <span style={{

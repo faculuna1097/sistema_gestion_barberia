@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { theme } from '../../theme/tokens.js';
 import { fmtFechaLarga } from '../../utils/fecha.js';
+import { capitalizar } from '../../utils/formato.js';
 import { useHover } from '../../hooks/useHover.js';
 
 /**
@@ -89,9 +90,8 @@ export default function NavegadorDia({ fecha, esHoy, onAnterior, onSiguiente, on
         fontWeight: theme.weightMedium,
         lineHeight: 1.3,
         color: theme.ink,
-        textTransform: 'capitalize',
       }}>
-        {fmtFechaLarga(fecha)}
+        {capitalizar(fmtFechaLarga(fecha))}
       </div>
 
       <BotonBarra onClick={onSiguiente} aria="Día siguiente">
