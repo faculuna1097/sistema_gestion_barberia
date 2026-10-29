@@ -4,6 +4,10 @@
 //   - Hero con la comisión semanal (lo más importante).
 //   - Desglose de la semana (cortes, monto, propinas, total).
 //   - Detalle de cortes agrupados por día.
+// Color de los montos (sistema_de_disenio.md §3.1.1), desde la mirada del
+// barbero: lo que cobra en la semana es su resultado y va en verde
+// (colorResultado); el resto (la comisión de cada día, que es un subtotal, el
+// generado, las propinas, los precios) va en negro.
 
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, ChevronDown, ClipboardX, TrendingUp, TrendingDown, Minus } from 'lucide-react';
@@ -11,6 +15,8 @@ import { ChevronLeft, ChevronRight, ChevronDown, ClipboardX, TrendingUp, Trendin
 import { getPlanilla, getResumenPlanilla } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { fmtPesos } from '../utils/formato.js';
+import { colorResultado } from '../utils/colorMonto.js';
+import { useHover } from '../hooks/useHover.js';
 import {
   fmtFechaCorta, fmtFechaLarga, fechaLocalISO, fechaHoyISO, sumarDias,
 } from '../utils/fecha.js';
@@ -279,16 +285,16 @@ function NavegadorSemana({ semana, esEstaSemana, puedeAvanzar, onAnterior, onSig
 /**
  * BotonFlecha
  * Botón discreto cuadrado de 36×36 px para las flechas del navegador.
- * Hover con useState (MD §4.2). Soporta disabled (visual + bloqueo de click).
+ * Hover solo con mouse (useHover, MD §4.2). Soporta disabled (visual + bloqueo
+ * de click).
  */
 function BotonFlecha({ children, onClick, aria, disabled = false }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
   return (
     <button
       type="button"
       onClick={disabled ? undefined : onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...eventosHover}
       disabled={disabled}
       aria-label={aria}
       style={{
@@ -313,7 +319,9 @@ function BotonFlecha({ children, onClick, aria, disabled = false }) {
 
 /**
  * HeroComision
- * Card grande con la comisión semanal — dato más importante.
+ * Card grande con la comisión semanal — dato más importante. Es el resultado
+ * de la semana para el barbero: va en verde, o en negro si da $ 0
+ * (colorResultado, §3.1.1).
  * Si resumen es null (sin cortes esta semana), igual se muestra con $0
  * para que el barbero entienda que cargó pero no facturó nada.
  */
@@ -364,7 +372,7 @@ function HeroComision({ resumen, comisionPrev }) {
         fontSize: 36,
         letterSpacing: '-0.02em',
         lineHeight: 1.1,
-        color: theme.accent,
+        color: colorResultado(comision),
         marginTop: 4,
         fontVariantNumeric: 'tabular-nums',
       }}>
@@ -410,7 +418,7 @@ function DeltaSemanal({ pct }) {
         flexShrink: 0,
         color,
         fontFamily: theme.body,
-        fontSize: theme.sizeMicro + 1,
+        fontSize: theme.sizeBody,
         fontWeight: theme.weightMedium,
       }}
     >
@@ -433,7 +441,7 @@ function DesgloseSemanal({ resumen, cantidadCortes }) {
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
       <KPI label="Cortes"   value={cantidadCortes}    size="sm" />
       <KPI label="Generado" value={fmtPesos(totalGen)} size="sm" />
-      <KPI label="Propinas" value={fmtPesos(propinas)} size="sm" tone="success" />
+      <KPI label="Propinas" value={fmtPesos(propinas)} size="sm" />
     </div>
   );
 }
@@ -504,7 +512,8 @@ function DetalleCortes({ diasConCortes, comisionTipo, comisionValor }) {
  * DiaConCortes
  * Card colapsable de un día: header clickeable (fecha + pill "Hoy" + comisión
  * del día + chevron) y, al expandir, la lista de cortes. Sólo el día de hoy
- * arranca desplegado (lo controla DetalleCortes).
+ * arranca desplegado (lo controla DetalleCortes). La comisión del día va en
+ * negro: es un subtotal de la semanal, que es la que va en verde (§3.1.1).
  */
 function DiaConCortes({ fecha, cortes, comisionTipo, comisionValor, expandido, esHoy, onToggle }) {
   const comisionDia = calcularComisionDia(cortes, comisionTipo, comisionValor);
@@ -569,7 +578,7 @@ function DiaConCortes({ fecha, cortes, comisionTipo, comisionValor, expandido, e
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <span style={{
             fontFamily: theme.body,
-            fontSize: theme.sizeMicro + 1,
+            fontSize: theme.sizeBody,
             color: theme.muted,
           }}>
             {cortes.length} corte{cortes.length === 1 ? '' : 's'}
@@ -578,7 +587,7 @@ function DiaConCortes({ fecha, cortes, comisionTipo, comisionValor, expandido, e
             fontFamily: theme.body,
             fontWeight: theme.weightHeading,
             fontSize: theme.sizeBody,
-            color: theme.accent,
+            color: theme.ink,
             fontVariantNumeric: 'tabular-nums',
           }}>
             {fmtPesos(comisionDia)}
@@ -667,7 +676,9 @@ function PillSinTurno() {
  * Fila de un corte dentro de la card del día (sin borde propio; el separador
  * lo da la card). Hora + servicio + pill de pago + cliente (o pill "Sin
  * turno" si no vino de un turno) a la izquierda; $monto y
- * $propina a la derecha. Si la propina es 0, no se muestra.
+ * $propina a la derecha. Si la propina es 0, no se muestra. La propina va en
+ * `muted`: es parte de la cuenta, no un resultado (§3.1.1), y no compite con
+ * el monto.
  * @param {boolean} props.ultimo - true en el último corte del día (sin separador)
  */
 function CorteFila({ corte, ultimo }) {
@@ -722,7 +733,7 @@ function CorteFila({ corte, ultimo }) {
             {corte.cliente_nombre && (
               <span style={{
                 fontFamily: theme.body,
-                fontSize: theme.sizeMicro + 1,
+                fontSize: theme.sizeBody,
                 color: theme.inkSoft,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -749,8 +760,8 @@ function CorteFila({ corte, ultimo }) {
         {propina > 0 && (
           <div style={{
             fontFamily: theme.body,
-            fontSize: theme.sizeMicro + 1,
-            color: theme.success,
+            fontSize: theme.sizeBody,
+            color: theme.muted,
             marginTop: 2,
           }}>
             + {fmtPesos(propina)} prop.

@@ -5,7 +5,9 @@
 //   - Card destacada con el próximo turno (si existe).
 //   - 3 KPIs: pendientes, completados, no asistieron (+ nota chica de cancelados).
 //   - Botón primario "Nuevo turno".
-//   - Lista de turnos del día con acciones (todas con ConfirmDialog).
+//   - Lista de turnos del día con sus acciones, "No asistió" y "Cancelar" (las
+//     dos con ConfirmDialog). Completar no está: un turno se completa al
+//     registrar su corte, desde el iPad o el panel.
 //
 // Props:
 //   barbero       — { id, nombre }
@@ -32,14 +34,8 @@ import {
 } from './ui';
 
 // Configuración del ConfirmDialog según la acción a ejecutar.
-// Centralizar acá evita 3 if/else en el render.
+// Centralizar acá evita un if/else por acción en el render.
 const ACCIONES = {
-  completar: {
-    title: 'Marcar como completado',
-    message: '¿Confirmás que ya atendiste este turno?',
-    confirmLabel: 'Sí, completar',
-    confirmVariant: 'primary',
-  },
   no_asistio: {
     title: 'Marcar como no asistió',
     message: 'El cliente no se presentó al turno. ¿Confirmás?',
@@ -124,28 +120,32 @@ export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
 
   /**
    * ejecutarAccion
-   * Handler del onConfirm del modal. Despacha al endpoint correcto según `accion`.
+   * Handler del onConfirm del modal: cancela el turno o marca que el cliente no
+   * asistió. El diálogo queda en "Procesando…" mientras responde el servidor;
+   * con su respuesta ({ id, estado }) el turno cambia en la lista en el mismo
+   * render en que se cierra el diálogo, y después la lista se recarga por detrás
+   * (convenciones §8). Si falla: el mensaje del servidor y la misma recarga,
+   * porque el turno pudo haber cambiado por otro lado (ej. el cliente lo canceló
+   * desde el turnero).
    */
   const ejecutarAccion = async () => {
     const { accion, turno } = confirma;
     setProcesando(true);
     try {
-      if (accion === 'cancelar') {
-        await cancelarTurno(turno.id);
-      } else {
-        // 'completar' → 'completado', 'no_asistio' → 'no_asistio'
-        const nuevoEstado = accion === 'completar' ? 'completado' : 'no_asistio';
-        await patchEstadoTurno(turno.id, nuevoEstado);
-      }
-      setConfirma({ open: false, accion: null, turno: null });
-      await cargarTurnos();
+      const cambio = accion === 'cancelar'
+        ? await cancelarTurno(turno.id)
+        : await patchEstadoTurno(turno.id, 'no_asistio');
+      setTurnos((actuales) => actuales.map((t) => (
+        t.id === cambio.id ? { ...t, estado: cambio.estado } : t
+      )));
     } catch (err) {
       console.error('[Dashboard] Error en ejecutarAccion:', err.message);
-      setConfirma({ open: false, accion: null, turno: null });
       mostrarErrorAccion(`Error: ${err.message}`);
     } finally {
       setProcesando(false);
+      setConfirma({ open: false, accion: null, turno: null });
     }
+    await cargarTurnos();
   };
 
   // ─── Datos derivados ──────────────────────────────────────────────────────
@@ -262,7 +262,7 @@ export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
           {cancelados.length > 0 && (
             <div style={{
               fontFamily: theme.body,
-              fontSize: theme.sizeMicro + 1,
+              fontSize: theme.sizeBody,
               color: theme.muted,
               marginTop: -8,
             }}>
@@ -337,14 +337,13 @@ export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
       {!cargando && !errorCarga && turnos.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {turnosOrdenados.map((turno) => {
-            // Un turno que todavía no empezó no puede marcarse como completado
-            // ni como "no vino" — esas acciones sólo aplican a turnos ya transcurridos.
+            // Un turno que todavía no empezó no puede marcarse como "no asistió"
+            // (el servidor también lo rechaza).
             const esFuturo = new Date(turno.inicio) > new Date();
             return (
               <TurnoListItem
                 key={turno.id}
                 turno={turno}
-                onCompletar={esFuturo ? undefined : () => pedirConfirmacion(turno, 'completar')}
                 onNoAsistio={esFuturo ? undefined : () => pedirConfirmacion(turno, 'no_asistio')}
                 onCancelar={() => pedirConfirmacion(turno, 'cancelar')}
                 bloqueado={procesando && confirma.turno?.id === turno.id}

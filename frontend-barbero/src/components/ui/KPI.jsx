@@ -62,7 +62,7 @@ function KPI({ label, value, sublabel, tone = 'default', size = 'lg' }) {
       {sublabel && (
         <div style={{
           fontFamily: theme.body,
-          fontSize: theme.sizeMicro + 1,
+          fontSize: theme.sizeBody,
           color: theme.muted,
           lineHeight: 1.3,
         }}>{sublabel}</div>

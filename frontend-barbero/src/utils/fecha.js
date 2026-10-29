@@ -53,23 +53,6 @@ export function sumarDias(fecha, dias) {
 }
 
 /**
- * generarProximosDias
- * Array de strings YYYY-MM-DD desde hoy (inclusive) por N días.
- * @param {number} cantidad - Cantidad de días a generar
- * @returns {Array<string>} Ej: ['2026-05-19', '2026-05-20', ...]
- */
-export function generarProximosDias(cantidad) {
-  const dias = [];
-  const hoy = new Date();
-  for (let i = 0; i < cantidad; i++) {
-    const d = new Date(hoy);
-    d.setDate(hoy.getDate() + i);
-    dias.push(fechaLocalISO(d));
-  }
-  return dias;
-}
-
-/**
  * fmtFechaCorta
  * Formato corto de fecha YYYY-MM-DD.
  * @param {string} fechaStr - 'YYYY-MM-DD'
@@ -155,15 +138,4 @@ export function nombreMes(fechaStr) {
  */
 export function esHoy(fechaStr) {
   return fechaStr === fechaLocalISO(new Date());
-}
-
-/**
- * esDomingo
- * True si la fecha cae en domingo (asumiendo barbería cerrada los domingos).
- * @param {string} fechaStr - 'YYYY-MM-DD'
- * @returns {boolean}
- */
-export function esDomingo(fechaStr) {
-  const [y, m, d] = fechaStr.split('-').map(Number);
-  return new Date(y, m - 1, d).getDay() === 0;
 }

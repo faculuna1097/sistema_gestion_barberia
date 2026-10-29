@@ -30,10 +30,14 @@ export function limitesDelDia(fecha) {
  *   crear un descanso.
  * - bloques: descansos y ausencias, recortados al día visible (una ausencia de
  *   varios días llega entera). Conservan su rango completo en desdeMs/hastaMs.
+ * - fueraDeHorario: las horas del local en las que el barbero no tiene slots,
+ *   en celdas grises (celdasFueraDeHorario), cada una con el ISO de su inicio
+ *   para mostrar la hora.
  * Función pura.
  * @param {Object} data - respuesta de getAgenda
  * @param {string} fecha - 'YYYY-MM-DD' del día visible
- * @returns {{ turnos: Array, slots: Array, bloques: Array, horarioDia: Object|null, duracionSlot: number|null }}
+ * @returns {{ turnos: Array, slots: Array, bloques: Array, fueraDeHorario: Array,
+ *   horarioDia: Object|null, duracionSlot: number|null }}
  */
 export function prepararAgenda(data, fecha) {
   const { inicioDia } = limitesDelDia(fecha);
@@ -65,13 +69,112 @@ export function prepararAgenda(data, fecha) {
     .map((s) => aBloque(s, fecha))
     .filter((b) => b.minFin > b.minInicio);
 
+  const fueraDeHorario = celdasFueraDeHorario(data.horario_atencion, slots, data.duracion_slot_minutos)
+    .map((c) => ({ ...c, inicioIso: new Date(inicioDia + c.minInicio * 60000).toISOString() }));
+
   return {
     turnos,
     slots,
     bloques,
+    fueraDeHorario,
     horarioDia: data.horario_atencion,
     duracionSlot: data.duracion_slot_minutos,
   };
+}
+
+/**
+ * aMinutosDelDia
+ * Una hora 'HH:MM' (o 'HH:MM:SS') en minutos desde la medianoche.
+ * @param {string} hora
+ * @returns {number}
+ */
+function aMinutosDelDia(hora) {
+  const [h, m] = hora.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/**
+ * celdasFueraDeHorario
+ * Las horas del horario del local en las que el barbero no tiene slots, para
+ * dibujarlas en gris: no trabaja (antes, entre o después de sus bloques, o el
+ * día entero), o es el final de un bloque donde no entra un turno. Cortadas en
+ * celdas del largo de un slot, que siguen el ritmo de los slots del barbero
+ * para quedar pegadas a ellos:
+ * - un tramo que empieza donde termina un slot se corta desde ahí, hacia adelante;
+ * - el tramo de antes del primer slot, desde ese slot hacia atrás;
+ * - un día sin slots, desde la apertura del local.
+ * Lo que sobra (menos de un slot) queda en el otro extremo del tramo: si mide
+ * menos de medio slot se suma a la celda de al lado; si no, es una celda más.
+ * Una celda de menos de medio slot (un tramo así de corto) va sin hora
+ * (`conHora: false`): no hay lugar para el texto.
+ * Función pura.
+ * @param {{ hora_inicio: string, hora_fin: string }|null} horarioDia - horario
+ *   del local ese día ('HH:MM'); null si no abre
+ * @param {Array<{ minInicio: number, minFin: number }>} slots - grilla del
+ *   barbero, ordenada por inicio
+ * @param {number|null} duracionSlot - minutos por slot del negocio
+ * @returns {Array<{ minInicio: number, minFin: number, conHora: boolean }>}
+ *   ordenadas; vacío si el local no abre ese día
+ */
+export function celdasFueraDeHorario(horarioDia, slots, duracionSlot) {
+  if (!horarioDia || !duracionSlot) return [];
+  const apertura = aMinutosDelDia(horarioDia.hora_inicio);
+  const cierre = aMinutosDelDia(horarioDia.hora_fin);
+  if (cierre <= apertura) return [];
+
+  // Tramos del horario del local que no cubre ningún slot.
+  const tramos = [];
+  let cursor = apertura;
+  let vieneDeSlot = false;
+  for (const s of slots) {
+    if (s.minFin <= cursor) continue;     // antes de la apertura, o ya cubierto
+    if (s.minInicio >= cierre) break;     // de acá en adelante, el local ya cerró
+    if (s.minInicio > cursor) tramos.push({ desde: cursor, hasta: s.minInicio, vieneDeSlot, vaASlot: true });
+    cursor = s.minFin;
+    vieneDeSlot = true;
+  }
+  if (cursor < cierre) tramos.push({ desde: cursor, hasta: cierre, vieneDeSlot, vaASlot: false });
+
+  return tramos
+    .flatMap((t) => cortarTramo(t, duracionSlot))
+    .map((c) => ({ ...c, conHora: c.minFin - c.minInicio >= duracionSlot / 2 }));
+}
+
+/**
+ * cortarTramo
+ * Corta un tramo sin slots en celdas de `duracion` minutos (reglas en
+ * celdasFueraDeHorario). Hacia atrás solo el tramo de antes del primer slot,
+ * para que la última celda quede pegada a ese slot.
+ * @param {{ desde: number, hasta: number, vieneDeSlot: boolean, vaASlot: boolean }} tramo
+ * @param {number} duracion - minutos por slot
+ * @returns {Array<{ minInicio: number, minFin: number }>} ordenadas
+ */
+function cortarTramo({ desde, hasta, vieneDeSlot, vaASlot }, duracion) {
+  const haciaAtras = !vieneDeSlot && vaASlot;
+  const celdas = [];
+  if (haciaAtras) {
+    for (let fin = hasta; fin - duracion >= desde; fin -= duracion) {
+      celdas.unshift({ minInicio: fin - duracion, minFin: fin });
+    }
+  } else {
+    for (let ini = desde; ini + duracion <= hasta; ini += duracion) {
+      celdas.push({ minInicio: ini, minFin: ini + duracion });
+    }
+  }
+
+  const sobra = (hasta - desde) % duracion;
+  if (sobra === 0) return celdas;
+
+  if (celdas.length > 0 && sobra < duracion / 2) {
+    // Se suma a la celda del extremo donde sobra.
+    if (haciaAtras) celdas[0] = { ...celdas[0], minInicio: desde };
+    else celdas[celdas.length - 1] = { ...celdas[celdas.length - 1], minFin: hasta };
+  } else if (haciaAtras) {
+    celdas.unshift({ minInicio: desde, minFin: desde + sobra });
+  } else {
+    celdas.push({ minInicio: hasta - sobra, minFin: hasta });
+  }
+  return celdas;
 }
 
 /**
@@ -131,7 +234,7 @@ export function agregarDescanso(agenda, descanso, fecha) {
  * responden los dos { id, estado }. Así el cambio se ve al instante, sin esperar
  * la recarga, que después lo confirma. Función pura.
  * - 'cancelado': el turno sale (los cancelados no se dibujan, como en prepararAgenda).
- * - otro estado ('completado', 'no_asistio'): el turno queda con ese estado.
+ * - otro estado ('no_asistio'): el turno queda con ese estado.
  * Los slots que ocupaba y estaban en 'turno' pasan a 'libre' si ya no los ocupa
  * ningún turno reservado: la grilla del servidor solo marca 'turno' en los
  * reservados (un completado o un "no asistió" deja su slot libre).

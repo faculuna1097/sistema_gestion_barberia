@@ -960,6 +960,8 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
   const esReservado = turno.estado === 'reservado';
   // Si el turno ya comenzó (hora de inicio <= ahora) ocultamos "Cancelar
   // turno" — a esa altura las opciones reales son completado o no asistió.
+  // Antes de que empiece, al revés: "No asistió" no aparece (el servidor
+  // rechaza marcarlo en un turno que no empezó).
   const yaComenzo = new Date(turno.inicio) <= new Date();
 
   // Filas estáticas del DetalleRecurso (label/valor simples).
@@ -1016,8 +1018,8 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
           )}
 
           {/* Acciones — solo si el turno está reservado.
-              Fila 1: Completado + No asistió, cada uno ocupa la mitad
-              (flex: 1) para llenar el ancho del modal.
+              Fila 1: Completar + No asistió (este, solo si el turno ya
+              empezó), con flex: 1 para llenar el ancho del modal.
               Fila 2 (solo si el turno NO empezó todavía): Cancelar turno,
               centrado en su propio div con ancho natural. */}
           {esReservado && !readonly && (
@@ -1033,16 +1035,18 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
                   <Check size={14} strokeWidth={2.5} />
                   Completar
                 </Button>
-                <Button
-                  variant="secondary"
-                  full={false}
-                  onClick={() => onCambiarEstado(turno.id, 'no_asistio')}
-                  disabled={accionando}
-                  style={{ flex: 1 }}
-                >
-                  <UserX size={14} strokeWidth={2} />
-                  No asistió
-                </Button>
+                {yaComenzo && (
+                  <Button
+                    variant="secondary"
+                    full={false}
+                    onClick={() => onCambiarEstado(turno.id, 'no_asistio')}
+                    disabled={accionando}
+                    style={{ flex: 1 }}
+                  >
+                    <UserX size={14} strokeWidth={2} />
+                    No asistió
+                  </Button>
+                )}
               </div>
               {!yaComenzo && (
                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>

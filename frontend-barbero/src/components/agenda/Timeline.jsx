@@ -1,6 +1,7 @@
 // /frontend-barbero/src/components/agenda/Timeline.jsx
-// Timeline del día de la Agenda: la grilla de slots, los slots tocables, la
-// selección, los descansos y ausencias, los turnos y la línea de "ahora".
+// Timeline del día de la Agenda: la grilla de slots, las horas sin slots en
+// gris, los slots tocables, la selección, los descansos y ausencias, los turnos
+// y la línea de "ahora".
 
 import { theme } from '../../theme/tokens.js';
 import { fmtHora } from '../../utils/fecha.js';
@@ -8,16 +9,27 @@ import { OFFSET_IZQ, cajaVertical, topDesdeMinutos } from './geometria.js';
 import { limitesDelDia, unirDescansosSeguidos } from './datosAgenda.js';
 import { BloqueNeutro, SlotTocable, BloqueTurno } from './BloquesTimeline.jsx';
 
+// Hora de inicio de una celda, en la columna izquierda (alineada con el primer
+// renglón de un turno). La comparten las celdas de slot y las grises.
+const ESTILO_HORA = {
+  position: 'absolute',
+  left: 8,
+  fontFamily: theme.mono,
+  fontSize: theme.sizeMicro,
+  color: theme.muted,
+};
+
 /**
  * Timeline
  * Dibuja la grilla del barbero (una celda con borde por slot y, a la izquierda,
- * el horario de inicio de cada slot), los slots tocables, la selección, los
- * bloques de descanso y de ausencia, los turnos y el indicador de "ahora".
- * Los horarios de la izquierda son solo los de los slots: con slots de 50 min
+ * el horario de inicio de cada slot), en gris las horas del local en que no
+ * tiene slots, los slots tocables, la selección, los bloques de descanso y de
+ * ausencia, los turnos y el indicador de "ahora".
+ * Los horarios de la izquierda son solo los de las celdas: con slots de 50 min
  * desde las 08:00 se ve 08:00, 08:50, 09:40… No hay horas en punto.
  * Los turnos se dibujan desde `turnos`, no desde la grilla: la grilla solo marca
  * `turno` en los reservados, y un turno completado tiene que seguir viéndose.
- * @param {Object} props.agenda - de prepararAgenda: { turnos, slots, bloques }
+ * @param {Object} props.agenda - de prepararAgenda: { turnos, slots, bloques, fueraDeHorario }
  * @param {string} props.fecha - 'YYYY-MM-DD' del día visible
  * @param {number} props.ahora - "ahora" en ms epoch
  * @param {boolean} props.esHoy
@@ -35,7 +47,7 @@ export default function Timeline({
   agenda, fecha, ahora, esHoy, rango, pxPorHora, altoTotal, refAhora,
   iniciosTocables, seleccion, onTocarSlot, onTocarTurno, onTocarDescanso,
 }) {
-  const { turnos, slots, bloques } = agenda;
+  const { turnos, slots, bloques, fueraDeHorario } = agenda;
   const origen = rango.minInicio;
   const iniciosSeleccionados = new Set(seleccion.map((s) => s.inicioMs));
 
@@ -62,21 +74,43 @@ export default function Timeline({
       border: `1px solid ${theme.hairline}`,
       borderRadius: theme.radius,
     }}>
+      {/* Horas del local en que el barbero no tiene slots (no trabaja, o no
+          entra un turno al final de un bloque): celdas grises, sin acciones, con
+          su hora como el resto. Sin texto adentro: el descanso lleva su ícono y
+          su texto, y la ausencia va rayada. */}
+      {fueraDeHorario.map((celda) => {
+        const caja = cajaVertical(celda.minInicio, celda.minFin, origen, pxPorHora);
+        return (
+          <div key={`fuera-${celda.minInicio}`}>
+            {celda.conHora && (
+              <span style={{ ...ESTILO_HORA, top: caja.top + 4 }}>
+                {fmtHora(celda.inicioIso)}
+              </span>
+            )}
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                ...caja,
+                left: OFFSET_IZQ + 4,
+                right: 4,
+                background: theme.surfaceAlt,
+                border: `1px solid ${theme.hairlineSoft}`,
+                borderRadius: theme.radiusSm,
+              }}
+            />
+          </div>
+        );
+      })}
+
       {/* Grilla: una celda con borde por slot, separada de la siguiente, y su
-          horario de inicio a la izquierda (alineado con el primer renglón de un
-          turno). Es la única referencia de hora del timeline. */}
+          horario de inicio a la izquierda. Con las celdas grises, son la única
+          referencia de hora del timeline. */}
       {slots.map((slot) => {
         const caja = cajaVertical(slot.minInicio, slot.minFin, origen, pxPorHora);
         return (
           <div key={`celda-${slot.inicioMs}`}>
-            <span style={{
-              position: 'absolute',
-              left: 8,
-              top: caja.top + 4,
-              fontFamily: theme.mono,
-              fontSize: theme.sizeMicro,
-              color: theme.muted,
-            }}>
+            <span style={{ ...ESTILO_HORA, top: caja.top + 4 }}>
               {fmtHora(slot.inicioIso)}
             </span>
             <div

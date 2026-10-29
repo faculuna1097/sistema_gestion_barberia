@@ -3,23 +3,16 @@
 // descanso o de una ausencia, el botón de un slot libre y el bloque de un turno.
 // Usan la misma geometría que las celdas de la grilla (cajaVertical).
 
-import { useState } from 'react';
 import { Check, Coffee, CalendarOff } from 'lucide-react';
 
 import { theme } from '../../theme/tokens.js';
 import { fmtHora } from '../../utils/fecha.js';
+import { useHover } from '../../hooks/useHover.js';
 import { OFFSET_IZQ, cajaVertical } from './geometria.js';
 
 // Fondo rayado de las ausencias: lo que las distingue de un descanso además del
 // texto y el ícono. Rayas finas en `hairline` sobre `surfaceAlt`.
 const FONDO_AUSENCIA = `repeating-linear-gradient(135deg, ${theme.surfaceAlt} 0 8px, ${theme.hairline} 8px 10px)`;
-
-// Si el dispositivo tiene hover de verdad (mouse). En pantallas táctiles iOS
-// dispara mouseenter al tocar y el hover queda "pegado" (sistema_de_disenio §9
-// #19): los slots y los descansos solo usan hover si esto es true.
-const PUEDE_HOVER = typeof window !== 'undefined'
-  && typeof window.matchMedia === 'function'
-  && window.matchMedia('(hover: hover)').matches;
 
 // Mapa estado → tokens del sistema. La barra lateral usa el color fuerte;
 // el fondo del bloque, su variante soft.
@@ -52,7 +45,7 @@ const INTERLINEADO_TURNO = 18;
  * @param {() => void} props.onTocar - solo se usa en los descansos
  */
 export function BloqueNeutro({ bloque, origen, pxPorHora, onTocar }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
   const esDescanso = bloque.tipo === 'descanso';
   const Icono = esDescanso ? Coffee : CalendarOff;
   const texto = esDescanso
@@ -103,8 +96,7 @@ export function BloqueNeutro({ bloque, origen, pxPorHora, onTocar }) {
     <button
       type="button"
       onClick={onTocar}
-      onMouseEnter={PUEDE_HOVER ? () => setHover(true) : undefined}
-      onMouseLeave={PUEDE_HOVER ? () => setHover(false) : undefined}
+      {...eventosHover}
       aria-label={`Descanso de ${fmtHora(bloque.desdeIso)} a ${fmtHora(bloque.hastaIso)}`}
       style={{
         ...estilo,
@@ -126,7 +118,7 @@ export function BloqueNeutro({ bloque, origen, pxPorHora, onTocar }) {
  * Por dentro va vacío: la hora ya está en la columna izquierda. Elegido, muestra
  * una tilde (el fondo lo pone el bloque de la selección). La hora va en el
  * aria-label.
- * El hover solo se activa en dispositivos con mouse (PUEDE_HOVER): en una
+ * El hover solo se activa en dispositivos con mouse (useHover): en una
  * pantalla táctil quedaría pegado después de tocar.
  * Ocupa exactamente su celda (cajaVertical): el área táctil es el alto del slot
  * menos la separación entre celdas (≥ 46 px con ALTO_MIN_SLOT de 48).
@@ -137,7 +129,7 @@ export function BloqueNeutro({ bloque, origen, pxPorHora, onTocar }) {
  * @param {() => void} props.onTocar
  */
 export function SlotTocable({ slot, seleccionado, origen, pxPorHora, onTocar }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
   const hora = fmtHora(slot.inicioIso);
 
   // Seleccionado: el fondo lo pone el bloque de la selección (Timeline).
@@ -147,8 +139,7 @@ export function SlotTocable({ slot, seleccionado, origen, pxPorHora, onTocar }) 
     <button
       type="button"
       onClick={onTocar}
-      onMouseEnter={PUEDE_HOVER ? () => setHover(true) : undefined}
-      onMouseLeave={PUEDE_HOVER ? () => setHover(false) : undefined}
+      {...eventosHover}
       aria-label={`${hora}, libre`}
       aria-pressed={seleccionado}
       style={{
@@ -178,14 +169,15 @@ export function SlotTocable({ slot, seleccionado, origen, pxPorHora, onTocar }) 
 /**
  * BloqueTurno
  * Bloque clickable posicionado por hora. Fondo soft + barra lateral de color.
- * Usa la misma geometría que las celdas de la grilla (cajaVertical).
+ * Usa la misma geometría que las celdas de la grilla (cajaVertical). Hover solo
+ * con mouse (useHover).
  * @param {Object} props.turno - con minInicio/minFin (prepararAgenda)
  * @param {number} props.origen - minuto del día que queda arriba del timeline
  * @param {number} props.pxPorHora - escala vertical
  * @param {() => void} props.onClick
  */
 export function BloqueTurno({ turno, origen, pxPorHora, onClick }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
 
   const caja = cajaVertical(turno.minInicio, turno.minFin, origen, pxPorHora);
   const top = caja.top;
@@ -201,8 +193,7 @@ export function BloqueTurno({ turno, origen, pxPorHora, onClick }) {
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }
       }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...eventosHover}
       style={{
         position: 'absolute',
         top,

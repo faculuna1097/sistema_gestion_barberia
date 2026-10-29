@@ -1,12 +1,13 @@
 // /frontend-barbero/src/components/ui/Card.jsx
 // Contenedor base de contenido. Usado en listas de servicios, barberos, resumen, etc.
 
-import { useState } from 'react';
 import { theme } from '../../theme/tokens.js';
+import { useHover } from '../../hooks/useHover.js';
 
 /**
  * Card
- * Card con border, padding y estados de selección/hover si es clickable.
+ * Card con border, padding y estados de selección/hover si es clickable. El
+ * hover solo se prende con mouse (useHover).
  * @param {ReactNode} props.children
  * @param {boolean} [props.selected=false] - Si está seleccionada (border accent + focus ring)
  * @param {Function} [props.onClick] - Si se pasa, la card es clickable
@@ -14,7 +15,7 @@ import { theme } from '../../theme/tokens.js';
  * @param {Object} [props.style] - Override puntual
  */
 function Card({ children, selected = false, onClick, padding = 14, style }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
   const clickable = Boolean(onClick);
 
   // Resolución del color de border según estado: selected > hover > default.
@@ -25,8 +26,7 @@ function Card({ children, selected = false, onClick, padding = 14, style }) {
   return (
     <div
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...eventosHover}
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}
       onKeyDown={clickable ? (e) => {

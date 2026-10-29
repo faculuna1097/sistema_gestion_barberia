@@ -1,12 +1,13 @@
 // /frontend-barbero/src/components/ui/Button.jsx
 // Botón unificado con 4 variantes. Reemplaza todos los <button> ad-hoc del proyecto.
 
-import { useState } from 'react';
 import { theme } from '../../theme/tokens.js';
+import { useHover } from '../../hooks/useHover.js';
 
 /**
  * Button
  * Botón principal del sistema. Variantes: primary | ghost | secondary | danger.
+ * El hover solo se prende con mouse (useHover).
  * @param {ReactNode} props.children - Contenido del botón
  * @param {Function} props.onClick - Handler de click
  * @param {'primary'|'ghost'|'secondary'|'danger'} [props.variant='primary'] - Estilo visual
@@ -27,7 +28,7 @@ function Button({
   style,
   ariaLabel,
 }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
 
   // Estilos base comunes a todas las variantes.
   const base = {
@@ -78,8 +79,7 @@ function Button({
     <button
       type={type}
       onClick={disabled ? undefined : onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...eventosHover}
       disabled={disabled}
       aria-label={ariaLabel}
       style={{ ...base, ...variants[variant], ...style }}

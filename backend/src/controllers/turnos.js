@@ -176,9 +176,12 @@ export const crearTurnoAdmin = async (req, res) => {
 
 /**
  * PATCH /api/admin/turnos/:id/estado
- * Cambia estado a 'completado' o 'no_asistio'.
- * Si rol=barbero, solo puede afectar turnos propios.
- * @param {Object} req.body - { estado: 'completado' | 'no_asistio' }
+ * Marca un turno reservado que ya empezó como 'no_asistio', el único estado
+ * que se cambia a mano. 'completado' → 400: un turno se completa registrando
+ * su corte (POST /:id/completar o el iPad). Un turno que no empezó → 400; uno
+ * que no está reservado → 409.
+ * Si rol=barbero, solo puede afectar turnos propios (uno ajeno → 404).
+ * @param {Object} req.body - { estado: 'no_asistio' }
  * @returns {JSON} { id, estado }
  */
 export const patchEstado = async (req, res) => {
@@ -195,6 +198,9 @@ export const patchEstado = async (req, res) => {
     console.log('[turnos] patchEstado completado | turno_id:', resultado.id, '| estado:', resultado.estado);
     res.json(resultado);
   } catch (err) {
+    if (err.code === 'ESTADO_NO_PERMITIDO' || err.code === 'TURNO_NO_EMPEZO') {
+      return res.status(400).json({ error: err.message });
+    }
     if (err.code === 'NO_ENCONTRADO') {
       return res.status(404).json({ error: err.message });
     }
@@ -208,10 +214,10 @@ export const patchEstado = async (req, res) => {
 
 /**
  * POST /api/admin/turnos/:id/completar
- * Completa un turno registrando su corte (forma_pago + precio + propina). A
- * diferencia de patchEstado (que solo cambia el estado a 'completado'), esta vía
- * deja el registro financiero del turno — es el equivalente backoffice del flujo
- * operativo del iPad. Acepta servicio_id opcional para cambiar el servicio al
+ * Completa un turno registrando su corte (forma_pago + precio + propina). Es la
+ * única vía del backoffice para completar un turno (patchEstado rechaza
+ * 'completado'), y deja el registro financiero del turno — es el equivalente
+ * backoffice del flujo operativo del iPad. Acepta servicio_id opcional para cambiar el servicio al
  * completar (default: el del turno); si se cambia, el corte Y el turno quedan con
  * ese servicio. Si rol=barbero, solo puede completar turnos propios.
  * @param {Object} req.body - { forma_pago, precio, propina?, servicio_id? }

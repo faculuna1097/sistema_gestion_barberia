@@ -69,19 +69,21 @@ export function cajaVertical(minInicio, minFin, origen, pxPorHora) {
 
 /**
  * calcularRango
- * Rango vertical del timeline, en minutos del día: del primer slot (o turno) al
- * último. La agenda se ordena por los slots del barbero: no hay horas en punto
- * ni margen alrededor del horario del local. Los turnos lo agrandan si quedan
- * afuera de la grilla (uno cargado a mano fuera del horario sigue visible). Los
- * descansos y las ausencias no lo agrandan: se recortan (una ausencia de varios
- * días lo estiraría a 24 h).
+ * Rango vertical del timeline, en minutos del día: el horario del local (los
+ * slots del barbero más las celdas grises de las horas en que no tiene slots),
+ * sin horas en punto ni margen alrededor. Los slots y los turnos lo agrandan si
+ * quedan afuera (un bloque o un turno cargado fuera del horario sigue visible).
+ * Los descansos y las ausencias no lo agrandan: se recortan (una ausencia de
+ * varios días lo estiraría a 24 h).
  * @param {Array<{minInicio: number, minFin: number}>} turnos - turnos visibles del día (no cancelados)
  * @param {Array<{minInicio: number, minFin: number}>} slots - grilla del barbero
- * @returns {{ minInicio: number, minFin: number }|null} null si no hay ni slots ni
- *   turnos (el barbero no trabaja ese día: no hay timeline que dibujar)
+ * @param {Array<{minInicio: number, minFin: number}>} [fueraDeHorario=[]] - celdas
+ *   grises (celdasFueraDeHorario, datosAgenda.js)
+ * @returns {{ minInicio: number, minFin: number }|null} null si no hay nada que
+ *   dibujar (el local no abre ese día y no hay turnos)
  */
-export function calcularRango(turnos, slots) {
-  const tramos = [...turnos, ...slots];
+export function calcularRango(turnos, slots, fueraDeHorario = []) {
+  const tramos = [...turnos, ...slots, ...fueraDeHorario];
   if (tramos.length === 0) return null;
   return {
     minInicio: Math.max(0, Math.min(...tramos.map((t) => t.minInicio))),

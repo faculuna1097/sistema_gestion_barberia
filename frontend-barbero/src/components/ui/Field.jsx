@@ -78,13 +78,13 @@ function Field({
       {error ? (
         <span style={{
           fontFamily: theme.body,
-          fontSize: 12,
+          fontSize: theme.sizeBody,
           color: theme.danger,
         }}>{error}</span>
       ) : helper ? (
         <span style={{
           fontFamily: theme.body,
-          fontSize: 12,
+          fontSize: theme.sizeBody,
           color: theme.muted,
         }}>{helper}</span>
       ) : null}

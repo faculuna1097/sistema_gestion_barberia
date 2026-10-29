@@ -198,7 +198,7 @@ Decidido el 2026-10-19, en la Agenda del barbero. Cuando el usuario confirma una
 - **Si la respuesta no alcanza para dibujar el cambio** (ej. liberar un descanso en curso, que lo acorta y vuelve a abrir slots), el diálogo sigue en "Procesando…" hasta que termina la recarga, y se cierra con la pantalla ya actualizada.
 - **Nada se dibuja antes de que responda el servidor** (sin UI optimista): si falla (409, 400), no hay nada que deshacer.
 
-Dónde está aplicada: en todas las acciones de la Agenda del barbero. Marcar un descanso lo dibuja con `agregarDescanso`; liberarlo espera la recarga. Completar, no asistió y cancelar un turno lo dibujan con `aplicarEstadoDeTurno`, con el `{ id, estado }` que devuelve el servidor. Falta en el Inicio de la misma app (`Dashboard.jsx`), que tiene las mismas tres acciones de turnos y todavía recarga después de cerrar el diálogo, y en el resto de los fronts, que no están relevados.
+Dónde está aplicada: en todas las acciones de la app del barbero. En la Agenda, marcar un descanso lo dibuja con `agregarDescanso` y liberarlo espera la recarga; no asistió y cancelar un turno lo dibujan con `aplicarEstadoDeTurno`, con el `{ id, estado }` que devuelve el servidor. En el Inicio (`Dashboard.jsx`), las mismas dos acciones cambian el estado del turno en la lista con esa respuesta (desde el 2026-10-19). Falta en el resto de los fronts, que no están relevados.
 
 ### Estructura del panel admin
 - Cada `SeccionXxx` es autónoma y carga sus datos en `useEffect([])`.

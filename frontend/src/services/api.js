@@ -456,10 +456,12 @@ export const getAdminTurnos = async (fecha, barberoId = null) => {
 
 /**
  * patchAdminTurnoEstado
- * Cambia el estado de un turno (completado / no_asistio).
+ * Cambia el estado de un turno a mano. El único permitido es 'no_asistio', en
+ * un turno que ya empezó (el servidor rechaza 'completado' con un 400: se
+ * completa con completarAdminTurno, que registra el corte).
  * @param {string} turnoId
- * @param {string} estado - 'completado' | 'no_asistio'
- * @returns {Promise<Object>} turno actualizado
+ * @param {'no_asistio'} estado
+ * @returns {Promise<Object>} { id, estado }
  */
 export const patchAdminTurnoEstado = async (turnoId, estado) => {
   const res = await apiFetch(`/admin/turnos/${turnoId}/estado`, {

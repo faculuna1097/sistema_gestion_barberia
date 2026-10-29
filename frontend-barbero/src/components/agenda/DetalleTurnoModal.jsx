@@ -1,7 +1,7 @@
 // /frontend-barbero/src/components/agenda/DetalleTurnoModal.jsx
 // Detalle de un turno de la Agenda, con sus acciones si está reservado.
 
-import { Check, UserX } from 'lucide-react';
+import { UserX } from 'lucide-react';
 
 import { theme } from '../../theme/tokens.js';
 import { fmtHora } from '../../utils/fecha.js';
@@ -20,8 +20,10 @@ export default function DetalleTurnoModal({ turno, onCerrar, onAccion }) {
   if (!turno) return null;
 
   const esReservado = turno.estado === 'reservado';
-  // Un turno que aún no empezó sólo puede cancelarse: completarlo o marcarlo
-  // como "no vino" no tiene sentido hasta que el turno haya transcurrido.
+  // Un turno que aún no empezó sólo puede cancelarse: marcar que el cliente no
+  // vino recién tiene sentido cuando empezó (el servidor también lo rechaza).
+  // Completar no está acá: un turno se completa al registrar su corte, desde el
+  // iPad o el panel.
   const esFuturo = new Date(turno.inicio) > new Date();
 
   return (
@@ -51,24 +53,19 @@ export default function DetalleTurnoModal({ turno, onCerrar, onAccion }) {
 
       {/* Acciones — sólo si está reservado. Turnos futuros: sólo cancelar. */}
       {esReservado && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 20 }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: esFuturo ? '1fr' : '1fr 1fr',
+          gap: 8,
+          marginTop: 20,
+        }}>
           {!esFuturo && (
-            <Button variant="primary" onClick={() => onAccion(turno, 'completar')}>
-              <Check size={16} strokeWidth={2} aria-hidden="true" />
-              Completado
+            <Button variant="secondary" onClick={() => onAccion(turno, 'no_asistio')}>
+              <UserX size={16} strokeWidth={1.75} aria-hidden="true" />
+              No asistió
             </Button>
           )}
-          {!esFuturo ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <Button variant="secondary" onClick={() => onAccion(turno, 'no_asistio')}>
-                <UserX size={16} strokeWidth={1.75} aria-hidden="true" />
-                No asistió
-              </Button>
-              <Button variant="danger" onClick={() => onAccion(turno, 'cancelar')}>Cancelar</Button>
-            </div>
-          ) : (
-            <Button variant="danger" onClick={() => onAccion(turno, 'cancelar')}>Cancelar</Button>
-          )}
+          <Button variant="danger" onClick={() => onAccion(turno, 'cancelar')}>Cancelar</Button>
         </div>
       )}
     </ModalDetalle>

@@ -3,8 +3,8 @@
 // Pensada para vivir como último hijo del PageContainer (sticky bottom),
 // respeta su max-width y la safe-area iOS.
 
-import { useState } from 'react';
 import { theme } from '../../theme/tokens.js';
+import { useHover } from '../../hooks/useHover.js';
 
 // Alto de cada ítem (≥ 44 de touch target, MD §5.4).
 const ALTO_ITEM = 56;
@@ -57,14 +57,14 @@ function BottomNav({ items, activo, onChange }) {
 
 /**
  * NavItem
- * Slot individual del BottomNav. Hover con useState (consistencia con MD §4.2).
+ * Slot individual del BottomNav. Hover solo con mouse (useHover, MD §4.2).
  * Touch target ≥ 44px (MD §5.4).
  * @param {{id, label, icon}} props.item
  * @param {boolean} props.activo
  * @param {Function} props.onClick
  */
 function NavItem({ item, activo, onClick }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
   const Icon = item.icon;
 
   // Color: activo gana sobre hover; hover gana sobre inactivo.
@@ -74,8 +74,7 @@ function NavItem({ item, activo, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...eventosHover}
       aria-current={activo ? 'page' : undefined}
       style={{
         flex: 1,

@@ -159,7 +159,7 @@ export default function Clientes({ onVolver }) {
             {filtroActivo && (
               <div style={{
                 fontFamily: theme.body,
-                fontSize: theme.sizeMicro + 1,
+                fontSize: theme.sizeBody,
                 color: theme.muted,
                 marginTop: -8,
               }}>
@@ -213,7 +213,7 @@ function ClienteFila({ cliente }) {
 
           <div style={{
             fontFamily: theme.body,
-            fontSize: theme.sizeMicro + 1,
+            fontSize: theme.sizeBody,
             color: theme.muted,
             marginTop: 2,
           }}>
@@ -227,7 +227,7 @@ function ClienteFila({ cliente }) {
               gap: 12,
               marginTop: 6,
               fontFamily: theme.body,
-              fontSize: theme.sizeMicro + 1,
+              fontSize: theme.sizeBody,
             }}>
               {cliente.telefono && (
                 <LinkContacto href={`tel:${cliente.telefono}`} texto={cliente.telefono} />

@@ -1,7 +1,8 @@
 // /frontend-barbero/src/components/Agenda.jsx
-// Vista de agenda tipo calendario mobile: timeline vertical con franjas horarias,
-// la grilla de slots del barbero (línea punteada en cada inicio de slot), los
-// turnos y los bloques de descanso y de ausencia. Navegable por día.
+// Vista de agenda tipo calendario mobile: timeline vertical con el horario del
+// local, la grilla de slots del barbero (una celda por slot), en gris las horas
+// en que no tiene slots, los turnos y los bloques de descanso y de ausencia.
+// Navegable por día.
 // Todo sale de una sola llamada por día, GET /api/admin/agenda
 // (plan_app_barbero.md, Feature 1, fases 3 y 4).
 // - Al tocar un turno se abre su detalle; las acciones pasan por ConfirmDialog.
@@ -71,12 +72,6 @@ const ACCIONES = {
     message: ({ desde, hasta }) =>
       `De ${desde} a ${hasta}. Mientras dure, el turnero no ofrece esos horarios.`,
     confirmLabel: 'Sí, marcar',
-    confirmVariant: 'primary',
-  },
-  completar: {
-    title: 'Marcar como completado',
-    message: '¿Confirmás que ya atendiste este turno?',
-    confirmLabel: 'Sí, completar',
     confirmVariant: 'primary',
   },
   no_asistio: {
@@ -263,9 +258,9 @@ export default function Agenda() {
    * rato con la pantalla vieja mientras se recarga (convenciones §8):
    * - marcar un descanso → agregarDescanso. 409 → "Ese horario se acaba de
    *   ocupar" + recarga; 400 → el mensaje del servidor.
-   * - completar, no asistió, cancelar → aplicarEstadoDeTurno. Si falla, el
-   *   mensaje del servidor + recarga: el turno pudo haber cambiado por otro lado
-   *   (ej. el cliente lo canceló desde el turnero).
+   * - no asistió, cancelar → aplicarEstadoDeTurno. Si falla, el mensaje del
+   *   servidor + recarga: el turno pudo haber cambiado por otro lado (ej. el
+   *   cliente lo canceló desde el turnero).
    */
   const ejecutarAccion = async () => {
     const { accion, turno } = confirma;
@@ -291,7 +286,7 @@ export default function Agenda() {
       } else {
         const cambio = accion === 'cancelar'
           ? await cancelarTurno(turno.id)
-          : await patchEstadoTurno(turno.id, accion === 'completar' ? 'completado' : 'no_asistio');
+          : await patchEstadoTurno(turno.id, 'no_asistio');
         setAgenda((actual) => (actual ? aplicarEstadoDeTurno(actual, cambio) : actual));
       }
       exito = true;
@@ -352,11 +347,12 @@ export default function Agenda() {
     }
   };
 
-  // Rango vertical y escala del día mostrado. `rango` es null si el barbero no
-  // trabaja ese día (sin slots ni turnos). Sin rango, el alto por defecto solo
+  // Rango vertical y escala del día mostrado. `rango` es null si el local no abre
+  // ese día y no hay turnos. Un día que el barbero no trabaja y el local abre sí
+  // tiene rango: se ve entero en gris. Sin rango, el alto por defecto solo
   // dimensiona el skeleton.
   const rango = useMemo(
-    () => (agenda ? calcularRango(agenda.turnos, agenda.slots) : null),
+    () => (agenda ? calcularRango(agenda.turnos, agenda.slots, agenda.fueraDeHorario) : null),
     [agenda],
   );
   const pxPorHora = calcularPxPorHora(agenda?.duracionSlot);
@@ -401,8 +397,9 @@ export default function Agenda() {
           </div>
         )}
 
-        {/* Día sin slots ni turnos: no hay timeline que dibujar. El aviso se
-            centra en el espacio que queda debajo del navegador de días (flex: 1). */}
+        {/* El local no abre y no hay turnos: no hay timeline que dibujar. El
+            aviso se centra en el espacio que queda debajo del navegador de días
+            (flex: 1). */}
         {!cargando && !errorCarga && agenda && !rango && (
           <div style={{
             flex: 1,
@@ -412,7 +409,7 @@ export default function Agenda() {
           }}>
             <EmptyState
               glyph={<CalendarOff size={28} strokeWidth={1.5} aria-hidden="true" />}
-              title={agenda.horarioDia ? 'No tenés horario de trabajo este día' : 'El local no abre este día'}
+              title="El local no abre este día"
             />
           </div>
         )}

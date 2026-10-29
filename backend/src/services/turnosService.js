@@ -331,23 +331,32 @@ export const listarTurnosOperativos = async ({ tenantId, barberoId, fecha }) => 
 };
 
 /**
- * Cambia el estado de un turno a 'completado' o 'no_asistio'.
+ * Cambia el estado de un turno a mano. El único estado permitido es
+ * 'no_asistio', y solo en un turno reservado que ya empezó.
+ * 'completado' se rechaza: un turno se completa solo al registrar su corte
+ * (completarTurnoConCorte o el iPad). Completarlo acá lo dejaba completado sin
+ * corte y, como el iPad lista solo los reservados, el cobro terminaba cargado
+ * como un cliente sin turno.
  * @param {string} turnoId
- * @param {string} nuevoEstado - 'completado' | 'no_asistio'
+ * @param {string} nuevoEstado - 'no_asistio'
  * @param {string} tenantId
  * @param {string|null} barberoId - si es barbero, solo puede cambiar los suyos
- * @returns {Promise<Object>} turno actualizado
- * @throws {{ code: 'NO_ENCONTRADO' | 'ESTADO_INVALIDO' }}
+ * @returns {Promise<Object>} { id, estado }
+ * @throws {{ code: 'ESTADO_NO_PERMITIDO' | 'NO_ENCONTRADO' | 'ESTADO_INVALIDO' | 'TURNO_NO_EMPEZO' }}
  */
 export const cambiarEstado = async (turnoId, nuevoEstado, tenantId, barberoId) => {
-  const estadosPermitidos = ['completado', 'no_asistio'];
-  if (!estadosPermitidos.includes(nuevoEstado)) {
-    const err = new Error(`Estado "${nuevoEstado}" no es válido. Permitidos: ${estadosPermitidos.join(', ')}`);
-    err.code = 'ESTADO_INVALIDO';
+  if (nuevoEstado === 'completado') {
+    const err = new Error('Un turno se completa registrando su corte, desde el iPad o el panel');
+    err.code = 'ESTADO_NO_PERMITIDO';
+    throw err;
+  }
+  if (nuevoEstado !== 'no_asistio') {
+    const err = new Error(`Estado "${nuevoEstado}" no es válido. El único permitido es 'no_asistio'`);
+    err.code = 'ESTADO_NO_PERMITIDO';
     throw err;
   }
 
-  // Buscar turno con scoping
+  // Buscar turno con scoping. Si ya empezó se calcula en la base, con su reloj.
   const params = [turnoId, tenantId];
   let where = 't.id = $1 AND t.tenant_id = $2';
   if (barberoId) {
@@ -356,7 +365,7 @@ export const cambiarEstado = async (turnoId, nuevoEstado, tenantId, barberoId) =
   }
 
   const lookupRes = await query(
-    `SELECT t.id, t.estado FROM turno t WHERE ${where}`,
+    `SELECT t.id, t.estado, t.inicio > now() AS no_empezo FROM turno t WHERE ${where}`,
     params
   );
   if (lookupRes.rows.length === 0) {
@@ -371,23 +380,35 @@ export const cambiarEstado = async (turnoId, nuevoEstado, tenantId, barberoId) =
     err.code = 'ESTADO_INVALIDO';
     throw err;
   }
+  if (turno.no_empezo) {
+    const err = new Error('El turno todavía no empezó: no se puede marcar que el cliente no asistió');
+    err.code = 'TURNO_NO_EMPEZO';
+    throw err;
+  }
 
-  // tenant_id redundante (defensa en profundidad, auditoría 2.2): el turnoId ya
-  // vino del lookup scopeado por tenant de arriba, pero explicitarlo elimina la
-  // dependencia implícita ante un futuro refactor que separe ambas queries.
-  await query(
-    `UPDATE turno SET estado = $1 WHERE id = $2 AND tenant_id = $3`,
+  // estado = 'reservado' en el WHERE: si entre el lookup y acá el turno cambió
+  // (se canceló, se registró su corte), no se pisa. tenant_id redundante
+  // (defensa en profundidad, auditoría 2.2): el turnoId ya vino del lookup
+  // scopeado por tenant de arriba.
+  const updateRes = await query(
+    `UPDATE turno SET estado = $1 WHERE id = $2 AND tenant_id = $3 AND estado = 'reservado'`,
     [nuevoEstado, turnoId, tenantId]
   );
+  if (updateRes.rowCount === 0) {
+    console.warn('[turnosService] cambiarEstado — el turno dejó de estar reservado antes del UPDATE | turno_id:', turnoId);
+    const err = new Error('El turno cambió de estado mientras se procesaba');
+    err.code = 'ESTADO_INVALIDO';
+    throw err;
+  }
 
   return { id: turnoId, estado: nuevoEstado };
 };
 
 /**
- * Completa un turno registrando su corte. A diferencia de cambiarEstado (que
- * solo cambia el estado), esta vía deja el registro financiero del turno — es
- * el equivalente backoffice del flujo operativo del iPad: completar = registrar
- * el corte. Valida (scoped) que el turno exista y siga 'reservado'. El servicio
+ * Completa un turno registrando su corte. Es la única vía del backoffice para
+ * completar un turno (cambiarEstado rechaza 'completado'), y deja el registro
+ * financiero del turno — es el equivalente backoffice del flujo operativo del
+ * iPad: completar = registrar el corte. Valida (scoped) que el turno exista y siga 'reservado'. El servicio
  * del corte es por defecto el del turno; opcionalmente se acepta un override
  * (servicioId) que se valida contra el catálogo (tenant + activo). Delega en
  * registrarCorte (cortesService), que inserta el corte, marca el turno

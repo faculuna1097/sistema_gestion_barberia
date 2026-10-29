@@ -236,9 +236,11 @@ export const crearTurnoAdmin = async (datos) => {
 
 /**
  * patchEstadoTurno
- * Cambia el estado de un turno a 'completado' o 'no_asistio'.
+ * Cambia el estado de un turno a mano. El único permitido es 'no_asistio', en
+ * un turno que ya empezó: un turno se completa al registrar su corte (iPad o
+ * panel), y el servidor rechaza 'completado' con un 400.
  * @param {string} turnoId
- * @param {string} estado - 'completado' | 'no_asistio'
+ * @param {'no_asistio'} estado
  * @returns {Promise<Object>} { id, estado }
  */
 export const patchEstadoTurno = async (turnoId, estado) => {

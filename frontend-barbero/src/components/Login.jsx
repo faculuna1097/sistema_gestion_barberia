@@ -5,12 +5,15 @@
 //   2. Teclado de PIN de 4 dígitos.
 // Props:
 //   onAcceso(token, barbero) — callback cuando el login es exitoso.
+//   logoUrl, nombreNegocio — marca del tenant; los carga App (una sola vez,
+//     también para el título y el favicon del tab).
 
 import { useState, useEffect, useCallback } from 'react';
 import { Delete, AlertCircle, ChevronRight } from 'lucide-react';
 
-import { getBarberos, loginBarbero, getImagenesNegocio, getTenant } from '../services/api.js';
+import { getBarberos, loginBarbero } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
+import { useHover } from '../hooks/useHover.js';
 import {
   PageContainer,
   TopBar,
@@ -37,19 +40,18 @@ const TECLAS_PIN = [
  * Maneja la autenticación del barbero. Internamente alterna entre dos sub-pantallas:
  * SelectorBarbero (elegir nombre) y PinKeyboard (ingresar PIN).
  * @param {(token: string, barbero: {id, nombre}) => void} props.onAcceso
+ * @param {string|null} props.logoUrl - Logo del tenant (null mientras carga o si
+ *   no hay): la pantalla funciona igual sin él
+ * @param {string|null} props.nombreNegocio - Nombre del local (null mientras
+ *   carga o si falló)
  */
-export default function Login({ onAcceso }) {
+export default function Login({ onAcceso, logoUrl, nombreNegocio }) {
   const [barberos, setBarberos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
 
   const [fase, setFase] = useState('selector'); // 'selector' | 'pin'
   const [barberoSel, setBarberoSel] = useState(null);
-
-  // Logo y nombre del tenant para brandear la pantalla de login. Cargan
-  // best-effort: si fallan, la pantalla funciona igual sin esos datos.
-  const [logoUrl, setLogoUrl] = useState(null);
-  const [nombreNegocio, setNombreNegocio] = useState(null);
 
   /**
    * cargarBarberos
@@ -70,29 +72,6 @@ export default function Login({ onAcceso }) {
   }, []);
 
   useEffect(() => { cargarBarberos(); }, [cargarBarberos]);
-
-  // Carga del branding del tenant (logo + nombre) — independiente de los
-  // barberos y best-effort: si algo falla, el login funciona igual.
-  useEffect(() => {
-    let activo = true;
-    getImagenesNegocio()
-      .then((imagenes) => {
-        if (!activo) return;
-        const logo = imagenes.find((img) => img.tipo === 'logo' && img.orden === 1);
-        if (logo) setLogoUrl(logo.url);
-      })
-      .catch((err) => {
-        console.warn('[Login] getImagenesNegocio — falló, login sin logo:', err.message);
-      });
-    getTenant()
-      .then((tenant) => {
-        if (activo && tenant?.nombre) setNombreNegocio(tenant.nombre);
-      })
-      .catch((err) => {
-        console.warn('[Login] getTenant — falló, login sin nombre:', err.message);
-      });
-    return () => { activo = false; };
-  }, []);
 
   /**
    * seleccionarBarbero
@@ -556,22 +535,24 @@ function DotIndicador({ llenoYActivo, estado }) {
 
 /**
  * TeclaPin
- * Botón individual del teclado. Hover con useState (MD §4.2).
+ * Botón individual del teclado. Hover solo con mouse (useHover, MD §4.2). El
+ * "apretado" (press) sí va también en pantallas táctiles: es el feedback del
+ * toque y se apaga solo al soltar.
  * Touch target ≥ 64px en alto para uso mobile cómodo.
  * @param {Function} props.onClick
  * @param {string} props.aria - aria-label del botón
  * @param {ReactNode} props.children
  */
 function TeclaPin({ onClick, aria, children }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
   const [press, setPress] = useState(false);
 
   return (
     <button
       type="button"
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => { setHover(false); setPress(false); }}
+      {...eventosHover}
+      onMouseLeave={() => { eventosHover.onMouseLeave?.(); setPress(false); }}
       onMouseDown={() => setPress(true)}
       onMouseUp={() => setPress(false)}
       aria-label={aria}

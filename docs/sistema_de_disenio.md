@@ -125,9 +125,15 @@ fuera verde, el verde dejaría de avisar algo.
 - **Fuera de esta regla:** las pills de tipo de movimiento y de forma de pago
   (son categorías), los contadores por estado (ej. "Reservados" en indigo, el
   color de ese estado en la agenda) y la fecha de "hoy" resaltada.
-- **Dónde está aplicada:** en el panel de gestión. El turnero ya cumple (sus
-  precios van en `ink`); falta `frontend-barbero` (ver Pendientes en
-  `estado_actual.md`).
+- **Dónde está aplicada:** en el panel de gestión y en `frontend-barbero` (desde
+  el 2026-10-19). El turnero ya cumple (sus precios van en `ink`).
+  - **La app del barbero** mira la plata desde el barbero: en `MiPlanilla`, lo
+    que cobra en la semana es su resultado (`colorResultado`, copia idéntica de
+    `utils/colorMonto.js` del panel). La comisión de cada día es un subtotal y
+    va en `ink`, igual que el generado y las propinas (la propina de cada corte,
+    en `muted`, como texto secundario).
+  - El contador "Pendientes" del Inicio es un contador de estado y queda fuera
+    de la regla.
 
 ### 3.2 Tipografía
 - **Geist** (body) + **Geist Mono** (eyebrows / micro labels en mayúsculas).
@@ -163,6 +169,7 @@ La densidad visual debe acompañar.
 
 Reglas que cambian según densidad:
 - **Tipografía**: el turnero puede usar `sizeHeading` (18) generosamente; gestión prioriza `sizeBody` (14) incluso en títulos de card. **No bajar nunca de 14 en texto leíble**.
+  - **Excepciones en `sizeMicro` (11), decididas el 2026-10-19:** los eyebrows y micro-labels en mono y mayúsculas (incluido `StatusPill`), las pills o chips de categoría (ej. forma de pago y "Sin turno" en `MiPlanilla`) y las etiquetas de la barra de navegación (`BottomNav`). Son rótulos de una o dos palabras que se reconocen de un vistazo, no texto que se lee, y las pestañas van con su ícono. A 14, las pills de cada corte pasarían a dos renglones más seguido.
 - **Tablas**: gestión usa tablas densas (filas de 36–40 px); barbero / turnero priorizan cards.
 - **Whitespace**: aireado en turnero, justo en gestión. Pero **nunca sacrificar legibilidad** por compactar.
 
@@ -303,6 +310,24 @@ const [hover, setHover] = useState(false);
 **Cuidado**: en listas con 50+ items hover-able, el re-render por hover
 puede notarse. Si pasa, refactorizar ese caso puntual a `:hover` via
 `<style>` scoped. **Por ahora no es un problema medible**, pero ver §9.8.
+
+**En `frontend-barbero` (desde el 2026-10-19), el hook `useHover`**
+(`src/hooks/useHover.js`) reemplaza ese `useState`: en una pantalla táctil iOS
+dispara `mouseenter` al tocar y el hover quedaba "pegado" (§9 #19).
+
+```jsx
+const [hover, eventosHover] = useHover();
+<button {...eventosHover} style={{ background: hover ? theme.surfaceAlt : 'transparent' }}>
+```
+
+- Sin mouse (`(hover: hover)` da `false`, constante `PUEDE_HOVER` del mismo
+  archivo), `eventosHover` viene vacío y el hover no se prende nunca.
+- Si el elemento necesita su propio `onMouseLeave` (ej. `TeclaPin`, que
+  también apaga el "apretado"), va después del spread y llama a
+  `eventosHover.onMouseLeave?.()`.
+- Un componente nuevo del barbero con hover usa el hook. El panel sigue con el
+  `useState` (es de escritorio); el turnero, que tiene el mismo problema, no
+  tiene el hook todavía.
 
 ### 4.3 Click handlers: `onClick`, NO `onPointerDown`
 
@@ -649,14 +674,16 @@ actualizá este doc.**
 16. **Toast inline → flotante global.** El primitivo `Toast` es hoy inline / render-state (cada caller mantiene el estado y lo monta en su layout; ver §4.8). El **target** es un Toast **flotante, centrado y con auto-dismiss** servido por un provider global con API imperativa (`toast.show()`). Migrar implica: (1) crear el provider/portal + dispatcher; (2) migrar **todos** los call-sites inline actuales (`BloqueImagenes`, los 6 handlers de export de xlsx vía `errorExport`, y cualquier otro feedback efímero); (3) recién ahí poder centralizar el feedback de error de `cargarChunk`. Hasta entonces, el patrón vigente es el inline (§4.8).
 17. **Estilo de etiqueta "eyebrow" copiado a mano** (mono, 11 px, mayúsculas, `muted`) en unos diez lugares del turnero (`ScreenHeader`, `Field`, `CampoTelefono`, `SelectorDiaHorario`, `SeleccionCuando`, `GestionTurno`…). Candidato a un estilo compartido (ej. un primitivo `Eyebrow`). Visto en el rediseño del turnero (2026-10-08).
 18. **`index.css` repite a mano colores de `tokens.js`** (fondo, anillo de foco, scrollbar) porque el CSS no puede importar el JS; está comentado en cada lugar. Para una sola fuente: exponer los tokens como variables CSS. Visto en el turnero; como `index.css` se copia entre fronts (§8), seguramente pasa en todos.
-19. **Hover con `useState` en pantallas táctiles** (§4.2): iOS dispara `mouseenter` al tocar y el estado queda "pegado" hasta tocar otra cosa (borde gris en `Card`/`SlotChip`, `accentHover` en el primario). Casi no se nota porque la pantalla cambia, pero sí donde no se navega (chips de la reprogramación del turnero). Emparenta con #8: un `:hover` real dentro de `@media (hover: hover)` lo resolvería. **(2026-10-19)** La Agenda del barbero ya lo evita en los slots y los descansos con la constante `PUEDE_HOVER` (`matchMedia('(hover: hover)')`, en `components/agenda/BloquesTimeline.jsx`); el bloque de turno y las flechas de día todavía no. Candidata a `utils/` cuando otro componente la necesite.
+19. **Hover con `useState` en pantallas táctiles** (§4.2): iOS dispara `mouseenter` al tocar y el estado queda "pegado" hasta tocar otra cosa (borde gris en `Card`/`SlotChip`, `accentHover` en el primario). Casi no se nota porque la pantalla cambia, pero sí donde no se navega (chips de la reprogramación del turnero). Emparenta con #8: un `:hover` real dentro de `@media (hover: hover)` lo resolvería. **(2026-10-19) Resuelto en `frontend-barbero`** con el hook `useHover` (§4.2), en todos sus hover. **Falta el turnero** (`Card`, `SlotChip`, `Button` y los chips de la reprogramación): copiar el hook a su `src/hooks/` y usarlo igual.
 20. **`Card` tiene `padding` por defecto 14**, fuera de la escala 4/8/12/16/24/32 (§3.3).
 21. **Touch target de los días de `SelectorDiaHorario`**: ~46 px de ancho en 375 px, pero ~41 px dentro de la tarjeta de la reprogramación y ~37 px en pantallas de 320 px, debajo de los 44 de §5.4 (el alto es 48). Al `MiniCalendario` le pasaba lo mismo.
-22. **Textos de 12 px en `frontend-barbero`** (`theme.sizeMicro + 1`), debajo del mínimo de 14 de §3.6: Clientes, CrearTurno, Dashboard, Gestión (tab Horarios, `FilaDia`), Más, MiPlanilla, `KPI` y `TurnoListItem`; `StatusPill` usa 10. Los 12 de `Field` y los 13 de `SummaryRow` ya están en `estado_actual.md` ("Tamaños escritos a mano"). La Agenda y las filas de Gestión → Suspensiones pasaron a 14 el 2026-10-19. Ojo al subirlos: en un bloque de alto fijo, 14 px con el interlineado global (1,5 → 21 px por renglón) puede no entrar; el bloque de turno de la Agenda usa un interlineado de 18 px (`INTERLINEADO_TURNO`). Visto en el paso 5a de la app del barbero.
+22. ~~**Textos de 12 px en `frontend-barbero`**~~ — **Resuelto (2026-10-19)**: pasaron a 14 (`sizeBody`), con el valor de `SummaryRow` (13) y la ayuda y el error de `Field` (12). `StatusPill` pasó de 10 a 11 (`sizeMicro`). Quedan en 11, a propósito, las pills de categoría y las etiquetas de la `BottomNav` (excepciones de §3.6). Texto original: (`theme.sizeMicro + 1`), debajo del mínimo de 14 de §3.6: Clientes, CrearTurno, Dashboard, Gestión (tab Horarios, `FilaDia`), Más, MiPlanilla, `KPI` y `TurnoListItem`; `StatusPill` usa 10. Los 12 de `Field` y los 13 de `SummaryRow` ya están en `estado_actual.md` ("Tamaños escritos a mano"). La Agenda y las filas de Gestión → Suspensiones pasaron a 14 el 2026-10-19. Ojo al subirlos: en un bloque de alto fijo, 14 px con el interlineado global (1,5 → 21 px por renglón) puede no entrar; el bloque de turno de la Agenda usa un interlineado de 18 px (`INTERLINEADO_TURNO`). Visto en el paso 5a de la app del barbero.
 
 ---
 
-*Última actualización: 2026-10-19 — paso 5a de la app del barbero: deuda #22 nueva (textos de 12 px que quedan en `frontend-barbero`); #19 anota `PUEDE_HOVER` de la Agenda.*
+*Última actualización: 2026-10-19 — paso 5b de la app del barbero: §3.1.1 aplicada en `frontend-barbero`; §3.6 suma las excepciones en `sizeMicro`; §4.2 suma el hook `useHover`; deuda #22 resuelta y #19 resuelta en el barbero (falta el turnero).*
+
+*2026-10-19 — paso 5a de la app del barbero: deuda #22 nueva (textos de 12 px que quedan en `frontend-barbero`); #19 anota `PUEDE_HOVER` de la Agenda.*
 
 *2026-10-08 — rediseño del turnero: la fuente de verdad pasa a `frontend/src/` (§1); §3.8 nueva (identidad propia del turnero: acento casi negro, hero, movimiento `tt-`); §2, §4.1, §5.2, §6.1, §6.2 y §8 actualizados; deuda #4 sin objeto; deudas #17–#21 nuevas.*
 

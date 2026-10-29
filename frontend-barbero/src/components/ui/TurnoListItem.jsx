@@ -1,10 +1,11 @@
 // /frontend-barbero/src/components/ui/TurnoListItem.jsx
 // Card que representa un turno en una lista.
 // Layout: hora grande a la izquierda · cliente + servicio en el medio · pill/acciones a la derecha.
-// Si el turno está reservado, debajo aparece una fila de acciones (Completar / No asistió / Cancelar).
-// Las acciones se ocultan automáticamente para estados no-reservado.
+// Si el turno está reservado, debajo aparece una fila de acciones (No asistió / Cancelar).
+// Las acciones se ocultan automáticamente para estados no-reservado. No hay
+// "Completar": un turno se completa al registrar su corte (iPad o panel).
 
-import { Check, UserX } from 'lucide-react';
+import { UserX } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
 import { fmtHora } from '../../utils/fecha.js';
 import Button from './Button.jsx';
@@ -23,15 +24,14 @@ import StatusPill from './StatusPill.jsx';
  *   cliente_email?: string,
  *   servicio_nombre?: string,
  * }} props.turno
- * @param {() => void} [props.onCompletar] - Acción "Completado"
  * @param {() => void} [props.onNoAsistio] - Acción "No asistió"
  * @param {() => void} [props.onCancelar]  - Acción "Cancelar"
  * @param {boolean} [props.bloqueado=false] - Si true, desactiva todos los botones (ej. mientras se procesa).
  */
-function TurnoListItem({ turno, onCompletar, onNoAsistio, onCancelar, bloqueado = false }) {
+function TurnoListItem({ turno, onNoAsistio, onCancelar, bloqueado = false }) {
   const esReservado = turno.estado === 'reservado';
   // Cantidad de acciones disponibles → define las columnas de la grilla.
-  const cantAcciones = [onCompletar, onNoAsistio, onCancelar].filter(Boolean).length;
+  const cantAcciones = [onNoAsistio, onCancelar].filter(Boolean).length;
   const mostrarAcciones = esReservado && cantAcciones > 0;
 
   return (
@@ -70,7 +70,7 @@ function TurnoListItem({ turno, onCompletar, onNoAsistio, onCancelar, bloqueado 
           {turno.servicio_nombre && (
             <div style={{
               fontFamily: theme.body,
-              fontSize: theme.sizeMicro + 1,
+              fontSize: theme.sizeBody,
               color: theme.muted,
               marginTop: 2,
               overflow: 'hidden',
@@ -87,34 +87,22 @@ function TurnoListItem({ turno, onCompletar, onNoAsistio, onCancelar, bloqueado 
       </div>
 
       {mostrarAcciones && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-          {/* Acción dominante: completar el turno (camino del día a día). */}
-          {onCompletar && (
-            <Button variant="primary" onClick={onCompletar} disabled={bloqueado}>
-              <Check size={16} strokeWidth={2} aria-hidden="true" />
-              Completado
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${cantAcciones}, 1fr)`,
+          gap: 8,
+          marginTop: 12,
+        }}>
+          {onNoAsistio && (
+            <Button variant="secondary" onClick={onNoAsistio} disabled={bloqueado}>
+              <UserX size={16} strokeWidth={1.75} aria-hidden="true" />
+              No asistió
             </Button>
           )}
-
-          {/* Acciones secundarias: menos frecuentes, peso visual menor. */}
-          {(onNoAsistio || onCancelar) && (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: `repeat(${[onNoAsistio, onCancelar].filter(Boolean).length}, 1fr)`,
-              gap: 8,
-            }}>
-              {onNoAsistio && (
-                <Button variant="secondary" onClick={onNoAsistio} disabled={bloqueado}>
-                  <UserX size={16} strokeWidth={1.75} aria-hidden="true" />
-                  No asistió
-                </Button>
-              )}
-              {onCancelar && (
-                <Button variant="danger" onClick={onCancelar} disabled={bloqueado}>
-                  Cancelar
-                </Button>
-              )}
-            </div>
+          {onCancelar && (
+            <Button variant="danger" onClick={onCancelar} disabled={bloqueado}>
+              Cancelar
+            </Button>
           )}
         </div>
       )}

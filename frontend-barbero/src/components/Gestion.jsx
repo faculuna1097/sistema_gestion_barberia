@@ -17,7 +17,7 @@ import {
   liberarSuspension,
 } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
-import { fmtFechaHora } from '../utils/fecha.js';
+import { fmtFechaHora, fmtHora, fechaDeISO } from '../utils/fecha.js';
 
 import {
   TopBar,
@@ -368,7 +368,7 @@ function FilaDia({ dia, bloques, horarioTenant, onAgregar, onActualizar, onElimi
       {diaCerrado ? (
         <div style={{
           fontFamily: theme.body,
-          fontSize: theme.sizeMicro + 1,
+          fontSize: theme.sizeBody,
           color: theme.muted,
         }}>
           El negocio no abre este día
@@ -857,12 +857,15 @@ function suspensionEnCurso(suspension) {
  * Card de una suspensión: rango de fechas + motivo opcional + botón "Liberar"
  * ("Terminar" si está en curso). Las que cargó el administrador (origen 'admin')
  * no muestran el botón: el barbero no las puede liberar (el backend responde 403 igual).
+ * Si termina el mismo día que empieza, el "hasta" lleva solo la hora: con la
+ * fecha completa, a 375 px ocupaba dos renglones al lado del botón.
  * @param {Object} props.suspension
  * @param {() => void} props.onLiberar
  */
 function FilaSuspension({ suspension, onLiberar }) {
   const puedeLiberar = suspension.origen !== 'admin';
   const accion = suspensionEnCurso(suspension) ? 'Terminar' : 'Liberar';
+  const mismoDia = fechaDeISO(suspension.desde) === fechaDeISO(suspension.hasta);
   return (
     <Card padding={12}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -881,7 +884,7 @@ function FilaSuspension({ suspension, onLiberar }) {
             color: theme.muted,
             marginTop: 2,
           }}>
-            hasta {fmtFechaHora(suspension.hasta)}
+            hasta {mismoDia ? `${fmtHora(suspension.hasta)} hs` : fmtFechaHora(suspension.hasta)}
           </div>
           {suspension.motivo && (
             <div style={{

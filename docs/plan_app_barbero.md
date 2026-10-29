@@ -297,10 +297,13 @@ sentencia.
       la misma geometría. Una celda tocable mide el alto del slot menos 2 px (≥ 46);
     - **rango:** del primer slot (o turno) al último (`calcularRango`), sin margen de horas
       alrededor del horario del local. Un turno fuera de la grilla lo agranda. Los descansos y
-      las ausencias se recortan y no lo agrandan (una ausencia de varios días lo estiraría a 24 h);
+      las ausencias se recortan y no lo agrandan (una ausencia de varios días lo estiraría a 24 h).
+      **Cambió en el paso 5b:** el rango es el horario del local, con en gris las horas sin slots;
     - **día sin slots ni turnos:** en vez de un timeline vacío con el rango 7–22 por defecto,
       un `EmptyState` ("No tenés horario de trabajo este día" / "El local no abre este día").
-      El alto por defecto solo dimensiona el skeleton de la primera carga.
+      El alto por defecto solo dimensiona el skeleton de la primera carga. **Cambió en el paso
+      5b:** si el local abre, el día se ve entero en gris; el aviso queda solo para "El local no
+      abre este día".
   - **Bloques:** el descanso, liso (`surfaceAlt`) con ícono `Coffee`; la ausencia, rayada
     (`repeating-linear-gradient` de `surfaceAlt` y `hairline`) con ícono `CalendarOff` y el
     motivo. Texto en `inkSoft` a 14 px (≥ 11,7:1 sobre los dos fondos). Ícono y texto van
@@ -380,19 +383,81 @@ sentencia.
   a hoy" se veía raro: hasta que corría el efecto de carga, se dibujaba el timeline del día
   anterior bajo la fecha nueva, y el scroll a "ahora" arrancaba sobre él y se repetía. Ahora
   el skeleton aparece en el mismo render que la fecha (`irADia`).
-- **Quedó para decidir:**
+- **Quedó para decidir** (las dos se hicieron en el paso 5b):
   - el salto de 52 px cuando "Volver a hoy" desaparece (alternativa: "Hoy" dentro de la barra
     de fecha);
   - en Gestión → Suspensiones, a 375 px, "hasta martes, 20 de octubre · 23:00 hs" ocupa dos
     renglones al lado del botón "Liberar" (alternativa: "hasta 23:00 hs" si es el mismo día).
-- **Pendiente fuera de la Agenda:** el Inicio (`Dashboard.jsx`) tiene las mismas tres acciones
-  de turnos sin la convención de §8. Los demás textos de 12 px de la app están en
-  `sistema_de_disenio.md` §9 #22.
+- **Pendiente fuera de la Agenda** (hecho en el paso 5b): el Inicio (`Dashboard.jsx`) tiene las
+  mismas tres acciones de turnos sin la convención de §8. Los demás textos de 12 px de la app
+  están en `sistema_de_disenio.md` §9 #22.
 - **Datos de prueba en demo** (Alejo, 20/10, creados desde la app y sin email):
   - turnos C1 13:00 completado (`a33d738b`), C2 13:50 no asistió (`c45adee2`) y C3 18:00
     cancelado (`b39d3054`);
   - descanso 13:00–14:40, liberado (`7567b1a8`);
   - suspensión 21:30–23:00, liberada (`bb538ff1`).
+
+**Cómo quedó el paso 5b (2026-10-19): limpieza de la app del barbero.**
+- **Decisión: un turno se completa solo al registrar su corte** (iPad o panel, que hacen las
+  dos cosas juntas con `registrarCorte`). Antes, "Completado" en la app hacía
+  `PATCH /admin/turnos/:id/estado` con `completado`: el turno quedaba completado sin corte y,
+  como el iPad lista solo los `reservado` (`listarTurnosOperativos`), el cobro terminaba cargado
+  como cliente sin turno. Le pasó al turno C1 de la prueba del 5a (`a33d738b`, completado sin
+  corte).
+  - **App del barbero:** sale "Completado" de la Agenda (`DetalleTurnoModal`) y del Inicio
+    (`TurnoListItem` pierde `onCompletar`). Un turno reservado que ya empezó ofrece "No
+    asistió" y "Cancelar"; uno que no empezó, solo "Cancelar".
+  - **`cambiarEstado`** (`turnosService.js`) acepta solo `no_asistio`: `completado` → 400 ("Un
+    turno se completa registrando su corte, desde el iPad o el panel"); otro valor → 400 (antes
+    409). "No asistió" de un turno que no empezó → 400, comparado con `now()` de la base. El
+    `UPDATE` lleva `estado = 'reservado'` en el `WHERE`: si no actualiza, 409.
+  - **Panel:** nunca mandaba `completado` por `PATCH` (su "Completar" usa
+    `completarAdminTurno`). Su "No asistió" ahora aparece solo si el turno ya empezó, para no
+    ofrecer algo que el servidor rechaza.
+- **Inicio con la convención de §8:** con la respuesta `{ id, estado }`, el turno cambia en la
+  lista en el mismo render en que se cierra el diálogo; después recarga por detrás. Si falla,
+  el aviso y la misma recarga.
+- **Color de montos** (`sistema_de_disenio.md` §3.1.1) en `MiPlanilla`: la comisión semanal va
+  en verde (`colorResultado`, copia de `utils/colorMonto.js` del panel); la de cada día, el
+  generado y las propinas, en `ink`; la propina de cada corte, en `muted`.
+- **14 px:** todos los `sizeMicro + 1` de la app, el valor de `SummaryRow` y la ayuda y el error
+  de `Field`. `StatusPill` pasa de 10 a 11. Quedan en 11 las pills de categoría y las etiquetas
+  de la `BottomNav` (excepción escrita en `sistema_de_disenio.md` §3.6).
+- **Hover:** el hook `useHover` (`src/hooks/useHover.js`, con `PUEDE_HOVER`) reemplaza el
+  `useState` de hover en toda la app: en una pantalla táctil no se prende (§4.2, §9 #19).
+- **Login:** el nombre y el logo del negocio se piden una sola vez, en `App.jsx`, que los aplica
+  al tab (título y favicon) y se los pasa al `Login` por props. Con `Promise.allSettled`, si
+  falla uno se usa el otro. El logo es el de menor `orden` en los dos lugares (antes el `Login`
+  tomaba solo el de `orden === 1`).
+- **"Hoy" dentro de la barra de fecha** de la Agenda, después de "→" y un separador. Está
+  siempre; viendo hoy queda desactivado. Así ni la pantalla ni la fecha se mueven al volver a
+  hoy. Si una fecha larga no entra en un renglón ("miércoles, 30 de septiembre" a 375 px), pasa
+  a dos dentro del mismo alto.
+- **Gestión → Suspensiones:** si una suspensión termina el mismo día que empieza, la fila dice
+  "hasta 23:00 hs".
+- **Horas sin slots, en gris** (pedido del usuario en la revisión del paso). La Agenda muestra
+  todo el horario del local de ese día. Las horas en que el barbero no tiene slots se dibujan
+  como celdas grises (`surfaceAlt`, borde `hairlineSoft`), sin texto ni acciones, con su hora a
+  la izquierda como el resto:
+  - las horas en que no trabaja (antes, entre o después de sus bloques) y el final de un bloque
+    donde no entra un turno (ej. kingsai, de 10 a 19 con slots de 50: 18:20–19:00);
+  - un día que el local abre y el barbero no trabaja se ve entero en gris. El `EmptyState`
+    queda solo para "El local no abre este día" (sin turnos);
+  - las celdas siguen el ritmo de los slots del barbero para quedar pegadas a ellos: después de
+    un slot se cortan hacia adelante; antes del primero, hacia atrás; un día sin slots, desde la
+    apertura. Un sobrante de menos de medio slot se suma a la celda de al lado; una celda más
+    corta que eso va sin hora;
+  - solo en el front (`celdasFueraDeHorario` en `datosAgenda.js`, el rango en `geometria.js`,
+    el dibujo en `Timeline.jsx`): el front ya recibe el horario del local y los slots, y la
+    grilla del backend también valida los descansos, así que no se le agregaron celdas;
+  - fuera del horario del local no se dibuja nada, salvo un turno o un slot que caiga ahí (lo
+    agrandan, como antes). Probado en node con los horarios reales de demo y kingsai; falta
+    verlo en pantalla.
+- **`utils/fecha.js`:** se borraron `esDomingo` y `generarProximosDias`, que no se usaban.
+- **Datos de prueba en demo:**
+  - `9b15434c` (Alejo, 16/05) y `0b6642ac` (Facundo, 20/05): de reservado a no asistió;
+  - `09ec79ac` (Facundo, 16/05): completado con el corte `1eb5ea32` ($ 6.500, efectivo);
+  - `ccf6fe6b` (Alejo, 20/10 09:00): cancelado desde el Inicio, sin mail (cliente sin email).
 
 #### Fase 5 — Panel de gestión (`frontend/`)
 
