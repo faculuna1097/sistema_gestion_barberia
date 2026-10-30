@@ -3,8 +3,7 @@
 > Documento **temporal** de trabajo (2026-10-29), en `feature/descansos-agenda`. Es el inventario
 > verificado y clasificado de las deudas abiertas, para resolverlas antes de mergear el branch.
 > Cuando se cierren las tandas, se borra; el estado vigente vuelve a vivir en
-> [`estado_actual.md`](./estado_actual.md). Este doc **no** modificó las fuentes: la limpieza de las
-> resueltas (clase D) es una tarea aparte.
+> [`estado_actual.md`](./estado_actual.md). Cada tanda saca de las fuentes lo que cierra.
 
 ## Cómo se armó
 
@@ -63,7 +62,7 @@
 | E03 | `gasto.created_at` redundante con `gasto.timestamp` | EA:327 | Abierta | B | DB y schema | S | DB (si se borra) | `SQL_Schema.md` | — |
 | E04 | Separar credenciales a `tenant_credenciales` (1:1) | EA:328 | Abierta. No hay ningún `SELECT *`: riesgo teórico | C | DB y schema | L | DB, regresión en auth | auth*, `tenantMiddleware.js`, `adminOperativo.js`, `gestion.js` | — |
 | E05 | `getBarberos` repite la query de `listarBarberosActivos` | EA:329 | Abierta | A | estructura del backend | S | — | `controllers/barberos.js` | — |
-| E06 | "Mailing migrado a Resend" figura como deuda | EA:330 | No es deuda: nota de estado | D | docs | S | — | `estado_actual.md` | — |
+| E06 | "Mailing migrado a Resend" figura como deuda | EA:330 | Hecha (tanda 1, 2026-10-30): sacada de `estado_actual.md`; lo que decía ya está en Deploy, Pendientes y `decisiones_mail_entregabilidad.md` | D | docs | S | — | `estado_actual.md` | — |
 | E07 | Las reservas no validan el bloque del barbero ni la grilla de slots | EA:331 | Abierta | C | validaciones y errores del backend | L | contrato | `controllers/turnero.js`, `controllers/turnos.js` | AUD-1 |
 | E10 | Título del evento de Calendar: pasar a solo `cliente.nombre` | EA:334 | Abierta (`googleCalendar.js:53`) | A | estructura del backend | S | — | `services/googleCalendar.js` | — |
 | E11 | `actualizarCredencialesOperativas` no chequea `rowCount` | EA:335 | Abierta | A | validaciones y errores del backend | S | — | `controllers/adminOperativo.js` | — |
@@ -74,14 +73,14 @@
 | E14 | Logger estructurado | EA:338 | Abierta (309 `console.*`) | C | estructura del backend | L | — | backend entero | — |
 | E15 | Subdominio, tokens, utils y primitivos copiados en cada front | EA:339 | Abierta; volvió a divergir (X01) | C | lint y tooling | L | regresión en 4 fronts | `*/src/{theme,utils,components/ui}` | X01, DS18 |
 | E17 | `TZ` redeclarada | EA:341 | Abierta (`inicio.js:6`, `googleCalendar.js:9`) | A | estructura del backend | S | — | `controllers/inicio.js`, `services/googleCalendar.js` | — |
-| E18 | Comentarios que citan §5-bis y §7 #1 de `performance_frontends.md` | EA:342 | Abierta (`db.js:172`, `index.js:247`) | A | estructura del backend | S | — | `config/db.js`, `index.js` | — |
+| E18 | Comentarios que citan §5-bis y §7 #1 de `performance_frontends.md` | EA:342 | Hecha (tanda 1, 2026-10-30): citan el doc sin sección (`db.js:172`, `index.js:248`) | A | estructura del backend | S | — | `config/db.js`, `index.js` | — |
 | E19 | Default de `PUBLIC_BASE_URL` en 5173 (es 5175) | EA:343 | Abierta (`turnosService.js:190,215`) | A | estructura del backend | S | — | `services/turnosService.js` | — |
 | E20 | SELECT enriquecido de turno casi igual en tres lugares | EA:344 | Abierta | A | estructura del backend | M | regresión (mails, recordatorio) | `turnosService.js`, `recordatoriosService.js` | — |
 | E21 | Rebote de overscroll de iOS detrás del footer del turnero | EA:346 | Mitigación vigente; no verificable sin iPhone | C | turnero | L | visible | `frontend-turnero/src/index.css`, layout | — |
 | E22 | Tipo de comisión `fijo` latente (CHECK y cálculos) | EA:348 = `SQL_Schema.md:15` | Abierta | B | DB y schema | M | DB | `SQL_Schema`, `planillaService.js`, `SeccionPlanillas.jsx`, `MiPlanilla.jsx` | P08, M06 |
 | E23 | `activo`/`created_at` nullables (barbero, servicio, producto, categoria_gasto) | EA:350 | Según `SQL_Schema.md`; la DB no se consultó | A | DB y schema | S | DB | SQL a mano | M03 |
 | M01 | `req.body` sin fallback (Express 5) → 500 en vez de 400 | EA:354 | Cambió: 18 controllers (decía 15) | A | validaciones y errores del backend | S | — | `index.js` (middleware) | — |
-| M02 | `caja.eliminarMovimiento` con id no-UUID → 500 | EA:355 | Abierta | A | validaciones y errores del backend | S | — | `controllers/caja.js` | T02 |
+| M02 | `caja.eliminarMovimiento` con id no-UUID → 500 | EA:355 | Cambió: también `deleteGasto`, `updateGasto`, `deleteVenta` y `updateVenta` (ningún manejo del 22P02 en `gastos.js` ni `ventas.js`) | A | validaciones y errores del backend | S | — | `controllers/caja.js`, `controllers/gastos.js`, `controllers/ventas.js` | T02, N03 |
 | M03 | `getCategorias` no filtra `activo` | EA:356 | Abierta | A | validaciones y errores del backend | S | visible (iPad) | `controllers/categorias.js` | E23 |
 | M04 | Gasto sin categoría: `JOIN` en Balances y Caja, `LEFT JOIN` en Gastos | EA:357 | Abierta | A | estructura del backend | S | visible (totales) | `controllers/balances.js`, `controllers/caja.js` | — |
 | M05 | `gasto.categoria_id` no se valida contra el tenant | EA:358 | Abierta (FK simple) | A | validaciones y errores del backend | S | — | `controllers/gastos.js` | M12 |
@@ -92,9 +91,9 @@
 | M10 | `getBalanceHistorico` acepta `cantidad` negativa | EA:363 | Abierta (`balances.js:335`) | A | validaciones y errores del backend | S | — | `controllers/balances.js` | — |
 | M11 | Redondeo de comisiones distinto entre mensual e histórico | EA:364 | Abierta | A | estructura del backend | S | visible (centavos) | `controllers/balances.js` | P08 |
 | M12 | Categorías de gasto cargadas a mano por tenant | EA:365 | Abierta | B | DB y schema | M | DB (FK compuesto) | `crearTenant.js`, `onboarding.md` | E02, M05 |
-| M13a | `gastos.js` sin JSDoc | EA:366 | Abierta | A | estructura del backend | S | — | `controllers/gastos.js` | M07 |
+| M13a | `gastos.js` sin JSDoc | EA:366 | Hecha (tanda 1, 2026-10-30): JSDoc en los 4 handlers | A | estructura del backend | S | — | `controllers/gastos.js` | M07 |
 | M13b | `getGastosMensual` corre sus dos consultas en serie | EA:366 | Abierta | A | estructura del backend | S | — | `controllers/gastos.js` | — |
-| M13c | Comentario "RUTAS DEL BACKOFFICE (admin + barbero)" engañoso | EA:366 | Abierta (`index.js:218`) | A | estructura del backend | S | — | `index.js` | — |
+| M13c | Comentario "RUTAS DEL BACKOFFICE (admin + barbero)" engañoso | EA:366 | Hecha (tanda 1, 2026-10-30): comentario corregido (`index.js:218`) | A | estructura del backend | S | — | `index.js` | — |
 | M15 | Subdominios de tenant sin `noindex` | EA:368 | Abierta (`frontend/vercel.json`) | A | panel | S | visible (SEO del turnero si se configura mal) | `frontend/vercel.json` | — |
 | M16 | Landing: `linkWhatsApp`/`linkEmail` sin manejo de `null` | EA:369 | Cambió de archivo: `utils/contacto.js` | A | landing | S | — | `frontend-landing/src/utils/contacto.js` | — |
 | T01 | CORS: origin no permitido → 500 | EA:374 | Abierta (`index.js:93`) | A | validaciones y errores del backend | S | — | `index.js` | — |
@@ -111,7 +110,7 @@
 | T11 | `HorarioSemanal` no recibe los feriados | EA:387 | Abierta (`Landing.jsx:232`) | A | turnero | S | — | `Landing.jsx` | — |
 | T12a | Scrollbar horizontal en la fila del equipo (desktop) | EA:388 | No verificado visualmente | A | turnero | S | visible | `Landing.jsx` | — |
 | T12b | Pin centrado en una dirección de dos renglones | EA:388 | No verificado visualmente | A | turnero | S | visible | `Landing.jsx` | — |
-| T12c | `fmtFechaCorta` sin uso en el turnero | EA:388 | Abierta | A | turnero | S | — | `utils/fecha.js` | — |
+| T12c | `fmtFechaCorta` sin uso en el turnero | EA:388 | Hecha (tanda 1, 2026-10-30): borrada; los comentarios del panel apuntan a la del barbero | A | turnero | S | — | `utils/fecha.js` | — |
 | T12d | `fmtDiaAccesible` arma texto visible: nombre corto | EA:388 | Abierta | A | turnero | S | — | `utils/fecha.js` + 2 usos | — |
 | F01 | `GET /admin/turnos?desde=&hasta=` pasa los instantes crudos | EA:392 | Abierta | A | validaciones y errores del backend | S | — | `controllers/turnos.js` | — |
 | F02 | Liberar es `DELETE /admin/suspensiones/:id` | EA:393 | Abierta | B | estructura del backend | S | contrato | `routes`, `suspensiones.js`, los dos `api.js` | — |
@@ -122,7 +121,7 @@
 | P03 | #28 acoplamiento entre tabs de Planillas | EA:403 | Aceptada; sigue el `Promise.all` | C | panel | S | — | `SeccionPlanillas.jsx` | P08 |
 | P04 | #42 `BloqueFeriados` con overflow propio | EA:404 | Aceptada; la razón sigue | C | panel | S | — | `BloqueFeriados.jsx:415` | — |
 | P05 | #43 nombre y URL del negocio sin self-service | EA:405 | Aceptada; sigue valiendo con un tenant real | C | panel | S | — | `TabNegocio.jsx` | — |
-| P06 | #45 bloque del barbero en día que el local cerró | EA:406 | Resuelta en los hechos: la cascada borra esos bloques y `putHorarios` responde 422 `dia_cerrado` | D | panel | S | — | `estado_actual.md` | — |
+| P06 | #45 bloque del barbero en día que el local cerró | EA:406 | Hecha (tanda 1, 2026-10-30): sacada de `estado_actual.md`. La cascada borra esos bloques y `putHorarios` responde 422 `dia_cerrado` | D | panel | S | — | `estado_actual.md` | — |
 | P07 | DELETE silencioso en Ventas, Gastos y Caja | EA:407 | Abierta | A | panel | S | — | `SeccionVentas/Gastos/Caja.jsx` | DS16 |
 | P08 | Fórmula de comisión en tres lugares | EA:408 | Abierta | A | panel | M | contrato | `planillaService.js`, `SeccionPlanillas.jsx`, `MiPlanilla.jsx` | E22, M06, P03 |
 | P09 | `lint` del panel falla (7 errores + 1 warning) | EA:409 | Confirmada idéntica; los otros 3 fronts en verde | A | lint y tooling | S | — | `eslint.config.js`, `App.jsx`, `FondoLocal.jsx`, `PanelAdmin.jsx`, `SeccionBalances.jsx`, `wizard.jsx` | DS13 |
@@ -139,11 +138,11 @@
 | P17b | `Modal` sin manejo del foco | EA:417 | Abierta | A | panel | M | — | `Modal.jsx` | — |
 | P18 | Formas de pago en tres lugares (+ ternario del Excel) | EA:418 | Abierta | A | panel | S | — | `utils/formato.js`, `BadgeFormaPago.jsx`, `SeccionGastos.jsx:566` | — |
 | P19 | `BotonFormaPago` y `GrupoOpciones` son el mismo patrón | EA:419 | Abierta | A | panel | M | visible | `SeccionTurnero.jsx`, `SeccionCaja.jsx`, `components/ui/` | — |
-| P20a | Comentario viejo en `SeccionGastos.jsx` ("id numérico") | EA:420 | Abierta (`:503`) | A | panel | S | — | `SeccionGastos.jsx` | — |
-| P20b | Encabezado de `SelectorDia.jsx` con la ruta vieja | EA:420 | Abierta | A | panel | S | — | `SelectorDia.jsx` | — |
-| DS08 | Hover con `useState` en tablas densas | SD:731 | Resuelta: `DataTable` usa `<style>` local | D | docs | S | — | `sistema_de_disenio.md` | — |
+| P20a | Comentario viejo en `SeccionGastos.jsx` ("id numérico") | EA:420 | Hecha (tanda 1, 2026-10-30): comentario y `String()` borrados; la comparación es directa | A | panel | S | — | `SeccionGastos.jsx` | — |
+| P20b | Encabezado de `SelectorDia.jsx` con la ruta vieja | EA:420 | Hecha (tanda 1, 2026-10-30): ruta corregida | A | panel | S | — | `SelectorDia.jsx` | — |
+| DS08 | Hover con `useState` en tablas densas | SD:731 | Hecha (tanda 1, 2026-10-30): tachada en §9. `DataTable` usa `<style>` local | D | docs | S | — | `sistema_de_disenio.md` | — |
 | DS09 | Contraste WCAG (`muted` sobre `surfaceAlt` 4,4:1, `mutedSoft` 2,6:1) | SD:732 | Medida el 2026-10-30: `muted` 4,40:1 sobre `surfaceAlt`, `mutedSoft` 2,56:1 sobre blanco; 48 usos de `mutedSoft` | B | turnero | M | visible | `tokens.js` de los fronts + usos de `mutedSoft` | — |
-| DS12 | Focus visible en todos los primitivos | SD:738 | Resuelta casi entera: `*:focus-visible` global + anillos propios. Falta mirar `wizard.jsx` y `ConfirmarTurno.jsx` | D | docs | S | — | `sistema_de_disenio.md` | — |
+| DS12 | Focus visible en todos los primitivos | SD:738 | Hecha (tanda 1, 2026-10-30): tachada en §9. Probada en el navegador: el selector de país de `CampoTelefono` casi no mostraba el foco con error, y su contenedor ahora lleva `outline` | D | docs | S | — | `sistema_de_disenio.md`, `ConfirmarTurno.jsx` | — |
 | DS13 | `set-state-in-effect`: postura unificada | SD:739 | Abierta (off solo en barbero). Con la regla prendida: 13 avisos (10 en barbero, 3 en panel) | B | lint y tooling | S | — | `eslint.config.js` de los fronts | P09 |
 | DS15 | `getMisClientes` sin paginación | SD:741 | Abierta | C | app del barbero | M | contrato | `controllers/clientes.js`, `Clientes.jsx` | Base de clientes |
 | DS16 | Toast inline → flotante global | SD:742 | Abierta | A | panel | M | visible | `components/ui/Toast.jsx`, callers | — |
@@ -233,12 +232,12 @@ Cada tanda es un chat y un commit sobre `feature/descansos-agenda`. Las clase C 
 | # | Tanda | ids | Tamaño | Riesgo | Decisiones B |
 |---|---|---|---|---|---|
 | 1 | Limpieza y docs | E06, P06, DS08, DS12, E18, M13a, M13c, P20a, P20b, T12c | S | Nulo. DS12 pide mirar el foco de `wizard.jsx` y `ConfirmarTurno.jsx`. | — |
-| 2 | Lint en verde | DS13, P09 | S | Nulo | 11 |
-| 3 | Validaciones y errores del backend | M01, M02, T02, T01, E11, F01, M10, M08, M03, M05, T03, F04 | M | Bajo. T03 y F04 piden el mismo tope en el front y en el back; M03 cambia lo que ve el iPad. | — |
+| 2 | Lint en verde y limpieza | DS13, P09, N01, N02, N04 | S | Nulo | 11 |
+| 3 | Validaciones y errores del backend | M01, M02, N03, T02, T01, E11, F01, M10, M08, M03, M05, T03, F04 | M | Bajo. T03 y F04 piden el mismo tope en el front y en el back; M03 cambia lo que ve el iPad. | — |
 | 4 | Refactors del backend | E05, E17, E19, E10, E20, E13a, E13b, M07, M13b, M04, M11, AUD-6, E02, E01 | M–L | Medio: permisos (E13b), cascada (E13a), stock (M07), mails (E20), pool (AUD-6). M04 y M11 pueden mover totales. | 1 |
 | 5 | Contratos backend ↔ fronts | T04, F02, M09, AUD-5 | M | Contrato. El backend nuevo tiene que andar con los fronts viejos. | 6, 8, 13 |
 | 6 | Panel | DS16 → P07, P01, P11, P12, P13, P14, P15a, P15b, P15c, P16, P17a, P17b, P18, P19, DS23, PF09, M15, P10 | L | Visible. Verificar en preview y en el iPad (P15b). | 9 |
-| 7 | Turnero y landing | T06, T07b, T07c, T10, T11, T12a, T12b, T12d, DS17, DS19, DS21, AUD-4b, X01, M16, T08, DS09, DS20 | M–L | Visible. Sumarla a la prueba en celulares reales del deploy. DS09 y DS20 tocan también el panel y el barbero. | 7, 10, 12 |
+| 7 | Turnero y landing | T06, T07b, T07c, T10, T11, T12a, T12b, T12d, DS17, DS19, DS21, AUD-4b, X01, M16, T08, DS09, DS20, N05 | M–L | Visible. Sumarla a la prueba en celulares reales del deploy. DS09 y DS20 tocan también el panel y el barbero. | 7, 10, 12 |
 | 8 | DB: nullables, categorías y gasto | E23, E03, M12 | M | DB | 2, 5 |
 | 9 | Comisiones | E22, M06, P08 | L | DB, contrato y visible (montos de Planillas y Balances) | 3, 4 |
 
@@ -248,11 +247,25 @@ Cada tanda es un chat y un commit sobre `feature/descansos-agenda`. Las clase C 
 - **Paralelo posible:** 6 y 7 tocan fronts distintos, pero DS09 y DS20 los cruzan. Lo más
   simple es correrlas en serie.
 - **Decisiones B:** cerradas el 2026-10-30.
+- **Docs:** cada tanda saca de `estado_actual.md` y de §9 lo que cierra. Las referencias `EA:` de
+  la tabla se corrieron al editar ese doc: hay que buscar cada deuda por su texto.
 - **Cambios de DB:** las tandas 8 y 9 agregan columnas, constraints y backfills que se pueden
   aplicar antes del deploy, como la migración de `barbero_suspension`.
 - **M06 y el deploy:** `corte.comision_porcentaje` queda nullable hasta que el backend nuevo esté
   en producción; si no, el backend viejo no puede insertar cortes. Después del deploy hay que
   repetir el backfill para los cortes cargados en el medio, y recién ahí ponerle `NOT NULL`.
+
+## Hallazgos durante las tandas
+
+Deudas nuevas, que no estaban en las fuentes. Se suman a las 107 de los conteos de arriba.
+
+| id | deuda | origen | estado verificado | clase | área | tam | riesgo | archivos | tanda |
+|---|---|---|---|---|---|---|---|---|---|
+| N01 | Citas a `plan_turnero_v2.md`, `plan_horario_atencion.md` y `plan_recordatorio_turnos.md`, que ya no existen | Tanda 1 | Confirmada: 20 citas en 19 archivos | A | docs | S | — | `backend/src`, `frontend*/src` | 2 |
+| N02 | Encabezados con la ruta vieja | Tanda 1 | Confirmada: 5 archivos | A | panel | S | — | `BadgeFormaPago`, `BotonExportarExcel`, `SelectorMes`, `SelectorSemana`, `TogglePill` | 2 |
+| N03 | `if (!id)` que nunca se cumple: la ruta `/:id` ya garantiza el id | Tanda 1 | Confirmada: `deleteGasto` y `deleteVenta` | A | validaciones y errores del backend | S | — | `controllers/gastos.js`, `controllers/ventas.js` | 3 |
+| N04 | §8 y E15 dicen que `utils/fecha.js` es idéntico o copiado entre fronts | Tanda 1 | Del reporte de la tanda 1; no revisada aparte | A | docs | S | — | `sistema_de_disenio.md`, `estado_actual.md` | 2 |
+| N05 | Al llegar con Tab al email en `ConfirmarTurno`, el footer fijo tapa parte de la ayuda y del error | Tanda 1 | Del reporte de la tanda 1; no reproducida en la revisión | A | turnero | S | visible | `ConfirmarTurno.jsx`, `StickyFooter.jsx` | 7 |
 
 ## Lo que no se pudo verificar
 
@@ -260,7 +273,6 @@ Con navegador o celular:
 - T06 (probable por el código).
 - T07b, T12a, T12b, E21.
 - DS21: el touch target no se midió.
-- DS12: falta mirar `wizard.jsx` y `ConfirmarTurno.jsx`.
 
 Con la DB:
 - E23: los NULLs se vieron solo en `SQL_Schema.md`.

@@ -4,6 +4,15 @@ import { esMontoValido } from '../utils/validarNumero.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
 import { TZ } from '../utils/constantes.js';
 
+/**
+ * POST /api/gastos
+ * Registra un gasto. Roles: operativo (iPad) o admin (panel).
+ * @param {string} req.body.categoria_id - UUID de la categoría de gasto
+ * @param {string} req.body.descripcion
+ * @param {number} req.body.monto - Monto, >= 0
+ * @param {string} req.body.forma_pago - 'efectivo' o 'mercado_pago'
+ * @returns {JSON} 201 con la fila creada; 400 si falta un campo o no es válido
+ */
 export const createGasto = async (req, res) => {
   const { categoria_id, descripcion, monto, forma_pago } = req.body;
 
@@ -35,6 +44,13 @@ export const createGasto = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/gastos/mensual
+ * Gastos de un mes, del más reciente al más viejo, con los totales por categoría
+ * y el total general. Los gastos sin categoría salen como 'Sin categoría'. Rol: admin.
+ * @param {string} [req.query.mes] - Mes 'YYYY-MM'; por defecto, el actual en hora argentina
+ * @returns {JSON} { gastos, totalesPorCategoria, totalGeneral }; 400 si `mes` no tiene el formato
+ */
 export const getGastosMensual = async (req, res) => {
   const mes = req.query.mes || new Date().toLocaleDateString('sv-SE', { timeZone: TZ }).slice(0, 7);
 
@@ -89,6 +105,12 @@ export const getGastosMensual = async (req, res) => {
   }
 };
 
+/**
+ * DELETE /api/gastos/:id
+ * Borra un gasto del tenant. Rol: admin.
+ * @param {string} req.params.id - UUID del gasto
+ * @returns {JSON} { eliminado: true, id }; 404 si el gasto no existe en el tenant
+ */
 export const deleteGasto = async (req, res) => {
   const { id } = req.params;
 
@@ -116,6 +138,17 @@ export const deleteGasto = async (req, res) => {
   }
 };
 
+/**
+ * PUT /api/gastos/:id
+ * Edita la categoría, la descripción, el monto y la forma de pago de un gasto. Rol: admin.
+ * @param {string} req.params.id - UUID del gasto
+ * @param {string} req.body.categoria_id - UUID de la categoría de gasto
+ * @param {string} req.body.descripcion
+ * @param {number} req.body.monto - Monto, >= 0
+ * @param {string} req.body.forma_pago - 'efectivo' o 'mercado_pago'
+ * @returns {JSON} { id, categoria_id, descripcion, monto, forma_pago }; 400 si falta un
+ *   campo o no es válido; 404 si el gasto no existe en el tenant
+ */
 export const updateGasto = async (req, res) => {
   const { id } = req.params;
 

@@ -56,19 +56,6 @@ export function generarProximosDias(cantidad) {
 }
 
 /**
- * fmtFechaCorta
- * Formato corto de fecha YYYY-MM-DD.
- * @param {string} fechaStr - 'YYYY-MM-DD'
- * @returns {string} Ej: "lun 19/05"
- */
-export function fmtFechaCorta(fechaStr) {
-  const [y, m, d] = fechaStr.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  const dia = date.toLocaleDateString('es-AR', { weekday: 'short' });
-  return `${dia.replace('.', '')} ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
-}
-
-/**
  * fmtFechaLarga
  * Formato largo de fecha YYYY-MM-DD con día de semana y mes completo. El día
  * va sin cero adelante, como en la grilla de días ("8", no "08").

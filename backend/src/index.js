@@ -215,7 +215,8 @@ app.use('/api/caja',      verificarToken, requiereRol('admin'), cajaRouter);
 app.use('/api/inicio',    verificarToken, requiereRol('admin'), inicioRoutes);
 app.use('/api/balances',  verificarToken, requiereRol('admin'), balancesRouter);
 // ─────────────────────────────────────────────────────────────────────────────
-// RUTAS DEL BACKOFFICE — /api/admin/* (admin + barbero autenticados)
+// RUTAS DEL BACKOFFICE — /api/admin/*. La mayoría son solo admin; cada línea
+// declara sus roles con requiereRol (horario-atencion, dentro de su router).
 // ─────────────────────────────────────────────────────────────────────────────
 // turnos: admin + barbero (excluye operativo, que opera por /api/turnos, no /api/admin/*).
 app.use('/api/admin/turnos',    verificarToken, requiereRol('admin', 'barbero'), turnosAdminRoutes);
@@ -244,7 +245,7 @@ const startServer = async () => {
   console.log('[index] Verificando conexión a la base de datos...');
   await testConnection();
   // Mantiene caliente la conexión a Supabase (evita el cold connection del pool
-  // tras 30s de inactividad). Ver docs/performance_frontends.md §7 #1.
+  // tras 30s de inactividad). Ver docs/performance_frontends.md.
   iniciarKeepAlive();
   app.listen(PORT, () => {
     console.log(`[index] ✅ Servidor corriendo en http://localhost:${PORT}`);

@@ -169,7 +169,7 @@ export const testConnection = async () => {
  * conexión nunca llega a estar ociosa 30s y el pool no la cierra, evitando que
  * la próxima request pague el establecimiento completo (TCP + TLS + auth del
  * Session Pooler) contra Supabase en us-west-2 — ese cold connection es el
- * grueso de los ~2s fríos del bootstrap (ver docs/performance_frontends.md §5-bis).
+ * grueso de los ~2s fríos del bootstrap (ver docs/performance_frontends.md).
  *
  * El ping corre en background y es tolerante a fallos: si un tick falla (blip de
  * red a Oregon) se loguea como degradación recuperable y se reintenta en el

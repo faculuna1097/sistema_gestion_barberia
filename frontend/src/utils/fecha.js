@@ -2,10 +2,10 @@
 // Helpers de fecha/hora — versión consolidada del panel de gestión.
 //
 // Convención: este archivo es el sucesor consolidado de `utils/fechas.js`
-// (plural, legacy), ya eliminado (Fase 6 Etapa B, 2026-05-29). Las funciones
-// equivalentes de frontend-turnero (`fmtHora`, `fmtFechaCorta`) divergen a
-// propósito (TZ del navegador / weekday narrow): son otro repo y per D9 del
-// plan de rediseño la consistencia entre fronts es estética, no de API.
+// (plural, legacy), ya eliminado (Fase 6 Etapa B, 2026-05-29). `fmtHora`
+// (frontend-turnero) y `fmtFechaCorta` (frontend-barbero) divergen a propósito
+// (TZ del navegador / weekday corto): son otro repo y per D9 del plan de
+// rediseño la consistencia entre fronts es estética, no de API.
 //
 // Formatos canónicos del proyecto:
 //   - Mes:    'YYYY-MM'      (ej: '2026-03')
@@ -155,7 +155,7 @@ export const fechaADiaMes = (fechaStr) => {
  * formatFechaCorta
  * Convierte un día 'YYYY-MM-DD' a un label corto con día de la semana entero.
  * Usado en el detalle semanal de Planillas.
- * NOTA: el equivalente de frontend-turnero (`fmtFechaCorta`) usa weekday narrow
+ * NOTA: el equivalente de frontend-barbero (`fmtFechaCorta`) usa weekday corto
  * ("lun" en vez de "Lunes"). Divergen a propósito (otro repo, D9).
  * @example formatFechaCorta('2026-03-15') → 'Domingo 15/03'
  */

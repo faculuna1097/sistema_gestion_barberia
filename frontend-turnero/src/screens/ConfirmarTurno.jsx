@@ -436,7 +436,9 @@ function CampoTelefono({
         color: theme.muted,
       }}>{label}</label>
 
-      {/* Contenedor bordeado que agrupa país + número como un solo campo */}
+      {/* Contenedor bordeado que agrupa país + número como un solo campo. El
+          outline repite el *:focus-visible global: con error el borde no cambia
+          y el select y el input lo anulan, así que el foco se marca acá. */}
       <div style={{
         display: 'flex',
         alignItems: 'stretch',
@@ -445,6 +447,8 @@ function CampoTelefono({
         borderRadius: theme.radius,
         transition: `border-color ${theme.transitionFast}, box-shadow ${theme.transitionFast}`,
         boxShadow: focus ? `0 0 0 3px ${theme.accent}26` : 'none',
+        outline: focus ? `2px solid ${theme.accent}` : 'none',
+        outlineOffset: 2,
         overflow: 'hidden',
       }}>
         {/* Selector de país — select nativo (mejor UX/accesibilidad en mobile) */}

@@ -500,9 +500,7 @@ export default function SeccionGastos() {
         const data = await res.json();
         throw new Error(data.error || 'Error del servidor');
       }
-      // El select devuelve strings; las categorías traen id numérico desde
-      // el server. Comparamos con coerción para que el lookup funcione.
-      const categoriaNombre = categorias.find((c) => String(c.id) === String(formEditar.categoria_id))?.nombre
+      const categoriaNombre = categorias.find((c) => c.id === formEditar.categoria_id)?.nombre
         || gastoAEditar.categoria_nombre;
 
       const nuevosGastos = gastos.map((g) => g.id === id ? {
