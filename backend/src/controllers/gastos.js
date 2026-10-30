@@ -5,6 +5,7 @@ import { esFormaPagoValida } from '../utils/validarPago.js';
 import { esUUID } from '../utils/validarUuid.js';
 import { TZ, MAX_DESCRIPCION_GASTO } from '../utils/constantes.js';
 import { categoriaEnTenant } from '../services/categoriasService.js';
+import { eliminarGasto } from '../services/movimientosService.js';
 
 /**
  * POST /api/gastos
@@ -134,12 +135,7 @@ export const deleteGasto = async (req, res) => {
   }
 
   try {
-    const resultado = await query(
-      `DELETE FROM gasto WHERE id = $1 AND tenant_id = $2 RETURNING id`,
-      [id, req.tenant_id]
-    );
-
-    if (resultado.rows.length === 0) {
+    if (!(await eliminarGasto(id, req.tenant_id))) {
       console.warn('[gastos] deleteGasto — gasto no encontrado | id:', id);
       return res.status(404).json({ error: 'Gasto no encontrado' });
     }

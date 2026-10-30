@@ -1,12 +1,13 @@
 // /backend/src/utils/credencialesOperativas.js
-// Reglas y hasheo de las credenciales del modo operativo para los scripts de alta
-// (crearTenant.js y generarHashOperativo.js). Son las mismas reglas que aplica el
-// panel de gestión en controllers/adminOperativo.js.
+// Reglas y hasheo de las credenciales del modo operativo. Único lugar donde viven:
+// las usan los scripts de alta (crearTenant.js y generarHashOperativo.js) y el panel
+// de gestión (controllers/adminOperativo.js). El panel importa los mínimos y arma
+// sus propios mensajes, porque ahí usuario y password son opcionales.
 
 import bcrypt from 'bcrypt';
 
-const USUARIO_MIN_CARACTERES = 3;
-const PASSWORD_MIN_CARACTERES = 8;
+export const USUARIO_MIN_CARACTERES = 3;
+export const PASSWORD_MIN_CARACTERES = 8;
 const SALT_ROUNDS = 10;
 
 /**

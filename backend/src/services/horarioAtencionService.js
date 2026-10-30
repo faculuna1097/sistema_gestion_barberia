@@ -10,6 +10,7 @@ import { query } from '../config/db.js';
 import { TZ } from '../utils/constantes.js';
 import { cancelarEvento } from './googleCalendar.js';
 import { enviarCancelacionAutomatica, construirContextoMail } from './mail/mailer.js';
+import { eliminarBloque, truncarBloque } from './horariosService.js';
 
 /**
  * Obtiene las filas crudas de horario del tenant tal como están en la DB.
@@ -225,11 +226,12 @@ export const calcularDelta = async (tenantId, horariosNuevos) => {
  * reemplazo de tenant_horario_atencion se hace aparte (reemplazarHorario),
  * al final, para que ante un fallo intermedio siga vigente el horario viejo.
  *
+ * @param {string} tenantId - UUID del tenant
  * @param {Object} delta - resultado de calcularDelta
  * @param {string} linkTurnero - URL de reserva para el mail al cliente
  * @returns {Promise<{ bloques_truncados: number, bloques_eliminados: number, turnos_cancelados: number }>}
  */
-export const ejecutarCascada = async (delta, linkTurnero) => {
+export const ejecutarCascada = async (tenantId, delta, linkTurnero) => {
   // --- 1. Cancelar turnos afectados ---
   for (const t of delta.turnosACancelar) {
     await query(
@@ -263,14 +265,11 @@ export const ejecutarCascada = async (delta, linkTurnero) => {
 
   // --- 2. Bloques de barbero ---
   for (const id of delta.bloquesAEliminar) {
-    await query(`DELETE FROM barbero_horario WHERE id = $1`, [id]);
+    await eliminarBloque(id, tenantId);
     console.log('[horarioAtencionService] bloque de barbero eliminado | bloque_id:', id);
   }
   for (const b of delta.bloquesATruncar) {
-    await query(
-      `UPDATE barbero_horario SET hora_inicio = $1, hora_fin = $2 WHERE id = $3`,
-      [b.hora_inicio, b.hora_fin, b.id]
-    );
+    await truncarBloque(b.id, tenantId, b.hora_inicio, b.hora_fin);
     console.log('[horarioAtencionService] bloque de barbero truncado | bloque_id:', b.id);
   }
 

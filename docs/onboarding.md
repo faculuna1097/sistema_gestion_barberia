@@ -86,7 +86,16 @@ node src/scripts/generarHashOperativo.js <tenant_uuid> usuario password
 
 Valida los argumentos con las mismas reglas que el Paso 1, hashea la password con bcrypt y hace el
 `UPDATE` de `operativo_usuario` + `operativo_password_hash` en la fila del tenant, pisando las que
-hubiera. Si el tenant no existe, termina con error.
+hubiera. En el mismo `UPDATE` sube `operativo_token_version`, igual que el panel: las sesiones
+abiertas del iPad dejan de servir. Si el tenant no existe, termina con error.
+
+**Después de correrlo, invalidá el caché.** El script corre en un proceso aparte y no puede tocar
+el caché del `tenantMiddleware`. Hasta invalidarlo, el backend sigue con la versión vieja y rechaza
+los logins nuevos del iPad. Llamá a `POST /api/plataforma/cache/invalidate` con el subdominio del
+tenant, como se explica en [Baja de un tenant](#baja-de-un-tenant-o-cambio-de-subdominio--invalidar-el-caché)
+(el paso 2 de ese ejemplo). El script imprime el subdominio. Sin `PLATFORM_ADMIN_KEY` en Railway, el
+endpoint responde 503: el prerequisito está en esa misma sección. Reiniciar el server también
+limpia el caché.
 
 ---
 
@@ -223,7 +232,7 @@ Para alta de clientes nuevos esto no es problema — el subdominio es nuevo y el
 
 ### Baja de un tenant (o cambio de subdominio) — invalidar el caché
 
-Cuando editás a mano un tenant que el server de prod ya tiene cacheado (darlo de baja, cambiarle el subdominio, o tocar `operativo_token_version`/`activo` por SQL), el cambio **no pega hasta invalidar el caché**. Se hace con un endpoint de plataforma que disparás manualmente desde Bruno (no hay UI — es una herramienta de ops).
+Cuando editás a mano un tenant que el server de prod ya tiene cacheado (darlo de baja, cambiarle el subdominio, tocar `operativo_token_version`/`activo` por SQL, o correr `generarHashOperativo.js`), el cambio **no pega hasta invalidar el caché**. Se hace con un endpoint de plataforma que disparás manualmente desde Bruno (no hay UI — es una herramienta de ops).
 
 **Prerequisito (una sola vez):** la env var `PLATFORM_ADMIN_KEY` debe estar seteada en Railway. Por defecto **no** lo está (el endpoint queda deshabilitado → responde 503). Setearla dispara un autodeploy, así que hacelo en un momento de poco tráfico, la primera vez que vayas a usar el endpoint.
 

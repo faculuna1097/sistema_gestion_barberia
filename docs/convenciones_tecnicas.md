@@ -75,7 +75,7 @@ Qué se responde depende de dónde viene el id:
 | URL o body | **404** | El mismo que ese recurso usa cuando no existe (un id mal formado cuenta como "no existe"). |
 | Query param | **400** | `barbero_id debe ser un UUID válido` (`MENSAJE_BARBERO_ID_INVALIDO`, en el caso de `barbero_id`). |
 
-- Con rol barbero, el `barbero_id` del query o del body se ignora: se valida solo cuando se usa.
+- Con rol barbero, el `barbero_id` del query o del body se ignora: se valida solo cuando se usa. Ese scoping vive en `backend/src/utils/scopingRol.js`, salvo en `horarios.js`, que responde 403.
 - Un id opcional se valida solo si vino. Por ejemplo, `createCorte` sin `turno_id` es un cliente sin turno.
 - Los helpers `barberoActivoEnTenant`, `socioActivoEnTenant` y `calcularDuracionServicio` ya validan el formato: un id mal formado devuelve "no encontrado" y el caller responde 404.
 - Un status dice la categoría del error, y el mensaje dice el detalle. No se inventan status ni se reusa uno con otro significado (405 es "método no permitido").
@@ -182,7 +182,7 @@ aritmética de fechas (sumar minutos, comparar rangos).
 - **Nunca** `BEGIN` / `COMMIT` (incompatibilidad con PgBouncer free plan, IPv4-only).
 - Inserts secuenciales con cleanup manual si algo falla.
 - `db.js` exporta como named exports `query` (lo que usa todo el código), `cerrarPool` (cierre limpio del cron), `testConnection` e `iniciarKeepAlive` (arranque). El pool crudo no se exporta.
-- Pool con `max: 3`, `ssl: { ca: <config/supabase-ca.crt>, rejectUnauthorized: true }` y `statement_timeout` de 5s por conexión.
+- Pool con `max: 3`, `ssl: { ca: <config/supabase-ca.crt>, rejectUnauthorized: true }` y `statement_timeout` de 5s por conexión (un `SET` en el hook `onConnect`: el pooler descarta `options` y el parámetro `statement_timeout` del `Pool`).
 - Toda tabla nueva se crea con RLS activado y sin policies (`ALTER TABLE ... ENABLE ROW LEVEL SECURITY`): cierra la API automática de Supabase, y el backend entra igual porque se conecta como dueño de las tablas. El SQL editor no lo activa solo. Ver `estado_actual.md` → RLS.
 - `query()` reintenta **una vez** ante errores de conexión (no de SQL). Las escrituras no idempotentes que no deben reejecutarse (ajustes relativos de stock, `stock_actual = stock_actual ± $1`) van con `query(sql, params, { reintentar: false })` — ver `utils/stock.js`.
 

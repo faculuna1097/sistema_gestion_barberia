@@ -151,6 +151,7 @@ backend/
     |   |-- googleCalendar.js
     |   |-- horarioAtencionService.js
     |   |-- horariosService.js
+    |   |-- movimientosService.js
     |   |-- planillaService.js
     |   |-- recordatoriosService.js
     |   |-- sociosService.js
@@ -167,6 +168,7 @@ backend/
         |-- movimientos.js
         |-- pin.js
         |-- sanitizarLogs.js
+        |-- scopingRol.js
         |-- stock.js
         |-- suscripcion.js
         |-- validarFecha.js

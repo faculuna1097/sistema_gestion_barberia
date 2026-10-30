@@ -50,3 +50,23 @@ export const barberoActivoEnTenant = async (barberoId, tenantId) => {
   );
   return result.rows.length > 0;
 };
+
+/**
+ * barberoEnTenant — verifica que un barbero exista y pertenezca al tenant, esté
+ * activo o no. Es para lo que el panel también hace con los inactivos, como ver
+ * y editar sus horarios (barberoActivoEnTenant los rechazaría).
+ *
+ * @param {string} barberoId - UUID del barbero (puede venir del cliente)
+ * @param {string} tenantId  - UUID del tenant del request
+ * @returns {Promise<boolean>} true si el barbero pertenece al tenant; false también
+ *   si el id está mal formado (el caller responde 404)
+ */
+export const barberoEnTenant = async (barberoId, tenantId) => {
+  if (!esUUID(barberoId)) return false;
+
+  const result = await query(
+    `SELECT 1 FROM barbero WHERE id = $1 AND tenant_id = $2`,
+    [barberoId, tenantId]
+  );
+  return result.rows.length > 0;
+};

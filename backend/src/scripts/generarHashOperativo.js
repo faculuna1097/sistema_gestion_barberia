@@ -1,7 +1,12 @@
 // /backend/src/scripts/generarHashOperativo.js
 // Reemplaza las credenciales del modo operativo de un tenant que ya existe. El alta
 // inicial la hace crearTenant.js; esto sirve para cambiarlas o para un tenant viejo.
-// El UPDATE pisa las credenciales operativas existentes.
+// El UPDATE pisa las credenciales operativas existentes y sube
+// operativo_token_version, como el panel: los tokens viejos del iPad dejan de servir.
+//
+// Este script corre en un proceso aparte y no puede invalidar el caché del
+// tenantMiddleware. Hasta que se invalide (POST /api/plataforma/cache/invalidate, ver
+// onboarding.md), el backend sigue con la versión vieja y rechaza los logins nuevos.
 //
 // Uso:
 //   cd backend
@@ -17,9 +22,10 @@ import { errorCredencialesOperativas, hashearPasswordOperativa } from '../utils/
 import { esUUID } from '../utils/validarUuid.js';
 
 /**
- * Valida los argumentos, hashea la password operativa y guarda usuario + hash en
- * la fila del tenant. No recibe ni retorna nada; lee process.argv y termina el
- * proceso con código 0 si todo salió bien, 1 si hubo error.
+ * Valida los argumentos, hashea la password operativa, guarda usuario + hash en la
+ * fila del tenant y sube operativo_token_version en el mismo UPDATE. No recibe ni
+ * retorna nada; lee process.argv y termina el proceso con código 0 si todo salió
+ * bien, 1 si hubo error.
  */
 async function generarHashOperativo() {
   console.log('[generarHashOperativo] Iniciando...');
@@ -47,7 +53,12 @@ async function generarHashOperativo() {
     const hash = await hashearPasswordOperativa(password);
 
     const resultado = await query(
-      'UPDATE tenant SET operativo_usuario = $1, operativo_password_hash = $2 WHERE id = $3',
+      `UPDATE tenant
+       SET operativo_usuario = $1,
+           operativo_password_hash = $2,
+           operativo_token_version = operativo_token_version + 1
+       WHERE id = $3
+       RETURNING subdominio`,
       [usuario, hash, tenantId]
     );
 
@@ -58,6 +69,7 @@ async function generarHashOperativo() {
 
     console.log('[generarHashOperativo] Credenciales operativas actualizadas correctamente en la DB.');
     console.log('[generarHashOperativo] Tenant:', tenantId, '| Usuario:', usuario);
+    console.log(`[generarHashOperativo] Falta invalidar el caché del backend (POST /api/plataforma/cache/invalidate con subdominio "${resultado.rows[0].subdominio}"). Hasta entonces, el backend rechaza los logins nuevos. Ver onboarding.md.`);
     process.exit(0);
   } catch (err) {
     console.error('[generarHashOperativo] Error:', err);

@@ -4,7 +4,7 @@
 
 import { detalleSemanal, resumenSemanal, descansosSemanal } from '../services/planillaService.js';
 import { esFechaISO } from '../utils/validarFecha.js';
-import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
+import { filtroBarberoSegunRol } from '../utils/scopingRol.js';
 
 /**
  * GET /api/admin/planilla?semana=YYYY-MM-DD&barbero_id=X
@@ -17,14 +17,9 @@ export const getPlanilla = async (req, res) => {
     return res.status(400).json({ error: 'semana debe tener formato YYYY-MM-DD' });
   }
 
-  let barberoId;
-  if (req.rol === 'barbero') {
-    barberoId = req.barbero_id;
-  } else if (req.query.barbero_id) {
-    if (!esUUID(req.query.barbero_id)) {
-      return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
-    }
-    barberoId = req.query.barbero_id;
+  const { barberoId, error } = filtroBarberoSegunRol(req);
+  if (error) {
+    return res.status(400).json({ error });
   }
 
   try {
@@ -47,14 +42,9 @@ export const getResumen = async (req, res) => {
     return res.status(400).json({ error: 'semana debe tener formato YYYY-MM-DD' });
   }
 
-  let barberoId;
-  if (req.rol === 'barbero') {
-    barberoId = req.barbero_id;
-  } else if (req.query.barbero_id) {
-    if (!esUUID(req.query.barbero_id)) {
-      return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
-    }
-    barberoId = req.query.barbero_id;
+  const { barberoId, error } = filtroBarberoSegunRol(req);
+  if (error) {
+    return res.status(400).json({ error });
   }
 
   try {
@@ -79,14 +69,9 @@ export const getDescansosSemana = async (req, res) => {
     return res.status(400).json({ error: 'semana debe tener formato YYYY-MM-DD' });
   }
 
-  let barberoId;
-  if (req.rol === 'barbero') {
-    barberoId = req.barbero_id;
-  } else if (req.query.barbero_id) {
-    if (!esUUID(req.query.barbero_id)) {
-      return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
-    }
-    barberoId = req.query.barbero_id;
+  const { barberoId, error } = filtroBarberoSegunRol(req);
+  if (error) {
+    return res.status(400).json({ error });
   }
 
   try {

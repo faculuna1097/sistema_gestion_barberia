@@ -1,6 +1,5 @@
 // /backend/src/controllers/caja.js
 import { query } from '../config/db.js';
-import { aplicarMutacionesStock } from '../utils/stock.js';
 import { TZ } from '../utils/constantes.js';
 import { esMontoPositivo } from '../utils/validarNumero.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
@@ -13,6 +12,7 @@ import {
   sentidoDeMovimiento,
 } from '../utils/movimientos.js';
 import { socioActivoEnTenant } from '../services/sociosService.js';
+import { eliminarGasto, eliminarVenta } from '../services/movimientosService.js';
 
 // Mensaje del 404 de los tipos base; los de movimiento_extra comparten uno solo.
 const NO_ENCONTRADO_POR_TIPO = {
@@ -330,41 +330,15 @@ export const eliminarMovimiento = async (req, res) => {
       console.log('[caja] eliminarMovimiento — corte eliminado | id:', id);
 
     } else if (tipo === 'venta') {
-      const ventaResult = await query(
-        'SELECT producto_id, cantidad FROM venta WHERE id = $1 AND tenant_id = $2',
-        [id, req.tenant_id]
-      );
-      if (ventaResult.rows.length === 0) {
-        return res.status(404).json({ error: NO_ENCONTRADO_POR_TIPO.venta });
-      }
-      const { producto_id, cantidad } = ventaResult.rows[0];
-
-      // Restaurar stock primero (helper con compensación) y borrar la venta
-      // después; si el DELETE falla, revertimos el restore (auditoría 6.2).
-      const revertirStock = await aplicarMutacionesStock([{ producto_id, delta: cantidad }], req.tenant_id);
-      console.log('[caja] eliminarMovimiento — stock restaurado | producto_id:', producto_id, '| cantidad:', cantidad);
-      let ventaDelRes;
-      try {
-        ventaDelRes = await query('DELETE FROM venta WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
-      } catch (err) {
-        await revertirStock();
-        throw err;
-      }
-      // Igual que deleteVenta: si el DELETE no borró nada (fila desaparecida entre
-      // el SELECT y el DELETE por un borrado concurrente), el restore que ya
-      // aplicamos sobra → lo revertimos para no doble-sumar el stock.
-      if (ventaDelRes.rowCount === 0) {
-        await revertirStock();
-        console.warn('[caja] eliminarMovimiento — venta ya no existía al borrar (carrera) | id:', id);
+      if (!(await eliminarVenta(id, req.tenant_id))) {
         return res.status(404).json({ error: NO_ENCONTRADO_POR_TIPO.venta });
       }
       console.log('[caja] eliminarMovimiento — venta eliminada | id:', id);
 
     } else if (tipo === 'gasto') {
-      const gastoDelRes = await query('DELETE FROM gasto WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
       // Contrato consistente con las ramas corte/venta: 404 si no borró nada
       // (id inexistente o de otro tenant) en vez de un 200 engañoso.
-      if (gastoDelRes.rowCount === 0) {
+      if (!(await eliminarGasto(id, req.tenant_id))) {
         return res.status(404).json({ error: NO_ENCONTRADO_POR_TIPO.gasto });
       }
       console.log('[caja] eliminarMovimiento — gasto eliminado | id:', id);

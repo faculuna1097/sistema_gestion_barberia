@@ -54,3 +54,18 @@ export function esCantidadValida(valor) {
   const n = Number(valor);
   return Number.isInteger(n) && n >= 1;
 }
+
+/**
+ * esEnteroNoNegativo
+ * Valida un stock: entero >= 0. A diferencia de esCantidadValida, el 0 es válido
+ * (sin stock mínimo, o sin unidades para sumar).
+ * @param {*} valor - Valor recibido del body (number o string numérico).
+ * @returns {boolean} true si es un entero >= 0.
+ */
+export function esEnteroNoNegativo(valor) {
+  if (valor === undefined || valor === null || valor === '' || typeof valor === 'boolean') {
+    return false;
+  }
+  const n = Number(valor);
+  return Number.isInteger(n) && n >= 0;
+}

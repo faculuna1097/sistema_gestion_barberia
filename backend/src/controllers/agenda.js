@@ -10,7 +10,7 @@ import { calcularGrillaDelDia, DisponibilidadError } from '../services/disponibi
 import { listarBloquesDescanso } from '../services/descansosService.js';
 import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { esFechaISO } from '../utils/validarFecha.js';
-import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
+import { filtroBarberoSegunRol } from '../utils/scopingRol.js';
 
 /**
  * GET /api/admin/agenda?fecha=YYYY-MM-DD&barbero_id=X
@@ -32,22 +32,21 @@ import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
  */
 export const getAgenda = async (req, res) => {
   const { fecha } = req.query;
-  const esBarbero = req.rol === 'barbero';
-  const barberoId = esBarbero ? req.barbero_id : req.query.barbero_id;
 
   if (!esFechaISO(fecha)) {
     return res.status(400).json({ error: 'fecha es requerida y debe ser una fecha YYYY-MM-DD válida' });
   }
+  const { barberoId, error } = filtroBarberoSegunRol(req);
+  if (error) {
+    return res.status(400).json({ error });
+  }
   if (!barberoId) {
     return res.status(400).json({ error: 'barbero_id es requerido' });
   }
-  // El barbero_id del admin llega del query; el del barbero viene del token.
-  if (!esBarbero && !esUUID(barberoId)) {
-    return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
-  }
 
   try {
-    if (!esBarbero && !(await barberoActivoEnTenant(barberoId, req.tenant_id))) {
+    // El barbero_id del admin llega del query; el del barbero viene del token.
+    if (req.rol !== 'barbero' && !(await barberoActivoEnTenant(barberoId, req.tenant_id))) {
       return res.status(404).json({ error: 'Barbero no encontrado o inactivo' });
     }
 

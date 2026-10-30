@@ -8,7 +8,7 @@
 import { crearDescanso, listarBloquesDescanso, bloqueDelDescanso } from '../services/descansosService.js';
 import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { esFechaISO, parsearInstante } from '../utils/validarFecha.js';
-import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
+import { barberoSegunRol, filtroBarberoSegunRol, origenSegunRol } from '../utils/scopingRol.js';
 
 /**
  * GET /api/admin/descansos?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&barbero_id=X
@@ -28,9 +28,9 @@ export const getDescansos = async (req, res) => {
   if (hasta < desde) {
     return res.status(400).json({ error: 'hasta debe ser igual o posterior a desde' });
   }
-  const barberoId = req.rol === 'barbero' ? req.barbero_id : (req.query.barbero_id || undefined);
-  if (barberoId && !esUUID(barberoId)) {
-    return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
+  const { barberoId, error } = filtroBarberoSegunRol(req);
+  if (error) {
+    return res.status(400).json({ error });
   }
 
   try {
@@ -56,9 +56,8 @@ export const getDescansos = async (req, res) => {
  *   404 barbero | 409 algún slot ocupado
  */
 export const postDescanso = async (req, res) => {
-  const esBarbero = req.rol === 'barbero';
-  const barberoId = esBarbero ? req.barbero_id : req.body.barbero_id;
-  const origen = esBarbero ? 'barbero' : 'admin';
+  const barberoId = barberoSegunRol(req, req.body.barbero_id);
+  const origen = origenSegunRol(req);
 
   if (!barberoId) {
     return res.status(400).json({ error: 'barbero_id es requerido' });
@@ -76,7 +75,7 @@ export const postDescanso = async (req, res) => {
   try {
     // El barbero_id del admin llega del body: tiene que ser un barbero activo del
     // tenant. El del barbero viene del token.
-    if (!esBarbero && !(await barberoActivoEnTenant(barberoId, req.tenant_id))) {
+    if (req.rol !== 'barbero' && !(await barberoActivoEnTenant(barberoId, req.tenant_id))) {
       console.warn('[descansos] postDescanso — barbero no pertenece al tenant o inactivo | barbero_id:', barberoId);
       return res.status(404).json({ error: 'Barbero no encontrado o inactivo' });
     }

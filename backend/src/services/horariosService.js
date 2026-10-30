@@ -97,3 +97,33 @@ export const reemplazarHorarios = async (barberoId, tenantId, bloques) => {
 
   return insertados;
 };
+
+/**
+ * Elimina un bloque horario. Lo usa la cascada de un cambio de horario de atención,
+ * con un bloque que quedó fuera del nuevo horario.
+ * @param {string} bloqueId
+ * @param {string} tenantId
+ * @returns {Promise<void>}
+ */
+export const eliminarBloque = async (bloqueId, tenantId) => {
+  await query(
+    `DELETE FROM barbero_horario WHERE id = $1 AND tenant_id = $2`,
+    [bloqueId, tenantId]
+  );
+};
+
+/**
+ * Recorta un bloque horario a un rango nuevo. Lo usa la cascada de un cambio de
+ * horario de atención, con un bloque que quedó parcialmente fuera.
+ * @param {string} bloqueId
+ * @param {string} tenantId
+ * @param {string} horaInicio - nuevo inicio, 'HH:MM'
+ * @param {string} horaFin - nuevo fin, 'HH:MM'
+ * @returns {Promise<void>}
+ */
+export const truncarBloque = async (bloqueId, tenantId, horaInicio, horaFin) => {
+  await query(
+    `UPDATE barbero_horario SET hora_inicio = $1, hora_fin = $2 WHERE id = $3 AND tenant_id = $4`,
+    [horaInicio, horaFin, bloqueId, tenantId]
+  );
+};

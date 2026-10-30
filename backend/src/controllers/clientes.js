@@ -3,7 +3,7 @@
 // Cobertura: decisiones_turnero.md.
 
 import { query } from '../config/db.js';
-import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
+import { filtroBarberoSegunRol } from '../utils/scopingRol.js';
 
 /**
  * GET /api/admin/clientes?busqueda=X
@@ -23,15 +23,12 @@ import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
  * @returns {JSON} array de { id, nombre, email, telefono, total_visitas, ultima_visita }
  */
 export const getMisClientes = async (req, res) => {
-  const barbero_id = req.rol === 'barbero'
-    ? req.barbero_id
-    : req.query.barbero_id;
-
-  if (!barbero_id) {
-    return res.status(400).json({ error: 'barbero_id es requerido' });
+  const { barberoId, error } = filtroBarberoSegunRol(req);
+  if (error) {
+    return res.status(400).json({ error });
   }
-  if (!esUUID(barbero_id)) {
-    return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
+  if (!barberoId) {
+    return res.status(400).json({ error: 'barbero_id es requerido' });
   }
 
   try {
@@ -46,7 +43,7 @@ export const getMisClientes = async (req, res) => {
          AND t.estado IN ('completado', 'reservado')
        GROUP BY c.id, c.nombre, c.email, c.telefono
        ORDER BY ultima_visita DESC`,
-      [barbero_id, req.tenant_id]
+      [barberoId, req.tenant_id]
     );
     res.json(result.rows);
   } catch (err) {

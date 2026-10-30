@@ -101,7 +101,7 @@ export const putHorarioAtencion = async (req, res) => {
     let cascada = { bloques_truncados: 0, bloques_eliminados: 0, turnos_cancelados: 0 };
     if (hayImpacto) {
       const linkTurnero = armarLinkTurnero(req);
-      cascada = await ejecutarCascada(delta, linkTurnero);
+      cascada = await ejecutarCascada(req.tenant_id, delta, linkTurnero);
     }
     await reemplazarHorario(req.tenant_id, horariosNorm);
 

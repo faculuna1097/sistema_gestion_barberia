@@ -14,8 +14,10 @@ import { validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { existeFeriado } from '../services/feriadosService.js';
 import { validarContacto } from '../utils/validarTexto.js';
 import { esFechaISO, parsearInstante } from '../utils/validarFecha.js';
+import { esMontoValido } from '../utils/validarNumero.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
-import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
+import { esUUID } from '../utils/validarUuid.js';
+import { barberoSegunRol, filtroBarberoSegunRol, origenSegunRol } from '../utils/scopingRol.js';
 
 // Mensaje del 404 de un turno, el mismo que usa turnosService.
 const MENSAJE_TURNO_NO_ENCONTRADO = 'Turno no encontrado';
@@ -30,17 +32,12 @@ const MENSAJE_TURNO_NO_ENCONTRADO = 'Turno no encontrado';
  */
 export const getTurnos = async (req, res) => {
   try {
-    const filtros = { tenantId: req.tenant_id };
-
     // Scoping por rol
-    if (req.rol === 'barbero') {
-      filtros.barberoId = req.barbero_id;
-    } else if (req.query.barbero_id) {
-      if (!esUUID(req.query.barbero_id)) {
-        return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
-      }
-      filtros.barberoId = req.query.barbero_id;
+    const { barberoId, error } = filtroBarberoSegunRol(req);
+    if (error) {
+      return res.status(400).json({ error });
     }
+    const filtros = { tenantId: req.tenant_id, barberoId };
 
     // Filtro por fecha o rango
     if (req.query.fecha) {
@@ -79,8 +76,8 @@ export const crearTurnoAdmin = async (req, res) => {
   const { servicio_id, inicio } = req.body;
 
   // barbero_id: si es barbero, forzar el propio (anti escalada horizontal)
-  const barbero_id = req.rol === 'barbero' ? req.barbero_id : req.body.barbero_id;
-  const origen_creacion = req.rol === 'barbero' ? 'barbero' : 'admin';
+  const barbero_id = barberoSegunRol(req, req.body.barbero_id);
+  const origen_creacion = origenSegunRol(req);
 
   // ── Validaciones de presencia (ids + inicio) ──────────────────────────────
   if (!servicio_id || !barbero_id || !inicio) {
@@ -208,7 +205,7 @@ export const patchEstado = async (req, res) => {
   }
 
   // Scoping: barbero solo cambia los suyos
-  const barberoId = req.rol === 'barbero' ? req.barbero_id : null;
+  const barberoId = barberoSegunRol(req, null);
 
   try {
     const resultado = await cambiarEstado(req.params.id, estado, req.tenant_id, barberoId);
@@ -253,15 +250,15 @@ export const completarTurno = async (req, res) => {
   if (!esFormaPagoValida(forma_pago)) {
     return res.status(400).json({ error: "forma_pago es requerida y debe ser 'efectivo' o 'mercado_pago'" });
   }
-  if (precio === undefined || Number.isNaN(Number(precio)) || Number(precio) < 0) {
+  if (!esMontoValido(precio)) {
     return res.status(400).json({ error: 'precio es requerido y debe ser un número >= 0' });
   }
-  if (propina !== undefined && (Number.isNaN(Number(propina)) || Number(propina) < 0)) {
+  if (propina !== undefined && !esMontoValido(propina)) {
     return res.status(400).json({ error: 'propina debe ser un número >= 0' });
   }
 
   // Scoping: barbero solo completa los suyos
-  const barberoId = req.rol === 'barbero' ? req.barbero_id : null;
+  const barberoId = barberoSegunRol(req, null);
 
   try {
     const resultado = await completarTurnoConCorte({
@@ -300,8 +297,8 @@ export const deleteTurno = async (req, res) => {
     return res.status(404).json({ error: MENSAJE_TURNO_NO_ENCONTRADO });
   }
 
-  const canceladoPor = req.rol === 'barbero' ? 'barbero' : 'admin';
-  const barberoId = req.rol === 'barbero' ? req.barbero_id : null;
+  const canceladoPor = origenSegunRol(req);
+  const barberoId = barberoSegunRol(req, null);
 
   try {
     const resultado = await cancelarTurnoPorId(req.params.id, canceladoPor, req.tenant_id, barberoId);

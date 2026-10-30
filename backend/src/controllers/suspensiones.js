@@ -6,7 +6,7 @@ import { listarSuspensiones, crearSuspension, liberarSuspension } from '../servi
 import { armarLinkTurnero } from '../services/turnosService.js';
 import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { esFechaISO, parsearInstante } from '../utils/validarFecha.js';
-import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
+import { barberoSegunRol, filtroBarberoSegunRol, origenSegunRol } from '../utils/scopingRol.js';
 import { TIPOS_SUSPENSION } from '../utils/constantes.js';
 
 /**
@@ -32,17 +32,12 @@ export const getSuspensiones = async (req, res) => {
     return res.status(400).json({ error: `tipo debe ser uno de: ${TIPOS_SUSPENSION.join(', ')}` });
   }
 
-  try {
-    let barberoId;
-    if (req.rol === 'barbero') {
-      barberoId = req.barbero_id;
-    } else if (req.query.barbero_id) {
-      if (!esUUID(req.query.barbero_id)) {
-        return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
-      }
-      barberoId = req.query.barbero_id;
-    }
+  const { barberoId, error } = filtroBarberoSegunRol(req);
+  if (error) {
+    return res.status(400).json({ error });
+  }
 
+  try {
     const suspensiones = await listarSuspensiones(req.tenant_id, { barberoId, desde, hasta, tipo });
     res.json(suspensiones);
   } catch (err) {
@@ -66,9 +61,8 @@ export const postSuspension = async (req, res) => {
   const { desde, hasta, motivo, confirmar_cancelacion } = req.body;
 
   // barbero_id: si es barbero, forzar el propio
-  const esBarbero = req.rol === 'barbero';
-  const barberoId = esBarbero ? req.barbero_id : req.body.barbero_id;
-  const origen = esBarbero ? 'barbero' : 'admin';
+  const barberoId = barberoSegunRol(req, req.body.barbero_id);
+  const origen = origenSegunRol(req);
 
   if (!barberoId || !desde || !hasta) {
     return res.status(400).json({ error: 'barbero_id, desde y hasta son requeridos' });
@@ -89,7 +83,7 @@ export const postSuspension = async (req, res) => {
     // tenant. El FK de barbero_suspension no es compuesto con tenant_id, así que
     // sin este chequeo se podría cargar una suspensión a un barbero de otro tenant.
     // El del barbero viene del token.
-    if (!esBarbero && !(await barberoActivoEnTenant(barberoId, req.tenant_id))) {
+    if (req.rol !== 'barbero' && !(await barberoActivoEnTenant(barberoId, req.tenant_id))) {
       console.warn('[suspensiones] postSuspension — barbero no pertenece al tenant o inactivo | barbero_id:', barberoId);
       return res.status(404).json({ error: 'Barbero no encontrado o inactivo' });
     }
@@ -137,8 +131,8 @@ export const postSuspension = async (req, res) => {
  *   403 origen admin | 404 | 409 ya liberada o terminada
  */
 export const deleteSuspension = async (req, res) => {
-  const barberoId = req.rol === 'barbero' ? req.barbero_id : null;
-  const rol = req.rol === 'barbero' ? 'barbero' : 'admin';
+  const barberoId = barberoSegunRol(req, null);
+  const rol = origenSegunRol(req);
 
   try {
     const suspension = await liberarSuspension(req.params.id, req.tenant_id, rol, barberoId);

@@ -27,6 +27,11 @@
 import bcrypt from 'bcrypt';
 import { query } from '../config/db.js';
 import { invalidar } from '../middlewares/tenantMiddleware.js';
+import {
+  USUARIO_MIN_CARACTERES,
+  PASSWORD_MIN_CARACTERES,
+  hashearPasswordOperativa,
+} from '../utils/credencialesOperativas.js';
 
 /**
  * obtenerCredencialesOperativas
@@ -83,12 +88,12 @@ export async function actualizarCredencialesOperativas(req, res) {
     return res.status(400).json({ error: 'El PIN de administrador es requerido' });
   }
 
-  if (cambiarUsuario && usuario.length < 3) {
-    return res.status(400).json({ error: 'El usuario debe tener al menos 3 caracteres' });
+  if (cambiarUsuario && usuario.length < USUARIO_MIN_CARACTERES) {
+    return res.status(400).json({ error: `El usuario debe tener al menos ${USUARIO_MIN_CARACTERES} caracteres` });
   }
 
-  if (cambiarPassword && password.length < 8) {
-    return res.status(400).json({ error: 'La password debe tener al menos 8 caracteres' });
+  if (cambiarPassword && password.length < PASSWORD_MIN_CARACTERES) {
+    return res.status(400).json({ error: `La password debe tener al menos ${PASSWORD_MIN_CARACTERES} caracteres` });
   }
 
   try {
@@ -119,7 +124,7 @@ export async function actualizarCredencialesOperativas(req, res) {
     }
 
     if (cambiarPassword) {
-      const hash = await bcrypt.hash(password, 10);
+      const hash = await hashearPasswordOperativa(password);
       setClauses.push(`operativo_password_hash = $${indice++}`);
       valores.push(hash);
       // Invalida todos los JWT operativos emitidos antes de este cambio.

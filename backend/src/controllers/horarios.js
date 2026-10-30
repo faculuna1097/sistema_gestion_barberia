@@ -4,12 +4,15 @@
 
 import { obtenerHorarios, validarNoSolapamiento, reemplazarHorarios } from '../services/horariosService.js';
 import { obtenerHorarioCrudo, validarRangoEnHorario } from '../services/horarioAtencionService.js';
+import { barberoEnTenant } from '../services/barberosService.js';
 import { esUUID } from '../utils/validarUuid.js';
 
 /**
  * GET /api/admin/horarios/:barbero_id
- * Si rol=barbero y barbero_id !== req.barbero_id, devuelve 403.
- * @returns {JSON} array de bloques horarios | 404 si barbero_id está mal formado
+ * Si rol=barbero y barbero_id !== req.barbero_id, devuelve 403. Vale también para
+ * un barbero inactivo: el panel precarga los horarios de todos.
+ * @returns {JSON} array de bloques horarios | 404 si el barbero no es del tenant o
+ *   barbero_id está mal formado
  */
 export const getHorarios = async (req, res) => {
   const { barbero_id } = req.params;
@@ -17,11 +20,12 @@ export const getHorarios = async (req, res) => {
   if (req.rol === 'barbero' && barbero_id !== req.barbero_id) {
     return res.status(403).json({ error: 'No podés ver horarios de otro barbero' });
   }
-  if (!esUUID(barbero_id)) {
-    return res.status(404).json({ error: 'Barbero no encontrado' });
-  }
 
   try {
+    if (!(await barberoEnTenant(barbero_id, req.tenant_id))) {
+      return res.status(404).json({ error: 'Barbero no encontrado' });
+    }
+
     const bloques = await obtenerHorarios(barbero_id, req.tenant_id);
     res.json(bloques);
   } catch (err) {
@@ -36,7 +40,8 @@ export const getHorarios = async (req, res) => {
  * { dia_semana, hora_inicio, hora_fin }.
  * Si rol=barbero y barbero_id !== req.barbero_id, devuelve 403.
  * Valida no-solapamiento entre bloques del mismo día antes de persistir.
- * @returns {JSON} array de bloques insertados | 404 si barbero_id está mal formado
+ * @returns {JSON} array de bloques insertados | 404 si el barbero no es del tenant o
+ *   barbero_id está mal formado
  */
 export const putHorarios = async (req, res) => {
   const { barbero_id } = req.params;
@@ -76,6 +81,12 @@ export const putHorarios = async (req, res) => {
   }
 
   try {
+    // barbero_horario tiene FK simple: sin este chequeo, un barbero de otro tenant
+    // pasaría el FK y dejaría una fila cruzada, y uno inexistente daría 500.
+    if (!(await barberoEnTenant(barbero_id, req.tenant_id))) {
+      return res.status(404).json({ error: 'Barbero no encontrado' });
+    }
+
     // Validar que cada bloque caiga dentro del horario de atención del tenant.
     // Una sola query del horario; validación pura por bloque.
     const horarioTenant = await obtenerHorarioCrudo(req.tenant_id);

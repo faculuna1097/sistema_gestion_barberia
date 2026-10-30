@@ -14,7 +14,7 @@ import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { TZ, RECORDATORIO_DIAS_ANTES } from '../utils/constantes.js';
 import { enviarRecordatorio, construirContextoMail } from './mail/mailer.js';
-import { construirLinkGestion } from './turnosService.js';
+import { construirLinkGestion, sqlTurnoEnriquecido } from './turnosService.js';
 
 /**
  * Lee la sub-config de recordatorio de un tenant aplicando el default opt-in:
@@ -64,23 +64,14 @@ export const obtenerTenantsActivos = async () => {
  */
 export const obtenerTurnosDelLote = async (tenantId, fechaObjetivo) => {
   const result = await query(
-    `SELECT t.inicio, t.fin, t.token_gestion,
-            b.nombre AS barbero_nombre, b.email AS barbero_email,
-            s.nombre AS servicio_nombre,
-            c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
-            tn.nombre_negocio AS tenant_nombre, tn.direccion AS tenant_direccion,
-            tn.subdominio AS tenant_subdominio,
-            t.id AS turno_id
-     FROM turno t
-     JOIN barbero  b  ON b.id  = t.barbero_id
-     JOIN servicio s  ON s.id  = t.servicio_id
-     JOIN cliente  c  ON c.id  = t.cliente_id
-     JOIN tenant   tn ON tn.id = t.tenant_id
-     WHERE t.tenant_id = $1
-       AND t.estado = 'reservado'
-       AND t.recordatorio_enviado_en IS NULL
-       AND DATE(t.inicio AT TIME ZONE $2) = $3::date
-     ORDER BY t.inicio ASC`,
+    sqlTurnoEnriquecido(
+      't.token_gestion, tn.subdominio AS tenant_subdominio, t.id AS turno_id',
+      `WHERE t.tenant_id = $1
+         AND t.estado = 'reservado'
+         AND t.recordatorio_enviado_en IS NULL
+         AND DATE(t.inicio AT TIME ZONE $2) = $3::date
+       ORDER BY t.inicio ASC`
+    ),
     [tenantId, TZ, fechaObjetivo]
   );
   return result.rows;
