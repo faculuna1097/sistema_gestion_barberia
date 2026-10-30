@@ -243,8 +243,8 @@ Cada tanda es un chat y un commit sobre `feature/descansos-agenda`. Las clase C 
 | 9 | Comisiones | E22, M06, P08, M11 | L | DB, contrato y visible (montos de Planillas y Balances) | 3, 4 |
 
 **Notas:**
-- **Orden fijo:** 1 → 2 → 3 → 4 → 4b, porque tocan los mismos controllers.
-  `gastos.js`). 5 va antes de 6 y 7, porque cambia los `api.js` de los fronts.
+- **Orden fijo:** 1 → 2 → 3 → 4 → 4b, porque tocan los mismos controllers. 5 va antes de 6 y 7,
+  porque cambia los `api.js` de los fronts.
 - **Paralelo posible:** 6 y 7 tocan fronts distintos, pero DS09 y DS20 los cruzan. Lo más
   simple es correrlas en serie.
 - **Decisiones B:** cerradas el 2026-10-30.
