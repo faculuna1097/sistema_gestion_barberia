@@ -305,12 +305,29 @@ function TablaResumen({ totales, totalGeneral, cantidadGastos }) {
 // ─── Modal de edición ─────────────────────────────────────────────────────────
 
 /**
+ * opcionesDeCategoria
+ * Opciones del select de categoría al editar un gasto: las activas, más la del
+ * gasto si no está entre ellas. Sin esa opción, un gasto con categoría inactiva
+ * mostraría la primera de la lista en lugar de la suya.
+ * @param {Array<{id: string, nombre: string}>} categorias - Categorías activas
+ * @param {Object|null} gasto - Gasto que se edita (trae categoria_id y categoria_nombre)
+ * @returns {Array<{value: string, label: string}>}
+ */
+function opcionesDeCategoria(categorias, gasto) {
+  const opciones = categorias.map((c) => ({ value: c.id, label: c.nombre }));
+  if (gasto?.categoria_id && !categorias.some((c) => c.id === gasto.categoria_id)) {
+    opciones.push({ value: gasto.categoria_id, label: gasto.categoria_nombre });
+  }
+  return opciones;
+}
+
+/**
  * ModalEditarGasto
  * Modal de edición de gasto. 4 campos editables: categoría, descripción,
  * monto, forma de pago. Sin preview (el monto editado es directo).
  */
 function ModalEditarGasto({ open, gasto, categorias, form, onChange, onGuardar, onCancelar, guardando, errorEditar }) {
-  const opcionesCategoria = categorias.map((c) => ({ value: c.id, label: c.nombre }));
+  const opcionesCategoria = opcionesDeCategoria(categorias, gasto);
 
   return (
     <Modal

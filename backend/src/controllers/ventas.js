@@ -2,6 +2,7 @@
 import { query } from '../config/db.js';
 import { esMontoValido, esCantidadValida } from '../utils/validarNumero.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
+import { esUUID } from '../utils/validarUuid.js';
 import { aplicarMutacionesStock } from '../utils/stock.js';
 import { TZ } from '../utils/constantes.js';
 
@@ -137,8 +138,8 @@ export const getVentasMensual = async (req, res) => {
 export const deleteVenta = async (req, res) => {
   const { id } = req.params;
 
-  if (!id) {
-    return res.status(400).json({ error: 'Falta el parámetro id' });
+  if (!esUUID(id)) {
+    return res.status(404).json({ error: 'Venta no encontrada' });
   }
 
   try {
@@ -188,6 +189,10 @@ export const deleteVenta = async (req, res) => {
 export const updateVenta = async (req, res) => {
   const { id } = req.params;
 
+  if (!esUUID(id)) {
+    return res.status(404).json({ error: 'Venta no encontrada' });
+  }
+
   const { producto_id, cantidad, precio_unitario, forma_pago } = req.body;
 
   if (!producto_id || !forma_pago) {
@@ -203,6 +208,9 @@ export const updateVenta = async (req, res) => {
   }
   if (!esFormaPagoValida(forma_pago)) {
     return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });
+  }
+  if (!esUUID(producto_id)) {
+    return res.status(404).json({ error: 'Producto no encontrado' });
   }
 
   try {

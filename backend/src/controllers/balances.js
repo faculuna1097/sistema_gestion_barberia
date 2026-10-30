@@ -4,6 +4,7 @@
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { TZ } from '../utils/constantes.js';
+import { esCantidadValida } from '../utils/validarNumero.js';
 import { TIPOS_MOVIMIENTO_EXTRA, resumirMovimientosExtra } from '../utils/movimientos.js';
 
 /**
@@ -320,7 +321,8 @@ export const getBalanceMensual = async (req, res) => {
  * Un mes aparece si tuvo al menos un corte, venta, gasto o movimiento extra.
  * `ingresos_brutos` incluye los otros ingresos; `balance_neto` y las variaciones
  * no incluyen aportes ni retiros (son capital, no resultado).
- * @param {number} req.query.cantidad - Cantidad de meses (default: 12, máx: 24)
+ * @param {number} [req.query.cantidad] - Cantidad de meses, entero >= 1 (default: 12).
+ *   Lo que pase de 24 se recorta a 24.
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @returns {JSON} [{ mes, label, ingresos_brutos, total_comisiones, ingresos_netos, egresos,
  *   balance_neto, otros_ingresos, aportes, retiros, variacion_vs_anterior,
@@ -329,10 +331,13 @@ export const getBalanceMensual = async (req, res) => {
  *   null si ese mes no tuvo movimientos (no está en la lista) o su balance es 0:
  *   `variacion_vs_anterior` compara `balance_neto` (con comisiones) y
  *   `variacion_vs_anterior_sin_comisiones` compara ingresos brutos − egresos, para el
- *   botón "Sin comisiones" del panel.
+ *   botón "Sin comisiones" del panel. 400 si `cantidad` viene y no es un entero >= 1.
  */
 export const getBalanceHistorico = async (req, res) => {
-  const cantidad = Math.min(parseInt(req.query.cantidad) || 12, 24);
+  if (req.query.cantidad !== undefined && !esCantidadValida(req.query.cantidad)) {
+    return res.status(400).json({ error: 'cantidad debe ser un entero mayor o igual a 1' });
+  }
+  const cantidad = Math.min(Number(req.query.cantidad ?? 12), 24);
 
   // Borde inferior de la ventana: día 1 a las 00:00 (hora argentina) del mes
   // más viejo, así entran exactamente `cantidad` meses. Antes restaba N meses a

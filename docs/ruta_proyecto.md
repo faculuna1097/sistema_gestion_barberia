@@ -144,6 +144,7 @@ backend/
     |   `-- probarRecordatorios.js
     |-- services/
     |   |-- barberosService.js
+    |   |-- categoriasService.js
     |   |-- cortesService.js
     |   |-- disponibilidadService.js
     |   |-- feriadosService.js
@@ -170,7 +171,8 @@ backend/
         |-- validarFecha.js
         |-- validarNumero.js
         |-- validarPago.js
-        `-- validarTexto.js
+        |-- validarTexto.js
+        `-- validarUuid.js
 ```
 
 ### Rutas HTTP del backend

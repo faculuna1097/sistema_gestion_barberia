@@ -26,6 +26,9 @@ import {
 } from "./wizard.jsx";
 import { wizardStyles } from "./wizardStyles.js";
 
+// Tiene que coincidir con MAX_DESCRIPCION_GASTO de backend/src/utils/constantes.js.
+const MAX_DESCRIPCION_GASTO = 200;
+
 /**
  * FlujoGasto
  * Wizard de 5 pasos para registrar un gasto. La lógica de negocio (envío,
@@ -143,6 +146,7 @@ export default function FlujoGasto({ onVolver, categorias, imagenLocal }) {
           onChange={setDescripcion}
           placeholder="Ej: Compra de shampoo y acondicionador..."
           autoFocus
+          maxLength={MAX_DESCRIPCION_GASTO}
         />
         <Button
           variant="primary"

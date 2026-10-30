@@ -13,16 +13,15 @@ import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { existeFeriado } from '../services/feriadosService.js';
 import { validarContacto } from '../utils/validarTexto.js';
-import { parsearInstante } from '../utils/validarFecha.js';
+import { esFechaISO, parsearInstante } from '../utils/validarFecha.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
-
-const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * GET /api/admin/turnos
- * Query params: fecha (YYYY-MM-DD) o desde+hasta (ISO). barbero_id opcional
- * (ignorado si rol=barbero).
- * @returns {JSON} array de turnos con datos de barbero, servicio y cliente
+ * Query params: fecha (YYYY-MM-DD) o desde+hasta (instantes con fecha y hora; sin
+ * zona se toman en hora argentina). barbero_id opcional (ignorado si rol=barbero).
+ * @returns {JSON} array de turnos con datos de barbero, servicio y cliente;
+ *   400 si fecha, desde o hasta son inválidos
  */
 export const getTurnos = async (req, res) => {
   try {
@@ -37,13 +36,18 @@ export const getTurnos = async (req, res) => {
 
     // Filtro por fecha o rango
     if (req.query.fecha) {
-      if (!REGEX_FECHA.test(req.query.fecha)) {
+      if (!esFechaISO(req.query.fecha)) {
         return res.status(400).json({ error: 'fecha debe tener formato YYYY-MM-DD' });
       }
       filtros.fecha = req.query.fecha;
     } else if (req.query.desde && req.query.hasta) {
-      filtros.desde = req.query.desde;
-      filtros.hasta = req.query.hasta;
+      const desde = parsearInstante(req.query.desde);
+      const hasta = parsearInstante(req.query.hasta);
+      if (!desde || !hasta) {
+        return res.status(400).json({ error: 'desde y hasta deben ser fecha y hora válidas (YYYY-MM-DDTHH:MM)' });
+      }
+      filtros.desde = desde.toISO();
+      filtros.hasta = hasta.toISO();
     }
 
     const turnos = await listarTurnos(filtros);

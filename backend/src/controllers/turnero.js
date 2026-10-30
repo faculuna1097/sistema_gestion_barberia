@@ -17,7 +17,7 @@ import { enviarCancelacion, enviarReprogramacion, construirContextoMail } from '
 import {
   calcularDuracionServicio, upsertCliente, insertarTurno, enriquecerTurno,
   armarLinkGestion, sincronizarCalendarCreacion, notificarConfirmacion,
-  inicioPosteriorAhora, MENSAJE_SLOT_OCUPADO,
+  inicioPosteriorAhora, inicioDentroDeVentana, MENSAJE_SLOT_OCUPADO, MENSAJE_FUERA_DE_VENTANA,
 } from '../services/turnosService.js';
 import { suspensionSolapaSql } from '../services/suspensionesService.js';
 import { barberoActivoEnTenant, listarBarberosActivos } from '../services/barberosService.js';
@@ -25,6 +25,7 @@ import { obtenerHorarioCrudo, validarTurnoEnHorario } from '../services/horarioA
 import { obtenerFeriados, existeFeriado } from '../services/feriadosService.js';
 import { TZ } from '../utils/constantes.js';
 import { esFechaISO, hoyISO, parsearInstante } from '../utils/validarFecha.js';
+import { esUUID } from '../utils/validarUuid.js';
 import { validarContacto, esTelefonoE164, esUrlHttps, normalizarOrigen } from '../utils/validarTexto.js';
 
 /**
@@ -156,7 +157,8 @@ export const getBarberos = async (req, res) => {
  * @param {string} req.query.servicio_id
  * @param {string} req.query.fecha          - 'YYYY-MM-DD'
  * @returns {JSON} { slots: [ISO,...] } con barbero_id;
- *   { slots: [ISO,...], asignaciones: { [ISO]: barbero_id } } sin barbero_id
+ *   { slots: [ISO,...], asignaciones: { [ISO]: barbero_id } } sin barbero_id;
+ *   400 si falta un parámetro o alguno es inválido
  */
 export const getDisponibilidad = async (req, res) => {
   const { barbero_id, servicio_id, fecha } = req.query;
@@ -166,6 +168,12 @@ export const getDisponibilidad = async (req, res) => {
   }
   if (!esFechaISO(fecha)) {
     return res.status(400).json({ error: 'fecha debe ser una fecha válida con formato YYYY-MM-DD' });
+  }
+  if (!esUUID(servicio_id)) {
+    return res.status(400).json({ error: 'servicio_id debe ser un UUID válido' });
+  }
+  if (barbero_id && !esUUID(barbero_id)) {
+    return res.status(400).json({ error: 'barbero_id debe ser un UUID válido' });
   }
 
   try {
@@ -211,7 +219,7 @@ export const getDisponibilidad = async (req, res) => {
  * @param {string} req.query.servicio_id
  * @param {string} req.query.desde         - 'YYYY-MM-DD' (inclusive)
  * @param {string} req.query.hasta         - 'YYYY-MM-DD' (inclusive)
- * @returns {JSON} { dias: ['YYYY-MM-DD', ...] }
+ * @returns {JSON} { dias: ['YYYY-MM-DD', ...] }; 400 si falta un parámetro o alguno es inválido
  */
 export const getDiasDisponibles = async (req, res) => {
   const { barbero_id, servicio_id, desde, hasta } = req.query;
@@ -221,6 +229,12 @@ export const getDiasDisponibles = async (req, res) => {
   }
   if (!esFechaISO(desde) || !esFechaISO(hasta)) {
     return res.status(400).json({ error: 'desde y hasta deben ser fechas válidas con formato YYYY-MM-DD' });
+  }
+  if (!esUUID(servicio_id)) {
+    return res.status(400).json({ error: 'servicio_id debe ser un UUID válido' });
+  }
+  if (barbero_id && !esUUID(barbero_id)) {
+    return res.status(400).json({ error: 'barbero_id debe ser un UUID válido' });
   }
 
   try {
@@ -270,7 +284,8 @@ export const getDiasDisponibles = async (req, res) => {
  * @param {string} [req.body.origen]  - por qué link llegó el cliente (ej. 'instagram'),
  *   se guarda en turno.origen_link. Opcional: si no cumple el formato
  *   (normalizarOrigen), se guarda null y la reserva sigue
- * @returns {JSON} 201 { turno_id, token_gestion }
+ * @returns {JSON} 201 { turno_id, token_gestion }; 400 si `inicio` no es futuro o
+ *   queda fuera de los próximos DIAS_RESERVABLES días
  */
 export const crearTurno = async (req, res) => {
   const { servicio_id, barbero_id, inicio } = req.body;
@@ -299,6 +314,9 @@ export const crearTurno = async (req, res) => {
   }
   if (!inicioPosteriorAhora(inicioDT)) {
     return res.status(400).json({ error: 'inicio debe ser futuro' });
+  }
+  if (!inicioDentroDeVentana(inicioDT)) {
+    return res.status(400).json({ error: MENSAJE_FUERA_DE_VENTANA });
   }
 
   try {
@@ -505,7 +523,8 @@ export const cancelarTurno = async (req, res) => {
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @param {string} req.params.token
  * @param {string} req.body.inicio   - ISO con offset
- * @returns {JSON} { ok: true, turno: { id, inicio, fin } }
+ * @returns {JSON} { ok: true, turno: { id, inicio, fin } }; 400 si `inicio` no es
+ *   futuro o queda fuera de los próximos DIAS_RESERVABLES días
  */
 export const reprogramarTurno = async (req, res) => {
   const { inicio } = req.body;
@@ -520,6 +539,9 @@ export const reprogramarTurno = async (req, res) => {
   }
   if (!inicioPosteriorAhora(inicioDT)) {
     return res.status(400).json({ error: 'inicio debe ser futuro' });
+  }
+  if (!inicioDentroDeVentana(inicioDT)) {
+    return res.status(400).json({ error: MENSAJE_FUERA_DE_VENTANA });
   }
 
   try {

@@ -5,6 +5,7 @@ import { TZ } from '../utils/constantes.js';
 import { esMontoPositivo } from '../utils/validarNumero.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
 import { esFechaISO, esFechaFutura, hoyISO } from '../utils/validarFecha.js';
+import { esUUID } from '../utils/validarUuid.js';
 import {
   TIPOS_MOVIMIENTO_EXTRA,
   MAX_DESCRIPCION_MOVIMIENTO,
@@ -12,6 +13,14 @@ import {
   sentidoDeMovimiento,
 } from '../utils/movimientos.js';
 import { socioActivoEnTenant } from '../services/sociosService.js';
+
+// Mensaje del 404 de los tipos base; los de movimiento_extra comparten uno solo.
+const NO_ENCONTRADO_POR_TIPO = {
+  corte: 'Corte no encontrado',
+  venta: 'Venta no encontrada',
+  gasto: 'Gasto no encontrado',
+};
+const MOVIMIENTO_NO_ENCONTRADO = 'Movimiento no encontrado';
 
 /**
  * getMovimientosDia
@@ -158,7 +167,7 @@ export const getMovimientosDia = async (req, res) => {
  *   400 si falla una validación; 404 si el socio no existe, es de otro tenant o está inactivo.
  */
 export const crearMovimientoExtra = async (req, res) => {
-  const { tipo, monto, forma_pago, socio_id, descripcion, fecha } = req.body || {};
+  const { tipo, monto, forma_pago, socio_id, descripcion, fecha } = req.body;
 
   if (!esTipoMovimientoExtra(tipo)) {
     return res.status(400).json({ error: "tipo debe ser 'aporte_capital', 'retiro_socio' u 'otro_ingreso'" });
@@ -249,10 +258,20 @@ export const crearMovimientoExtra = async (req, res) => {
  * @param {string} req.params.tipo - 'corte' | 'venta' | 'gasto' | 'aporte_capital' | 'retiro_socio' | 'otro_ingreso'
  * @param {string} req.params.id   - UUID del registro
  * @param {string} req.tenant_id   - Inyectado por tenantMiddleware
- * @returns {JSON} { ok: true } — 404 si el registro no existe en el tenant; 400 si el tipo es inválido
+ * @returns {JSON} { ok: true } — 404 si el registro no existe en el tenant o el id
+ *   está mal formado; 400 si el tipo es inválido
  */
 export const eliminarMovimiento = async (req, res) => {
   const { tipo, id } = req.params;
+
+  const esTipoBase = Object.hasOwn(NO_ENCONTRADO_POR_TIPO, tipo);
+  if (!esTipoBase && !esTipoMovimientoExtra(tipo)) {
+    return res.status(400).json({ error: 'Tipo inválido' });
+  }
+  // Un id mal formado no puede ser ningún registro.
+  if (!esUUID(id)) {
+    return res.status(404).json({ error: esTipoBase ? NO_ENCONTRADO_POR_TIPO[tipo] : MOVIMIENTO_NO_ENCONTRADO });
+  }
 
   try {
     if (tipo === 'corte') {
@@ -263,7 +282,7 @@ export const eliminarMovimiento = async (req, res) => {
         [id, req.tenant_id]
       );
       if (corteResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Corte no encontrado' });
+        return res.status(404).json({ error: NO_ENCONTRADO_POR_TIPO.corte });
       }
       const { turno_id } = corteResult.rows[0];
 
@@ -316,7 +335,7 @@ export const eliminarMovimiento = async (req, res) => {
         [id, req.tenant_id]
       );
       if (ventaResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Venta no encontrada' });
+        return res.status(404).json({ error: NO_ENCONTRADO_POR_TIPO.venta });
       }
       const { producto_id, cantidad } = ventaResult.rows[0];
 
@@ -337,7 +356,7 @@ export const eliminarMovimiento = async (req, res) => {
       if (ventaDelRes.rowCount === 0) {
         await revertirStock();
         console.warn('[caja] eliminarMovimiento — venta ya no existía al borrar (carrera) | id:', id);
-        return res.status(404).json({ error: 'Venta no encontrada' });
+        return res.status(404).json({ error: NO_ENCONTRADO_POR_TIPO.venta });
       }
       console.log('[caja] eliminarMovimiento — venta eliminada | id:', id);
 
@@ -346,23 +365,21 @@ export const eliminarMovimiento = async (req, res) => {
       // Contrato consistente con las ramas corte/venta: 404 si no borró nada
       // (id inexistente o de otro tenant) en vez de un 200 engañoso.
       if (gastoDelRes.rowCount === 0) {
-        return res.status(404).json({ error: 'Gasto no encontrado' });
+        return res.status(404).json({ error: NO_ENCONTRADO_POR_TIPO.gasto });
       }
       console.log('[caja] eliminarMovimiento — gasto eliminado | id:', id);
 
-    } else if (esTipoMovimientoExtra(tipo)) {
-      // El filtro por tipo evita borrar, por ejemplo, un retiro desde la URL de un aporte.
+    } else {
+      // Movimiento extra: el tipo ya se validó al entrar. El filtro por tipo evita
+      // borrar, por ejemplo, un retiro desde la URL de un aporte.
       const extraDelRes = await query(
         'DELETE FROM movimiento_extra WHERE id = $1 AND tenant_id = $2 AND tipo = $3',
         [id, req.tenant_id, tipo]
       );
       if (extraDelRes.rowCount === 0) {
-        return res.status(404).json({ error: 'Movimiento no encontrado' });
+        return res.status(404).json({ error: MOVIMIENTO_NO_ENCONTRADO });
       }
       console.log('[caja] eliminarMovimiento — movimiento extra eliminado | id:', id, '| tipo:', tipo);
-
-    } else {
-      return res.status(400).json({ error: 'Tipo inválido' });
     }
 
     res.json({ ok: true });

@@ -5,6 +5,7 @@
 
 import { DateTime } from 'luxon';
 import { TZ } from '../utils/constantes.js';
+import { esFechaISO } from '../utils/validarFecha.js';
 import {
   obtenerFeriados,
   existeFeriado,
@@ -14,9 +15,6 @@ import {
   eliminarFeriado,
 } from '../services/feriadosService.js';
 import { armarLinkTurnero } from '../services/turnosService.js';
-
-// Formato esperado de una fecha de feriado: 'YYYY-MM-DD'.
-const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * GET /api/admin/feriados
@@ -29,7 +27,7 @@ const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 export const getFeriados = async (req, res) => {
   const hoy = DateTime.now().setZone(TZ).toISODate();
   const desde = req.query.desde || hoy;
-  if (!REGEX_FECHA.test(desde)) {
+  if (!esFechaISO(desde)) {
     return res.status(400).json({ error: 'El parámetro "desde" debe tener formato YYYY-MM-DD' });
   }
 
@@ -58,7 +56,7 @@ export const postFeriado = async (req, res) => {
   const { fecha, descripcion, confirmar_cascada } = req.body;
 
   // --- Validación del shape ---
-  if (!fecha || !REGEX_FECHA.test(fecha)) {
+  if (!esFechaISO(fecha)) {
     return res.status(400).json({ error: 'fecha es requerida y debe tener formato YYYY-MM-DD' });
   }
   const hoy = DateTime.now().setZone(TZ).toISODate();

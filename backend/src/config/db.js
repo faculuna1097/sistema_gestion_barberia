@@ -142,7 +142,8 @@ export const query = async (text, params, opciones = {}) => {
  * Cierra el pool drenando las conexiones abiertas. Lo usa el job del cron de
  * recordatorios para terminar limpio: el pool mantiene vivo el event loop, así
  * que sin cerrarlo el proceso no termina solo. No exponemos el pool crudo para
- * no habilitar pool.connect() (restricción del Session Pooler, plan §9).
+ * no habilitar pool.connect() (restricción del Session Pooler, ver
+ * docs/decisiones_mail_recordatorio.md).
  * @returns {Promise} resuelve cuando todas las conexiones quedaron cerradas
  */
 export const cerrarPool = () => pool.end();

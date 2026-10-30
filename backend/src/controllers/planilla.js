@@ -3,8 +3,7 @@
 // Thin wrapper. Cobertura: decisiones_turnero.md.
 
 import { detalleSemanal, resumenSemanal, descansosSemanal } from '../services/planillaService.js';
-
-const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+import { esFechaISO } from '../utils/validarFecha.js';
 
 /**
  * GET /api/admin/planilla?semana=YYYY-MM-DD&barbero_id=X
@@ -13,7 +12,7 @@ const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
  */
 export const getPlanilla = async (req, res) => {
   const { semana } = req.query;
-  if (!semana || !REGEX_FECHA.test(semana)) {
+  if (!esFechaISO(semana)) {
     return res.status(400).json({ error: 'semana debe tener formato YYYY-MM-DD' });
   }
 
@@ -40,7 +39,7 @@ export const getPlanilla = async (req, res) => {
  */
 export const getResumen = async (req, res) => {
   const { semana } = req.query;
-  if (!semana || !REGEX_FECHA.test(semana)) {
+  if (!esFechaISO(semana)) {
     return res.status(400).json({ error: 'semana debe tener formato YYYY-MM-DD' });
   }
 
@@ -69,7 +68,7 @@ export const getResumen = async (req, res) => {
  */
 export const getDescansosSemana = async (req, res) => {
   const { semana } = req.query;
-  if (!semana || !REGEX_FECHA.test(semana)) {
+  if (!esFechaISO(semana)) {
     return res.status(400).json({ error: 'semana debe tener formato YYYY-MM-DD' });
   }
 

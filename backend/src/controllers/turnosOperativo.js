@@ -6,8 +6,7 @@
 // Cobertura: decisiones_turnero.md.
 
 import { listarTurnosOperativos } from '../services/turnosService.js';
-
-const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+import { esFechaISO } from '../utils/validarFecha.js';
 
 /**
  * getTurnosOperativos
@@ -23,7 +22,7 @@ export const getTurnosOperativos = async (req, res) => {
   if (!barbero_id || !fecha) {
     return res.status(400).json({ error: 'barbero_id y fecha son requeridos' });
   }
-  if (!REGEX_FECHA.test(fecha)) {
+  if (!esFechaISO(fecha)) {
     return res.status(400).json({ error: 'fecha debe tener formato YYYY-MM-DD' });
   }
 

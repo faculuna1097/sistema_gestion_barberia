@@ -1,6 +1,7 @@
 // Entrypoint del cron diario de recordatorios de turno (la "noche anterior").
-// Cáscara fina (plan §5): NO reescribe lógica, sólo invoca procesarRecordatorios
-// en envío real, loguea el resumen del lote y termina el proceso limpio.
+// Cáscara fina (ver docs/decisiones_mail_recordatorio.md): NO reescribe lógica, sólo
+// invoca procesarRecordatorios en envío real, loguea el resumen del lote y termina
+// el proceso limpio.
 //
 // Por qué hay que terminar a mano: el pool de pg mantiene vivo el event loop, así
 // que el proceso no se cierra solo. El finally drena el pool (cerrarPool) y hace

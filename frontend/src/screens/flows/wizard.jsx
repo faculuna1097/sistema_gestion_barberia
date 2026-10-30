@@ -165,9 +165,10 @@ export function BotonOpcion({ activo = false, onClick, variante = "normal", dash
  * @param {string} [props.placeholder]
  * @param {number} [props.rows=5]
  * @param {boolean} [props.autoFocus=false]
+ * @param {number} [props.maxLength] — tope de caracteres; sin él, no hay tope
  * @returns {JSX.Element}
  */
-export function CampoTexto({ value, onChange, placeholder, rows = 5, autoFocus = false }) {
+export function CampoTexto({ value, onChange, placeholder, rows = 5, autoFocus = false, maxLength }) {
   const [focus, setFocus] = useState(false);
   return (
     <textarea
@@ -176,6 +177,7 @@ export function CampoTexto({ value, onChange, placeholder, rows = 5, autoFocus =
       placeholder={placeholder}
       rows={rows}
       autoFocus={autoFocus}
+      maxLength={maxLength}
       onFocus={() => setFocus(true)}
       onBlur={() => setFocus(false)}
       style={{

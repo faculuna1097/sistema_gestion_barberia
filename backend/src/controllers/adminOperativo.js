@@ -129,7 +129,10 @@ export async function actualizarCredencialesOperativas(req, res) {
     valores.push(tenant_id);
     const sql = `UPDATE tenant SET ${setClauses.join(', ')} WHERE id = $${indice}`;
 
-    await query(sql, valores);
+    const resultado = await query(sql, valores);
+    if (resultado.rowCount === 0) {
+      return res.status(404).json({ error: 'Tenant no encontrado' });
+    }
 
     // Si se rotó la password, el UPDATE bumpeó operativo_token_version: el caché
     // del tenantMiddleware (que guarda la versión por subdominio) quedó stale.

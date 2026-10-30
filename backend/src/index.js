@@ -70,7 +70,7 @@ app.set('trust proxy', 1);
 // --- Middlewares globales ---
 // helmet setea los headers de seguridad estándar (X-Content-Type-Options,
 // X-Frame-Options, HSTS, Referrer-Policy, etc.) en toda respuesta. Va primero
-// en la cadena para cubrir también los errores tempranos (CORS, 404). Los
+// en la cadena para cubrir también las respuestas tempranas (429, 404). Los
 // defaults alcanzan: la API sirve solo JSON sobre HTTPS, no necesita CSP custom.
 app.use(helmet());
 // Express agrega "X-Powered-By: Express" por defecto — disclosure innecesaria
@@ -89,7 +89,9 @@ app.use(cors({
     if (esDesarrollo && /^http:\/\/(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin)) {
       return callback(null, true);
     }
-    callback(new Error(`CORS bloqueado para origin: ${origin}`));
+    // Origin no permitido: sin error (daría 500 y un stack en el log por cada
+    // pedido) y sin headers CORS, así el navegador bloquea la respuesta.
+    callback(null, false);
   },
   credentials: true,
 }));
@@ -100,6 +102,12 @@ app.use(cors({
 // Los límites finos de login y reserva se montan en sus rutas, más abajo.
 app.use(limiterGlobal);
 app.use(express.json());
+// En Express 5 req.body queda undefined si no llega body: desestructurarlo tiraría
+// TypeError (500). Con el objeto vacío, cada controller responde su propio 400.
+app.use((req, res, next) => {
+  req.body ??= {};
+  next();
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ENDPOINT DE PLATAFORMA — operación manual, FUERA de la cadena tenant/JWT.
@@ -118,7 +126,7 @@ app.use(express.json());
 // que no aparece en el log de acceso HTTP: por eso loguea su propio evento.
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/plataforma/cache/invalidate', verificarClavePlataforma, (req, res) => {
-  const { subdominio } = req.body || {};
+  const { subdominio } = req.body;
   if (!subdominio || typeof subdominio !== 'string') {
     return res.status(400).json({ error: 'subdominio es requerido' });
   }

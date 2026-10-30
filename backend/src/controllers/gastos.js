@@ -2,22 +2,28 @@
 import { query } from '../config/db.js';
 import { esMontoValido } from '../utils/validarNumero.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
-import { TZ } from '../utils/constantes.js';
+import { esUUID } from '../utils/validarUuid.js';
+import { TZ, MAX_DESCRIPCION_GASTO } from '../utils/constantes.js';
+import { categoriaEnTenant } from '../services/categoriasService.js';
 
 /**
  * POST /api/gastos
  * Registra un gasto. Roles: operativo (iPad) o admin (panel).
- * @param {string} req.body.categoria_id - UUID de la categoría de gasto
- * @param {string} req.body.descripcion
+ * @param {string} req.body.categoria_id - UUID de una categoría de gasto del tenant
+ * @param {string} req.body.descripcion - Hasta MAX_DESCRIPCION_GASTO caracteres
  * @param {number} req.body.monto - Monto, >= 0
  * @param {string} req.body.forma_pago - 'efectivo' o 'mercado_pago'
- * @returns {JSON} 201 con la fila creada; 400 si falta un campo o no es válido
+ * @returns {JSON} 201 con la fila creada; 400 si falta un campo o no es válido;
+ *   404 si la categoría no es del tenant
  */
 export const createGasto = async (req, res) => {
   const { categoria_id, descripcion, monto, forma_pago } = req.body;
 
   if (!categoria_id || !descripcion || !forma_pago) {
     return res.status(400).json({ error: 'Faltan campos requeridos: categoria_id, descripcion, monto, forma_pago' });
+  }
+  if (typeof descripcion !== 'string' || descripcion.length > MAX_DESCRIPCION_GASTO) {
+    return res.status(400).json({ error: `descripcion debe ser un texto de hasta ${MAX_DESCRIPCION_GASTO} caracteres` });
   }
   if (!esMontoValido(monto)) {
     return res.status(400).json({ error: 'monto es requerido y debe ser un número >= 0' });
@@ -27,6 +33,13 @@ export const createGasto = async (req, res) => {
   }
 
   try {
+    // Única validación que consulta la base: va después de las que solo miran el
+    // body. El FK de gasto.categoria_id es simple, así que sin esto se podría
+    // guardar una categoría de otro tenant.
+    if (!(await categoriaEnTenant(categoria_id, req.tenant_id))) {
+      return res.status(404).json({ error: 'Categoría no encontrada' });
+    }
+
     const resultado = await query(
       `INSERT INTO gasto (tenant_id, categoria_id, descripcion, monto, forma_pago)
        VALUES ($1, $2, $3, $4, $5)
@@ -109,13 +122,14 @@ export const getGastosMensual = async (req, res) => {
  * DELETE /api/gastos/:id
  * Borra un gasto del tenant. Rol: admin.
  * @param {string} req.params.id - UUID del gasto
- * @returns {JSON} { eliminado: true, id }; 404 si el gasto no existe en el tenant
+ * @returns {JSON} { eliminado: true, id }; 404 si el gasto no existe en el tenant o
+ *   el id está mal formado
  */
 export const deleteGasto = async (req, res) => {
   const { id } = req.params;
 
-  if (!id) {
-    return res.status(400).json({ error: 'Falta el parámetro id' });
+  if (!esUUID(id)) {
+    return res.status(404).json({ error: 'Gasto no encontrado' });
   }
 
   try {
@@ -142,15 +156,21 @@ export const deleteGasto = async (req, res) => {
  * PUT /api/gastos/:id
  * Edita la categoría, la descripción, el monto y la forma de pago de un gasto. Rol: admin.
  * @param {string} req.params.id - UUID del gasto
- * @param {string} req.body.categoria_id - UUID de la categoría de gasto
- * @param {string} req.body.descripcion
+ * @param {string} req.body.categoria_id - UUID de una categoría de gasto del tenant
+ *   (puede estar inactiva: un gasto viejo se tiene que poder editar)
+ * @param {string} req.body.descripcion - Hasta MAX_DESCRIPCION_GASTO caracteres
  * @param {number} req.body.monto - Monto, >= 0
  * @param {string} req.body.forma_pago - 'efectivo' o 'mercado_pago'
  * @returns {JSON} { id, categoria_id, descripcion, monto, forma_pago }; 400 si falta un
- *   campo o no es válido; 404 si el gasto no existe en el tenant
+ *   campo o no es válido; 404 si el gasto no existe en el tenant, el id está mal
+ *   formado o la categoría no es del tenant
  */
 export const updateGasto = async (req, res) => {
   const { id } = req.params;
+
+  if (!esUUID(id)) {
+    return res.status(404).json({ error: 'Gasto no encontrado' });
+  }
 
   const { categoria_id, descripcion, monto, forma_pago } = req.body;
 
@@ -158,6 +178,9 @@ export const updateGasto = async (req, res) => {
     return res.status(400).json({
       error: 'Faltan campos requeridos: categoria_id, descripcion, monto, forma_pago'
     });
+  }
+  if (typeof descripcion !== 'string' || descripcion.length > MAX_DESCRIPCION_GASTO) {
+    return res.status(400).json({ error: `descripcion debe ser un texto de hasta ${MAX_DESCRIPCION_GASTO} caracteres` });
   }
   if (!esMontoValido(monto)) {
     return res.status(400).json({ error: 'monto es requerido y debe ser un número >= 0' });
@@ -167,6 +190,10 @@ export const updateGasto = async (req, res) => {
   }
 
   try {
+    if (!(await categoriaEnTenant(categoria_id, req.tenant_id))) {
+      return res.status(404).json({ error: 'Categoría no encontrada' });
+    }
+
     const resultado = await query(
       `UPDATE gasto
        SET categoria_id = $1, descripcion = $2, monto = $3, forma_pago = $4

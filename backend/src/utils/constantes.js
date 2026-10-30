@@ -19,6 +19,16 @@ export const ANTELACION_MINIMA_MINUTOS = 5;
 // 62 (dos meses) deja margen para un calendario mensual sin habilitar abusos.
 export const DIAS_MAXIMOS_RANGO_DISPONIBILIDAD = 62;
 
+// Cuántos días hacia adelante se puede reservar o reprogramar desde el turnero
+// público, contando hoy como el día 1 (el último es hoy + 14). Tiene que coincidir
+// con DIAS_RESERVABLES de frontend-turnero/src/utils/fecha.js. No aplica a
+// POST /api/admin/turnos: el admin y el barbero pueden cargar más adelante.
+export const DIAS_RESERVABLES = 15;
+
+// Largo máximo de la descripción de un gasto. El iPad corta en el mismo número
+// (frontend/src/screens/flows/FlujoGasto.jsx).
+export const MAX_DESCRIPCION_GASTO = 200;
+
 // Valores de barbero_suspension.tipo (mismo CHECK que la DB). Un descanso es una
 // suspensión corta que el barbero marca sobre slots libres (decisiones_descansos.md).
 export const TIPOS_SUSPENSION = ['suspension', 'descanso'];

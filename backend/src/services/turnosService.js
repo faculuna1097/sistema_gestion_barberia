@@ -9,7 +9,7 @@ import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { crearEvento, cancelarEvento } from './googleCalendar.js';
 import { enviarConfirmacion, enviarCancelacion, construirContextoMail } from './mail/mailer.js';
-import { TZ, ANTELACION_MINIMA_MINUTOS } from '../utils/constantes.js';
+import { TZ, ANTELACION_MINIMA_MINUTOS, DIAS_RESERVABLES } from '../utils/constantes.js';
 import { registrarCorte } from './cortesService.js';
 import { suspensionSolapaSql } from './suspensionesService.js';
 
@@ -254,6 +254,23 @@ export const notificarConfirmacion = async (enriquecido, linkGestion) => {
 export const inicioPosteriorAhora = (inicioDT) => {
   const umbral = DateTime.now().setZone(TZ).plus({ minutes: ANTELACION_MINIMA_MINUTOS });
   return inicioDT > umbral;
+};
+
+// Mensaje del 400 de un turno público fuera de la ventana de reserva.
+export const MENSAJE_FUERA_DE_VENTANA =
+  `Solo se puede reservar dentro de los próximos ${DIAS_RESERVABLES} días`;
+
+/**
+ * Verifica que el día de un inicio, en hora argentina, caiga dentro de la ventana
+ * de reserva del turnero público. Hoy cuenta como el día 1: el último es
+ * hoy + DIAS_RESERVABLES - 1. Con el formato 'YYYY-MM-DD', comparar los strings
+ * equivale a comparar las fechas.
+ * @param {DateTime} inicioDT - Instante en TZ (lo que devuelve parsearInstante)
+ * @returns {boolean}
+ */
+export const inicioDentroDeVentana = (inicioDT) => {
+  const ultimoDia = DateTime.now().setZone(TZ).plus({ days: DIAS_RESERVABLES - 1 }).toISODate();
+  return inicioDT.toISODate() <= ultimoDia;
 };
 
 // ─── Operaciones del backoffice ──────────────────────────────────────────────
