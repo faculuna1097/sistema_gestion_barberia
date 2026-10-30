@@ -91,7 +91,7 @@ export const postFeriado = async (req, res) => {
     let cascada = { turnos_cancelados: 0 };
     if (hayImpacto) {
       const linkTurnero = armarLinkTurnero(req);
-      cascada = await ejecutarCascadaFeriado(delta.turnosACancelar, linkTurnero, descripcionNorm);
+      cascada = await ejecutarCascadaFeriado(req.tenant_id, delta.turnosACancelar, linkTurnero, descripcionNorm);
     }
     const feriado = await insertarFeriado(req.tenant_id, fecha, descripcionNorm);
 

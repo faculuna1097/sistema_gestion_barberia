@@ -8,7 +8,7 @@ import { query } from '../config/db.js';
 import bcrypt from 'bcrypt';
 import { pinColisiona } from '../utils/pin.js';
 import { esUUID } from '../utils/validarUuid.js';
-import { esMontoValido, esEnteroNoNegativo } from '../utils/validarNumero.js';
+import { esMontoValido, esEnteroNoNegativo, ENTERO_MAXIMO } from '../utils/validarNumero.js';
 import { invalidar } from '../middlewares/tenantMiddleware.js';
 
 const SALT_ROUNDS = 10;
@@ -351,7 +351,9 @@ export const crearProducto = async (req, res) => {
  * Edita nombre, precio, stock_minimo y/o activo, y opcionalmente suma unidades
  * al stock con `agregar_stock` (delta aditivo). Datos y delta de stock se aplican
  * en una sola sentencia UPDATE (atómica por definición — convención §6: sin
- * BEGIN/COMMIT). stock_actual nunca se setea directo, solo se incrementa.
+ * BEGIN/COMMIT). stock_actual nunca se setea directo, solo se incrementa. Si la suma
+ * se pasa de ENTERO_MAXIMO, no se aplica nada: el tope va en el WHERE, porque depende
+ * del stock que haya en ese momento.
  * @param {string}  req.params.id          - UUID del producto
  * @param {string}  req.tenant_id          - Inyectado por verificarToken
  * @param {string}  req.body.nombre        - Nombre del producto
@@ -359,7 +361,8 @@ export const crearProducto = async (req, res) => {
  * @param {number}  req.body.stock_minimo  - Stock mínimo para alertas (default 0, entero >= 0)
  * @param {boolean} req.body.activo        - Estado activo/inactivo
  * @param {number}  req.body.agregar_stock - Unidades a sumar al stock actual (default 0, entero >= 0)
- * @returns {JSON} Producto actualizado; 400 si falta un campo o el precio o el stock no son válidos
+ * @returns {JSON} Producto actualizado; 400 si falta un campo, el precio o el stock no
+ *   son válidos o el stock resultante se pasa del máximo; 404 si el producto no existe
  */
 export const editarProducto = async (req, res) => {
   const { id } = req.params;
@@ -387,15 +390,26 @@ export const editarProducto = async (req, res) => {
        SET nombre = $1, precio = $2, stock_minimo = $3, activo = $4,
            stock_actual = stock_actual + $5
        WHERE id = $6 AND tenant_id = $7
+         AND COALESCE(stock_actual, 0)::bigint + $5 <= $8
        RETURNING id, nombre, precio, stock_actual, stock_minimo, activo`,
-      [nombre.trim(), Number(precio), Number(stock_minimo ?? 0), activo, delta, id, req.tenant_id],
+      [nombre.trim(), Number(precio), Number(stock_minimo ?? 0), activo, delta, id, req.tenant_id, ENTERO_MAXIMO],
       // Escritura relativa de stock (stock_actual + agregar_stock): no idempotente,
       // no reintentar (auditoría 4.2) — un retry doble-sumaría el restock. Es un
       // único UPDATE, sin compensación multi-paso (6.2 no aplica).
       { reintentar: false }
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Producto no encontrado' });
+      // Sin filas: o el producto no existe, o la suma se pasaba del tope. Una lectura
+      // solo decide qué error devolver.
+      const existe = await query(
+        `SELECT 1 FROM producto WHERE id = $1 AND tenant_id = $2`,
+        [id, req.tenant_id]
+      );
+      if (existe.rows.length === 0) {
+        return res.status(404).json({ error: 'Producto no encontrado' });
+      }
+      console.warn('[gestion] editarProducto — el stock resultante supera el máximo | producto_id:', id);
+      return res.status(400).json({ error: 'El stock resultante supera el máximo permitido' });
     }
     console.log('[gestion] editarProducto completado | producto_id:', result.rows[0].id);
     res.json(result.rows[0]);

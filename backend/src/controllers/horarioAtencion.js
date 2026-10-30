@@ -10,6 +10,7 @@ import {
   reemplazarHorario,
 } from '../services/horarioAtencionService.js';
 import { armarLinkTurnero } from '../services/turnosService.js';
+import { esHoraValida } from '../utils/validarFecha.js';
 
 /**
  * GET /api/admin/horario-atencion
@@ -54,7 +55,7 @@ export const putHorarioAtencion = async (req, res) => {
   const horariosNorm = [];
   for (let i = 0; i < horarios.length; i++) {
     const h = horarios[i];
-    if (h.dia_semana === undefined || h.dia_semana === null || !h.hora_inicio || !h.hora_fin) {
+    if (h?.dia_semana === undefined || h.dia_semana === null || !h.hora_inicio || !h.hora_fin) {
       return res.status(400).json({ error: `Día ${i}: dia_semana, hora_inicio y hora_fin son requeridos` });
     }
     if (!Number.isInteger(h.dia_semana) || h.dia_semana < 0 || h.dia_semana > 6) {
@@ -64,6 +65,9 @@ export const putHorarioAtencion = async (req, res) => {
       return res.status(400).json({ error: `dia_semana ${h.dia_semana} aparece más de una vez` });
     }
     diasVistos.add(h.dia_semana);
+    if (!esHoraValida(h.hora_inicio) || !esHoraValida(h.hora_fin)) {
+      return res.status(400).json({ error: `Día ${h.dia_semana}: hora_inicio y hora_fin deben ser horas válidas con formato HH:MM` });
+    }
 
     // Normalizamos a 'HH:MM' para comparar de forma consistente.
     const horaInicio = h.hora_inicio.slice(0, 5);

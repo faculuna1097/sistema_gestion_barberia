@@ -17,6 +17,10 @@ import { TZ } from '../utils/constantes.js';
 // registrarCorte y el controller, que responde lo mismo ante un turno_id mal formado.
 export const MENSAJE_TURNO_INEXISTENTE = 'El turno no existe o es de otro barbero';
 
+// Mensaje del 400 de un corte cuyo total no entra en corte.monto_total. Lo comparten
+// los dos controllers que llaman a registrarCorte.
+export const MENSAJE_TOTAL_EXCEDIDO = 'precio más propina no puede superar 99.999.999,99';
+
 /**
  * Arma un error tipado de registrarCorte que cada controller mapea a HTTP.
  * @param {string} code - código del error (ver @throws de registrarCorte)

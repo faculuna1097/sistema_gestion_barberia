@@ -80,6 +80,17 @@ Qué se responde depende de dónde viene el id:
 - Los helpers `barberoActivoEnTenant`, `socioActivoEnTenant` y `calcularDuracionServicio` ya validan el formato: un id mal formado devuelve "no encontrado" y el caller responde 404.
 - Un status dice la categoría del error, y el mensaje dice el detalle. No se inventan status ni se reusa uno con otro significado (405 es "método no permitido").
 
+### Montos y cantidades que llegan del cliente
+
+Se validan con `backend/src/utils/validarNumero.js` antes de tocar la DB. Sin tope, Postgres responde con el error `22003` y el usuario ve un 500.
+
+- `esMontoValido`: columnas `numeric(10,2)`, de 0 a `MONTO_MAXIMO` (99.999.999,99). Se compara el valor tal como llega: Postgres redondea antes de chequear, y 99999999.995 pasaría a 100000000.00.
+- `esCantidadValida` y `esEnteroNoNegativo`: columnas `integer`, hasta `ENTERO_MAXIMO` (2.147.483.647).
+- `esMontoPositivo` no tiene tope, porque `movimiento_extra.monto` es `numeric` sin precisión. `esEnteroPositivo` tampoco: es para un valor que no va a una columna.
+- **Sumas:** que cada valor entre en su columna no alcanza.
+  - Si la suma se puede calcular antes de tocar la DB, se valida en el controller. Ej.: `sumaMontosValida(precio, propina ?? 0)` para `corte.monto_total`.
+  - Si depende de lo que hay en la DB, el tope va en el `WHERE` del `UPDATE`, y una lectura posterior solo decide qué error devolver. Ej.: `stock_actual + agregar_stock` en `editarProducto`.
+
 ---
 
 ## 3. Asincronía
@@ -125,6 +136,11 @@ new Date(fecha).toISOString().slice(0, 10)
 Las fechas de calendario (`'YYYY-MM-DD'`) que llegan por query o body se validan con
 `esFechaISO` de `utils/validarFecha.js` (formato + fecha real: `2026-02-31` es inválida), y "hoy"
 en hora argentina sale de `hoyISO()`. No redeclarar un regex de fecha en cada controller.
+
+Las **horas del día** (columnas `time`) se validan con `esHoraValida` del mismo archivo: `'HH:MM'`
+o `'HH:MM:SS'`, hasta 23:59:59 (`24:00` no se acepta, aunque Postgres sí). Para compararlas como
+strings, primero se recortan a `'HH:MM'`: `'09:00'` y `'09:00:00'` son la misma hora, pero no el
+mismo string.
 
 Los **instantes** (fecha y hora, columnas `timestamptz`) que llegan del cliente se parsean con
 `parsearInstante` del mismo archivo, **nunca** se pasan crudos al SQL ni se comparan con `new Date()`:
@@ -181,6 +197,9 @@ aritmética de fechas (sumar minutos, comparar rangos).
 - **Nunca** `pool.connect()`.
 - **Nunca** `BEGIN` / `COMMIT` (incompatibilidad con PgBouncer free plan, IPv4-only).
 - Inserts secuenciales con cleanup manual si algo falla.
+- **Reemplazar un conjunto de filas va en una sola sentencia**, nunca un `DELETE` seguido de `INSERT`s: si algo falla en el medio, se pierden los datos. Si la tabla tiene un `UNIQUE` o un `EXCLUDE`, el `WITH ... DELETE` + `INSERT ... SELECT unnest(...)` simple falla: Postgres inserta primero y las filas nuevas chocan con las viejas. Hay dos salidas:
+  - Con una clave para el conflicto: upsert más `DELETE` de lo que sobra, que tocan filas distintas (`reemplazarHorario`).
+  - Sin clave (un `EXCLUDE`): el `INSERT` lee el resultado del `DELETE` con `WHERE (SELECT count(*) FROM borrados) >= 0`, así el borrado corre primero (`reemplazarHorarios`).
 - `db.js` exporta como named exports `query` (lo que usa todo el código), `cerrarPool` (cierre limpio del cron), `testConnection` e `iniciarKeepAlive` (arranque). El pool crudo no se exporta.
 - Pool con `max: 3`, `ssl: { ca: <config/supabase-ca.crt>, rejectUnauthorized: true }` y `statement_timeout` de 5s por conexión (un `SET` en el hook `onConnect`: el pooler descarta `options` y el parámetro `statement_timeout` del `Pool`).
 - Toda tabla nueva se crea con RLS activado y sin policies (`ALTER TABLE ... ENABLE ROW LEVEL SECURITY`): cierra la API automática de Supabase, y el backend entra igual porque se conecta como dueño de las tablas. El SQL editor no lo activa solo. Ver `estado_actual.md` → RLS.

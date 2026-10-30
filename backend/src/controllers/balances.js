@@ -4,7 +4,7 @@
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { TZ } from '../utils/constantes.js';
-import { esCantidadValida } from '../utils/validarNumero.js';
+import { esEnteroPositivo } from '../utils/validarNumero.js';
 import { TIPOS_MOVIMIENTO_EXTRA, resumirMovimientosExtra } from '../utils/movimientos.js';
 
 /**
@@ -334,7 +334,7 @@ export const getBalanceMensual = async (req, res) => {
  *   botón "Sin comisiones" del panel. 400 si `cantidad` viene y no es un entero >= 1.
  */
 export const getBalanceHistorico = async (req, res) => {
-  if (req.query.cantidad !== undefined && !esCantidadValida(req.query.cantidad)) {
+  if (req.query.cantidad !== undefined && !esEnteroPositivo(req.query.cantidad)) {
     return res.status(400).json({ error: 'cantidad debe ser un entero mayor o igual a 1' });
   }
   const cantidad = Math.min(Number(req.query.cantidad ?? 12), 24);

@@ -13,6 +13,7 @@ import { TZ, ANTELACION_MINIMA_MINUTOS, DIAS_RESERVABLES } from '../utils/consta
 import { esUUID } from '../utils/validarUuid.js';
 import { registrarCorte } from './cortesService.js';
 import { suspensionSolapaSql } from './suspensionesService.js';
+import { sqlTurnoEnriquecido } from './sqlTurnoEnriquecido.js';
 
 // ─── Helpers compartidos ─────────────────────────────────────────────────────
 
@@ -145,30 +146,6 @@ export const insertarTurno = async ({
   }
   return { turno_id: result.rows[0].id, token_gestion };
 };
-
-/**
- * Arma el SELECT enriquecido de un turno: las columnas con los alias que consume
- * construirContextoMail (mailer.js) y los JOINs a barbero, servicio, cliente y
- * tenant. Lo comparten enriquecerTurno, cancelarTurnoPorId y el lote de
- * recordatorios; cada uno suma sus columnas y su condición.
- * @param {string} columnasExtra - Columnas propias de la consulta, separadas por coma.
- *   Son fragmentos fijos del código, nunca input del usuario.
- * @param {string} condiciones - WHERE (y ORDER BY, si hace falta). Los parámetros los
- *   pasa quien ejecuta la query.
- * @returns {string} La sentencia SQL completa
- */
-export const sqlTurnoEnriquecido = (columnasExtra, condiciones) =>
-  `SELECT t.inicio, t.fin, ${columnasExtra},
-          b.nombre AS barbero_nombre, b.email AS barbero_email,
-          s.nombre AS servicio_nombre,
-          c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
-          tn.nombre_negocio AS tenant_nombre, tn.direccion AS tenant_direccion
-   FROM turno t
-   JOIN barbero  b ON b.id = t.barbero_id
-   JOIN servicio s ON s.id = t.servicio_id
-   JOIN cliente  c ON c.id = t.cliente_id
-   JOIN tenant   tn ON tn.id = t.tenant_id
-   ${condiciones}`;
 
 /**
  * SELECT enriquecido con JOINs a barbero, servicio, cliente y tenant.

@@ -19,6 +19,7 @@ import {
   armarLinkGestion, sincronizarCalendarCreacion, notificarConfirmacion,
   inicioPosteriorAhora, inicioDentroDeVentana, MENSAJE_SLOT_OCUPADO, MENSAJE_FUERA_DE_VENTANA,
 } from '../services/turnosService.js';
+import { sqlTurnoEnriquecido } from '../services/sqlTurnoEnriquecido.js';
 import { suspensionSolapaSql } from '../services/suspensionesService.js';
 import { barberoActivoEnTenant, listarBarberosActivos } from '../services/barberosService.js';
 import { obtenerHorarioCrudo, validarTurnoEnHorario } from '../services/horarioAtencionService.js';
@@ -465,17 +466,7 @@ export const cancelarTurno = async (req, res) => {
   try {
     // ── Buscar turno + datos enriquecidos en una sola query ────────────────
     const lookupRes = await query(
-      `SELECT t.id, t.estado, t.google_event_id, t.inicio, t.fin,
-              b.nombre AS barbero_nombre, b.email AS barbero_email,
-              s.nombre AS servicio_nombre,
-              c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
-              tn.nombre_negocio AS tenant_nombre
-       FROM turno t
-       JOIN barbero  b ON b.id = t.barbero_id
-       JOIN servicio s ON s.id = t.servicio_id
-       JOIN cliente  c ON c.id = t.cliente_id
-       JOIN tenant   tn ON tn.id = t.tenant_id
-       WHERE t.token_gestion = $1 AND t.tenant_id = $2`,
+      sqlTurnoEnriquecido('t.id, t.estado, t.google_event_id', 'WHERE t.token_gestion = $1 AND t.tenant_id = $2'),
       [req.params.token, req.tenant_id]
     );
     if (lookupRes.rows.length === 0) {
@@ -547,18 +538,11 @@ export const reprogramarTurno = async (req, res) => {
   try {
     // ── Lookup turno + duración del servicio + datos para services ─────────
     const lookupRes = await query(
-      `SELECT t.id, t.estado, t.google_event_id,
-              (tn.duracion_slot_minutos * s.cantidad_slots) AS duracion_minutos,
-              b.nombre AS barbero_nombre, b.email AS barbero_email,
-              s.nombre AS servicio_nombre,
-              c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
-              tn.nombre_negocio AS tenant_nombre, tn.direccion AS tenant_direccion
-       FROM turno t
-       JOIN tenant   tn ON tn.id = t.tenant_id
-       JOIN barbero  b  ON b.id  = t.barbero_id
-       JOIN servicio s  ON s.id  = t.servicio_id
-       JOIN cliente  c  ON c.id  = t.cliente_id
-       WHERE t.token_gestion = $1 AND t.tenant_id = $2`,
+      sqlTurnoEnriquecido(
+        `t.id, t.estado, t.google_event_id,
+         (tn.duracion_slot_minutos * s.cantidad_slots) AS duracion_minutos`,
+        'WHERE t.token_gestion = $1 AND t.tenant_id = $2'
+      ),
       [req.params.token, req.tenant_id]
     );
     if (lookupRes.rows.length === 0) {

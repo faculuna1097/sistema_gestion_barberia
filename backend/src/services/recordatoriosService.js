@@ -14,7 +14,8 @@ import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { TZ, RECORDATORIO_DIAS_ANTES } from '../utils/constantes.js';
 import { enviarRecordatorio, construirContextoMail } from './mail/mailer.js';
-import { construirLinkGestion, sqlTurnoEnriquecido } from './turnosService.js';
+import { construirLinkGestion } from './turnosService.js';
+import { sqlTurnoEnriquecido } from './sqlTurnoEnriquecido.js';
 
 /**
  * Lee la sub-config de recordatorio de un tenant aplicando el default opt-in:

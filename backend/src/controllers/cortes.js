@@ -4,10 +4,10 @@
 // turnos del backoffice (turnosService → completarTurnoConCorte). Acá solo se
 // valida el body y se mapean los errores tipados del service a respuestas HTTP.
 
-import { registrarCorte, MENSAJE_TURNO_INEXISTENTE } from '../services/cortesService.js';
+import { registrarCorte, MENSAJE_TURNO_INEXISTENTE, MENSAJE_TOTAL_EXCEDIDO } from '../services/cortesService.js';
 import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { calcularDuracionServicio } from '../services/turnosService.js';
-import { esMontoValido } from '../utils/validarNumero.js';
+import { esMontoValido, sumaMontosValida } from '../utils/validarNumero.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
 import { esUUID } from '../utils/validarUuid.js';
 
@@ -28,6 +28,7 @@ import { esUUID } from '../utils/validarUuid.js';
  * @param {number}   req.body.propina     - Monto de propina (default: 0)
  * @param {string}   [req.body.turno_id]  - UUID del turno asociado (opcional)
  * @returns {JSON} 201 { message, corte_id, monto_total, turno_vinculado } |
+ *   400 si falta un campo, no es válido o precio + propina no entra en monto_total |
  *   404 barbero, servicio o turno que no existen (un id mal formado cuenta como no existe)
  */
 export const createCorte = async (req, res) => {
@@ -46,6 +47,9 @@ export const createCorte = async (req, res) => {
   }
   if (propina !== undefined && !esMontoValido(propina)) {
     return res.status(400).json({ error: 'propina debe ser un número >= 0' });
+  }
+  if (!sumaMontosValida(precio, propina ?? 0)) {
+    return res.status(400).json({ error: MENSAJE_TOTAL_EXCEDIDO });
   }
   // Sin turno_id es un walk-in: solo se valida si vino.
   if (turno_id && !esUUID(turno_id)) {

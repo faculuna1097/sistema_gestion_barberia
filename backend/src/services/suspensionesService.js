@@ -8,6 +8,7 @@ import { TZ } from '../utils/constantes.js';
 import { esUUID } from '../utils/validarUuid.js';
 import { cancelarEvento } from './googleCalendar.js';
 import { enviarCancelacionAutomatica, construirContextoMail } from './mail/mailer.js';
+import { sqlTurnoEnriquecido } from './sqlTurnoEnriquecido.js';
 
 // ─── Rango efectivo (helper SQL) ─────────────────────────────────────────────
 // Una fila de barbero_suspension bloquea [desde, LEAST(hasta, COALESCE(liberada_en, hasta))).
@@ -82,20 +83,6 @@ export const listarSuspensiones = async (tenantId, { barberoId, desde, hasta, ti
   return result.rows;
 };
 
-// SELECT de un turno con los datos que necesitan el mail y Calendar. Lo comparten
-// buscarTurnosAfectados (por rango) y crearSuspension (por ids cancelados).
-const SELECT_TURNO_ENRIQUECIDO = `
-  SELECT t.id, t.inicio, t.fin, t.google_event_id,
-         b.nombre AS barbero_nombre, b.email AS barbero_email,
-         s.nombre AS servicio_nombre,
-         c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
-         tn.nombre_negocio AS tenant_nombre
-  FROM turno t
-  JOIN barbero  b ON b.id = t.barbero_id
-  JOIN servicio s ON s.id = t.servicio_id
-  JOIN cliente  c ON c.id = t.cliente_id
-  JOIN tenant   tn ON tn.id = t.tenant_id`;
-
 /**
  * Busca turnos reservados que caen dentro del rango de la suspensión.
  * @param {string} tenantId
@@ -106,12 +93,14 @@ const SELECT_TURNO_ENRIQUECIDO = `
  */
 export const buscarTurnosAfectados = async (tenantId, barberoId, desde, hasta) => {
   const result = await query(
-    `${SELECT_TURNO_ENRIQUECIDO}
-     WHERE t.tenant_id = $1
-       AND t.barbero_id = $2
-       AND t.estado = 'reservado'
-       AND t.inicio < $4
-       AND t.fin > $3`,
+    sqlTurnoEnriquecido(
+      't.id, t.google_event_id',
+      `WHERE t.tenant_id = $1
+         AND t.barbero_id = $2
+         AND t.estado = 'reservado'
+         AND t.inicio < $4
+         AND t.fin > $3`
+    ),
     [tenantId, barberoId, desde, hasta]
   );
   return result.rows;
@@ -133,7 +122,7 @@ const respuestaTurnosAfectados = (turnos) => ({
  * Avisa la cancelación de turnos por suspensión: borra el evento de Calendar y
  * manda el mail al cliente. Best-effort: un fallo se loguea y no corta el resto,
  * porque la suspensión y las cancelaciones ya están grabadas.
- * @param {Array} turnos - filas con SELECT_TURNO_ENRIQUECIDO de turnos ya cancelados
+ * @param {Array} turnos - filas de sqlTurnoEnriquecido de turnos ya cancelados
  * @param {string|null} motivo - motivo de la suspensión, para el mail
  * @param {string} linkTurnero - link para reservar de nuevo
  * @returns {Promise<void>}
@@ -231,7 +220,7 @@ export const crearSuspension = async ({
   if (idsCancelados.length > 0) {
     try {
       const cancelados = await query(
-        `${SELECT_TURNO_ENRIQUECIDO} WHERE t.id = ANY($1::uuid[]) AND t.tenant_id = $2`,
+        sqlTurnoEnriquecido('t.id, t.google_event_id', 'WHERE t.id = ANY($1::uuid[]) AND t.tenant_id = $2'),
         [idsCancelados, tenantId]
       );
       await notificarCancelaciones(cancelados.rows, motivo, linkTurnero);

@@ -9,6 +9,7 @@ import { query } from '../config/db.js';
 import { TZ } from '../utils/constantes.js';
 import { cancelarEvento } from './googleCalendar.js';
 import { enviarCancelacionAutomatica, construirContextoMail } from './mail/mailer.js';
+import { sqlTurnoEnriquecido } from './sqlTurnoEnriquecido.js';
 
 /**
  * Lista los feriados del tenant con fecha >= desde, ordenados ascendentemente.
@@ -57,20 +58,13 @@ export const existeFeriado = async (tenantId, fecha) => {
  */
 export const calcularDeltaFeriado = async (tenantId, fecha) => {
   const turnosRes = await query(
-    `SELECT t.id, t.inicio, t.fin, t.google_event_id,
-            b.nombre AS barbero_nombre, b.email AS barbero_email,
-            s.nombre AS servicio_nombre,
-            c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
-            tn.nombre_negocio AS tenant_nombre
-     FROM turno t
-     JOIN barbero  b ON b.id = t.barbero_id
-     JOIN servicio s ON s.id = t.servicio_id
-     JOIN cliente  c ON c.id = t.cliente_id
-     JOIN tenant   tn ON tn.id = t.tenant_id
-     WHERE t.tenant_id = $1
-       AND t.estado = 'reservado'
-       AND t.inicio > now()
-       AND DATE(t.inicio AT TIME ZONE $2) = $3::date`,
+    sqlTurnoEnriquecido(
+      't.id, t.google_event_id',
+      `WHERE t.tenant_id = $1
+         AND t.estado = 'reservado'
+         AND t.inicio > now()
+         AND DATE(t.inicio AT TIME ZONE $2) = $3::date`
+    ),
     [tenantId, TZ, fecha]
   );
   return { turnosACancelar: turnosRes.rows };
@@ -82,19 +76,29 @@ export const calcularDeltaFeriado = async (tenantId, fecha) => {
  * Pooler no soporta BEGIN/COMMIT); ante un fallo intermedio el feriado
  * todavía no se insertó, así que el estado queda recuperable.
  *
+ * Un turno que dejó de estar reservado después de calcular el delta (se completó,
+ * lo canceló el cliente) no se pisa, no se cuenta y no dispara Calendar ni mail.
+ *
+ * @param {string} tenantId - UUID del tenant
  * @param {Array} turnos - turnos a cancelar (de calcularDeltaFeriado)
  * @param {string} linkTurnero - URL de reserva para el mail al cliente
  * @param {string} [descripcion] - descripción del feriado, para el mail
- * @returns {Promise<{ turnos_cancelados: number }>}
+ * @returns {Promise<{ turnos_cancelados: number }>} los que se cancelaron de verdad
  */
-export const ejecutarCascadaFeriado = async (turnos, linkTurnero, descripcion) => {
+export const ejecutarCascadaFeriado = async (tenantId, turnos, linkTurnero, descripcion) => {
+  let turnosCancelados = 0;
   for (const t of turnos) {
-    await query(
+    const updateRes = await query(
       `UPDATE turno
          SET estado = 'cancelado', cancelado_en = now(), cancelado_por = 'admin'
-       WHERE id = $1`,
-      [t.id]
+       WHERE id = $1 AND tenant_id = $2 AND estado = 'reservado'`,
+      [t.id, tenantId]
     );
+    if (updateRes.rowCount === 0) {
+      console.warn('[feriadosService] ejecutarCascadaFeriado — el turno dejó de estar reservado antes del UPDATE | turno_id:', t.id);
+      continue;
+    }
+    turnosCancelados++;
     console.log('[feriadosService] turno cancelado por feriado | turno_id:', t.id);
 
     // Best-effort: Calendar.
@@ -118,7 +122,7 @@ export const ejecutarCascadaFeriado = async (turnos, linkTurnero, descripcion) =
     }
   }
 
-  return { turnos_cancelados: turnos.length };
+  return { turnos_cancelados: turnosCancelados };
 };
 
 /**

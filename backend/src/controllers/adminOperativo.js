@@ -61,7 +61,8 @@ export async function obtenerCredencialesOperativas(req, res) {
 /**
  * actualizarCredencialesOperativas
  * Actualiza usuario y/o password operativos del tenant del request.
- * String vacío en un campo significa "no modificar" (silencioso).
+ * String vacío en un campo significa "no modificar" (silencioso). Todo lo que llega
+ * tiene que ser string: un número no se puede hashear ni comparar con bcrypt.
  *
  * Re-autenticación (deuda #35): aunque la ruta ya exige JWT de rol admin,
  * cambiar credenciales operativas es una acción sensible — un panel admin
@@ -76,23 +77,24 @@ export async function actualizarCredencialesOperativas(req, res) {
   const { usuario, password, pin_admin } = req.body;
   const tenant_id = req.tenant_id;
 
-  // Falsy (undefined, null, '') significa "no modificar este campo".
-  const cambiarUsuario  = !!usuario;
-  const cambiarPassword = !!password;
+  // undefined, null y '' significan "no modificar este campo". Cualquier otro valor
+  // que no sea string (0 o false incluidos) cae en las validaciones de abajo.
+  const cambiarUsuario  = usuario !== undefined && usuario !== null && usuario !== '';
+  const cambiarPassword = password !== undefined && password !== null && password !== '';
 
   if (!cambiarUsuario && !cambiarPassword) {
     return res.status(400).json({ error: 'Debe enviar usuario y/o password para modificar' });
   }
 
-  if (!pin_admin) {
+  if (!pin_admin || typeof pin_admin !== 'string') {
     return res.status(400).json({ error: 'El PIN de administrador es requerido' });
   }
 
-  if (cambiarUsuario && usuario.length < USUARIO_MIN_CARACTERES) {
+  if (cambiarUsuario && (typeof usuario !== 'string' || usuario.length < USUARIO_MIN_CARACTERES)) {
     return res.status(400).json({ error: `El usuario debe tener al menos ${USUARIO_MIN_CARACTERES} caracteres` });
   }
 
-  if (cambiarPassword && password.length < PASSWORD_MIN_CARACTERES) {
+  if (cambiarPassword && (typeof password !== 'string' || password.length < PASSWORD_MIN_CARACTERES)) {
     return res.status(400).json({ error: `La password debe tener al menos ${PASSWORD_MIN_CARACTERES} caracteres` });
   }
 

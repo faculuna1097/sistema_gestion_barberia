@@ -66,36 +66,38 @@ export const validarNoSolapamiento = (bloques) => {
 };
 
 /**
- * Reemplaza completo el horario semanal de un barbero.
- * Borra todos los bloques existentes e inserta los nuevos.
+ * Reemplaza completo el horario semanal de un barbero, en una sola sentencia: si algo
+ * falla, no se borra nada y nunca hay un momento sin bloques (convenciones §6).
+ * El INSERT lee el resultado del DELETE para que el borrado corra primero. Sin eso,
+ * Postgres inserta antes de borrar y los bloques nuevos chocan con los viejos en el
+ * EXCLUDE barbero_horario_no_solapamiento.
  * @param {string} barberoId
  * @param {string} tenantId
  * @param {Array} bloques - [{ dia_semana, hora_inicio, hora_fin }, ...]
- * @returns {Promise<Array>} bloques insertados con id
+ * @returns {Promise<Array>} bloques insertados con id, en el orden en que llegaron
  */
 export const reemplazarHorarios = async (barberoId, tenantId, bloques) => {
-  // DELETE existentes
-  await query(
-    `DELETE FROM barbero_horario WHERE barbero_id = $1 AND tenant_id = $2`,
-    [barberoId, tenantId]
+  const result = await query(
+    `WITH borrados AS (
+       DELETE FROM barbero_horario WHERE barbero_id = $1 AND tenant_id = $2
+       RETURNING id
+     )
+     INSERT INTO barbero_horario (tenant_id, barbero_id, dia_semana, hora_inicio, hora_fin)
+     SELECT $2::uuid, $1::uuid, b.dia_semana, b.hora_inicio, b.hora_fin
+     FROM unnest($3::smallint[], $4::time[], $5::time[])
+          WITH ORDINALITY AS b(dia_semana, hora_inicio, hora_fin, orden)
+     WHERE (SELECT count(*) FROM borrados) >= 0
+     ORDER BY b.orden
+     RETURNING id, dia_semana, hora_inicio, hora_fin`,
+    [
+      barberoId,
+      tenantId,
+      bloques.map((b) => b.dia_semana),
+      bloques.map((b) => b.hora_inicio),
+      bloques.map((b) => b.hora_fin),
+    ]
   );
-
-  if (bloques.length === 0) return [];
-
-  // INSERT nuevos — uno por uno (Session Pooler no soporta transacciones,
-  // pero el DELETE + INSERTs secuenciales es aceptable acá)
-  const insertados = [];
-  for (const b of bloques) {
-    const result = await query(
-      `INSERT INTO barbero_horario (tenant_id, barbero_id, dia_semana, hora_inicio, hora_fin)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, dia_semana, hora_inicio, hora_fin`,
-      [tenantId, barberoId, b.dia_semana, b.hora_inicio, b.hora_fin]
-    );
-    insertados.push(normalizarBloque(result.rows[0]));
-  }
-
-  return insertados;
+  return result.rows.map(normalizarBloque);
 };
 
 /**

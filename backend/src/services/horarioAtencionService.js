@@ -11,6 +11,7 @@ import { TZ } from '../utils/constantes.js';
 import { cancelarEvento } from './googleCalendar.js';
 import { enviarCancelacionAutomatica, construirContextoMail } from './mail/mailer.js';
 import { eliminarBloque, truncarBloque } from './horariosService.js';
+import { sqlTurnoEnriquecido } from './sqlTurnoEnriquecido.js';
 
 /**
  * Obtiene las filas crudas de horario del tenant tal como están en la DB.
@@ -175,19 +176,12 @@ export const calcularDelta = async (tenantId, horariosNuevos) => {
 
   // --- Turnos reservados futuros ---
   const turnosRes = await query(
-    `SELECT t.id, t.inicio, t.fin, t.google_event_id,
-            b.nombre AS barbero_nombre, b.email AS barbero_email,
-            s.nombre AS servicio_nombre,
-            c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
-            tn.nombre_negocio AS tenant_nombre
-     FROM turno t
-     JOIN barbero  b ON b.id = t.barbero_id
-     JOIN servicio s ON s.id = t.servicio_id
-     JOIN cliente  c ON c.id = t.cliente_id
-     JOIN tenant   tn ON tn.id = t.tenant_id
-     WHERE t.tenant_id = $1
-       AND t.estado = 'reservado'
-       AND t.inicio > now()`,
+    sqlTurnoEnriquecido(
+      't.id, t.google_event_id',
+      `WHERE t.tenant_id = $1
+         AND t.estado = 'reservado'
+         AND t.inicio > now()`
+    ),
     [tenantId]
   );
 
@@ -226,20 +220,30 @@ export const calcularDelta = async (tenantId, horariosNuevos) => {
  * reemplazo de tenant_horario_atencion se hace aparte (reemplazarHorario),
  * al final, para que ante un fallo intermedio siga vigente el horario viejo.
  *
+ * Un turno que dejó de estar reservado después de calcular el delta (se completó,
+ * lo canceló el cliente) no se pisa, no se cuenta y no dispara Calendar ni mail.
+ *
  * @param {string} tenantId - UUID del tenant
  * @param {Object} delta - resultado de calcularDelta
  * @param {string} linkTurnero - URL de reserva para el mail al cliente
  * @returns {Promise<{ bloques_truncados: number, bloques_eliminados: number, turnos_cancelados: number }>}
+ *   turnos_cancelados cuenta los que se cancelaron de verdad
  */
 export const ejecutarCascada = async (tenantId, delta, linkTurnero) => {
   // --- 1. Cancelar turnos afectados ---
+  let turnosCancelados = 0;
   for (const t of delta.turnosACancelar) {
-    await query(
+    const updateRes = await query(
       `UPDATE turno
          SET estado = 'cancelado', cancelado_en = now(), cancelado_por = 'admin'
-       WHERE id = $1`,
-      [t.id]
+       WHERE id = $1 AND tenant_id = $2 AND estado = 'reservado'`,
+      [t.id, tenantId]
     );
+    if (updateRes.rowCount === 0) {
+      console.warn('[horarioAtencionService] ejecutarCascada — el turno dejó de estar reservado antes del UPDATE | turno_id:', t.id);
+      continue;
+    }
+    turnosCancelados++;
     console.log('[horarioAtencionService] turno cancelado por cambio de horario | turno_id:', t.id);
 
     // Best-effort: Calendar.
@@ -276,26 +280,37 @@ export const ejecutarCascada = async (tenantId, delta, linkTurnero) => {
   return {
     bloques_truncados: delta.bloquesATruncar.length,
     bloques_eliminados: delta.bloquesAEliminar.length,
-    turnos_cancelados: delta.turnosACancelar.length,
+    turnos_cancelados: turnosCancelados,
   };
 };
 
 /**
- * Reemplaza por completo el horario semanal del tenant: borra las filas
- * actuales e inserta las del payload. Se llama al final del PUT, después de
- * la cascada. Inserts secuenciales (Session Pooler no soporta transacciones).
+ * Reemplaza por completo el horario semanal del tenant, en una sola sentencia: si
+ * algo falla, no se pierde nada (convenciones §6). Se llama al final del PUT, después
+ * de la cascada. Borra los días que cierran y hace upsert de los abiertos: tocan filas
+ * distintas, así que no choca con el UNIQUE (tenant_id, dia_semana). Un día que no
+ * cambió no cuenta como cambio para el trigger web_deploy_kingsai.
  *
  * @param {string} tenantId - UUID del tenant
  * @param {Array} horarios - días abiertos [{ dia_semana, hora_inicio, hora_fin }]
  * @returns {Promise<void>}
  */
 export const reemplazarHorario = async (tenantId, horarios) => {
-  await query(`DELETE FROM tenant_horario_atencion WHERE tenant_id = $1`, [tenantId]);
-  for (const h of horarios) {
-    await query(
-      `INSERT INTO tenant_horario_atencion (tenant_id, dia_semana, hora_inicio, hora_fin)
-       VALUES ($1, $2, $3, $4)`,
-      [tenantId, h.dia_semana, h.hora_inicio, h.hora_fin]
-    );
-  }
+  await query(
+    `WITH cerrados AS (
+       DELETE FROM tenant_horario_atencion
+       WHERE tenant_id = $1 AND dia_semana <> ALL($2::smallint[])
+     )
+     INSERT INTO tenant_horario_atencion (tenant_id, dia_semana, hora_inicio, hora_fin)
+     SELECT $1::uuid, h.dia_semana, h.hora_inicio, h.hora_fin
+     FROM unnest($2::smallint[], $3::time[], $4::time[]) AS h(dia_semana, hora_inicio, hora_fin)
+     ON CONFLICT (tenant_id, dia_semana)
+     DO UPDATE SET hora_inicio = EXCLUDED.hora_inicio, hora_fin = EXCLUDED.hora_fin`,
+    [
+      tenantId,
+      horarios.map((h) => h.dia_semana),
+      horarios.map((h) => h.hora_inicio),
+      horarios.map((h) => h.hora_fin),
+    ]
+  );
 };
