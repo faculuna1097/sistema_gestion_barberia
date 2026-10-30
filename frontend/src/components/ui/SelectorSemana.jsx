@@ -1,4 +1,4 @@
-// /frontend/src/components/SelectorSemana.jsx
+// /frontend/src/components/ui/SelectorSemana.jsx
 
 // Selector de semana ISO. Envuelve a SelectorPeriodo con la lógica específica
 // de semanas: formatea el label como rango lunes → domingo, calcula si la

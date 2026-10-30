@@ -4,7 +4,7 @@
 // y filtran todas las queries por ese tenant_id. Sin token: no hay req.rol
 // ni req.barbero_id acá.
 //
-// Cobertura: ver plan_turnero_v2.md sección 4.
+// Cobertura: ver decisiones_turnero.md.
 
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
@@ -119,7 +119,7 @@ export const getServicios = async (req, res) => {
  * Lista los barberos activos del tenant. Acepta query param ?servicio_id
  * pero lo ignora por ahora: todos los barberos atienden todos los servicios.
  * El param queda preparado para reglas futuras de "qué barbero atiende qué"
- * (ver plan_turnero_v2.md sección 12).
+ * (ver decisiones_turnero.md).
  *
  * El listado sale de `listarBarberosActivos`, el mismo que usa "Cualquier
  * barbero" en la disponibilidad: los barberos que ve el cliente son los que

@@ -1,4 +1,4 @@
-// /frontend/src/components/TogglePill.jsx
+// /frontend/src/components/ui/TogglePill.jsx
 // Pill binaria de filtro (toggle on/off). Hoy usada en SeccionCaja para
 // "Solo Barberos".
 //

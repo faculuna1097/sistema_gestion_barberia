@@ -1,7 +1,7 @@
 // /backend/src/controllers/horarioAtencion.js
 // Controller del backoffice para el horario semanal de atención del tenant.
 // Thin wrapper: delega la lógica de negocio a horarioAtencionService.js.
-// Cobertura: plan_horario_atencion.md sección 3.3.
+// Cobertura: decisiones_horario_atencion.md.
 
 import {
   obtenerHorarioCompleto,

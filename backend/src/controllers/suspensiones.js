@@ -1,6 +1,6 @@
 // /backend/src/controllers/suspensiones.js
 // Controller del backoffice para suspensiones de barberos.
-// Thin wrapper con scoping por rol. Cobertura: plan_turnero_v2.md sección 5.
+// Thin wrapper con scoping por rol. Cobertura: decisiones_turnero.md.
 
 import { listarSuspensiones, crearSuspension, liberarSuspension } from '../services/suspensionesService.js';
 import { armarLinkTurnero } from '../services/turnosService.js';

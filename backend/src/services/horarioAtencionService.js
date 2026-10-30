@@ -1,6 +1,6 @@
 // /backend/src/services/horarioAtencionService.js
 // Lógica de negocio del horario semanal de atención del tenant.
-// Cobertura: plan_horario_atencion.md sección 3.3 y 3.7.
+// Cobertura: decisiones_horario_atencion.md.
 //
 // La tabla tenant_horario_atencion tiene 1 fila por día abierto.
 // Ausencia de fila = el negocio cierra ese día.

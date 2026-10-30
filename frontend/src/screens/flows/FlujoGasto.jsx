@@ -23,8 +23,8 @@ import {
   FilaTotal,
   PantallaExito,
   AvisoExito,
-  wizardStyles,
 } from "./wizard.jsx";
+import { wizardStyles } from "./wizardStyles.js";
 
 /**
  * FlujoGasto

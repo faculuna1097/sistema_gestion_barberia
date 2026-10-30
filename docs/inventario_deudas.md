@@ -124,7 +124,7 @@
 | P06 | #45 bloque del barbero en día que el local cerró | EA:406 | Hecha (tanda 1, 2026-10-30): sacada de `estado_actual.md`. La cascada borra esos bloques y `putHorarios` responde 422 `dia_cerrado` | D | panel | S | — | `estado_actual.md` | — |
 | P07 | DELETE silencioso en Ventas, Gastos y Caja | EA:407 | Abierta | A | panel | S | — | `SeccionVentas/Gastos/Caja.jsx` | DS16 |
 | P08 | Fórmula de comisión en tres lugares | EA:408 | Abierta | A | panel | M | contrato | `planillaService.js`, `SeccionPlanillas.jsx`, `MiPlanilla.jsx` | E22, M06, P03 |
-| P09 | `lint` del panel falla (7 errores + 1 warning) | EA:409 | Confirmada idéntica; los otros 3 fronts en verde | A | lint y tooling | S | — | `eslint.config.js`, `App.jsx`, `FondoLocal.jsx`, `PanelAdmin.jsx`, `SeccionBalances.jsx`, `wizard.jsx` | DS13 |
+| P09 | `lint` del panel falla (7 errores + 1 warning) | EA:409 | Hecha (tanda 2, 2026-10-30): `npx eslint .` en verde en los cuatro fronts. `wizardStyles` pasó a `wizardStyles.js` y el efecto del histórico usa `useEffectEvent`, sin cambiar cuándo recarga (probado en el navegador) | A | lint y tooling | S | — | `eslint.config.js`, `App.jsx`, `FondoLocal.jsx`, `PanelAdmin.jsx`, `SeccionBalances.jsx`, `wizard.jsx` | DS13 |
 | P10 | `ScreenHeader` en Ventas y Gastos: ¿se saca? | EA:410 | Abierta | B | panel | S | visible | `SeccionVentas.jsx`, `SeccionGastos.jsx` | — |
 | P11 | `SeccionInicio` usa `.then(r => r.json())` | EA:411 | Abierta (`:423-425`) | A | panel | S | — | `SeccionInicio.jsx` | — |
 | P12 | Caja esconde selector de día y totales al cargar o fallar | EA:412 | Abierta | A | panel | S | visible | `SeccionCaja.jsx` | — |
@@ -143,7 +143,7 @@
 | DS08 | Hover con `useState` en tablas densas | SD:731 | Hecha (tanda 1, 2026-10-30): tachada en §9. `DataTable` usa `<style>` local | D | docs | S | — | `sistema_de_disenio.md` | — |
 | DS09 | Contraste WCAG (`muted` sobre `surfaceAlt` 4,4:1, `mutedSoft` 2,6:1) | SD:732 | Medida el 2026-10-30: `muted` 4,40:1 sobre `surfaceAlt`, `mutedSoft` 2,56:1 sobre blanco; 48 usos de `mutedSoft` | B | turnero | M | visible | `tokens.js` de los fronts + usos de `mutedSoft` | — |
 | DS12 | Focus visible en todos los primitivos | SD:738 | Hecha (tanda 1, 2026-10-30): tachada en §9. Probada en el navegador: el selector de país de `CampoTelefono` casi no mostraba el foco con error, y su contenedor ahora lleva `outline` | D | docs | S | — | `sistema_de_disenio.md`, `ConfirmarTurno.jsx` | — |
-| DS13 | `set-state-in-effect`: postura unificada | SD:739 | Abierta (off solo en barbero). Con la regla prendida: 13 avisos (10 en barbero, 3 en panel) | B | lint y tooling | S | — | `eslint.config.js` de los fronts | P09 |
+| DS13 | `set-state-in-effect`: postura unificada | SD:739 | Hecha (tanda 2, 2026-10-30): apagada en los cuatro `eslint.config.js`, con el motivo en `convenciones_tecnicas.md` §8 y la #13 tachada en §9 | B | lint y tooling | S | — | `eslint.config.js` de los fronts | P09 |
 | DS15 | `getMisClientes` sin paginación | SD:741 | Abierta | C | app del barbero | M | contrato | `controllers/clientes.js`, `Clientes.jsx` | Base de clientes |
 | DS16 | Toast inline → flotante global | SD:742 | Abierta | A | panel | M | visible | `components/ui/Toast.jsx`, callers | — |
 | DS17 | Estilo "eyebrow" copiado a mano en el turnero | SD:743 | Abierta | A | turnero | S | — | `frontend-turnero/src/**` | — |
@@ -233,10 +233,10 @@ Cada tanda es un chat y un commit sobre `feature/descansos-agenda`. Las clase C 
 |---|---|---|---|---|---|
 | 1 | Limpieza y docs | E06, P06, DS08, DS12, E18, M13a, M13c, P20a, P20b, T12c | S | Nulo. DS12 pide mirar el foco de `wizard.jsx` y `ConfirmarTurno.jsx`. | — |
 | 2 | Lint en verde y limpieza | DS13, P09, N01, N02, N04 | S | Nulo | 11 |
-| 3 | Validaciones y errores del backend | M01, M02, N03, T02, T01, E11, F01, M10, M08, M03, M05, T03, F04 | M | Bajo. T03 y F04 piden el mismo tope en el front y en el back; M03 cambia lo que ve el iPad. | — |
+| 3 | Validaciones y errores del backend | M01, M02, N03, T02, T01, E11, F01, M10, M08, M03, M05, T03, F04, N06 | M | Bajo. T03 y F04 piden el mismo tope en el front y en el back; M03 cambia lo que ve el iPad. | — |
 | 4 | Refactors del backend | E05, E17, E19, E10, E20, E13a, E13b, M07, M13b, M04, M11, AUD-6, E02, E01 | M–L | Medio: permisos (E13b), cascada (E13a), stock (M07), mails (E20), pool (AUD-6). M04 y M11 pueden mover totales. | 1 |
 | 5 | Contratos backend ↔ fronts | T04, F02, M09, AUD-5 | M | Contrato. El backend nuevo tiene que andar con los fronts viejos. | 6, 8, 13 |
-| 6 | Panel | DS16 → P07, P01, P11, P12, P13, P14, P15a, P15b, P15c, P16, P17a, P17b, P18, P19, DS23, PF09, M15, P10 | L | Visible. Verificar en preview y en el iPad (P15b). | 9 |
+| 6 | Panel | DS16 → P07, P01, P11, P12, P13, P14, P15a, P15b, P15c, P16, P17a, P17b, P18, P19, DS23, PF09, M15, P10, N07, N08, N09, N10 | L | Visible. Verificar en preview y en el iPad (P15b). | 9 |
 | 7 | Turnero y landing | T06, T07b, T07c, T10, T11, T12a, T12b, T12d, DS17, DS19, DS21, AUD-4b, X01, M16, T08, DS09, DS20, N05 | M–L | Visible. Sumarla a la prueba en celulares reales del deploy. DS09 y DS20 tocan también el panel y el barbero. | 7, 10, 12 |
 | 8 | DB: nullables, categorías y gasto | E23, E03, M12 | M | DB | 2, 5 |
 | 9 | Comisiones | E22, M06, P08 | L | DB, contrato y visible (montos de Planillas y Balances) | 3, 4 |
@@ -261,11 +261,16 @@ Deudas nuevas, que no estaban en las fuentes. Se suman a las 107 de los conteos 
 
 | id | deuda | origen | estado verificado | clase | área | tam | riesgo | archivos | tanda |
 |---|---|---|---|---|---|---|---|---|---|
-| N01 | Citas a `plan_turnero_v2.md`, `plan_horario_atencion.md` y `plan_recordatorio_turnos.md`, que ya no existen | Tanda 1 | Confirmada: 20 citas en 19 archivos | A | docs | S | — | `backend/src`, `frontend*/src` | 2 |
-| N02 | Encabezados con la ruta vieja | Tanda 1 | Confirmada: 5 archivos | A | panel | S | — | `BadgeFormaPago`, `BotonExportarExcel`, `SelectorMes`, `SelectorSemana`, `TogglePill` | 2 |
+| N01 | Citas a `plan_turnero_v2.md`, `plan_horario_atencion.md` y `plan_recordatorio_turnos.md`, que ya no existen | Tanda 1 | Hecha (tanda 2, 2026-10-30): las 20 citas apuntan a los docs `decisiones_*`, sin sección | A | docs | S | — | `backend/src`, `frontend*/src` | 2 |
+| N02 | Encabezados con la ruta vieja | Tanda 1 | Hecha (tanda 2, 2026-10-30): los 5 encabezados corregidos | A | panel | S | — | `BadgeFormaPago`, `BotonExportarExcel`, `SelectorMes`, `SelectorSemana`, `TogglePill` | 2 |
 | N03 | `if (!id)` que nunca se cumple: la ruta `/:id` ya garantiza el id | Tanda 1 | Confirmada: `deleteGasto` y `deleteVenta` | A | validaciones y errores del backend | S | — | `controllers/gastos.js`, `controllers/ventas.js` | 3 |
-| N04 | §8 y E15 dicen que `utils/fecha.js` es idéntico o copiado entre fronts | Tanda 1 | Del reporte de la tanda 1; no revisada aparte | A | docs | S | — | `sistema_de_disenio.md`, `estado_actual.md` | 2 |
+| N04 | §8 y E15 dicen que `utils/fecha.js` es idéntico o copiado entre fronts | Tanda 1 | Hecha (tanda 2, 2026-10-30): corregidos §8 y la deuda de helpers duplicados. El panel no comparte funciones de fecha con ningún front; el barbero y el turnero comparten cinco | A | docs | S | — | `sistema_de_disenio.md`, `estado_actual.md` | 2 |
 | N05 | Al llegar con Tab al email en `ConfirmarTurno`, el footer fijo tapa parte de la ayuda y del error | Tanda 1 | Del reporte de la tanda 1; no reproducida en la revisión | A | turnero | S | visible | `ConfirmarTurno.jsx`, `StickyFooter.jsx` | 7 |
+| N06 | Citas tipo "plan §N" a planes que ya no existen | Tanda 2 | Confirmada: 7 líneas en `recordatoriosService.js`, `jobs/recordatorios.js`, `config/db.js` y `authOperativo.js` | A | docs | S | — | esos 4 archivos | 3 |
+| N07 | §8 dice "idéntico" para `tokens.js` e `index.css`, y la deuda de `Modal` dice que `tokens.js` es igual en los cuatro | Tanda 2 | Confirmada para `tokens.js` (el panel no tiene `sizeInput`); lo de `index.css` es del reporte | A | docs | S | — | `sistema_de_disenio.md`, `estado_actual.md` | 6 |
+| N08 | `intentoHistorico` nunca vuelve a 0: después de un reintento, cada vuelta al tab recarga el histórico | Tanda 2 | Del reporte de la tanda 2; inofensivo | A | panel | S | — | `SeccionBalances.jsx` | 6 |
+| N09 | `FondoLocal.jsx:107` lee un caché dentro de un efecto; se podría resolver sin efecto | Tanda 2 | Del reporte de la tanda 2 | A | panel | S | visible | `components/ui/FondoLocal.jsx` | 6 |
+| N10 | `eslint-disable` de `exhaustive-deps` sin revisar | Tanda 2 | Confirmada: es el único en los cuatro fronts | A | panel | S | — | `gestion/TabBarberos.jsx:530` | 6 |
 
 ## Lo que no se pudo verificar
 

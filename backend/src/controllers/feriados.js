@@ -1,7 +1,7 @@
 // /backend/src/controllers/feriados.js
 // Controller del backoffice para los feriados puntuales del tenant.
 // Thin wrapper: delega la lógica de negocio a feriadosService.js.
-// Cobertura: plan_horario_atencion.md sección 4.2.
+// Cobertura: decisiones_horario_atencion.md.
 
 import { DateTime } from 'luxon';
 import { TZ } from '../utils/constantes.js';

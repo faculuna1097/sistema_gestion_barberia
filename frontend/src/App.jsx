@@ -133,7 +133,6 @@ export default function App() {
   // Cuando es null, la pantalla inicial es PantallaLoginOperativo en lugar de MainScreen.
   const [tokenOperativo, setTokenOperativo] = useState(leerTokenOperativoInicial);
   const [currentScreen, setCurrentScreen] = useState(tokenOperativo ? "main" : "loginOperativo");
-  const [token, setToken] = useState(null);
   // imagenLogo: URL del logo del tenant — viene de tenant_imagen tipo='logo'.
   // Nombre evita confusión con el campo legacy tenant.logo (que se elimina al
   // mergear feature/turnero a main).
@@ -182,7 +181,6 @@ export default function App() {
   useEffect(() => {
     setOnUnauthorizedAdmin(() => {
       console.warn('[app] 401 del panel detectado — redirigiendo al login del panel');
-      setToken(null);
       setRolPanel('admin');
       setBarberoSesion(null);
       setCurrentScreen("loginAdmin");
@@ -279,7 +277,6 @@ export default function App() {
   };
 
   const cerrarSesionAdmin = () => {
-    setToken(null);
     clearAuthToken();
     setRolPanel('admin');
     setBarberoSesion(null);
@@ -348,7 +345,6 @@ export default function App() {
         imagenLogo={imagenLogo}
         imagenLocal={imagenLocal}
         onAcceso={(tokenRecibido, info) => {
-          setToken(tokenRecibido);
           setAuthToken(tokenRecibido);
           setRolPanel(info.rol);
           setBarberoSesion(info.barbero ?? null);

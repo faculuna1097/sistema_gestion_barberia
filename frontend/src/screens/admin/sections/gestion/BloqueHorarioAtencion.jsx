@@ -1,6 +1,6 @@
 // /frontend/src/screens/admin/sections/gestion/BloqueHorarioAtencion.jsx
 // Bloque de gestión del horario semanal de atención del negocio.
-// Se renderiza dentro de TabNegocio. Cobertura: plan_horario_atencion.md §3.8.
+// Se renderiza dentro de TabNegocio. Cobertura: decisiones_horario_atencion.md.
 //
 // Sistema de diseño: tokens + Geist + primitivos + onClick. El modal de
 // confirmación de la cascada 409 usa ConfirmDialog + DetalleRecurso (mismo

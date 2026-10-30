@@ -1,6 +1,6 @@
 // /backend/src/services/horariosService.js
 // Lógica de negocio de horarios semanales de barberos.
-// Cobertura: plan_turnero_v2.md sección 5 (/api/admin/horarios).
+// Cobertura: decisiones_turnero.md.
 
 import { query } from '../config/db.js';
 

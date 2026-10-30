@@ -20,7 +20,7 @@
 // ganancia del mes. Se muestran aparte, cerrando en "Queda en el negocio"
 // (ganancia + aportes − retiros). Ver docs/decisiones_movimientos_extra.md.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useEffectEvent } from 'react';
 import {
   Banknote,
   Receipt,
@@ -342,10 +342,15 @@ export default function SeccionBalances() {
   }, [mesSeleccionado, intentoMensual]);
 
   // ── Carga del histórico anual ──────────────────────────────────────────────
+  // useEffectEvent: el efecto lee datosHistorico sin depender de él. Como
+  // dependencia, cada carga volvería a disparar el efecto, y después de un
+  // reintento (intentoHistorico > 0) recargaría sin fin.
+  const yaHayHistorico = useEffectEvent(() => Boolean(datosHistorico));
+
   useEffect(() => {
     if (tabActivo !== 'historico') return;
     // Si ya hay datos y no es un reintento explícito, no recargamos.
-    if (datosHistorico && intentoHistorico === 0) return;
+    if (yaHayHistorico() && intentoHistorico === 0) return;
 
     let cancelado = false;
     const cargar = async () => {

@@ -1,4 +1,4 @@
-// /frontend/src/components/BotonExportarExcel.jsx
+// /frontend/src/components/ui/BotonExportarExcel.jsx
 // Botón de "Exportar Excel" — wrapper delgado sobre el primitivo Button
 // que fija el ícono (Lucide Download) y el label.
 //

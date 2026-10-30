@@ -213,6 +213,10 @@ Dónde está aplicada: en todas las acciones de la app del barbero. En la Agenda
 ### Posicionamiento de helpers
 - Las funciones helper (ej: `ExcelIcon`) van **arriba** del componente que las usa, nunca después del `default export`.
 
+### Lint
+- `npx eslint .` pasa sin errores ni warnings en los cuatro fronts.
+- **`react-hooks/set-state-in-effect` está apagada en los cuatro** (`eslint.config.js`). El patrón de carga de datos del proyecto (§3: `useEffect` con `async/await` y `setCargando(true)`) dispara falsos positivos: en el montaje `cargando` ya es `true`, así que React descarta el render. Decidido el 2026-10-30, en vez de reescribir ese patrón en todas las pantallas.
+
 ---
 
 ## 9. Stack y deploy (referencia)

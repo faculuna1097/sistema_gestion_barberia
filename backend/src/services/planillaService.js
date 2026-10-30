@@ -1,6 +1,6 @@
 // /backend/src/services/planillaService.js
 // Lógica de negocio de planillas semanales con scoping por rol.
-// Cobertura: plan_turnero_v2.md sección 5 (/api/admin/planilla).
+// Cobertura: decisiones_turnero.md.
 // Acepta semana como YYYY-MM-DD (se toma la semana que contiene esa fecha).
 
 import { DateTime } from 'luxon';

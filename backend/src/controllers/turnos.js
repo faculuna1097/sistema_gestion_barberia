@@ -1,7 +1,7 @@
 // /backend/src/controllers/turnos.js
 // Controller del backoffice para gestión de turnos (admin y barbero).
 // Thin wrapper: arma filtros según req.rol y req.barbero_id, delega al
-// turnosService. Cobertura: plan_turnero_v2.md sección 5 (/api/admin/turnos).
+// turnosService. Cobertura: decisiones_turnero.md.
 
 import {
   listarTurnos, calcularDuracionServicio, upsertCliente, insertarTurno,

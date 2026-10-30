@@ -15,7 +15,7 @@
 //   FilaResumen    — fila label/valor del resumen (densidad kiosko).
 //   FilaTotal      — fila de total (color parametrizable: ink ingreso / danger egreso).
 //   PantallaExito  — confirmación con checkmark animado + monto.
-//   wizardStyles   — estilos de layout reusables por los flujos (grillas, botón grande, etc.).
+// Los estilos de layout que componen los flujos están en wizardStyles.js.
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
@@ -432,10 +432,7 @@ export function PantallaExito({ imagenLocal, titulo, monto, montoColor = theme.i
  * @param {React.ReactNode} props.children — texto del aviso
  * @returns {JSX.Element}
  */
-export function AvisoExito(props) {
-  // Desestructurado acá y no en la firma: no-unused-vars no ve el uso de un
-  // parámetro que solo aparece como JSX (ver estado_actual.md, lint del panel).
-  const { Icon, children } = props;
+export function AvisoExito({ Icon, children }) {
   return (
     <div style={styles.aviso}>
       <Icon size={20} strokeWidth={1.75} color={theme.warning} style={{ flexShrink: 0, marginTop: 2 }} />
@@ -443,43 +440,6 @@ export function AvisoExito(props) {
     </div>
   );
 }
-
-// ─── Estilos de layout reusables por los flujos ──────────────────────────────────
-// Lo que cada flujo compone dentro del PanelWizard (grillas de opciones, botón
-// grande, card de resumen). Se exporta para no redefinirlo en los 3 archivos.
-export const wizardStyles = {
-  // Grilla de opciones: flex wrap centrado (la última fila incompleta queda centrada).
-  gridOpciones: {
-    display: "flex",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 12,
-  },
-  // Grilla de 2 columnas (forma de pago, Sí/No de propina).
-  gridDos: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 16,
-  },
-  mpLogo: {
-    height: 52,
-    width: "auto",
-    objectFit: "contain",
-  },
-  // Botón grande (override del primitivo Button para superficie kiosko).
-  btnGrande: {
-    padding: "18px 24px",
-    fontSize: 18,
-    fontWeight: theme.weightHeading,
-  },
-  errorTexto: {
-    color: theme.danger,
-    fontFamily: theme.body,
-    fontSize: theme.sizeBody,
-    textAlign: "center",
-    margin: 0,
-  },
-};
 
 // ─── Estilos internos del wizard (PanelWizard / total / éxito) ────────────────────
 const styles = {

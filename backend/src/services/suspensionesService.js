@@ -1,6 +1,6 @@
 // /backend/src/services/suspensionesService.js
 // Lógica de negocio de suspensiones de barberos.
-// Cobertura: plan_turnero_v2.md sección 5 (/api/admin/suspensiones).
+// Cobertura: decisiones_turnero.md.
 
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';

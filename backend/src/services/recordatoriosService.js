@@ -3,7 +3,7 @@
 // El disparador (cron / script) es una cáscara fina que invoca a
 // procesarRecordatorios; toda la lógica del trabajo vive acá para que el
 // mecanismo de disparo se pueda cambiar sin reescribir esto (ver
-// docs/plan_recordatorio_turnos.md §5).
+// docs/decisiones_mail_recordatorio.md).
 //
 // Restricciones (plan §9): sin transacciones ni pool.connect() — el Pooler de
 // Supabase no las soporta; la idempotencia se resuelve con el claim atómico de

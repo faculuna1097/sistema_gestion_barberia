@@ -304,7 +304,8 @@ frontend/
     |       |-- FlujoCorte.jsx
     |       |-- FlujoGasto.jsx
     |       |-- FlujoVenta.jsx
-    |       `-- wizard.jsx
+    |       |-- wizard.jsx
+    |       `-- wizardStyles.js
     |-- services/
     |   `-- api.js
     |-- theme/

@@ -1,6 +1,6 @@
 // /backend/src/controllers/horarios.js
 // Controller del backoffice para horarios semanales de barberos.
-// Thin wrapper con scoping por rol. Cobertura: plan_turnero_v2.md sección 5.
+// Thin wrapper con scoping por rol. Cobertura: decisiones_turnero.md.
 
 import { obtenerHorarios, validarNoSolapamiento, reemplazarHorarios } from '../services/horariosService.js';
 import { obtenerHorarioCrudo, validarRangoEnHorario } from '../services/horarioAtencionService.js';

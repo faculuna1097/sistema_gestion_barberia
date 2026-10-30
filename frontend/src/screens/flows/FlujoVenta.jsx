@@ -19,8 +19,8 @@ import {
   FilaResumen,
   FilaTotal,
   PantallaExito,
-  wizardStyles,
 } from "./wizard.jsx";
+import { wizardStyles } from "./wizardStyles.js";
 
 /**
  * BtnCantidad

@@ -1,6 +1,6 @@
 // /backend/src/controllers/clientes.js
 // Controller del backoffice para búsqueda de clientes.
-// Cobertura: plan_turnero_v2.md sección 5 (/api/admin/clientes).
+// Cobertura: decisiones_turnero.md.
 
 import { query } from '../config/db.js';
 

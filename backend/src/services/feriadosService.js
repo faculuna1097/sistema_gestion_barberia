@@ -1,6 +1,6 @@
 // /backend/src/services/feriadosService.js
 // Lógica de negocio de los feriados puntuales del tenant.
-// Cobertura: plan_horario_atencion.md secciones 4.2 y 4.5.
+// Cobertura: decisiones_horario_atencion.md.
 //
 // La tabla tenant_feriado tiene 1 fila por feriado. Un feriado cierra el
 // día completo (sin horario especial en este MVP).

@@ -1,7 +1,7 @@
 // /frontend/src/screens/admin/sections/gestion/BloqueFeriados.jsx
 // Bloque de gestión de los feriados puntuales del negocio.
 // Se renderiza dentro de TabNegocio, debajo del horario de atención.
-// Cobertura: plan_horario_atencion.md §4.6.
+// Cobertura: decisiones_horario_atencion.md.
 //
 // Sistema de diseño: tokens + Geist + primitivos + onClick. El alta usa el
 // primitivo Modal; la confirmación de cascada 409 y el borrado usan

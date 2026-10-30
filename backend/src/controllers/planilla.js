@@ -1,6 +1,6 @@
 // /backend/src/controllers/planilla.js
 // Controller del backoffice para planilla semanal con scoping por rol.
-// Thin wrapper. Cobertura: plan_turnero_v2.md sección 5 (/api/admin/planilla).
+// Thin wrapper. Cobertura: decisiones_turnero.md.
 
 import { detalleSemanal, resumenSemanal, descansosSemanal } from '../services/planillaService.js';
 

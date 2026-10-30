@@ -578,7 +578,8 @@ componente se comparte recién cuando un segundo front lo necesita).
 
 Piezas de la superficie kiosko (los flujos de Corte, Venta y Gasto del iPad del
 mostrador). Viven en `frontend/src/screens/flows/wizard.jsx`, no en
-`components/ui/`: son del flujo, con el mismo criterio que §6.2.
+`components/ui/`: son del flujo, con el mismo criterio que §6.2. Los estilos de
+layout que componen los flujos (`wizardStyles`) están al lado, en `wizardStyles.js`.
 
 | Componente | Para qué |
 |---|---|
@@ -673,7 +674,6 @@ la estrategia es duplicar**:
 
 **Lo que se copia de `frontend/` (el panel) a cualquier front nuevo**:
 - `theme/tokens.js` *(idéntico)*.
-- `utils/formato.js`, `utils/fecha.js` *(idénticos)*.
 - `index.css` *(idéntico; la landing suma sus clases `om-`, ver §4.1)*.
 - Los primitivos universales (sección 6.1). `StickyFooter`, del barbero.
 
@@ -682,6 +682,18 @@ la estrategia es duplicar**:
 - `Progress`, `SelectorDiaHorario`, `SlotChip`, `ResumenTurno`,
   `AgregarAlCalendario` (solo del flujo de reserva).
 - Cualquier componente específico de una pantalla (Landing, etc.).
+
+**`utils/fecha.js` y `utils/formato.js` no son copias**, aunque se llamen igual
+en varios fronts:
+- `fecha.js`: el panel tiene su propio juego de funciones, con la zona fija en
+  `TZ`, y no comparte ninguna con el turnero ni con el barbero. Esos dos trabajan
+  en la zona del navegador y comparten cinco funciones: `fechaLocalISO`,
+  `fechaDeISO`, `fmtHora` y `fmtFechaHora` son iguales, y `fmtFechaLarga` difiere
+  (`day: '2-digit'` en el barbero, `'numeric'` en el turnero). La landing no
+  tiene `fecha.js`.
+- `formato.js`: `fmtPesos` está en los cuatro, y el del panel es distinto (redondea
+  y pone el signo y un espacio). `capitalizar` está en el barbero y el turnero. El
+  resto de las funciones es propio del panel.
 
 Si en algún momento el dolor de mantener los duplicados es alto, evaluar
 mover todo a un paquete compartido (`packages/ui/`) con npm/pnpm
@@ -736,7 +748,7 @@ actualizá este doc.**
 10. ~~**Iconografía sin librería elegida**~~ — **Resuelto**: se eligió Lucide (`lucide-react`). Ver §3.7.
 11. ~~**`<html lang="es">`** — verificar que esté en `index.html` de cada front.~~ — **Resuelto**: presente en los cuatro fronts (verificado 2026-09-29).
 12. ~~**Focus visible global** — auditar que todos los primitivos tengan estilo de `:focus-visible`. Hoy `Card` y `Button` sí; el resto, sin verificar.~~ — **Resuelto**: hay una regla `*:focus-visible` global en los cuatro fronts, y los campos que anulan el `outline` tienen anillo propio (`InputTiempo`, `Select`, `SearchInput`, `CampoTexto`, `CampoMonto`). `CampoTelefono` lleva además el `outline` en su contenedor, porque con error el borde no cambia.
-13. **Regla ESLint `react-hooks/set-state-in-effect` desactivada en `frontend-barbero/eslint.config.js`.** Llegó por el scaffolding de Vite (`eslint-plugin-react-hooks` v7); los otros fronts usan versiones más viejas sin ella. En este código son falsos positivos sobre el patrón de fetching del proyecto (`setCargando(true)` al montar, cuando `cargando` ya es `true`). Si se actualiza react-hooks en los demás fronts, tomar una **postura unificada**: desactivarla en todos, o refactorizar el patrón de fetch a "sin setState síncrono en el efecto". **Actualización 2026-09-29:** eso ya pasó — los cuatro fronts tienen `eslint-plugin-react-hooks` v7 y la regla está activa en todos salvo barbero. La postura unificada sigue pendiente; el estado actual de lint de cada front (qué errores y dónde) está en `estado_actual.md` → Deudas vivas del frontend del panel.
+13. ~~**Regla ESLint `react-hooks/set-state-in-effect` desactivada solo en `frontend-barbero/eslint.config.js`.** Faltaba una postura unificada: desactivarla en todos, o refactorizar el patrón de fetch a "sin setState síncrono en el efecto".~~ — **Resuelto**: está apagada en los cuatro fronts, con el motivo en `convenciones_tecnicas.md` §8.
 14. ~~**Rango horario del timeline hardcodeado**~~ — **Resuelto**: `Agenda.jsx` de `frontend-barbero` ya no usa `7:00`–`22:00` fijo. El rango se deriva por día con `calcularRangoHoras(horarioAtencion, fecha, turnos)`: trae `horario_atencion` del local (`getTenant()`, fetch best-effort una sola vez al montar) y muestra desde `apertura - 1h` hasta `cierre + 1h` del día visible (`floor`/`ceil` para líneas de hora prolijas con horarios no enteros como `10:30`). El rango se expande para que cualquier turno fuera de esa franja siga visible (clamp al min/max entre horario y turnos). Día cerrado: deriva de los turnos del día (±1h) o, sin turnos, cae al default `7`–`22` — mismo camino al que cae si `getTenant()` falla (red de seguridad). `HORA_INICIO`/`HORA_FIN`/`ALTO_TOTAL` pasaron de constantes de módulo a valores derivados por render que bajan por props a `Timeline`/`BloqueTurno`. (Emparenta con la deuda 4, aún abierta en el turnero.)
 15. **`getMisClientes` sin paginación** — la pantalla Clientes de `frontend-barbero` trae todos los clientes históricos del barbero y filtra en cliente. Con 500+ clientes, el render de cards con hover-state (ver deuda 8) puede sentirse lento. Mitigación: paginar el endpoint o virtualizar la lista.
 16. **Toast inline → flotante global.** El primitivo `Toast` es hoy inline / render-state (cada caller mantiene el estado y lo monta en su layout; ver §4.8). El **target** es un Toast **flotante, centrado y con auto-dismiss** servido por un provider global con API imperativa (`toast.show()`). Migrar implica: (1) crear el provider/portal + dispatcher; (2) migrar **todos** los call-sites inline actuales (`BloqueImagenes`, los 6 handlers de export de xlsx vía `errorExport`, y cualquier otro feedback efímero); (3) recién ahí poder centralizar el feedback de error de `cargarChunk`. Hasta entonces, el patrón vigente es el inline (§4.8).
@@ -750,7 +762,9 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-10-30 — deudas #8 y #12 de §9 resueltas: `DataTable` hace el hover de las filas con `<style>` local, y el foco visible quedó auditado (`CampoTelefono` suma el `outline` en su contenedor).*
+*Última actualización: 2026-10-30 — deuda #13 de §9 resuelta: `set-state-in-effect` apagada en los cuatro fronts; §6.4 suma `wizardStyles.js`; §8 corrige lo de `utils/fecha.js` y `utils/formato.js`, que no son copias entre fronts.*
+
+*2026-10-30 — deudas #8 y #12 de §9 resueltas: `DataTable` hace el hover de las filas con `<style>` local, y el foco visible quedó auditado (`CampoTelefono` suma el `outline` en su contenedor).*
 
 *2026-10-29 — cierre de la Feature 1 de la app del barbero: §3.5 suma `shadowScroll`; §3.6 suma la superficie kiosko y su escala; §6.4 nueva (wizard del modo operativo y el patrón del paso de confirmación); deuda #23 nueva.*
 

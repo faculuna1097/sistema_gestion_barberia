@@ -1,4 +1,4 @@
-// /frontend/src/components/BadgeFormaPago.jsx
+// /frontend/src/components/ui/BadgeFormaPago.jsx
 // Pill que indica la forma de pago de un movimiento (efectivo / mercado pago).
 //
 // Variante de diseño: solo texto, sin íconos. El contexto en la tabla

@@ -23,7 +23,11 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^[A-Z_]' }],
+      // Apagada en los 4 fronts: el patrón de carga de datos del proyecto (fetch
+      // en useEffect con setCargando(true)) dispara falsos positivos. Ver
+      // convenciones_tecnicas.md §8.
+      'react-hooks/set-state-in-effect': 'off',
     },
   },
 ])
