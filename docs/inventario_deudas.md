@@ -57,14 +57,14 @@
 
 | id | deuda | fuente | estado verificado | clase | área | tam | riesgo | archivos | deps |
 |---|---|---|---|---|---|---|---|---|---|
-| E01 | Claves `ciudad`/`moneda` del default de `configuracion` sin uso (+ TODO del script) | EA:325, `crearTenant.js:69` | Abierta | B | estructura del backend | S | — | `scripts/crearTenant.js` | E02, M12 |
-| E02 | `crearTenant.js` no crea las credenciales operativas; `generarHashOperativo.js` con constantes a mano | EA:326 | Abierta | A | estructura del backend | S | — | `scripts/crearTenant.js`, `scripts/generarHashOperativo.js`, `onboarding.md` | E01, M12 |
+| E01 | Claves `ciudad`/`moneda` del default de `configuracion` sin uso (+ TODO del script) | EA:325, `crearTenant.js:69` | Hecha (tanda 4, 2026-10-30): sacadas del INSERT y borrado el TODO; un tenant nuevo arranca con el default `{}` de la columna. Las filas existentes no se tocaron | B | estructura del backend | S | — | `scripts/crearTenant.js` | E02, M12 |
+| E02 | `crearTenant.js` no crea las credenciales operativas; `generarHashOperativo.js` con constantes a mano | EA:326 | Hecha (tanda 4, 2026-10-30): `crearTenant.js` recibe y guarda usuario y password operativos; `generarHashOperativo.js` toma `<tenant_id> <usuario> <password>`, sin constantes. Reglas y hash en `utils/credencialesOperativas.js`; `onboarding.md` actualizado | A | estructura del backend | S | — | `scripts/crearTenant.js`, `scripts/generarHashOperativo.js`, `onboarding.md` | E01, M12 |
 | E03 | `gasto.created_at` redundante con `gasto.timestamp` | EA:327 | Abierta | B | DB y schema | S | DB (si se borra) | `SQL_Schema.md` | — |
 | E04 | Separar credenciales a `tenant_credenciales` (1:1) | EA:328 | Abierta. No hay ningún `SELECT *`: riesgo teórico | C | DB y schema | L | DB, regresión en auth | auth*, `tenantMiddleware.js`, `adminOperativo.js`, `gestion.js` | — |
-| E05 | `getBarberos` repite la query de `listarBarberosActivos` | EA:329 | Abierta | A | estructura del backend | S | — | `controllers/barberos.js` | — |
+| E05 | `getBarberos` repite la query de `listarBarberosActivos` | EA:329 | Hecha (tanda 4, 2026-10-30): `getBarberos` usa `listarBarberosActivos` | A | estructura del backend | S | — | `controllers/barberos.js` | — |
 | E06 | "Mailing migrado a Resend" figura como deuda | EA:330 | Hecha (tanda 1, 2026-10-30): sacada de `estado_actual.md`; lo que decía ya está en Deploy, Pendientes y `decisiones_mail_entregabilidad.md` | D | docs | S | — | `estado_actual.md` | — |
 | E07 | Las reservas no validan el bloque del barbero ni la grilla de slots | EA:331 | Abierta | C | validaciones y errores del backend | L | contrato | `controllers/turnero.js`, `controllers/turnos.js` | AUD-1 |
-| E10 | Título del evento de Calendar: pasar a solo `cliente.nombre` | EA:334 | Abierta (`googleCalendar.js:53`) | A | estructura del backend | S | — | `services/googleCalendar.js` | — |
+| E10 | Título del evento de Calendar: pasar a solo `cliente.nombre` | EA:334 | Hecha (tanda 4, 2026-10-30): el título es solo `cliente.nombre`; `Servicio: X` pasó a la descripción para que el barbero lo siga viendo | A | estructura del backend | S | — | `services/googleCalendar.js` | — |
 | E11 | `actualizarCredencialesOperativas` no chequea `rowCount` | EA:335 | Hecha (tanda 3, 2026-10-30): `rowCount === 0` responde 404 | A | validaciones y errores del backend | S | — | `controllers/adminOperativo.js` | — |
 | E12 | Path `/turnos/gestionar/` escrito en el backend y en el turnero | EA:336 | Abierta | C | turnero | S | — | `turnosService.js`, `frontend-turnero/src/utils/rutas.js` | E15 |
 | E13a | `barbero_horario` con dos escritores (edición y cascada) | EA:337 | Abierta | A | estructura del backend | M | regresión (cascada) | `horariosService.js`, `horarioAtencionService.js` | — |
@@ -72,9 +72,9 @@
 | E13c | Lectura de clientes y find-or-create del turnero separados | EA:337 | Abierta | C | estructura del backend | M | — | `controllers/clientes.js`, `turnosService.js` | Base de clientes |
 | E14 | Logger estructurado | EA:338 | Abierta (309 `console.*`) | C | estructura del backend | L | — | backend entero | — |
 | E15 | Subdominio, tokens, utils y primitivos copiados en cada front | EA:339 | Abierta; volvió a divergir (X01) | C | lint y tooling | L | regresión en 4 fronts | `*/src/{theme,utils,components/ui}` | X01, DS18 |
-| E17 | `TZ` redeclarada | EA:341 | Abierta (`inicio.js:6`, `googleCalendar.js:9`) | A | estructura del backend | S | — | `controllers/inicio.js`, `services/googleCalendar.js` | — |
+| E17 | `TZ` redeclarada | EA:341 | Hecha (tanda 4, 2026-10-30): `inicio.js` y `googleCalendar.js` importan `TZ` de `utils/constantes.js` | A | estructura del backend | S | — | `controllers/inicio.js`, `services/googleCalendar.js` | — |
 | E18 | Comentarios que citan §5-bis y §7 #1 de `performance_frontends.md` | EA:342 | Hecha (tanda 1, 2026-10-30): citan el doc sin sección (`db.js:172`, `index.js:248`) | A | estructura del backend | S | — | `config/db.js`, `index.js` | — |
-| E19 | Default de `PUBLIC_BASE_URL` en 5173 (es 5175) | EA:343 | Abierta (`turnosService.js:190,215`) | A | estructura del backend | S | — | `services/turnosService.js` | — |
+| E19 | Default de `PUBLIC_BASE_URL` en 5173 (es 5175) | EA:343 | Hecha (tanda 4, 2026-10-30): default `http://localhost:5175` en los dos lugares y en `.env.example` | A | estructura del backend | S | — | `services/turnosService.js` | — |
 | E20 | SELECT enriquecido de turno casi igual en tres lugares | EA:344 | Abierta | A | estructura del backend | M | regresión (mails, recordatorio) | `turnosService.js`, `recordatoriosService.js` | — |
 | E21 | Rebote de overscroll de iOS detrás del footer del turnero | EA:346 | Mitigación vigente; no verificable sin iPhone | C | turnero | L | visible | `frontend-turnero/src/index.css`, layout | — |
 | E22 | Tipo de comisión `fijo` latente (CHECK y cálculos) | EA:348 = `SQL_Schema.md:15` | Abierta | B | DB y schema | M | DB | `SQL_Schema`, `planillaService.js`, `SeccionPlanillas.jsx`, `MiPlanilla.jsx` | P08, M06 |
@@ -82,7 +82,7 @@
 | M01 | `req.body` sin fallback (Express 5) → 500 en vez de 400 | EA:354 | Hecha (tanda 3, 2026-10-30): middleware `req.body ??= {}` después de `express.json()`; sacados los `req.body \|\| {}`. `express.raw` sigue dejando el `Buffer` de las imágenes | A | validaciones y errores del backend | S | — | `index.js` (middleware) | — |
 | M02 | `caja.eliminarMovimiento` con id no-UUID → 500 | EA:355 | Hecha (tanda 3, 2026-10-30): `esUUID` (`utils/validarUuid.js`) en todas las ramas de `caja.eliminarMovimiento`, `deleteGasto`, `updateGasto`, `deleteVenta` y `updateVenta`, y en el `producto_id` del body de `updateVenta` | A | validaciones y errores del backend | S | — | `controllers/caja.js`, `controllers/gastos.js`, `controllers/ventas.js` | T02, N03 |
 | M03 | `getCategorias` no filtra `activo` | EA:356 | Hecha (tanda 3, 2026-10-30): trae las de `activo IS NOT FALSE`. El modal de edición de Gastos suma la categoría del gasto si está inactiva, para no mostrar otra | A | validaciones y errores del backend | S | visible (iPad) | `controllers/categorias.js` | E23 |
-| M04 | Gasto sin categoría: `JOIN` en Balances y Caja, `LEFT JOIN` en Gastos | EA:357 | Abierta | A | estructura del backend | S | visible (totales) | `controllers/balances.js`, `controllers/caja.js` | — |
+| M04 | Gasto sin categoría: `JOIN` en Balances y Caja, `LEFT JOIN` en Gastos | EA:357 | Hecha (tanda 4, 2026-10-30): `LEFT JOIN` y `COALESCE(cg.nombre, 'Sin categoría')` en Balances mensual y Caja. Consultado: 0 gastos con `categoria_id` NULL en los tres tenants, así que los totales no cambian | A | estructura del backend | S | visible (totales) | `controllers/balances.js`, `controllers/caja.js` | — |
 | M05 | `gasto.categoria_id` no se valida contra el tenant | EA:358 | Hecha (tanda 3, 2026-10-30): `categoriaEnTenant` (`services/categoriasService.js`) responde 404 en `createGasto` y `updateGasto`; no exige que esté activa. El FK sigue simple (M12) | A | validaciones y errores del backend | S | — | `controllers/gastos.js` | M12 |
 | M06 | La comisión no queda guardada en el corte | EA:359 | Abierta | B | DB y schema | L | DB, contrato | `corte`, `cortesService.js`, `balances.js`, `planillaService.js` | E22, P08 |
 | M07 | Borrado de gastos y ventas implementado dos veces | EA:360 | Abierta | A | estructura del backend | M | regresión (stock) | `gastos.js`, `ventas.js`, `caja.js` | M02 |
@@ -92,7 +92,7 @@
 | M11 | Redondeo de comisiones distinto entre mensual e histórico | EA:364 | Abierta | A | estructura del backend | S | visible (centavos) | `controllers/balances.js` | P08 |
 | M12 | Categorías de gasto cargadas a mano por tenant | EA:365 | Abierta | B | DB y schema | M | DB (FK compuesto) | `crearTenant.js`, `onboarding.md` | E02, M05 |
 | M13a | `gastos.js` sin JSDoc | EA:366 | Hecha (tanda 1, 2026-10-30): JSDoc en los 4 handlers | A | estructura del backend | S | — | `controllers/gastos.js` | M07 |
-| M13b | `getGastosMensual` corre sus dos consultas en serie | EA:366 | Abierta | A | estructura del backend | S | — | `controllers/gastos.js` | — |
+| M13b | `getGastosMensual` corre sus dos consultas en serie | EA:366 | Hecha (tanda 4, 2026-10-30): las dos consultas corren con `Promise.all` | A | estructura del backend | S | — | `controllers/gastos.js` | — |
 | M13c | Comentario "RUTAS DEL BACKOFFICE (admin + barbero)" engañoso | EA:366 | Hecha (tanda 1, 2026-10-30): comentario corregido (`index.js:218`) | A | estructura del backend | S | — | `index.js` | — |
 | M15 | Subdominios de tenant sin `noindex` | EA:368 | Abierta (`frontend/vercel.json`) | A | panel | S | visible (SEO del turnero si se configura mal) | `frontend/vercel.json` | — |
 | M16 | Landing: `linkWhatsApp`/`linkEmail` sin manejo de `null` | EA:369 | Cambió de archivo: `utils/contacto.js` | A | landing | S | — | `frontend-landing/src/utils/contacto.js` | — |
@@ -235,9 +235,9 @@ Cada tanda es un chat y un commit sobre `feature/descansos-agenda`. Las clase C 
 | 2 | Lint en verde y limpieza | DS13, P09, N01, N02, N04 | S | Nulo | 11 |
 | 3 | Validaciones y errores del backend | M01, M02, N03, T02, T01, E11, F01, M10, M08, M03, M05, T03, F04, N06 | M | Bajo. T03 y F04 piden el mismo tope en el front y en el back; M03 cambia lo que ve el iPad. | — |
 | 4 | Contrato de ids y arreglos chicos | N11, N12, N13, N14, N16, N18, E05, E17, E19, E10, M13b, M04, E01, E02 | M | Bajo. M04 puede mover totales. | 1 |
-| 4b | Refactors del backend | E20, E13a, E13b, M07, AUD-6 | M–L | Medio: mails (E20), cascada (E13a), permisos (E13b), stock (M07), pool (AUD-6). | — |
+| 4b | Refactors del backend | E20, E13a, E13b, M07, AUD-6, N19, N20, N21, N22, N24 | M–L | Medio: mails (E20), cascada (E13a), permisos (E13b), stock (M07), pool (AUD-6). | — |
 | 5 | Contratos backend ↔ fronts | T04, F02, M09, AUD-5 | M | Contrato. El backend nuevo tiene que andar con los fronts viejos. | 6, 8, 13 |
-| 6 | Panel | DS16 → P07, P01, P11, P12, P13, P14, P15a, P15b, P15c, P16, P17a, P17b, P18, P19, DS23, PF09, M15, P10, N07, N08, N09, N10, N15 | L | Visible. Verificar en preview y en el iPad (P15b). | 9 |
+| 6 | Panel | DS16 → P07, P01, P11, P12, P13, P14, P15a, P15b, P15c, P16, P17a, P17b, P18, P19, DS23, PF09, M15, P10, N07, N08, N09, N10, N15, N23 | L | Visible. Verificar en preview y en el iPad (P15b). | 9 |
 | 7 | Turnero y landing | T06, T07b, T07c, T10, T11, T12a, T12b, T12d, DS17, DS19, DS21, AUD-4b, X01, M16, T08, DS09, DS20, N05, N17 | M–L | Visible. Sumarla a la prueba en celulares reales del deploy. DS09 y DS20 tocan también el panel y el barbero. | 7, 10, 12 |
 | 8 | DB: nullables, categorías y gasto | E23, E03, M12 | M | DB | 2, 5 |
 | 9 | Comisiones | E22, M06, P08, M11 | L | DB, contrato y visible (montos de Planillas y Balances) | 3, 4 |
@@ -275,14 +275,20 @@ Deudas nuevas, que no estaban en las fuentes. Se suman a las 107 de los conteos 
 | N08 | `intentoHistorico` nunca vuelve a 0: después de un reintento, cada vuelta al tab recarga el histórico | Tanda 2 | Del reporte de la tanda 2; inofensivo | A | panel | S | — | `SeccionBalances.jsx` | 6 |
 | N09 | `FondoLocal.jsx:107` lee un caché dentro de un efecto; se podría resolver sin efecto | Tanda 2 | Del reporte de la tanda 2 | A | panel | S | visible | `components/ui/FondoLocal.jsx` | 6 |
 | N10 | `eslint-disable` de `exhaustive-deps` sin revisar | Tanda 2 | Confirmada: es el único en los cuatro fronts | A | panel | S | — | `gestion/TabBarberos.jsx:530` | 6 |
-| N11 | 15 handlers siguen dando 500 con un id mal formado | Tanda 3 | Del reporte de la tanda 3 (medido); esos controllers no usan `esUUID` | A | validaciones y errores del backend | M | — | `ventas.js`, `turnos.js`, `turnosOperativo.js`, `planilla.js`, `descansos.js`, `horarios.js`, `feriados.js`, `imagenes.js`, `gestion.js` | 4 |
-| N12 | `getAgenda` y `createCorte` no siguen el contrato de ids | Tanda 3 | Confirmada: `getAgenda` da 404 en un query y `createCorte` 400 en el body | A | validaciones y errores del backend | S | — | `controllers/agenda.js`, `services/cortesService.js` | 4 |
-| N13 | Dos patrones para lo mismo: `esUUID` y el `catch` del `22P02` | Tanda 3 | Confirmada | A | validaciones y errores del backend | S | — | `barberosService.js`, `sociosService.js`, `turnosService.js`, `suspensionesService.js`, `cortesService.js` | 4 |
-| N14 | `convenciones_tecnicas.md` no documenta `esUUID` ni el contrato de ids | Tanda 3 | Del reporte de la tanda 3 | A | docs | S | — | `convenciones_tecnicas.md` | 4 |
+| N11 | 15 handlers siguen dando 500 con un id mal formado | Tanda 3 | Hecha (tanda 4, 2026-10-30): `esUUID` en los 15 handlers de la lista y también en `putHorarios` y `getMisClientes`, que daban el mismo 500. El `barbero_id` de `getHorarios` va en la URL: da 404 `Barbero no encontrado` | A | validaciones y errores del backend | M | — | `ventas.js`, `turnos.js`, `turnosOperativo.js`, `planilla.js`, `descansos.js`, `horarios.js`, `feriados.js`, `imagenes.js`, `gestion.js` | 4 |
+| N12 | `getAgenda` y `createCorte` no siguen el contrato de ids | Tanda 3 | Hecha (tanda 4, 2026-10-30): `getAgenda` da 400; `createCorte` da 404 con un `turno_id` mal formado o inexistente. El iPad no cambia: solo muestra el motivo del servidor con un 409. `completarTurno` también: un `servicio_id` mal formado o inexistente pasa de 400 a 404 | A | validaciones y errores del backend | S | — | `controllers/agenda.js`, `services/cortesService.js` | 4 |
+| N13 | Dos patrones para lo mismo: `esUUID` y el `catch` del `22P02` | Tanda 3 | Hecha (tanda 4, 2026-10-30): no queda ningún `catch` del `22P02`; ninguno protegía otra cosa. `completarTurnoConCorte` valida el servicio con `calcularDuracionServicio` | A | validaciones y errores del backend | S | — | `barberosService.js`, `sociosService.js`, `turnosService.js`, `suspensionesService.js`, `cortesService.js` | 4 |
+| N14 | `convenciones_tecnicas.md` no documenta `esUUID` ni el contrato de ids | Tanda 3 | Hecha (tanda 4, 2026-10-30): `convenciones_tecnicas.md` §2 → "Ids que llegan del cliente" | A | docs | S | — | `convenciones_tecnicas.md` | 4 |
 | N15 | Una descripción sin espacios desborda la tabla de Gastos y saca de vista Editar y Eliminar | Tanda 3 | Del reporte de la tanda 3 (medido con 200 caracteres) | A | panel | S | visible | `SeccionGastos.jsx` | 6 |
-| N16 | `feriados.js` calcula "hoy" a mano en vez de usar `hoyISO()` | Tanda 3 | Confirmada: 2 lugares | A | validaciones y errores del backend | S | — | `controllers/feriados.js` | 4 |
+| N16 | `feriados.js` calcula "hoy" a mano en vez de usar `hoyISO()` | Tanda 3 | Hecha (tanda 4, 2026-10-30): los 2 lugares usan `hoyISO()` | A | validaciones y errores del backend | S | — | `controllers/feriados.js` | 4 |
 | N17 | El `DIAS_RESERVABLES` del turnero no apunta a la constante del backend | Tanda 3 | Del reporte de la tanda 3 | A | turnero | S | — | `frontend-turnero/src/utils/fecha.js` | 7 |
-| N18 | `getTurnos` ignora `desde` o `hasta` si viene uno solo y lista todo el tenant | Tanda 3 | Del reporte de la tanda 3 | A | validaciones y errores del backend | S | — | `controllers/turnos.js` | 4 |
+| N18 | `getTurnos` ignora `desde` o `hasta` si viene uno solo y lista todo el tenant | Tanda 3 | Hecha (tanda 4, 2026-10-30): si llega solo `desde` o solo `hasta`, 400 | A | validaciones y errores del backend | S | — | `controllers/turnos.js` | 4 |
+| N19 | `generarHashOperativo.js` reemplaza la password sin subir `operativo_token_version`: los tokens viejos del iPad siguen sirviendo | Tanda 4 | Confirmada: el panel la sube e invalida el caché. Con el script, `onboarding.md` también tiene que pedir invalidar el caché (`/api/plataforma/cache/invalidate`); si no, el middleware sigue con la versión vieja y rechaza los logins nuevos | A | estructura del backend | S | — | `scripts/generarHashOperativo.js`, `onboarding.md` | 4b |
+| N20 | `adminOperativo.js` repite las reglas de `credencialesOperativas.js` | Tanda 4 | Confirmada: mínimos 3 y 8 y bcrypt 10 en los dos lados | A | estructura del backend | S | — | `controllers/adminOperativo.js`, `utils/credencialesOperativas.js` | 4b |
+| N21 | `crearServicio`, `editarServicio`, `crearProducto` y `editarProducto` no validan `precio`: `'abc'` se guarda como `NaN` y se aceptan negativos | Tanda 4 | Confirmada en el código: `gestion.js` no usa `esMontoValido`, `precio` es `numeric` sin CHECK y Postgres acepta `NaN`. Hoy hay 0 filas con `NaN`. `stock_minimo` tampoco se valida | A | validaciones y errores del backend | S | — | `controllers/gestion.js` | 4b |
+| N22 | `completarTurno` no usa `esMontoValido`: `'Infinity'` pasa la validación, y `''` o `null` cuentan como 0 | Tanda 4 | Confirmada en el código (`turnos.js:256,259`) | A | validaciones y errores del backend | S | — | `controllers/turnos.js` | 4b |
+| N23 | Con un 404, el iPad dice "Intentá de nuevo", y reintentar nunca funciona | Tanda 4 | Confirmada (`FlujoCorte.jsx:140`): solo muestra el motivo del servidor con un 409. Caso raro | A | panel | S | visible | `frontend/src/screens/flows/FlujoCorte.jsx` | 6 |
+| N24 | `putHorarios` y `getHorarios` no comprueban que el barbero sea del tenant | Tanda 4 | Confirmada: `barbero_horario` tiene FK simple a `barbero`, así que un barbero de otro tenant pasa el FK y deja una fila cruzada, y uno inexistente da 500. Hoy hay 0 filas cruzadas. Los lectores filtran por tenant, así que el otro tenant no se ve afectado | A | validaciones y errores del backend | S | — | `controllers/horarios.js`, `services/barberosService.js` | 4b |
 
 ## Lo que no se pudo verificar
 
@@ -294,7 +300,6 @@ Con navegador o celular:
 Con la DB:
 - E23: los NULLs se vieron solo en `SQL_Schema.md`.
 - E22: no se confirmó que no haya filas `fijo`.
-- M04: no se buscaron gastos sin categoría.
 
 Solo leído en el código:
 - T09: el comportamiento del limiter.

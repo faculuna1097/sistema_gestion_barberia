@@ -6,6 +6,7 @@
 
 import { query } from '../config/db.js';
 import { construirPath, urlPublica, subirImagen, eliminarImagen } from '../services/storageService.js';
+import { esUUID } from '../utils/validarUuid.js';
 
 // Cupo máximo de imágenes por tipo. El "orden" de cada imagen es su slot:
 // va de 1 al límite del tipo. La constraint UNIQUE(tenant,tipo,orden) en la
@@ -124,6 +125,10 @@ export const postImagen = async (req, res) => {
  * @returns {JSON} 200 { ok: true } | 404
  */
 export const deleteImagen = async (req, res) => {
+  if (!esUUID(req.params.id)) {
+    return res.status(404).json({ error: 'Imagen no encontrada' });
+  }
+
   try {
     // El filtro por tenant_id evita que un tenant borre imágenes de otro.
     const result = await query(

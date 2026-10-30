@@ -7,6 +7,7 @@
 
 import { listarTurnosOperativos } from '../services/turnosService.js';
 import { esFechaISO } from '../utils/validarFecha.js';
+import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
 
 /**
  * getTurnosOperativos
@@ -24,6 +25,9 @@ export const getTurnosOperativos = async (req, res) => {
   }
   if (!esFechaISO(fecha)) {
     return res.status(400).json({ error: 'fecha debe tener formato YYYY-MM-DD' });
+  }
+  if (!esUUID(barbero_id)) {
+    return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
   }
 
   try {

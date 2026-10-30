@@ -23,6 +23,9 @@ export const createVenta = async (req, res) => {
   if (!esMontoValido(precio_unitario)) {
     return res.status(400).json({ error: 'precio_unitario es requerido y debe ser un número >= 0' });
   }
+  if (!esUUID(producto_id)) {
+    return res.status(404).json({ error: 'Producto no encontrado' });
+  }
 
   let ventaId = null;
 

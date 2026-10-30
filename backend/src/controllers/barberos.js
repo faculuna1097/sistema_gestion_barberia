@@ -2,7 +2,7 @@
 // Controlador del recurso "barbero".
 // Contiene la lógica de negocio para cada endpoint de /api/barberos.
 
-import { query } from '../config/db.js';
+import { listarBarberosActivos } from '../services/barberosService.js';
 
 /**
  * getBarberos
@@ -12,14 +12,8 @@ import { query } from '../config/db.js';
  */
 export const getBarberos = async (req, res) => {
   try {
-    const result = await query(
-      `SELECT id, nombre
-       FROM barbero
-       WHERE tenant_id = $1 AND activo = true
-       ORDER BY nombre ASC`,
-      [req.tenant_id]
-    );
-    res.json(result.rows);
+    const barberos = await listarBarberosActivos(req.tenant_id);
+    res.json(barberos);
   } catch (err) {
     console.error('[barberos] Error en getBarberos:', err);
     res.status(500).json({ error: 'Error al obtener barberos' });

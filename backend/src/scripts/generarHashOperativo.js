@@ -1,33 +1,63 @@
-// ⚠️ TENANT-ESPECÍFICO: antes de reusar para otro tenant,
-// cambiar TENANT_ID, USUARIO_PLANO y PASSWORD_PLANO con los valores correspondientes.
-// El UPDATE pisa las credenciales operativas existentes — si ya están seteadas en
-// la DB, correr de nuevo las reemplaza.
+// /backend/src/scripts/generarHashOperativo.js
+// Reemplaza las credenciales del modo operativo de un tenant que ya existe. El alta
+// inicial la hace crearTenant.js; esto sirve para cambiarlas o para un tenant viejo.
+// El UPDATE pisa las credenciales operativas existentes.
+//
+// Uso:
+//   cd backend
+//   node src/scripts/generarHashOperativo.js <tenant_id> <usuario> <password>
+//
+// Argumentos:
+//   1. UUID del tenant (string)
+//   2. usuario operativo, al menos 3 caracteres (string)
+//   3. password operativa, al menos 8 caracteres (string)
 
-import bcrypt from 'bcrypt';
 import { query } from '../config/db.js';
-
-const TENANT_ID       = 'aaaaaaaa-0000-0000-0000-000000000002'; // demo
-const USUARIO_PLANO   = 'operativo';
-const PASSWORD_PLANO  = 'demo1234';
+import { errorCredencialesOperativas, hashearPasswordOperativa } from '../utils/credencialesOperativas.js';
+import { esUUID } from '../utils/validarUuid.js';
 
 /**
- * Hashea la password operativa y guarda usuario + hash en la fila del tenant.
- * No recibe ni retorna nada; lee las constantes de arriba y termina el proceso
- * con código 0 si todo salió bien, 1 si hubo error.
+ * Valida los argumentos, hashea la password operativa y guarda usuario + hash en
+ * la fila del tenant. No recibe ni retorna nada; lee process.argv y termina el
+ * proceso con código 0 si todo salió bien, 1 si hubo error.
  */
 async function generarHashOperativo() {
   console.log('[generarHashOperativo] Iniciando...');
-  try {
-    const hash = await bcrypt.hash(PASSWORD_PLANO, 10);
-    console.log('[generarHashOperativo] Hash generado:', hash);
 
-    await query(
+  const [, , tenantId, usuario, password] = process.argv;
+
+  if (!tenantId || !usuario || !password) {
+    console.error('[generarHashOperativo] Error: faltan argumentos.');
+    console.error('Uso: node src/scripts/generarHashOperativo.js <tenant_id> <usuario> <password>');
+    process.exit(1);
+  }
+
+  if (!esUUID(tenantId)) {
+    console.error('[generarHashOperativo] Error: tenant_id debe ser un UUID válido.');
+    process.exit(1);
+  }
+
+  const errorCredenciales = errorCredencialesOperativas(usuario, password);
+  if (errorCredenciales) {
+    console.error(`[generarHashOperativo] Error: ${errorCredenciales}`);
+    process.exit(1);
+  }
+
+  try {
+    const hash = await hashearPasswordOperativa(password);
+
+    const resultado = await query(
       'UPDATE tenant SET operativo_usuario = $1, operativo_password_hash = $2 WHERE id = $3',
-      [USUARIO_PLANO, hash, TENANT_ID]
+      [usuario, hash, tenantId]
     );
 
+    if (resultado.rowCount === 0) {
+      console.error(`[generarHashOperativo] Error: no existe el tenant ${tenantId}.`);
+      process.exit(1);
+    }
+
     console.log('[generarHashOperativo] Credenciales operativas actualizadas correctamente en la DB.');
-    console.log('[generarHashOperativo] Tenant:', TENANT_ID, '| Usuario:', USUARIO_PLANO);
+    console.log('[generarHashOperativo] Tenant:', tenantId, '| Usuario:', usuario);
     process.exit(0);
   } catch (err) {
     console.error('[generarHashOperativo] Error:', err);

@@ -72,37 +72,38 @@ export const getGastosMensual = async (req, res) => {
   }
 
   try {
-    const resultadoGastos = await query(
-      `SELECT
-         g.id,
-         g.categoria_id,
-         TO_CHAR(g.timestamp AT TIME ZONE $3, 'DD/MM/YYYY') AS fecha,
-         TO_CHAR(g.timestamp AT TIME ZONE $3, 'HH24:MI')    AS hora,
-         COALESCE(cg.nombre, 'Sin categoría') AS categoria_nombre,
-         g.descripcion,
-         g.monto,
-         g.forma_pago
-       FROM gasto g
-       LEFT JOIN categoria_gasto cg ON g.categoria_id = cg.id
-       WHERE g.tenant_id = $1
-         AND TO_CHAR(g.timestamp AT TIME ZONE $3, 'YYYY-MM') = $2
-       ORDER BY g.timestamp DESC`,
-      [req.tenant_id, mes, TZ]
-    );
-
-    const resultadoTotales = await query(
-      `SELECT
-         COALESCE(cg.nombre, 'Sin categoría') AS categoria_nombre,
-         SUM(g.monto)                          AS total,
-         COUNT(g.id)                           AS cantidad
-       FROM gasto g
-       LEFT JOIN categoria_gasto cg ON g.categoria_id = cg.id
-       WHERE g.tenant_id = $1
-         AND TO_CHAR(g.timestamp AT TIME ZONE $3, 'YYYY-MM') = $2
-       GROUP BY cg.nombre
-       ORDER BY total DESC`,
-      [req.tenant_id, mes, TZ]
-    );
+    const [resultadoGastos, resultadoTotales] = await Promise.all([
+      query(
+        `SELECT
+           g.id,
+           g.categoria_id,
+           TO_CHAR(g.timestamp AT TIME ZONE $3, 'DD/MM/YYYY') AS fecha,
+           TO_CHAR(g.timestamp AT TIME ZONE $3, 'HH24:MI')    AS hora,
+           COALESCE(cg.nombre, 'Sin categoría') AS categoria_nombre,
+           g.descripcion,
+           g.monto,
+           g.forma_pago
+         FROM gasto g
+         LEFT JOIN categoria_gasto cg ON g.categoria_id = cg.id
+         WHERE g.tenant_id = $1
+           AND TO_CHAR(g.timestamp AT TIME ZONE $3, 'YYYY-MM') = $2
+         ORDER BY g.timestamp DESC`,
+        [req.tenant_id, mes, TZ]
+      ),
+      query(
+        `SELECT
+           COALESCE(cg.nombre, 'Sin categoría') AS categoria_nombre,
+           SUM(g.monto)                          AS total,
+           COUNT(g.id)                           AS cantidad
+         FROM gasto g
+         LEFT JOIN categoria_gasto cg ON g.categoria_id = cg.id
+         WHERE g.tenant_id = $1
+           AND TO_CHAR(g.timestamp AT TIME ZONE $3, 'YYYY-MM') = $2
+         GROUP BY cg.nombre
+         ORDER BY total DESC`,
+        [req.tenant_id, mes, TZ]
+      ),
+    ]);
 
     const totalGeneral = resultadoTotales.rows.reduce((acc, row) => acc + parseFloat(row.total), 0);
 

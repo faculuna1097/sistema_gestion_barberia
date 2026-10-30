@@ -4,6 +4,7 @@
 
 import { detalleSemanal, resumenSemanal, descansosSemanal } from '../services/planillaService.js';
 import { esFechaISO } from '../utils/validarFecha.js';
+import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
 
 /**
  * GET /api/admin/planilla?semana=YYYY-MM-DD&barbero_id=X
@@ -20,6 +21,9 @@ export const getPlanilla = async (req, res) => {
   if (req.rol === 'barbero') {
     barberoId = req.barbero_id;
   } else if (req.query.barbero_id) {
+    if (!esUUID(req.query.barbero_id)) {
+      return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
+    }
     barberoId = req.query.barbero_id;
   }
 
@@ -47,6 +51,9 @@ export const getResumen = async (req, res) => {
   if (req.rol === 'barbero') {
     barberoId = req.barbero_id;
   } else if (req.query.barbero_id) {
+    if (!esUUID(req.query.barbero_id)) {
+      return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
+    }
     barberoId = req.query.barbero_id;
   }
 
@@ -76,6 +83,9 @@ export const getDescansosSemana = async (req, res) => {
   if (req.rol === 'barbero') {
     barberoId = req.barbero_id;
   } else if (req.query.barbero_id) {
+    if (!esUUID(req.query.barbero_id)) {
+      return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
+    }
     barberoId = req.query.barbero_id;
   }
 

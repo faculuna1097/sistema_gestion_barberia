@@ -15,13 +15,18 @@ import { existeFeriado } from '../services/feriadosService.js';
 import { validarContacto } from '../utils/validarTexto.js';
 import { esFechaISO, parsearInstante } from '../utils/validarFecha.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
+import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
+
+// Mensaje del 404 de un turno, el mismo que usa turnosService.
+const MENSAJE_TURNO_NO_ENCONTRADO = 'Turno no encontrado';
 
 /**
  * GET /api/admin/turnos
  * Query params: fecha (YYYY-MM-DD) o desde+hasta (instantes con fecha y hora; sin
  * zona se toman en hora argentina). barbero_id opcional (ignorado si rol=barbero).
  * @returns {JSON} array de turnos con datos de barbero, servicio y cliente;
- *   400 si fecha, desde o hasta son inválidos
+ *   400 si fecha, desde, hasta o barbero_id son inválidos, o si llega uno solo de
+ *   desde y hasta
  */
 export const getTurnos = async (req, res) => {
   try {
@@ -31,6 +36,9 @@ export const getTurnos = async (req, res) => {
     if (req.rol === 'barbero') {
       filtros.barberoId = req.barbero_id;
     } else if (req.query.barbero_id) {
+      if (!esUUID(req.query.barbero_id)) {
+        return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
+      }
       filtros.barberoId = req.query.barbero_id;
     }
 
@@ -40,7 +48,8 @@ export const getTurnos = async (req, res) => {
         return res.status(400).json({ error: 'fecha debe tener formato YYYY-MM-DD' });
       }
       filtros.fecha = req.query.fecha;
-    } else if (req.query.desde && req.query.hasta) {
+    } else if (req.query.desde || req.query.hasta) {
+      // Si falta uno, parsearInstante da null y responde el mismo 400.
       const desde = parsearInstante(req.query.desde);
       const hasta = parsearInstante(req.query.hasta);
       if (!desde || !hasta) {
@@ -189,6 +198,10 @@ export const crearTurnoAdmin = async (req, res) => {
  * @returns {JSON} { id, estado }
  */
 export const patchEstado = async (req, res) => {
+  if (!esUUID(req.params.id)) {
+    return res.status(404).json({ error: MENSAJE_TURNO_NO_ENCONTRADO });
+  }
+
   const { estado } = req.body;
   if (!estado) {
     return res.status(400).json({ error: 'estado es requerido' });
@@ -230,6 +243,10 @@ export const patchEstado = async (req, res) => {
  * @returns {JSON} 201 { id, estado: 'completado', servicio_id, corte_id, monto_total }
  */
 export const completarTurno = async (req, res) => {
+  if (!esUUID(req.params.id)) {
+    return res.status(404).json({ error: MENSAJE_TURNO_NO_ENCONTRADO });
+  }
+
   const { forma_pago, precio, propina, servicio_id } = req.body;
 
   // ── Validaciones de input ──────────────────────────────────────────────────
@@ -259,13 +276,7 @@ export const completarTurno = async (req, res) => {
     console.log('[turnos] completarTurno completado | turno_id:', resultado.id, '| corte_id:', resultado.corte_id);
     res.status(201).json(resultado);
   } catch (err) {
-    if (err.code === 'NO_ENCONTRADO') {
-      return res.status(404).json({ error: err.message });
-    }
-    if (err.code === 'SERVICIO_INVALIDO') {
-      return res.status(400).json({ error: err.message });
-    }
-    if (err.code === 'TURNO_INEXISTENTE') {
+    if (err.code === 'NO_ENCONTRADO' || err.code === 'SERVICIO_INVALIDO' || err.code === 'TURNO_INEXISTENTE') {
       return res.status(404).json({ error: err.message });
     }
     if (err.code === 'ESTADO_INVALIDO' || err.code === 'TURNO_YA_VINCULADO' || err.code === 'TURNO_YA_COMPLETADO') {
@@ -285,6 +296,10 @@ export const completarTurno = async (req, res) => {
  * @returns {JSON} { id, estado: 'cancelado' }
  */
 export const deleteTurno = async (req, res) => {
+  if (!esUUID(req.params.id)) {
+    return res.status(404).json({ error: MENSAJE_TURNO_NO_ENCONTRADO });
+  }
+
   const canceladoPor = req.rol === 'barbero' ? 'barbero' : 'admin';
   const barberoId = req.rol === 'barbero' ? req.barbero_id : null;
 

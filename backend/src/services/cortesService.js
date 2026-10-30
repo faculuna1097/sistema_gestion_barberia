@@ -13,6 +13,10 @@
 import { query } from '../config/db.js';
 import { TZ } from '../utils/constantes.js';
 
+// Mensaje del 404 de un turno que no existe o no es de ese barbero. Lo comparten
+// registrarCorte y el controller, que responde lo mismo ante un turno_id mal formado.
+export const MENSAJE_TURNO_INEXISTENTE = 'El turno no existe o es de otro barbero';
+
 /**
  * Arma un error tipado de registrarCorte que cada controller mapea a HTTP.
  * @param {string} code - código del error (ver @throws de registrarCorte)
@@ -59,7 +63,7 @@ const errorCorte = (code, mensaje) => {
  * @returns {Promise<{ corte_id: string, monto_total: number, turno_vinculado: boolean }>}
  *   turno_vinculado es false si vino turnoId y el corte entró sin turno.
  * @throws {{ code: 'TURNO_YA_VINCULADO' | 'TURNO_YA_COMPLETADO' | 'ESTADO_INVALIDO' |
- *   'TURNO_INEXISTENTE' | 'UUID_INVALIDO' | 'BARBERO_INVALIDO' | 'SERVICIO_INVALIDO' }}
+ *   'TURNO_INEXISTENTE' | 'BARBERO_INVALIDO' | 'SERVICIO_INVALIDO' }}
  *   para los conflictos conocidos; cualquier otro error se propaga crudo.
  */
 export const registrarCorte = async ({
@@ -123,11 +127,6 @@ export const registrarCorte = async ({
       }
       // Otro FK inesperado → se propaga crudo abajo.
     }
-    // UUID con formato inválido.
-    if (err.code === '22P02') {
-      console.warn('[cortesService] registrarCorte — UUID con formato inválido | turno_id:', turnoId);
-      throw errorCorte('UUID_INVALIDO', 'El turno_id tiene un formato inválido');
-    }
     // Cualquier otro error se propaga crudo (el controller lo loguea + responde 500).
     throw err;
   }
@@ -153,7 +152,7 @@ export const registrarCorte = async ({
   const estado = fila.rows[0]?.estado;
   console.warn('[cortesService] registrarCorte — turno no completable, corte no registrado | turno_id:', turnoId, '| estado:', estado ?? 'inexistente');
   if (!estado) {
-    throw errorCorte('TURNO_INEXISTENTE', 'El turno no existe o es de otro barbero');
+    throw errorCorte('TURNO_INEXISTENTE', MENSAJE_TURNO_INEXISTENTE);
   }
   if (estado === 'completado') {
     throw errorCorte('TURNO_YA_COMPLETADO', 'Este turno ya figura como completado. Si su cobro no está cargado, registralo como cliente sin turno');

@@ -8,6 +8,7 @@
 import { crearDescanso, listarBloquesDescanso, bloqueDelDescanso } from '../services/descansosService.js';
 import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { esFechaISO, parsearInstante } from '../utils/validarFecha.js';
+import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
 
 /**
  * GET /api/admin/descansos?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&barbero_id=X
@@ -28,15 +29,14 @@ export const getDescansos = async (req, res) => {
     return res.status(400).json({ error: 'hasta debe ser igual o posterior a desde' });
   }
   const barberoId = req.rol === 'barbero' ? req.barbero_id : (req.query.barbero_id || undefined);
+  if (barberoId && !esUUID(barberoId)) {
+    return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
+  }
 
   try {
     const bloques = await listarBloquesDescanso(req.tenant_id, { desde, hasta, barberoId });
     res.json(bloques);
   } catch (err) {
-    // UUID mal formado (22P02): el único uuid que llega del cliente es barbero_id.
-    if (err.code === '22P02') {
-      return res.status(400).json({ error: 'barbero_id debe ser un UUID válido' });
-    }
     console.error('[descansos] Error en getDescansos:', err);
     res.status(500).json({ error: 'Error al listar los descansos' });
   }

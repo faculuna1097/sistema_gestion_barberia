@@ -4,17 +4,21 @@
 
 import { obtenerHorarios, validarNoSolapamiento, reemplazarHorarios } from '../services/horariosService.js';
 import { obtenerHorarioCrudo, validarRangoEnHorario } from '../services/horarioAtencionService.js';
+import { esUUID } from '../utils/validarUuid.js';
 
 /**
  * GET /api/admin/horarios/:barbero_id
  * Si rol=barbero y barbero_id !== req.barbero_id, devuelve 403.
- * @returns {JSON} array de bloques horarios
+ * @returns {JSON} array de bloques horarios | 404 si barbero_id está mal formado
  */
 export const getHorarios = async (req, res) => {
   const { barbero_id } = req.params;
 
   if (req.rol === 'barbero' && barbero_id !== req.barbero_id) {
     return res.status(403).json({ error: 'No podés ver horarios de otro barbero' });
+  }
+  if (!esUUID(barbero_id)) {
+    return res.status(404).json({ error: 'Barbero no encontrado' });
   }
 
   try {
@@ -32,13 +36,16 @@ export const getHorarios = async (req, res) => {
  * { dia_semana, hora_inicio, hora_fin }.
  * Si rol=barbero y barbero_id !== req.barbero_id, devuelve 403.
  * Valida no-solapamiento entre bloques del mismo día antes de persistir.
- * @returns {JSON} array de bloques insertados
+ * @returns {JSON} array de bloques insertados | 404 si barbero_id está mal formado
  */
 export const putHorarios = async (req, res) => {
   const { barbero_id } = req.params;
 
   if (req.rol === 'barbero' && barbero_id !== req.barbero_id) {
     return res.status(403).json({ error: 'No podés modificar horarios de otro barbero' });
+  }
+  if (!esUUID(barbero_id)) {
+    return res.status(404).json({ error: 'Barbero no encontrado' });
   }
 
   const bloques = req.body;

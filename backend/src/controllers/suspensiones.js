@@ -6,6 +6,7 @@ import { listarSuspensiones, crearSuspension, liberarSuspension } from '../servi
 import { armarLinkTurnero } from '../services/turnosService.js';
 import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { esFechaISO, parsearInstante } from '../utils/validarFecha.js';
+import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
 import { TIPOS_SUSPENSION } from '../utils/constantes.js';
 
 /**
@@ -36,16 +37,15 @@ export const getSuspensiones = async (req, res) => {
     if (req.rol === 'barbero') {
       barberoId = req.barbero_id;
     } else if (req.query.barbero_id) {
+      if (!esUUID(req.query.barbero_id)) {
+        return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
+      }
       barberoId = req.query.barbero_id;
     }
 
     const suspensiones = await listarSuspensiones(req.tenant_id, { barberoId, desde, hasta, tipo });
     res.json(suspensiones);
   } catch (err) {
-    // UUID mal formado (22P02): el único uuid que llega del cliente es barbero_id.
-    if (err.code === '22P02') {
-      return res.status(400).json({ error: 'barbero_id debe ser un UUID válido' });
-    }
     console.error('[suspensiones] Error en getSuspensiones:', err);
     res.status(500).json({ error: 'Error al listar suspensiones' });
   }

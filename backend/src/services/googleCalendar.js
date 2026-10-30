@@ -5,8 +5,7 @@
 // GOOGLE_*, se loguea y se devuelve null/false sin propagar el error.
 
 import { google } from 'googleapis';
-
-const TZ = 'America/Argentina/Buenos_Aires';
+import { TZ } from '../utils/constantes.js';
 
 const {
   GOOGLE_CLIENT_ID,
@@ -43,6 +42,7 @@ if (credencialesCargadas) {
 const armarCuerpoEvento = (turno, barbero, servicio, cliente) => {
   const lineasDescripcion = [
     `Cliente: ${cliente.nombre}`,
+    `Servicio: ${servicio.nombre}`,
     cliente.telefono ? `Teléfono: ${cliente.telefono}` : null,
     cliente.email ? `Email: ${cliente.email}` : null,
     '',
@@ -50,7 +50,7 @@ const armarCuerpoEvento = (turno, barbero, servicio, cliente) => {
   ].filter(linea => linea !== null);
 
   return {
-    summary: `${cliente.nombre} — ${servicio.nombre}`,
+    summary: cliente.nombre,
     description: lineasDescripcion.join('\n'),
     start: {
       dateTime: new Date(turno.inicio).toISOString(),

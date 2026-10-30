@@ -3,6 +3,7 @@
 // Cobertura: decisiones_turnero.md.
 
 import { query } from '../config/db.js';
+import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
 
 /**
  * GET /api/admin/clientes?busqueda=X
@@ -28,6 +29,9 @@ export const getMisClientes = async (req, res) => {
 
   if (!barbero_id) {
     return res.status(400).json({ error: 'barbero_id es requerido' });
+  }
+  if (!esUUID(barbero_id)) {
+    return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
   }
 
   try {

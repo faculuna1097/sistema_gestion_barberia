@@ -5,6 +5,7 @@
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { TZ } from '../utils/constantes.js';
+import { esUUID } from '../utils/validarUuid.js';
 import { cancelarEvento } from './googleCalendar.js';
 import { enviarCancelacionAutomatica, construirContextoMail } from './mail/mailer.js';
 
@@ -298,27 +299,22 @@ const MENSAJE_NO_ENCONTRADA = 'No se encontró la suspensión o el descanso';
  * @throws {{ code: 'NO_ENCONTRADA' | 'ORIGEN_ADMIN' | 'YA_LIBERADA' | 'YA_TERMINADA', tipo?: string }}
  */
 export const liberarSuspension = async (suspensionId, tenantId, rol, barberoId) => {
+  if (!esUUID(suspensionId)) throw errorLiberar('NO_ENCONTRADA', MENSAJE_NO_ENCONTRADA);
+
   // $1 id, $2 tenant, $3 barbero (o NULL si es admin: no filtra), $4 rol.
   const params = [suspensionId, tenantId, barberoId ?? null, rol];
   const scoping = 'bs.id = $1 AND bs.tenant_id = $2 AND ($3::uuid IS NULL OR bs.barbero_id = $3::uuid)';
 
-  let result;
-  try {
-    result = await query(
-      `UPDATE barbero_suspension bs
-          SET liberada_en = now(), liberada_por = $4::text
-        WHERE ${scoping}
-          AND NOT ($4::text = 'barbero' AND bs.origen = 'admin')
-          AND bs.liberada_en IS NULL
-          AND ${finEfectivoSql('bs')} > now()
-        RETURNING bs.id, bs.tipo, bs.desde, bs.hasta, bs.liberada_en, bs.liberada_por`,
-      params
-    );
-  } catch (err) {
-    // UUID mal formado (22P02): no puede ser ninguna suspensión → 404, no 500.
-    if (err.code === '22P02') throw errorLiberar('NO_ENCONTRADA', MENSAJE_NO_ENCONTRADA);
-    throw err;
-  }
+  const result = await query(
+    `UPDATE barbero_suspension bs
+        SET liberada_en = now(), liberada_por = $4::text
+      WHERE ${scoping}
+        AND NOT ($4::text = 'barbero' AND bs.origen = 'admin')
+        AND bs.liberada_en IS NULL
+        AND ${finEfectivoSql('bs')} > now()
+      RETURNING bs.id, bs.tipo, bs.desde, bs.hasta, bs.liberada_en, bs.liberada_por`,
+    params
+  );
   if (result.rows.length > 0) return result.rows[0];
 
   // No se liberó: averiguar por qué (mismo scoping que el UPDATE).

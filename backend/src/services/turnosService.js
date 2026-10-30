@@ -10,6 +10,7 @@ import { query } from '../config/db.js';
 import { crearEvento, cancelarEvento } from './googleCalendar.js';
 import { enviarConfirmacion, enviarCancelacion, construirContextoMail } from './mail/mailer.js';
 import { TZ, ANTELACION_MINIMA_MINUTOS, DIAS_RESERVABLES } from '../utils/constantes.js';
+import { esUUID } from '../utils/validarUuid.js';
 import { registrarCorte } from './cortesService.js';
 import { suspensionSolapaSql } from './suspensionesService.js';
 
@@ -17,29 +18,23 @@ import { suspensionSolapaSql } from './suspensionesService.js';
 
 /**
  * Calcula la duración real de un servicio en minutos.
- * @param {string} servicioId - UUID del servicio
+ * @param {string} servicioId - UUID del servicio (puede venir del cliente)
  * @param {string} tenantId   - UUID del tenant
- * @returns {Promise<number|null>} duracion en minutos, o null si no existe
+ * @returns {Promise<number|null>} duracion en minutos, o null si no existe, está
+ *   inactivo o el id está mal formado (el caller responde 404)
  */
 export const calcularDuracionServicio = async (servicioId, tenantId) => {
-  try {
-    const result = await query(
-      `SELECT (t.duracion_slot_minutos * s.cantidad_slots) AS duracion_minutos
-       FROM servicio s
-       JOIN tenant t ON t.id = s.tenant_id
-       WHERE s.id = $1 AND s.tenant_id = $2 AND s.activo = true`,
-      [servicioId, tenantId]
-    );
-    if (result.rows.length === 0) return null;
-    return result.rows[0].duracion_minutos;
-  } catch (err) {
-    // UUID con formato inválido (22P02): un servicio_id mal formado no puede
-    // referenciar a ningún servicio real → lo tratamos como "no encontrado"
-    // (null → el caller responde 404) en vez de dejar escapar un 500. Mismo
-    // criterio que barberoActivoEnTenant. Ver auditoría (hallazgo UUID 22P02).
-    if (err.code === '22P02') return null;
-    throw err;
-  }
+  if (!esUUID(servicioId)) return null;
+
+  const result = await query(
+    `SELECT (t.duracion_slot_minutos * s.cantidad_slots) AS duracion_minutos
+     FROM servicio s
+     JOIN tenant t ON t.id = s.tenant_id
+     WHERE s.id = $1 AND s.tenant_id = $2 AND s.activo = true`,
+    [servicioId, tenantId]
+  );
+  if (result.rows.length === 0) return null;
+  return result.rows[0].duracion_minutos;
 };
 
 /**
@@ -187,7 +182,7 @@ export const construirLinkGestion = (subdominio, token) => {
   if (subdominio) {
     return `https://${subdominio}.barbermanager.app/turnos/gestionar/${token}`;
   }
-  const base = process.env.PUBLIC_BASE_URL ?? 'http://localhost:5173';
+  const base = process.env.PUBLIC_BASE_URL ?? 'http://localhost:5175';
   return `${base}/turnos/gestionar/${token}`;
 };
 
@@ -212,7 +207,7 @@ export const armarLinkTurnero = (req) => {
   if (subdominio) {
     return `https://${subdominio}.barbermanager.app/turnos`;
   }
-  const base = process.env.PUBLIC_BASE_URL ?? 'http://localhost:5173';
+  const base = process.env.PUBLIC_BASE_URL ?? 'http://localhost:5175';
   return `${base}/turnos`;
 };
 
@@ -477,25 +472,11 @@ export const completarTurnoConCorte = async ({ turnoId, tenantId, barberoId, for
 
   // Servicio del corte: por defecto el del turno (autoritativo). Si el backoffice
   // manda un override (cambió el servicio al completar), se valida que pertenezca al
-  // tenant y esté activo (mismo criterio que calcularDuracionServicio). Sin override
+  // tenant y esté activo, con calcularDuracionServicio. Sin override
   // no hay validación nueva → comportamiento idéntico al anterior (retrocompat).
   let servicioFinal = turno.servicio_id;
   if (servicioId !== undefined && servicioId !== null && servicioId !== '') {
-    let servRes;
-    try {
-      servRes = await query(
-        `SELECT 1 FROM servicio WHERE id = $1 AND tenant_id = $2 AND activo = true`,
-        [servicioId, tenantId]
-      );
-    } catch (err) {
-      if (err.code === '22P02') { // UUID con formato inválido
-        const e = new Error('El servicio_id tiene un formato inválido');
-        e.code = 'SERVICIO_INVALIDO';
-        throw e;
-      }
-      throw err;
-    }
-    if (servRes.rows.length === 0) {
+    if ((await calcularDuracionServicio(servicioId, tenantId)) === null) {
       const e = new Error('Servicio no encontrado o inactivo');
       e.code = 'SERVICIO_INVALIDO';
       throw e;

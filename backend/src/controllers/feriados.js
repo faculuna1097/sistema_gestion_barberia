@@ -3,9 +3,8 @@
 // Thin wrapper: delega la lógica de negocio a feriadosService.js.
 // Cobertura: decisiones_horario_atencion.md.
 
-import { DateTime } from 'luxon';
-import { TZ } from '../utils/constantes.js';
-import { esFechaISO } from '../utils/validarFecha.js';
+import { esFechaISO, hoyISO } from '../utils/validarFecha.js';
+import { esUUID } from '../utils/validarUuid.js';
 import {
   obtenerFeriados,
   existeFeriado,
@@ -25,8 +24,7 @@ import { armarLinkTurnero } from '../services/turnosService.js';
  * @returns {JSON} array de feriados [{ id, fecha, descripcion }]
  */
 export const getFeriados = async (req, res) => {
-  const hoy = DateTime.now().setZone(TZ).toISODate();
-  const desde = req.query.desde || hoy;
+  const desde = req.query.desde || hoyISO();
   if (!esFechaISO(desde)) {
     return res.status(400).json({ error: 'El parámetro "desde" debe tener formato YYYY-MM-DD' });
   }
@@ -59,8 +57,7 @@ export const postFeriado = async (req, res) => {
   if (!esFechaISO(fecha)) {
     return res.status(400).json({ error: 'fecha es requerida y debe tener formato YYYY-MM-DD' });
   }
-  const hoy = DateTime.now().setZone(TZ).toISODate();
-  if (fecha < hoy) {
+  if (fecha < hoyISO()) {
     return res.status(400).json({ error: 'No se puede declarar feriado una fecha pasada' });
   }
   // Normalizamos la descripción: '' o sólo espacios → null.
@@ -114,6 +111,10 @@ export const postFeriado = async (req, res) => {
  * @returns {JSON} 200 { ok: true } | 404
  */
 export const deleteFeriado = async (req, res) => {
+  if (!esUUID(req.params.id)) {
+    return res.status(404).json({ error: 'Feriado no encontrado' });
+  }
+
   try {
     const eliminado = await eliminarFeriado(req.tenant_id, req.params.id);
     if (!eliminado) {

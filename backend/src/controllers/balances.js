@@ -165,10 +165,10 @@ export const getBalanceMensual = async (req, res) => {
 
     const queryGastos = `
       SELECT
-        cg.nombre                   AS categoria,
-        COALESCE(SUM(g.monto), 0)   AS total
+        COALESCE(cg.nombre, 'Sin categoría') AS categoria,
+        COALESCE(SUM(g.monto), 0)            AS total
       FROM gasto g
-      JOIN categoria_gasto cg ON cg.id = g.categoria_id
+      LEFT JOIN categoria_gasto cg ON cg.id = g.categoria_id
       WHERE g.tenant_id = $1
         AND TO_CHAR(g.timestamp AT TIME ZONE $3, 'YYYY-MM') = $2
       GROUP BY cg.nombre

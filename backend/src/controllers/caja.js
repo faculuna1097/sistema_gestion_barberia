@@ -90,13 +90,13 @@ export const getMovimientosDia = async (req, res) => {
          g.timestamp,
          TO_CHAR(g.timestamp AT TIME ZONE $2, 'HH24:MI') AS hora,
          NULL AS barbero_nombre,
-         cg.nombre || ': ' || g.descripcion AS detalle,
+         COALESCE(cg.nombre, 'Sin categoría') || ': ' || g.descripcion AS detalle,
          g.monto AS monto,
          g.forma_pago,
          NULL AS comision_valor,
          'gasto' AS tipo
        FROM gasto g
-       JOIN categoria_gasto cg ON g.categoria_id = cg.id
+       LEFT JOIN categoria_gasto cg ON g.categoria_id = cg.id
        WHERE g.tenant_id = $1
          AND DATE(g.timestamp AT TIME ZONE $2) = $3::date
        ORDER BY g.timestamp ASC`,

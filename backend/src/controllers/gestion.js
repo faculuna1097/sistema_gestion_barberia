@@ -7,6 +7,7 @@
 import { query } from '../config/db.js';
 import bcrypt from 'bcrypt';
 import { pinColisiona } from '../utils/pin.js';
+import { esUUID } from '../utils/validarUuid.js';
 import { invalidar } from '../middlewares/tenantMiddleware.js';
 
 const SALT_ROUNDS = 10;
@@ -101,6 +102,9 @@ export const editarBarbero = async (req, res) => {
   const { id } = req.params;
   const { nombre, comision_valor, activo, pin } = req.body;
 
+  if (!esUUID(id)) {
+    return res.status(404).json({ error: 'Barbero no encontrado' });
+  }
   if (!nombre || comision_valor === undefined || activo === undefined) {
     return res.status(400).json({ error: 'nombre, comision_valor y activo son requeridos' });
   }
@@ -223,6 +227,9 @@ export const editarServicio = async (req, res) => {
   const { id } = req.params;
   const { nombre, precio, activo } = req.body;
 
+  if (!esUUID(id)) {
+    return res.status(404).json({ error: 'Servicio no encontrado' });
+  }
   if (!nombre || precio === undefined || activo === undefined) {
     return res.status(400).json({ error: 'nombre, precio y activo son requeridos' });
   }
@@ -329,6 +336,9 @@ export const editarProducto = async (req, res) => {
   const { id } = req.params;
   const { nombre, precio, stock_minimo, activo, agregar_stock } = req.body;
 
+  if (!esUUID(id)) {
+    return res.status(404).json({ error: 'Producto no encontrado' });
+  }
   if (!nombre || precio === undefined || activo === undefined) {
     return res.status(400).json({ error: 'nombre, precio y activo son requeridos' });
   }

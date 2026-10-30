@@ -64,6 +64,22 @@ Nada más. **Sin trace de navegación, sin "paso N — X seleccionado", sin "com
 - En backend, loguear el `err` completo (preserva el stack trace). En frontend, alcanza con `err.message`.
 - En frontend: `setEliminando(true)` / `setCargando(true)` van **antes** del `try`, no dentro.
 
+### Ids que llegan del cliente
+
+Todo id de una request se valida con `esUUID` (`backend/src/utils/validarUuid.js`) antes de tocar la DB. Sin eso, Postgres responde con el error `22P02` y el usuario ve un 500. No se atrapa el `22P02`: se valida antes.
+
+Qué se responde depende de dónde viene el id:
+
+| Origen | Respuesta | Mensaje |
+|---|---|---|
+| URL o body | **404** | El mismo que ese recurso usa cuando no existe (un id mal formado cuenta como "no existe"). |
+| Query param | **400** | `barbero_id debe ser un UUID válido` (`MENSAJE_BARBERO_ID_INVALIDO`, en el caso de `barbero_id`). |
+
+- Con rol barbero, el `barbero_id` del query o del body se ignora: se valida solo cuando se usa.
+- Un id opcional se valida solo si vino. Por ejemplo, `createCorte` sin `turno_id` es un cliente sin turno.
+- Los helpers `barberoActivoEnTenant`, `socioActivoEnTenant` y `calcularDuracionServicio` ya validan el formato: un id mal formado devuelve "no encontrado" y el caller responde 404.
+- Un status dice la categoría del error, y el mensaje dice el detalle. No se inventan status ni se reusa uno con otro significado (405 es "método no permitido").
+
 ---
 
 ## 3. Asincronía
@@ -83,9 +99,7 @@ use:
 ```js
 import { TZ } from '../utils/constantes.js';
 ```
-Nunca hardcodear el string en queries ni redeclararlo al tope del archivo
-en código nuevo. (Algunos archivos previos al refactor del turnero siguen
-con la declaración local; ver deudas técnicas en `estado_actual.md`.)
+Nunca hardcodear el string en queries ni redeclararlo al tope del archivo.
 
 ### Aritmética de fechas con TZ
 Para cualquier cómputo que requiera sumar minutos, comparar rangos, o

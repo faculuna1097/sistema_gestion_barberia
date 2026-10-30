@@ -4,11 +4,12 @@
 // turnos del backoffice (turnosService → completarTurnoConCorte). Acá solo se
 // valida el body y se mapean los errores tipados del service a respuestas HTTP.
 
-import { registrarCorte } from '../services/cortesService.js';
+import { registrarCorte, MENSAJE_TURNO_INEXISTENTE } from '../services/cortesService.js';
 import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { calcularDuracionServicio } from '../services/turnosService.js';
 import { esMontoValido } from '../utils/validarNumero.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
+import { esUUID } from '../utils/validarUuid.js';
 
 /**
  * createCorte
@@ -26,7 +27,8 @@ import { esFormaPagoValida } from '../utils/validarPago.js';
  * @param {string}   req.body.forma_pago  - 'efectivo' | 'mercado_pago'
  * @param {number}   req.body.propina     - Monto de propina (default: 0)
  * @param {string}   [req.body.turno_id]  - UUID del turno asociado (opcional)
- * @returns {JSON} 201 { message, corte_id, monto_total, turno_vinculado }
+ * @returns {JSON} 201 { message, corte_id, monto_total, turno_vinculado } |
+ *   404 barbero, servicio o turno que no existen (un id mal formado cuenta como no existe)
  */
 export const createCorte = async (req, res) => {
   const { barbero_id, servicio_id, precio, forma_pago, propina, turno_id } = req.body;
@@ -44,6 +46,10 @@ export const createCorte = async (req, res) => {
   }
   if (propina !== undefined && !esMontoValido(propina)) {
     return res.status(400).json({ error: 'propina debe ser un número >= 0' });
+  }
+  // Sin turno_id es un walk-in: solo se valida si vino.
+  if (turno_id && !esUUID(turno_id)) {
+    return res.status(404).json({ error: MENSAJE_TURNO_INEXISTENTE });
   }
 
   try {
@@ -90,8 +96,8 @@ export const createCorte = async (req, res) => {
     if (err.code === 'TURNO_YA_VINCULADO' || err.code === 'TURNO_YA_COMPLETADO' || err.code === 'ESTADO_INVALIDO') {
       return res.status(409).json({ error: err.message });
     }
-    if (err.code === 'TURNO_INEXISTENTE' || err.code === 'UUID_INVALIDO') {
-      return res.status(400).json({ error: err.message });
+    if (err.code === 'TURNO_INEXISTENTE') {
+      return res.status(404).json({ error: err.message });
     }
     console.error('[cortes] Error en createCorte:', err);
     res.status(500).json({ error: 'Error al registrar el corte' });

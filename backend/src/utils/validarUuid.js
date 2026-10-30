@@ -9,6 +9,9 @@
 // `ANY($n::uuid[])`.
 const REGEX_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Mensaje del 400 de un barbero_id mal formado en un query param.
+export const MENSAJE_BARBERO_ID_INVALIDO = 'barbero_id debe ser un UUID válido';
+
 /**
  * esUUID
  * Valida que un valor sea un uuid en su forma canónica (mayúsculas o minúsculas).

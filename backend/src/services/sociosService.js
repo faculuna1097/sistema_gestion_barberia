@@ -5,6 +5,7 @@
 // ajeno o inactivo en un 404 limpio en vez de una violación de FK cruda (500).
 
 import { query } from '../config/db.js';
+import { esUUID } from '../utils/validarUuid.js';
 
 /**
  * socioActivoEnTenant — verifica que un socio exista, pertenezca al tenant y
@@ -13,19 +14,15 @@ import { query } from '../config/db.js';
  *
  * @param {string} socioId  - UUID del socio (puede venir del cliente)
  * @param {string} tenantId - UUID del tenant del request
- * @returns {Promise<boolean>} true si el socio pertenece al tenant y está activo
+ * @returns {Promise<boolean>} true si el socio pertenece al tenant y está activo;
+ *   false también si el id está mal formado (el caller responde 404)
  */
 export const socioActivoEnTenant = async (socioId, tenantId) => {
-  try {
-    const result = await query(
-      `SELECT 1 FROM socio WHERE id = $1 AND tenant_id = $2 AND activo = true`,
-      [socioId, tenantId]
-    );
-    return result.rows.length > 0;
-  } catch (err) {
-    // UUID con formato inválido → no puede referenciar a ningún socio real.
-    // Lo tratamos como "no encontrado" (el caller responde 404) en vez de 500.
-    if (err.code === '22P02') return false;
-    throw err;
-  }
+  if (!esUUID(socioId)) return false;
+
+  const result = await query(
+    `SELECT 1 FROM socio WHERE id = $1 AND tenant_id = $2 AND activo = true`,
+    [socioId, tenantId]
+  );
+  return result.rows.length > 0;
 };

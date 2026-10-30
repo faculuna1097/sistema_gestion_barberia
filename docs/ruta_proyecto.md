@@ -163,6 +163,7 @@ backend/
     |       `-- resendProvider.js
     `-- utils/
         |-- constantes.js
+        |-- credencialesOperativas.js
         |-- movimientos.js
         |-- pin.js
         |-- sanitizarLogs.js

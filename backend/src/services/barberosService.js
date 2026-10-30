@@ -8,6 +8,7 @@
 // También centraliza el listado de barberos activos del turnero.
 
 import { query } from '../config/db.js';
+import { esUUID } from '../utils/validarUuid.js';
 
 /**
  * listarBarberosActivos — barberos activos del tenant, ordenados por nombre.
@@ -37,19 +38,15 @@ export const listarBarberosActivos = async (tenantId) => {
  *
  * @param {string} barberoId - UUID del barbero (puede venir del cliente)
  * @param {string} tenantId  - UUID del tenant del request
- * @returns {Promise<boolean>} true si el barbero pertenece al tenant y está activo
+ * @returns {Promise<boolean>} true si el barbero pertenece al tenant y está activo;
+ *   false también si el id está mal formado (el caller responde 404)
  */
 export const barberoActivoEnTenant = async (barberoId, tenantId) => {
-  try {
-    const result = await query(
-      `SELECT 1 FROM barbero WHERE id = $1 AND tenant_id = $2 AND activo = true`,
-      [barberoId, tenantId]
-    );
-    return result.rows.length > 0;
-  } catch (err) {
-    // UUID con formato inválido → no puede referenciar a ningún barbero real.
-    // Lo tratamos como "no encontrado" (el caller responde 404) en vez de 500.
-    if (err.code === '22P02') return false;
-    throw err;
-  }
+  if (!esUUID(barberoId)) return false;
+
+  const result = await query(
+    `SELECT 1 FROM barbero WHERE id = $1 AND tenant_id = $2 AND activo = true`,
+    [barberoId, tenantId]
+  );
+  return result.rows.length > 0;
 };

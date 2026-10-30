@@ -10,6 +10,7 @@ import { calcularGrillaDelDia, DisponibilidadError } from '../services/disponibi
 import { listarBloquesDescanso } from '../services/descansosService.js';
 import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { esFechaISO } from '../utils/validarFecha.js';
+import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
 
 /**
  * GET /api/admin/agenda?fecha=YYYY-MM-DD&barbero_id=X
@@ -40,10 +41,12 @@ export const getAgenda = async (req, res) => {
   if (!barberoId) {
     return res.status(400).json({ error: 'barbero_id es requerido' });
   }
+  // El barbero_id del admin llega del query; el del barbero viene del token.
+  if (!esBarbero && !esUUID(barberoId)) {
+    return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
+  }
 
   try {
-    // El barbero_id del admin llega del query: se valida antes de las queries en
-    // paralelo (un uuid mal formado las rompería). El del barbero viene del token.
     if (!esBarbero && !(await barberoActivoEnTenant(barberoId, req.tenant_id))) {
       return res.status(404).json({ error: 'Barbero no encontrado o inactivo' });
     }
