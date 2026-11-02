@@ -19,6 +19,7 @@ import { MENSAJE_TOTAL_EXCEDIDO } from '../services/cortesService.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
 import { esUUID } from '../utils/validarUuid.js';
 import { barberoSegunRol, filtroBarberoSegunRol, origenSegunRol } from '../utils/scopingRol.js';
+import { cuerpoError422, CUERPO_422_FERIADO } from '../utils/errores422.js';
 
 // Mensaje del 404 de un turno, el mismo que usa turnosService.
 const MENSAJE_TURNO_NO_ENCONTRADO = 'Turno no encontrado';
@@ -125,17 +126,13 @@ export const crearTurnoAdmin = async (req, res) => {
     const valHorario = await validarTurnoEnHorario(req.tenant_id, inicioDT, finDT);
     if (!valHorario.valido) {
       console.warn('[turnos] crearTurnoAdmin — turno fuera del horario del negocio | codigo:', valHorario.codigo);
-      return res.status(422).json({
-        codigo: valHorario.codigo,
-        mensaje: valHorario.mensaje,
-        ...(valHorario.limite && { limite: valHorario.limite }),
-      });
+      return res.status(422).json(cuerpoError422(valHorario));
     }
 
     // ── Validar que el turno no caiga en un feriado ─────────────────────────
     if (await existeFeriado(req.tenant_id, inicioDT.toISODate())) {
       console.warn('[turnos] crearTurnoAdmin — turno en día feriado');
-      return res.status(422).json({ codigo: 'feriado', mensaje: 'El negocio está cerrado por feriado ese día' });
+      return res.status(422).json(CUERPO_422_FERIADO);
     }
 
     // ── Upsert cliente (datos ya normalizados por validarContacto) ──────────

@@ -64,6 +64,15 @@ Nada más. **Sin trace de navegación, sin "paso N — X seleccionado", sin "com
 - En backend, loguear el `err` completo (preserva el stack trace). En frontend, alcanza con `err.message`.
 - En frontend: `setEliminando(true)` / `setCargando(true)` van **antes** del `try`, no dentro.
 
+### Forma de los errores de la API
+
+Todo error del backend responde `{ error, codigo? }`:
+
+- `error`: el texto para el usuario. Va siempre, y es lo que muestran los fronts.
+- `codigo`: opcional, para que un front distinga un caso sin comparar textos (`feriado_ya_existe`, `requiere_confirmacion`, `fuera_de_rango`).
+- Datos extra van al lado, nunca en lugar de `error`: `delta` en un `requiere_confirmacion`, `limite` en un 422 de horario.
+- Los 422 de horario y de feriado se arman con `cuerpoError422` (`backend/src/utils/errores422.js`).
+
 ### Ids que llegan del cliente
 
 Todo id de una request se valida con `esUUID` (`backend/src/utils/validarUuid.js`) antes de tocar la DB. Sin eso, Postgres responde con el error `22P02` y el usuario ve un 500. No se atrapa el `22P02`: se valida antes.

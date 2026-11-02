@@ -319,7 +319,7 @@ export default function Agenda() {
 
   /**
    * liberarDescanso
-   * Libera el descanso abierto en el detalle (DELETE /admin/suspensiones/:id): si
+   * Libera el descanso abierto en el detalle (POST /admin/suspensiones/:id/liberar): si
    * no empezó lo anula entero; si está en curso, lo termina ahora. Un
    * descanso unido (varias partes pegadas) son varias filas: se liberan todas las
    * partes que todavía no terminaron (una ya terminada daría 409).

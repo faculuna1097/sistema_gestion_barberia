@@ -7,6 +7,7 @@ import { obtenerHorarioCrudo, validarRangoEnHorario } from '../services/horarioA
 import { barberoEnTenant } from '../services/barberosService.js';
 import { esUUID } from '../utils/validarUuid.js';
 import { esHoraValida } from '../utils/validarFecha.js';
+import { cuerpoError422 } from '../utils/errores422.js';
 
 /**
  * GET /api/admin/horarios/:barbero_id
@@ -44,7 +45,8 @@ export const getHorarios = async (req, res) => {
  * se guardan como 'HH:MM'). Valida no-solapamiento entre bloques del mismo día antes
  * de persistir.
  * @returns {JSON} array de bloques insertados | 400 si un bloque no es válido | 404 si
- *   el barbero no es del tenant o barbero_id está mal formado
+ *   el barbero no es del tenant o barbero_id está mal formado | 422 { error, codigo,
+ *   limite? } si un bloque cae fuera del horario del negocio
  */
 export const putHorarios = async (req, res) => {
   const { barbero_id } = req.params;
@@ -108,11 +110,7 @@ export const putHorarios = async (req, res) => {
       if (!val.valido) {
         console.warn('[horarios] putHorarios — bloque', i,
           'fuera del horario del negocio | codigo:', val.codigo);
-        return res.status(422).json({
-          codigo: val.codigo,
-          mensaje: val.mensaje,
-          ...(val.limite && { limite: val.limite }),
-        });
+        return res.status(422).json(cuerpoError422(val));
       }
     }
 

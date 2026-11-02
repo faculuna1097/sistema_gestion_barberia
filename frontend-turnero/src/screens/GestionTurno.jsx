@@ -264,8 +264,6 @@ function GestionTurno({ token, tenant }) {
         {/* ── Datos del cliente ────────────────────────────── */}
         <div style={{ marginTop: 16 }}>
           <SummaryRow label="A nombre de" value={cliente.nombre}/>
-          <SummaryRow label="Email"       value={cliente.email}/>
-          <SummaryRow label="Teléfono"    value={cliente.telefono}/>
         </div>
 
         {/* ── Acciones (si está reservado y no en reprog) ── */}

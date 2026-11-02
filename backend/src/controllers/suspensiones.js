@@ -119,37 +119,37 @@ export const postSuspension = async (req, res) => {
 };
 
 /**
- * DELETE /api/admin/suspensiones/:id
+ * POST /api/admin/suspensiones/:id/liberar
  * Libera la suspensión o el descanso (no lo borra): completa liberada_en/liberada_por.
  * Si está en curso, termina en este momento. No recupera turnos cancelados.
- * Path y verbo se mantienen por compatibilidad con los dos fronts; el renombre a
- * POST .../:id/liberar está anotado en estado_actual.md.
+ * DELETE /api/admin/suspensiones/:id es un alias con este mismo handler, para los
+ * fronts anteriores; se saca en un deploy posterior al merge (estado_actual.md).
  * Si rol=barbero, solo puede liberar las propias, y no las cargadas por el admin.
  * La clave de la respuesta sigue siendo `suspension` (los fronts la leen así); el
  * objeto trae `tipo` para distinguir un descanso.
  * @returns {JSON} 200 { ok: true, suspension: { id, tipo, desde, hasta, liberada_en, liberada_por } } |
  *   403 origen admin | 404 | 409 ya liberada o terminada
  */
-export const deleteSuspension = async (req, res) => {
+export const postLiberarSuspension = async (req, res) => {
   const barberoId = barberoSegunRol(req, null);
   const rol = origenSegunRol(req);
 
   try {
     const suspension = await liberarSuspension(req.params.id, req.tenant_id, rol, barberoId);
-    console.log('[suspensiones] deleteSuspension — liberada | suspension_id:', req.params.id, '| tipo:', suspension.tipo, '| por:', rol);
+    console.log('[suspensiones] postLiberarSuspension — liberada | suspension_id:', req.params.id, '| tipo:', suspension.tipo, '| por:', rol);
     res.json({ ok: true, suspension });
   } catch (err) {
     if (err.code === 'NO_ENCONTRADA') {
       return res.status(404).json({ error: err.message });
     }
     if (err.code === 'ORIGEN_ADMIN') {
-      console.warn('[suspensiones] deleteSuspension — barbero intentó liberar una fila del admin | suspension_id:', req.params.id, '| tipo:', err.tipo);
+      console.warn('[suspensiones] postLiberarSuspension — barbero intentó liberar una fila del admin | suspension_id:', req.params.id, '| tipo:', err.tipo);
       return res.status(403).json({ error: err.message });
     }
     if (err.code === 'YA_LIBERADA' || err.code === 'YA_TERMINADA') {
       return res.status(409).json({ error: err.message });
     }
-    console.error('[suspensiones] Error en deleteSuspension:', err);
+    console.error('[suspensiones] Error en postLiberarSuspension:', err);
     res.status(500).json({ error: 'Error al liberar la suspensión o el descanso' });
   }
 };

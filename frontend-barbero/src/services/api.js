@@ -352,14 +352,14 @@ export const crearSuspension = async (datos) => {
  * liberarSuspension
  * Libera una suspensión o un descanso: si no empezó, deja de bloquear entero;
  * si está en curso, termina en este momento. La fila no se borra (queda como
- * registro para el dueño). El endpoint sigue siendo el DELETE de siempre.
+ * registro para el dueño).
  * @param {string} suspensionId
  * @returns {Promise<Object>} { ok: true, suspension: { id, tipo, desde, hasta, liberada_en, liberada_por } }
  * @throws {Error} con el mensaje del servidor y `status` (403 del admin, 404, 409 ya liberada/terminada)
  */
 export const liberarSuspension = async (suspensionId) => {
-  const res = await apiFetch(`/admin/suspensiones/${suspensionId}`, {
-    method: 'DELETE',
+  const res = await apiFetch(`/admin/suspensiones/${suspensionId}/liberar`, {
+    method: 'POST',
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

@@ -657,15 +657,14 @@ export const crearAdminSuspension = async (datos) => {
  * liberarAdminSuspension
  * Libera una suspensión (o un descanso): la fila no se borra, queda como
  * registro. Si no empezó, deja de bloquear entera; si está en curso, termina en
- * este momento. Los turnos que se cancelaron al crearla no se recuperan. El path
- * y el verbo siguen siendo DELETE /admin/suspensiones/:id.
+ * este momento. Los turnos que se cancelaron al crearla no se recuperan.
  * @param {string} suspensionId
  * @returns {Promise<Object>} { ok, suspension: { id, tipo, desde, hasta, liberada_en, liberada_por } }
  * @throws {Error} con el mensaje del servidor (404 no existe, 409 ya terminó o ya se liberó)
  */
 export const liberarAdminSuspension = async (suspensionId) => {
-  const res = await apiFetch(`/admin/suspensiones/${suspensionId}`, {
-    method: 'DELETE',
+  const res = await apiFetch(`/admin/suspensiones/${suspensionId}/liberar`, {
+    method: 'POST',
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));

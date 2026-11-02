@@ -118,7 +118,6 @@ turno del cliente de la calle.
   registro muestra abuso.
 - Descansos recurrentes.
 - Historial de horarios del barbero (el % de la jornada de semanas pasadas).
-- Renombrar `DELETE /admin/suspensiones/:id` a `POST .../:id/liberar`.
 - Validar en el servidor que el `inicio` de un turno caiga en la grilla y dentro del bloque del
   barbero (deuda en `estado_actual.md`).
 

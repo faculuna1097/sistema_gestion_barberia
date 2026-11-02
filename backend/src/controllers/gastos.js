@@ -48,7 +48,8 @@ export const createGasto = async (req, res) => {
       [req.tenant_id, categoria_id, descripcion, monto, forma_pago]
     );
 
-    const gastoCreado = resultado.rows[0];
+    // monto como número: pg entrega el NUMERIC como string (convención §4).
+    const gastoCreado = { ...resultado.rows[0], monto: Number(resultado.rows[0].monto) };
     console.log('[gastos] createGasto completado | gasto_id:', gastoCreado.id);
     return res.status(201).json(gastoCreado);
 
@@ -106,13 +107,12 @@ export const getGastosMensual = async (req, res) => {
       ),
     ]);
 
-    const totalGeneral = resultadoTotales.rows.reduce((acc, row) => acc + parseFloat(row.total), 0);
+    // Montos como número: pg entrega el NUMERIC como string (convención §4).
+    const gastos = resultadoGastos.rows.map((g) => ({ ...g, monto: Number(g.monto) }));
+    const totalesPorCategoria = resultadoTotales.rows.map((t) => ({ ...t, total: Number(t.total) }));
+    const totalGeneral = totalesPorCategoria.reduce((acc, t) => acc + t.total, 0);
 
-    return res.status(200).json({
-      gastos: resultadoGastos.rows,
-      totalesPorCategoria: resultadoTotales.rows,
-      totalGeneral,
-    });
+    return res.status(200).json({ gastos, totalesPorCategoria, totalGeneral });
 
   } catch (err) {
     console.error('[gastos] Error en getGastosMensual:', err);

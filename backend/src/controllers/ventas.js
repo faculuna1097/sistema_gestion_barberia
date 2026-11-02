@@ -123,15 +123,16 @@ export const getVentasMensual = async (req, res) => {
       [req.tenant_id, mes, TZ]
     );
 
-    const totalGeneral = resultadoTotales.rows.reduce(
-      (acc, row) => acc + parseFloat(row.monto_total), 0
-    );
+    // Montos como número: pg entrega el NUMERIC como string (convención §4).
+    const ventas = resultadoVentas.rows.map((v) => ({
+      ...v,
+      precio_unitario: Number(v.precio_unitario),
+      total: Number(v.total),
+    }));
+    const totalesPorProducto = resultadoTotales.rows.map((t) => ({ ...t, monto_total: Number(t.monto_total) }));
+    const totalGeneral = totalesPorProducto.reduce((acc, t) => acc + t.monto_total, 0);
 
-    return res.status(200).json({
-      ventas: resultadoVentas.rows,
-      totalesPorProducto: resultadoTotales.rows,
-      totalGeneral,
-    });
+    return res.status(200).json({ ventas, totalesPorProducto, totalGeneral });
 
   } catch (err) {
     console.error('[ventas] Error en getVentasMensual:', err);

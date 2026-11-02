@@ -48,7 +48,7 @@ export const getFeriados = async (req, res) => {
  * @param {string} req.body.fecha - fecha del feriado 'YYYY-MM-DD' (hoy o futura)
  * @param {string} [req.body.descripcion] - descripción opcional
  * @param {boolean} [req.body.confirmar_cascada] - autoriza ejecutar la cascada
- * @returns {JSON} 201 { feriado, cascada } | 409 { codigo, delta? } | 400
+ * @returns {JSON} 201 { feriado, cascada } | 409 { error, codigo, delta? } | 400
  */
 export const postFeriado = async (req, res) => {
   const { fecha, descripcion, confirmar_cascada } = req.body;
@@ -70,7 +70,7 @@ export const postFeriado = async (req, res) => {
     // --- Fecha ya cargada → 409 ---
     if (await existeFeriado(req.tenant_id, fecha)) {
       console.log('[feriados] postFeriado — feriado ya existe | fecha:', fecha);
-      return res.status(409).json({ codigo: 'feriado_ya_existe' });
+      return res.status(409).json({ error: 'Ya hay un feriado cargado en esa fecha', codigo: 'feriado_ya_existe' });
     }
 
     // --- Calcular el impacto ---
@@ -82,6 +82,7 @@ export const postFeriado = async (req, res) => {
       console.log('[feriados] postFeriado — requiere confirmación | turnos:',
         delta.turnosACancelar.length);
       return res.status(409).json({
+        error: 'La fecha tiene turnos reservados. Reenviar con confirmar_cascada: true para cancelarlos.',
         codigo: 'requiere_confirmacion',
         delta: { turnos_cancelados: delta.turnosACancelar.length },
       });

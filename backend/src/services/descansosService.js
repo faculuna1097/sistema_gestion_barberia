@@ -2,7 +2,7 @@
 // Lógica de negocio de los descansos: el barbero (o el admin) marca slots libres
 // y futuros de un día como "no atiendo". Un descanso es una fila de
 // barbero_suspension con tipo = 'descanso' (decisiones_descansos.md).
-// Se libera con el mismo DELETE /api/admin/suspensiones/:id (liberarSuspension).
+// Se libera con el mismo POST /api/admin/suspensiones/:id/liberar (liberarSuspension).
 //
 // Acá vive también la ÚNICA definición de "descansos pegados = un solo bloque"
 // (unirDescansos): la usan la Agenda de los dos fronts y el registro de Planillas.

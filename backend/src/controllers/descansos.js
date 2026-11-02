@@ -2,7 +2,7 @@
 // Controller del backoffice de descansos (/api/admin/descansos): listarlos como
 // bloques y crearlos. Thin wrapper con scoping por rol; la lógica vive en
 // descansosService.
-// Liberar un descanso es DELETE /api/admin/suspensiones/:id (controllers/suspensiones.js).
+// Liberar un descanso es POST /api/admin/suspensiones/:id/liberar (controllers/suspensiones.js).
 // Decisiones: docs/decisiones_descansos.md.
 
 import { crearDescanso, listarBloquesDescanso, bloqueDelDescanso } from '../services/descansosService.js';

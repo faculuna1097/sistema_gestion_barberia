@@ -1,7 +1,7 @@
 // /backend/src/routes/descansos.js
 // Rutas de descansos del backoffice (/api/admin/descansos).
 // Acepta roles admin y barbero — el scoping se resuelve en el handler.
-// Para liberar un descanso se usa DELETE /api/admin/suspensiones/:id.
+// Para liberar un descanso se usa POST /api/admin/suspensiones/:id/liberar.
 
 import { Router } from 'express';
 import { getDescansos, postDescanso } from '../controllers/descansos.js';

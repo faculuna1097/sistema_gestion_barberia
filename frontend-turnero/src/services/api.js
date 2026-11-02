@@ -129,8 +129,7 @@ export const crearTurno = async (datos) => {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    // El 422 (fuera de horario, feriado) trae `mensaje` en vez de `error`.
-    const err = new Error(body.error || body.mensaje || 'Error al crear turno');
+    const err = new Error(body.error || 'Error al crear turno');
     err.status = res.status;
     throw err;
   }
@@ -182,8 +181,7 @@ export const reprogramarTurno = async (token, inicio) => {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    // El 422 (fuera de horario, feriado) trae `mensaje` en vez de `error`.
-    const err = new Error(body.error || body.mensaje || 'Error al reprogramar turno');
+    const err = new Error(body.error || 'Error al reprogramar turno');
     err.status = res.status;
     throw err;
   }

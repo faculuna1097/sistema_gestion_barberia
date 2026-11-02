@@ -28,6 +28,7 @@ import { TZ } from '../utils/constantes.js';
 import { esFechaISO, hoyISO, parsearInstante } from '../utils/validarFecha.js';
 import { esUUID } from '../utils/validarUuid.js';
 import { validarContacto, esTelefonoE164, esUrlHttps, normalizarOrigen } from '../utils/validarTexto.js';
+import { cuerpoError422, CUERPO_422_FERIADO } from '../utils/errores422.js';
 
 /**
  * getTenant
@@ -342,17 +343,13 @@ export const crearTurno = async (req, res) => {
     const valHorario = await validarTurnoEnHorario(req.tenant_id, inicioDT, finDT);
     if (!valHorario.valido) {
       console.warn('[turnero] crearTurno — turno fuera del horario del negocio | codigo:', valHorario.codigo);
-      return res.status(422).json({
-        codigo: valHorario.codigo,
-        mensaje: valHorario.mensaje,
-        ...(valHorario.limite && { limite: valHorario.limite }),
-      });
+      return res.status(422).json(cuerpoError422(valHorario));
     }
 
     // ── Validar que el turno no caiga en un feriado ─────────────────────────
     if (await existeFeriado(req.tenant_id, inicioDT.toISODate())) {
       console.warn('[turnero] crearTurno — turno en día feriado');
-      return res.status(422).json({ codigo: 'feriado', mensaje: 'El negocio está cerrado por feriado ese día' });
+      return res.status(422).json(CUERPO_422_FERIADO);
     }
 
     // ── Upsert cliente (datos ya normalizados por validarContacto) ──────────
@@ -404,12 +401,13 @@ export const crearTurno = async (req, res) => {
  * Devuelve datos del turno por token_gestion. Sirve a la página de gestión
  * del turno linkeada desde el mail.
  * Filtra por tenant_id además del token (defensa multi-tenant aunque el
- * token sea UNIQUE global).
+ * token sea UNIQUE global). Del cliente devuelve solo el nombre: el link del mail
+ * se puede reenviar, y el email y el teléfono no se editan en esa página.
  *
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @param {string} req.params.token
  * @returns {JSON} { turno: { id, inicio, fin, estado }, barbero: { id, nombre },
- *   servicio: { id, nombre, precio: number, duracion_minutos }, cliente: { nombre, email, telefono } }
+ *   servicio: { id, nombre, precio: number, duracion_minutos }, cliente: { nombre } }
  */
 export const getTurnoPorToken = async (req, res) => {
   try {
@@ -418,7 +416,7 @@ export const getTurnoPorToken = async (req, res) => {
               b.id AS barbero_id, b.nombre AS barbero_nombre,
               s.id AS servicio_id, s.nombre AS servicio_nombre, s.precio AS servicio_precio,
               (tn.duracion_slot_minutos * s.cantidad_slots) AS servicio_duracion_minutos,
-              c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono
+              c.nombre AS cliente_nombre
        FROM turno t
        JOIN barbero  b  ON b.id  = t.barbero_id
        JOIN servicio s  ON s.id  = t.servicio_id
@@ -444,7 +442,7 @@ export const getTurnoPorToken = async (req, res) => {
       barbero:  { id: r.barbero_id, nombre: r.barbero_nombre },
       // precio como número: pg entrega el NUMERIC como string (convención §4).
       servicio: { id: r.servicio_id, nombre: r.servicio_nombre, precio: Number(r.servicio_precio), duracion_minutos: r.servicio_duracion_minutos },
-      cliente:  { nombre: r.cliente_nombre, email: r.cliente_email, telefono: r.cliente_telefono },
+      cliente:  { nombre: r.cliente_nombre },
     });
   } catch (err) {
     console.error('[turnero] Error en getTurnoPorToken:', err);
@@ -460,7 +458,7 @@ export const getTurnoPorToken = async (req, res) => {
  *
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @param {string} req.params.token
- * @returns {JSON} { ok: true }
+ * @returns {JSON} { ok: true }; 409 si el turno ya no está reservado
  */
 export const cancelarTurno = async (req, res) => {
   try {
@@ -479,14 +477,27 @@ export const cancelarTurno = async (req, res) => {
     }
 
     // ── UPDATE estado ──────────────────────────────────────────────────────
-    await query(
+    // El estado también va en el WHERE: si cambió entre la lectura de arriba y
+    // acá (ej. el turno se cobró), no se cancela.
+    const updateRes = await query(
       `UPDATE turno
          SET estado = 'cancelado',
              cancelado_en = now(),
              cancelado_por = 'cliente'
-       WHERE id = $1 AND tenant_id = $2`,
+       WHERE id = $1 AND tenant_id = $2 AND estado = 'reservado'`,
       [r.id, req.tenant_id]
     );
+    // Sin filas actualizadas: el turno cambió de estado. Una lectura solo decide
+    // qué estado nombrar en el 409; no se toca Calendar ni se manda el mail.
+    if (updateRes.rowCount === 0) {
+      const estadoRes = await query(
+        `SELECT estado FROM turno WHERE id = $1 AND tenant_id = $2`,
+        [r.id, req.tenant_id]
+      );
+      const estadoActual = estadoRes.rows[0]?.estado;
+      console.warn('[turnero] cancelarTurno — el turno cambió de estado antes del UPDATE | turno_id:', r.id, '| estado:', estadoActual);
+      return res.status(409).json({ error: `El turno está en estado "${estadoActual}" y no se puede cancelar` });
+    }
     console.log('[turnero] cancelarTurno — turno cancelado | turno_id:', r.id);
 
     // ── Best-effort: Google Calendar + mail ────────────────────────────────
@@ -560,17 +571,13 @@ export const reprogramarTurno = async (req, res) => {
     const valHorario = await validarTurnoEnHorario(req.tenant_id, inicioDT, finDT);
     if (!valHorario.valido) {
       console.warn('[turnero] reprogramarTurno — turno fuera del horario del negocio | codigo:', valHorario.codigo);
-      return res.status(422).json({
-        codigo: valHorario.codigo,
-        mensaje: valHorario.mensaje,
-        ...(valHorario.limite && { limite: valHorario.limite }),
-      });
+      return res.status(422).json(cuerpoError422(valHorario));
     }
 
     // ── Validar que el nuevo horario no caiga en un feriado ─────────────────
     if (await existeFeriado(req.tenant_id, inicioDT.toISODate())) {
       console.warn('[turnero] reprogramarTurno — turno en día feriado');
-      return res.status(422).json({ codigo: 'feriado', mensaje: 'El negocio está cerrado por feriado ese día' });
+      return res.status(422).json(CUERPO_422_FERIADO);
     }
 
     // ── UPDATE con captura de 23P01 y sin pisar suspensiones ───────────────

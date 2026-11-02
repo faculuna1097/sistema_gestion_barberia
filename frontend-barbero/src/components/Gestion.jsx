@@ -646,7 +646,7 @@ function TabSuspensiones({ barbero }) {
 
   /**
    * liberar
-   * Libera la suspensión tras confirmar (DELETE /api/admin/suspensiones/:id): si
+   * Libera la suspensión tras confirmar (POST /api/admin/suspensiones/:id/liberar): si
    * no empezó deja de bloquear entera; si está en curso, termina ahora. La fila
    * queda como registro. Los turnos que se cancelaron al crearla no vuelven.
    */

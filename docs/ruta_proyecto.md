@@ -1,6 +1,6 @@
 # Ruta del proyecto - Sistema de Gestion de Barberia
 
-Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y actualizado por última vez el 2026-10-30 (`backend/src/services/sqlTurnoEnriquecido.js`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
+Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y actualizado por última vez el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
 
 Este documento lista las carpetas y archivos del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP. Para mantenerlo, regenerar los arboles desde `git ls-files` en vez de parchearlos a mano.
 
@@ -68,6 +68,7 @@ backend/
     |   `-- supabase.js
     |-- controllers/
     |   |-- adminOperativo.js
+    |   |-- agenda.js
     |   |-- authBarbero.js
     |   |-- authOperativo.js
     |   |-- authPanel.js
@@ -77,6 +78,7 @@ backend/
     |   |-- categorias.js
     |   |-- clientes.js
     |   |-- cortes.js
+    |   |-- descansos.js
     |   |-- feriados.js
     |   |-- gastos.js
     |   |-- gestion.js
@@ -113,6 +115,7 @@ backend/
     |   |-- adminServicios.js
     |   |-- adminSocios.js
     |   |-- adminTurneroConfig.js
+    |   |-- agenda.js
     |   |-- authBarbero.js
     |   |-- authOperativo.js
     |   |-- authPanel.js
@@ -122,6 +125,7 @@ backend/
     |   |-- categorias.js
     |   |-- clientes.js
     |   |-- cortes.js
+    |   |-- descansos.js
     |   |-- gastos.js
     |   |-- horarios.js
     |   |-- inicio.js
@@ -146,6 +150,7 @@ backend/
     |   |-- barberosService.js
     |   |-- categoriasService.js
     |   |-- cortesService.js
+    |   |-- descansosService.js
     |   |-- disponibilidadService.js
     |   |-- feriadosService.js
     |   |-- googleCalendar.js
@@ -166,6 +171,7 @@ backend/
     `-- utils/
         |-- constantes.js
         |-- credencialesOperativas.js
+        |-- errores422.js
         |-- movimientos.js
         |-- pin.js
         |-- sanitizarLogs.js
@@ -203,6 +209,8 @@ backend/src/routes/
 |-- turnos.js                 turnos admin/barbero
 |-- horarios.js               horarios admin/barbero
 |-- suspensiones.js           suspensiones admin/barbero
+|-- descansos.js              descansos admin/barbero
+|-- agenda.js                 agenda del dia admin/barbero
 |-- clientes.js               clientes admin/barbero
 |-- planilla.js               planilla admin/barbero
 |-- adminBarberos.js          gestion admin de barberos

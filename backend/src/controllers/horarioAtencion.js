@@ -41,7 +41,7 @@ export const getHorarioAtencion = async (req, res) => {
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
  * @param {Array}  req.body.horarios - días abiertos [{ dia_semana, hora_inicio, hora_fin }]
  * @param {boolean} [req.body.confirmar_cascada] - autoriza ejecutar la cascada
- * @returns {JSON} 200 { horarios, cascada } | 409 { codigo, delta } | 400
+ * @returns {JSON} 200 { horarios, cascada } | 409 { error, codigo, delta } | 400
  */
 export const putHorarioAtencion = async (req, res) => {
   const { horarios, confirmar_cascada } = req.body;
@@ -92,6 +92,7 @@ export const putHorarioAtencion = async (req, res) => {
         'bloques:', delta.bloquesAEliminar.length + delta.bloquesATruncar.length,
         '| turnos:', delta.turnosACancelar.length);
       return res.status(409).json({
+        error: 'El cambio afecta bloques de barberos o turnos reservados. Reenviar con confirmar_cascada: true para aplicarlo.',
         codigo: 'requiere_confirmacion',
         delta: {
           bloques_truncados: delta.bloquesATruncar.length,

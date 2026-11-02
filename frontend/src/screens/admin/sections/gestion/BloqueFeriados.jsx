@@ -204,7 +204,7 @@ export default function BloqueFeriados() {
         const data = await res.json();
         if (!vivoRef.current) return;
         if (data.codigo === 'feriado_ya_existe') {
-          setErrorModal('Ya hay un feriado cargado en esa fecha.');
+          setErrorModal(data.error || 'Ya hay un feriado cargado en esa fecha.');
           return;
         }
         // requiere_confirmacion: cerrar el modal de alta y abrir el de cascada.
