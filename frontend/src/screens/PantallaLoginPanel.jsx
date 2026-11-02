@@ -1,4 +1,4 @@
-// /frontend/src/screens/PantallaLoginAdmin.jsx
+// /frontend/src/screens/PantallaLoginPanel.jsx
 // Pantalla de ingreso de PIN para acceder al panel. El login es unificado: el
 // backend resuelve el rol (admin o barbero) según el PIN ingresado.
 // Tiene teclado numérico táctil + soporte de teclado físico.
@@ -64,7 +64,7 @@ function BotonCancelarEsquina({ label, onClick }) {
 }
 
 /**
- * ShellLoginAdmin
+ * ShellLoginPanel
  * Wrapper full-screen con la card de PIN centrada. El fondo es `FondoLocal` (la
  * foto del local con blur + velo, el mismo de MainScreen y los 3 flujos), así el
  * ambiente del local no se corta al entrar al login. Sin foto, FondoLocal cae a
@@ -74,7 +74,7 @@ function BotonCancelarEsquina({ label, onClick }) {
  * Lo comparten la pantalla normal de ingreso de PIN y la de acceso suspendido.
  * El cancel button va en la esquina superior izquierda de la card.
  */
-function ShellLoginAdmin({ children, onCancelar, labelCancelar = 'Cancelar', maxWidth = 480, imagenLocal }) {
+function ShellLoginPanel({ children, onCancelar, labelCancelar = 'Cancelar', maxWidth = 480, imagenLocal }) {
   return (
     <FondoLocal imagenLocal={imagenLocal}>
       <div style={{
@@ -187,11 +187,11 @@ function ContactoCard() {
 }
 
 /**
- * PantallaLoginAdmin
+ * PantallaLoginPanel
  * Componente principal. Maneja el flujo de ingreso de PIN, validación y
  * el estado bloqueado por suscripción vencida.
  */
-export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo, imagenLocal }) {
+export default function PantallaLoginPanel({ onAcceso, onCancelar, imagenLogo, imagenLocal }) {
   const [pin, setPin]             = useState("");
   const [estado, setEstado]       = useState("idle"); // "idle" | "error" | "exito"
   const [shake, setShake]         = useState(false);
@@ -208,7 +208,7 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo, i
       setEstado("exito");
       setTimeout(() => onAcceso(token, { rol, aviso_pago, barbero }), 600);
     } catch (err) {
-      console.error('[pantallaLoginAdmin] Error en validarPin:', err.message);
+      console.error('[pantallaLoginPanel] Error en validarPin:', err.message);
       if (err.bloqueado) {
         setBloqueado(true);
       } else {
@@ -254,7 +254,7 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo, i
   // ── Pantalla bloqueada (suscripción vencida) ──────────────────────────────
   if (bloqueado) {
     return (
-      <ShellLoginAdmin onCancelar={onCancelar} labelCancelar="Volver" imagenLocal={imagenLocal}>
+      <ShellLoginPanel onCancelar={onCancelar} labelCancelar="Volver" imagenLocal={imagenLocal}>
         <EmptyState
           tone="danger"
           glyph={<IconoAlerta size={32} />}
@@ -262,7 +262,7 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo, i
           body="El acceso al panel está suspendido por falta de pago. Contactá al soporte para regularizar tu suscripción."
         />
         <ContactoCard />
-      </ShellLoginAdmin>
+      </ShellLoginPanel>
     );
   }
 
@@ -276,7 +276,7 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo, i
   const subtituloColor = estado === 'error' ? theme.danger : theme.muted;
 
   return (
-    <ShellLoginAdmin onCancelar={onCancelar} labelCancelar="Cancelar" imagenLocal={imagenLocal}>
+    <ShellLoginPanel onCancelar={onCancelar} labelCancelar="Cancelar" imagenLocal={imagenLocal}>
       <LogoCirculo imagenLogo={imagenLogo} fallbackColor={iconoColor} />
 
       <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -323,6 +323,6 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo, i
           <Delete size={22} strokeWidth={1.75} />
         </TeclaNum>
       </div>
-    </ShellLoginAdmin>
+    </ShellLoginPanel>
   );
 }

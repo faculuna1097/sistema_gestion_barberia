@@ -9,6 +9,7 @@
 //
 // Sistema de diseño: tokens + Geist + Lucide + onClick. Densidad compacta.
 // Fondo lo da PanelAdmin (theme.surfaceAlt, D7). Loading via LoadingState (D6).
+// Sin ScreenHeader, como el resto del panel (D15): el sidebar ya dice la sección.
 // Montos en ink y solo los totales en theme.danger: en una lista donde todo son
 // gastos, el título ya dice qué son y un rojo por fila no agrega información
 // (sistema_de_disenio §3.1.1). Caja sí pinta cada gasto en rojo porque mezcla
@@ -24,7 +25,6 @@ import { cargarChunk } from '../../../utils/cargarChunk';
 import { errorDeRespuesta, mensajeDeError } from '../../../utils/errores';
 import { toast } from '../../../utils/toast';
 import {
-  ScreenHeader,
   LoadingState,
   EmptyState,
   ConfirmDialog,
@@ -133,7 +133,10 @@ function TablaGastos({ gastos, totalGeneral, onEditar, onEliminar, accionesDesha
               <tr key={g.id} className="om-fila-hover">
                 <td style={{ ...tdBase, color: theme.muted, whiteSpace: 'nowrap' }}>{g.fecha}</td>
                 <td style={tdBase}><BadgeCategoria nombre={g.categoria_nombre} /></td>
-                <td style={{ ...tdBase, color: theme.inkSoft }}>{g.descripcion}</td>
+                {/* overflowWrap 'anywhere': una palabra sin espacios corta donde haga
+                    falta. Con 'break-word' la tabla igual se ensancha (no cambia el ancho
+                    mínimo de la columna) y saca de vista Editar y Eliminar. */}
+                <td style={{ ...tdBase, color: theme.inkSoft, overflowWrap: 'anywhere' }}>{g.descripcion}</td>
                 <td style={{
                   ...tdBase,
                   textAlign: 'right',
@@ -607,8 +610,6 @@ export default function SeccionGastos() {
 
   return (
     <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <ScreenHeader title="Gastos" subtitle="Registro mensual de egresos" />
-
       <ConfirmDialog
         open={!!gastoAEliminar}
         title="¿Eliminar este gasto?"

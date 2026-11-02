@@ -398,6 +398,20 @@ function CardStock({ productos }) {
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 /**
+ * leerJson
+ * GET a un endpoint del Inicio. Una respuesta con error se lanza, para que el
+ * Promise.all caiga en el estado de error con "Reintentar" en vez de guardar el
+ * `{ error }` del servidor como si fueran datos.
+ * @param {string} path - Ruta relativa (ej. '/inicio/resumen-dia')
+ * @returns {Promise<any>} El cuerpo JSON de la respuesta
+ */
+async function leerJson(path) {
+  const res = await apiFetch(path);
+  if (!res.ok) throw new Error(`HTTP ${res.status} en ${path}`);
+  return res.json();
+}
+
+/**
  * SeccionInicio
  * Carga los 3 endpoints en paralelo al montarse. Muestra LoadingState
  * mientras carga y EmptyState con acción "Reintentar" si algo falla.
@@ -420,9 +434,9 @@ export default function SeccionInicio() {
       setError(null);
       try {
         const [resumenData, comparativoData, stockData] = await Promise.all([
-          apiFetch('/inicio/resumen-dia').then(r => r.json()),
-          apiFetch('/inicio/comparativo-mes').then(r => r.json()),
-          apiFetch('/inicio/stock-bajo').then(r => r.json()),
+          leerJson('/inicio/resumen-dia'),
+          leerJson('/inicio/comparativo-mes'),
+          leerJson('/inicio/stock-bajo'),
         ]);
         if (cancelado) return;
         setResumen(resumenData);

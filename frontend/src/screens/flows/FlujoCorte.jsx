@@ -28,6 +28,29 @@ import {
 import { wizardStyles } from "./wizardStyles.js";
 
 /**
+ * mensajeErrorCorte
+ * Texto del error al confirmar el corte. Con un 409 (el turno ya se completó o
+ * cambió) o un 404 (el turno, el barbero o el servicio ya no existen),
+ * reintentar no sirve: se muestra el motivo del servidor y qué hacer. Con un
+ * 404 y un turno elegido, lo más probable es que el turno se haya borrado: al
+ * volver al paso del turno la lista se recarga y se puede elegir "Sin turno".
+ * @param {Error & { status?: number }} err - Error de registrarCorte
+ * @param {boolean} conTurno - Si el corte venía de un turno
+ * @returns {string}
+ */
+function mensajeErrorCorte(err, conTurno) {
+  if (err.status === 409) return err.message;
+  if (err.status === 404) {
+    const motivo = err.message.endsWith(".") ? err.message : `${err.message}.`;
+    const queHacer = conTurno
+      ? "Volvé al paso del turno y elegí «Sin turno»."
+      : "Volvé al inicio y empezá de nuevo.";
+    return `${motivo} ${queHacer}`;
+  }
+  return "Error al guardar el corte. Intentá de nuevo.";
+}
+
+/**
  * FlujoCorte
  * Wizard de 6 pasos para registrar un corte.
  *
@@ -97,6 +120,9 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
   const avanzar = () => setPaso((p) => p + 1);
   const retroceder = () => {
     if (paso === 1) { onVolver(); return; }
+    // El error de la confirmación es de ese intento: si el usuario vuelve (ej. a
+    // elegir "Sin turno" tras un 404), no tiene que reaparecer al llegar de nuevo.
+    setError(null);
     // Paso 5 (propina): si estamos en el input de monto → volver a Sí/No sin cambiar de paso.
     if (paso === 5 && tienePropina !== null) {
       setTienePropina(null);
@@ -135,9 +161,7 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
       }, sinTurno ? 4500 : 2500);
     } catch (err) {
       console.error('[flujoCorte] Error en confirmarCorte:', err.message);
-      // 409: el turno ya está completado o cambió. Reintentar no sirve (o
-      // cargaría el cobro dos veces): se muestra el motivo del servidor.
-      setError(err.status === 409 ? err.message : "Error al guardar el corte. Intentá de nuevo.");
+      setError(mensajeErrorCorte(err, Boolean(turnoSeleccionado)));
     } finally {
       setEnviando(false);
     }

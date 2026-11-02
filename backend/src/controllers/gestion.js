@@ -32,6 +32,29 @@ const errorStockProducto = (stockMinimo, agregarStock) => {
   return null;
 };
 
+// pg entrega los NUMERIC como string; la API los expone como número
+// (convenciones_tecnicas.md §4). Los dos helpers arman la fila que se responde.
+
+/**
+ * conPrecioNumero
+ * Fila de servicio o producto con `precio` como número.
+ * @param {object} fila - Fila de pg con `precio` (string)
+ * @returns {object} La misma fila, con `precio` numérico
+ */
+const conPrecioNumero = (fila) => ({ ...fila, precio: Number(fila.precio) });
+
+/**
+ * barberoConNumeros
+ * Fila de barbero con `comision_valor` como número. La columna admite NULL
+ * (tiene default 0, pero no NOT NULL): un NULL sigue siendo null, no 0.
+ * @param {object} fila - Fila de pg con `comision_valor` (string o null)
+ * @returns {object} La misma fila, con `comision_valor` numérico o null
+ */
+const barberoConNumeros = (fila) => ({
+  ...fila,
+  comision_valor: fila.comision_valor === null ? null : Number(fila.comision_valor),
+});
+
 // ─── BARBEROS ────────────────────────────────────────────────────────────────
 
 /**
@@ -49,7 +72,7 @@ export const getBarberos = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    res.json(result.rows);
+    res.json(result.rows.map(barberoConNumeros));
   } catch (err) {
     console.error('[gestion] Error en getBarberos:', err);
     res.status(500).json({ error: 'Error al obtener barberos' });
@@ -94,7 +117,7 @@ export const crearBarbero = async (req, res) => {
       [req.tenant_id, nombre.trim(), pinHash, comision]
     );
     console.log('[gestion] crearBarbero completado | barbero_id:', result.rows[0].id);
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(barberoConNumeros(result.rows[0]));
   } catch (err) {
     console.error('[gestion] Error en crearBarbero:', err);
     res.status(500).json({ error: 'Error al crear barbero' });
@@ -172,7 +195,7 @@ export const editarBarbero = async (req, res) => {
       return res.status(404).json({ error: 'Barbero no encontrado' });
     }
     console.log('[gestion] editarBarbero completado | barbero_id:', result.rows[0].id);
-    res.json(result.rows[0]);
+    res.json(barberoConNumeros(result.rows[0]));
   } catch (err) {
     console.error('[gestion] Error en editarBarbero:', err);
     res.status(500).json({ error: 'Error al editar barbero' });
@@ -196,7 +219,7 @@ export const getServicios = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    res.json(result.rows);
+    res.json(result.rows.map(conPrecioNumero));
   } catch (err) {
     console.error('[gestion] Error en getServicios:', err);
     res.status(500).json({ error: 'Error al obtener servicios' });
@@ -229,7 +252,7 @@ export const crearServicio = async (req, res) => {
       [req.tenant_id, nombre.trim(), Number(precio)]
     );
     console.log('[gestion] crearServicio completado | servicio_id:', result.rows[0].id);
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(conPrecioNumero(result.rows[0]));
   } catch (err) {
     console.error('[gestion] Error en crearServicio:', err);
     res.status(500).json({ error: 'Error al crear servicio' });
@@ -272,7 +295,7 @@ export const editarServicio = async (req, res) => {
       return res.status(404).json({ error: 'Servicio no encontrado' });
     }
     console.log('[gestion] editarServicio completado | servicio_id:', result.rows[0].id);
-    res.json(result.rows[0]);
+    res.json(conPrecioNumero(result.rows[0]));
   } catch (err) {
     console.error('[gestion] Error en editarServicio:', err);
     res.status(500).json({ error: 'Error al editar servicio' });
@@ -296,7 +319,7 @@ export const getProductos = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    res.json(result.rows);
+    res.json(result.rows.map(conPrecioNumero));
   } catch (err) {
     console.error('[gestion] Error en getProductos:', err);
     res.status(500).json({ error: 'Error al obtener productos' });
@@ -339,7 +362,7 @@ export const crearProducto = async (req, res) => {
       [req.tenant_id, nombre.trim(), Number(precio), delta, Number(stock_minimo ?? 0)]
     );
     console.log('[gestion] crearProducto completado | producto_id:', result.rows[0].id);
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(conPrecioNumero(result.rows[0]));
   } catch (err) {
     console.error('[gestion] Error en crearProducto:', err);
     res.status(500).json({ error: 'Error al crear producto' });
@@ -412,7 +435,7 @@ export const editarProducto = async (req, res) => {
       return res.status(400).json({ error: 'El stock resultante supera el máximo permitido' });
     }
     console.log('[gestion] editarProducto completado | producto_id:', result.rows[0].id);
-    res.json(result.rows[0]);
+    res.json(conPrecioNumero(result.rows[0]));
   } catch (err) {
     console.error('[gestion] Error en editarProducto:', err);
     res.status(500).json({ error: 'Error al editar producto' });

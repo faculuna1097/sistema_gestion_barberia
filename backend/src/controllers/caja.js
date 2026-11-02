@@ -132,14 +132,20 @@ export const getMovimientosDia = async (req, res) => {
 
     // ── Merge, sentido y orden cronológico (más reciente primero) ────────────
     // pg devuelve los NUMERIC como string: la API expone el monto como número,
-    // igual que el 201 de crearMovimientoExtra.
+    // igual que el 201 de crearMovimientoExtra. `comision_valor` también (solo los
+    // cortes la traen; el resto manda NULL, que sigue siendo null).
     const movimientos = [
       ...cortesResult.rows,
       ...ventasResult.rows,
       ...gastosResult.rows,
       ...extrasResult.rows,
     ]
-      .map((m) => ({ ...m, monto: Number(m.monto), sentido: sentidoDeMovimiento(m.tipo) }))
+      .map((m) => ({
+        ...m,
+        monto: Number(m.monto),
+        comision_valor: m.comision_valor === null ? null : Number(m.comision_valor),
+        sentido: sentidoDeMovimiento(m.tipo),
+      }))
       .sort((b, a) => new Date(a.timestamp) - new Date(b.timestamp));
 
     res.json({ movimientos });

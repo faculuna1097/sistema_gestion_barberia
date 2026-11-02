@@ -18,6 +18,7 @@ import {
   LoadingState,
 } from '../../../../components/ui';
 import { toast } from '../../../../utils/toast';
+import { mensajeDeError } from '../../../../utils/errores';
 import { theme } from '../../../../theme/tokens.js';
 
 // Definición de los tres grupos de imágenes: cuántos slots tiene cada uno y el
@@ -32,11 +33,13 @@ const GRUPOS = [
 ];
 
 // Parámetros de compresión por tipo. Los logos no necesitan tanta resolución
-// como una foto, así que se redimensionan y comprimen más agresivamente.
+// como una foto, así que se redimensionan y comprimen más agresivamente. El logo
+// se ve a ~96 px en el panel y a ~91 px en el turnero: 300 px alcanzan para una
+// pantalla de densidad 3 (iPhone) sin verse borroso (performance_frontends.md).
 const OPCIONES_COMPRESION = {
   local: { maxWidthOrHeight: 1280, maxSizeMB: 0.25 },
   corte: { maxWidthOrHeight: 1280, maxSizeMB: 0.25 },
-  logo:  { maxWidthOrHeight: 512,  maxSizeMB: 0.1 },
+  logo:  { maxWidthOrHeight: 300,  maxSizeMB: 0.1 },
 };
 
 // Lado de las miniaturas / tiles (px).
@@ -195,7 +198,9 @@ export default function BloqueImagenes() {
       ]);
     } catch (err) {
       console.error('[bloqueImagenes] Error en handleArchivo:', err.message);
-      if (vivoRef.current) toast.error(err.message || 'No se pudo subir la imagen.');
+      // Sin red, un chunk que no bajó o una imagen que no se pudo comprimir caen
+      // en el genérico; un rechazo del backend (ej. cupo lleno) trae su mensaje.
+      if (vivoRef.current) toast.error(mensajeDeError(err, 'No se pudo subir la imagen. Intentá de nuevo.'));
     } finally {
       if (vivoRef.current) setSubiendo(null);
     }

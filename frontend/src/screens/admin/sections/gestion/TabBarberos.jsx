@@ -15,7 +15,7 @@
 //
 // Sistema de diseño: tokens + Geist + Lucide + onClick. Densidad compacta.
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Plus, Users, Check, Clock, CalendarOff, CalendarClock,
   Trash2, AlertTriangle, RefreshCw,
@@ -48,6 +48,7 @@ import {
   InputTiempo,
 } from '../../../../components/ui';
 import { toast } from '../../../../utils/toast';
+import { errorDeRespuesta, mensajeDeError } from '../../../../utils/errores';
 import { theme } from '../../../../theme/tokens.js';
 
 // Orden de presentación de los días: Lun→Sáb, Dom al final (índices de DIAS).
@@ -264,7 +265,7 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
       toast.exito('Horarios guardados correctamente.');
     } catch (err) {
       console.error('[tabBarberos/Horario] Error guardando:', err.message);
-      if (vivoRef.current) toast.error(`Error: ${err.message}`);
+      if (vivoRef.current) toast.error(mensajeDeError(err, 'No se pudieron guardar los horarios. Intentá de nuevo.'));
     } finally {
       if (vivoRef.current) setGuardando(false);
     }
@@ -505,9 +506,11 @@ function SubPanelAusencias({ barbero }) {
 
   /**
    * cargarSuspensiones — fetch de las ausencias del barbero que no terminaron
-   * (solo tipo 'suspension').
+   * (solo tipo 'suspension'). Con useCallback la función cambia solo si cambia
+   * el barbero: el efecto de abajo la puede tener de dependencia sin recargar en
+   * cada render. También la llama `crear` después de crear una ausencia.
    */
-  const cargarSuspensiones = async () => {
+  const cargarSuspensiones = useCallback(async () => {
     try {
       const data = await getAdminSuspensiones(barbero.id, { tipo: 'suspension' });
       if (vivoRef.current) { setSuspensiones(data); setErrorCarga(null); }
@@ -517,12 +520,11 @@ function SubPanelAusencias({ barbero }) {
     } finally {
       if (vivoRef.current) setCargando(false);
     }
-  };
+  }, [barbero.id]);
 
   useEffect(() => {
     cargarSuspensiones();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [barbero.id]);
+  }, [cargarSuspensiones]);
 
   /**
    * crear — crea una ausencia. Maneja el conflicto 409 (turnos afectados).
@@ -556,7 +558,7 @@ function SubPanelAusencias({ barbero }) {
       await cargarSuspensiones();
     } catch (err) {
       console.error('[tabBarberos/Ausencias] Error creando:', err.message);
-      if (vivoRef.current) toast.error(`Error: ${err.message}`);
+      if (vivoRef.current) toast.error(mensajeDeError(err, 'No se pudo crear la ausencia. Intentá de nuevo.'));
     } finally {
       if (vivoRef.current) setCreando(false);
     }
@@ -583,7 +585,7 @@ function SubPanelAusencias({ barbero }) {
       console.error('[tabBarberos/Ausencias] Error liberando:', err.message);
       if (vivoRef.current) {
         setConfirmandoId(null);
-        toast.error(`No se pudo ${enCurso ? 'terminar' : 'liberar'}: ${err.message}`);
+        toast.error(mensajeDeError(err, `No se pudo ${enCurso ? 'terminar' : 'liberar'} la ausencia. Intentá de nuevo.`));
       }
     } finally {
       if (vivoRef.current) setLiberando(null);
@@ -939,15 +941,12 @@ function ModalDatosBarbero({ barbero, onGuardar, onCerrar }) {
 
     try {
       const res = await apiFetch(path, { method, body: JSON.stringify(body) });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Error del servidor');
-      }
+      if (!res.ok) throw await errorDeRespuesta(res);
       const barberoGuardado = await res.json();
       onGuardar(barberoGuardado, esEdicion);
     } catch (err) {
       console.error('[tabBarberos] Error en handleGuardar:', err.message);
-      setError(err.message || 'No se pudo guardar el barbero. Intentá de nuevo.');
+      setError(mensajeDeError(err, 'No se pudo guardar el barbero. Intentá de nuevo.'));
     } finally {
       setGuardando(false);
     }

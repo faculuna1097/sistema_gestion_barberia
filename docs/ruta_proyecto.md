@@ -240,6 +240,9 @@ frontend/
 |-- vite.config.js
 |-- public/
 |   |-- favicon.png
+|   |-- fonts/
+|   |   |-- geist-latin.woff2        Geist (variable), la declara src/index.css
+|   |   `-- geist-mono-latin.woff2   Geist Mono (variable)
 |   |-- manifest.json
 |   `-- mercadopago.png
 `-- src/
@@ -295,7 +298,7 @@ frontend/
     |       `-- TopBar.jsx
     |-- screens/
     |   |-- MainScreen.jsx
-    |   |-- PantallaLoginAdmin.jsx
+    |   |-- PantallaLoginPanel.jsx      login por PIN del panel (admin o barbero)
     |   |-- PantallaLoginOperativo.jsx
     |   |-- admin/
     |   |   |-- PanelAdmin.jsx

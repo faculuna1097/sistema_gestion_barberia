@@ -160,8 +160,9 @@ Mínimas. `shadowSm` para botones primarios, `shadowMd` para cards flotantes
 
 En el panel, `Modal` usa `shadowLg` (`0 20px 40px rgba(0,0,0,0.15)`): la card
 flota sobre el `overlay` (`rgba(9, 9, 11, 0.5)`, ink al 50 %), y con
-`shadowMd` no se despega del fondo oscuro. Los dos tokens están solo en el
-panel (2026-11-02): ningún otro front tiene modales.
+`shadowMd` no se despega del fondo oscuro. Los dos tokens son del panel
+(2026-11-02): ningún otro front tiene modales. La landing tiene un `shadowLg`
+propio con otro valor (§8).
 
 `shadowScroll` (`0 -8px 8px -8px rgba(0,0,0,0.12)`, desde el 2026-10-29) es una
 sombra hacia arriba que avisa "hay más contenido abajo" en una zona con scroll
@@ -554,7 +555,7 @@ pantalla.
 | `Card` | Contenedor con border, hover, selected, accesible con teclado. |
 | `Field` | Input + label + helper + error invalid. En el turnero acepta `name`, `autoComplete`, `inputMode` y `ref`. |
 | `TopBar` | Header con "← Volver" + slot derecho opcional. |
-| `ScreenHeader` | Eyebrow + title + subtitle. |
+| `ScreenHeader` | Eyebrow + title + subtitle. El panel ya no lo usa (D15, desde 2026-11-02 en ninguna sección): queda en su `components/ui/` para copiarlo a un front nuevo. |
 | `StickyFooter` | Footer anclado abajo con border-top, safe-area iOS. No está en el panel: si un front nuevo lo necesita, se copia del barbero. |
 | `EmptyState` | Glyph + title + body + acción opcional. |
 | `Skeleton` | Bloque con shimmer. |
@@ -716,9 +717,23 @@ Hoy cada front tiene su propio `/src/components/ui/`. **Hasta nuevo aviso,
 la estrategia es duplicar**:
 
 **Lo que se copia de `frontend/` (el panel) a cualquier front nuevo**:
-- `theme/tokens.js` *(idéntico)*.
-- `index.css` *(idéntico; la landing suma sus clases `om-`, ver §4.1)*.
+- `theme/tokens.js`, sin los tokens propios del panel (abajo).
+- `index.css`: el reset, el foco, la scrollbar y los `@keyframes` base. Las fuentes
+  salen de Google Fonts o de `public/fonts`, según el front (abajo).
 - Los primitivos universales (sección 6.1). `StickyFooter`, del barbero.
+
+**Qué hay en cada front** (comparado archivo por archivo el 2026-11-02). Ni
+`tokens.js` ni `index.css` son idénticos entre fronts:
+
+| | `tokens.js` | `index.css` |
+|---|---|---|
+| **Panel** | La base de Luz más `neutralSoft`, `overlay` y `shadowLg` (`0 20px 40px rgba(0,0,0,0.15)`), solo de este front. | Geist y Geist Mono desde `public/fonts` (desde 2026-11-02). `om-fade` sube 4 px. Suma `om-shake` y `.om-fila-hover` (el hover de las tablas de reporte) y `spin`. |
+| **Barbero** | La base de Luz: lo mismo que el panel, sin `neutralSoft`, `overlay` ni `shadowLg`. | Google Fonts. `om-fade` es solo opacidad (con `transform`, los modales se descentraban dentro de `PageContainer`). Su giro se llama `om-spin`. Sin `om-shake` ni `.om-fila-hover`. |
+| **Landing** | La base sin `neutralSoft`, `overlay` ni `maxWidth`. Suma `sizeDisplay`, `sizeSection`, `sizeSubheading`, `maxWidthWide`, `maxWidthText`, `sectionGapMin` y `sectionGapMax`. Tiene su propio `shadowLg` (`0 12px 32px rgba(0,0,0,0.10)`, para las capturas que flotan): mismo nombre que el del panel, otro valor. | Google Fonts, `scroll-behavior: smooth`, `om-reveal` y las clases `om-` de §4.1. Sin `om-stroke`, `om-overlay-in` ni `om-dialog-in`. |
+| **Turnero** | Diverge a propósito (§3.8): `bg`, `accent`, `accentHover`, `accentSoft` y los del hero. No tiene `shadowScroll`. | Diverge a propósito (§3.8): `overscroll-behavior`, los colores de su tema y el movimiento `tt-`. |
+
+Los cuatro comparten la escala de tamaños, pesos, spacing (`spacing`), radios y
+los estados.
 
 **Lo que NO se copia**:
 - Nada del turnero: sus tokens e `index.css` divergen a propósito (§3.8).
@@ -805,7 +820,9 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-11-02 — tanda 6a de deudas: §4.8 reescrita (toast flotante con `toast.show()`); §3.1 suma `neutralSoft`, §3.2 `sizeInput` en el panel, §3.5 `shadowLg` y `overlay`; §3.6 la escala del kiosko con nombre (`TAM_KIOSKO`) y las pills de la Agenda en `sizeMicro`; §5.6 nueva (foco en los modales); §6.1 suma `GrupoOpciones`, `estiloEtiquetaCampo` y la fuente única de formas de pago; deudas #16 y #23 resueltas.*
+*Última actualización: 2026-11-02 — tanda 6b de deudas: §8 corregido (qué hay de verdad en `tokens.js` e `index.css` de cada front, que no son idénticos); §3.5 aclara el `shadowLg` de la landing; §6.1, `ScreenHeader` ya no se usa en el panel.*
+
+*2026-11-02 — tanda 6a de deudas: §4.8 reescrita (toast flotante con `toast.show()`); §3.1 suma `neutralSoft`, §3.2 `sizeInput` en el panel, §3.5 `shadowLg` y `overlay`; §3.6 la escala del kiosko con nombre (`TAM_KIOSKO`) y las pills de la Agenda en `sizeMicro`; §5.6 nueva (foco en los modales); §6.1 suma `GrupoOpciones`, `estiloEtiquetaCampo` y la fuente única de formas de pago; deudas #16 y #23 resueltas.*
 
 *2026-10-30 — deuda #13 de §9 resuelta: `set-state-in-effect` apagada en los cuatro fronts; §6.4 suma `wizardStyles.js`; §8 corrige lo de `utils/fecha.js` y `utils/formato.js`, que no son copias entre fronts.*
 

@@ -20,6 +20,7 @@ import {
   LoadingState,
 } from '../../../../components/ui';
 import { toast } from '../../../../utils/toast';
+import { errorDeRespuesta, mensajeDeError } from '../../../../utils/errores';
 import { theme } from '../../../../theme/tokens.js';
 
 // Nombres de día indexados por dia_semana (0=domingo .. 6=sábado),
@@ -240,10 +241,7 @@ export default function BloqueHorarioAtencion() {
         return;
       }
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Error del servidor');
-      }
+      if (!res.ok) throw await errorDeRespuesta(res);
 
       const data = await res.json();
       if (!vivoRef.current) return;
@@ -262,7 +260,7 @@ export default function BloqueHorarioAtencion() {
       }
     } catch (err) {
       console.error('[bloqueHorarioAtencion] Error en ejecutarGuardado:', err.message);
-      if (vivoRef.current) toast.error(err.message || 'No se pudo guardar el horario. Intentá de nuevo.');
+      if (vivoRef.current) toast.error(mensajeDeError(err, 'No se pudo guardar el horario. Intentá de nuevo.'));
     } finally {
       if (vivoRef.current) setGuardando(false);
     }

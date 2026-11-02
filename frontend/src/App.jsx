@@ -4,7 +4,7 @@ import MainScreen from "./screens/MainScreen";
 import FlujoCorte from "./screens/flows/FlujoCorte";
 import FlujoVenta from "./screens/flows/FlujoVenta";
 import FlujoGasto from "./screens/flows/FlujoGasto";
-import PantallaLoginAdmin from "./screens/PantallaLoginAdmin";
+import PantallaLoginPanel from "./screens/PantallaLoginPanel";
 import PantallaLoginOperativo from "./screens/PantallaLoginOperativo";
 // PanelAdmin (panel admin/barbero) se carga con React.lazy: es el subárbol más
 // pesado y "frío" del front (solo el dueño/barbero, post-login). Así el login y
@@ -183,7 +183,7 @@ export default function App() {
       console.warn('[app] 401 del panel detectado — redirigiendo al login del panel');
       setRolPanel('admin');
       setBarberoSesion(null);
-      setCurrentScreen("loginAdmin");
+      setCurrentScreen("loginPanel");
     });
     return () => setOnUnauthorizedAdmin(null);
   }, []);
@@ -276,7 +276,7 @@ export default function App() {
     setCurrentScreen("main");
   };
 
-  const cerrarSesionAdmin = () => {
+  const cerrarSesionPanel = () => {
     clearAuthToken();
     setRolPanel('admin');
     setBarberoSesion(null);
@@ -339,9 +339,9 @@ export default function App() {
     return <FlujoGasto onVolver={volverAlInicio} categorias={datos.categorias} imagenLocal={imagenLocal} />;
   }
 
-  if (currentScreen === "loginAdmin") {
+  if (currentScreen === "loginPanel") {
     return (
-      <PantallaLoginAdmin
+      <PantallaLoginPanel
         imagenLogo={imagenLogo}
         imagenLocal={imagenLocal}
         onAcceso={(tokenRecibido, info) => {
@@ -364,7 +364,7 @@ export default function App() {
     return (
       <ErrorBoundary>
         <Suspense fallback={<PantallaCargando />}>
-          <PanelAdmin rol={rolPanel} barberoSesion={barberoSesion} onCerrarSesion={cerrarSesionAdmin} avisosPago={avisosPago} nombreNegocio={nombreNegocio} />
+          <PanelAdmin rol={rolPanel} barberoSesion={barberoSesion} onCerrarSesion={cerrarSesionPanel} avisosPago={avisosPago} nombreNegocio={nombreNegocio} />
         </Suspense>
       </ErrorBoundary>
     );
@@ -382,7 +382,7 @@ export default function App() {
         setCurrentScreen("nuevoGasto");
       }}
       onAdminAccess={() => {
-        setCurrentScreen("loginAdmin");
+        setCurrentScreen("loginPanel");
       }}
       onSpotify={() => {
         window.open("https://open.spotify.com", "_blank");

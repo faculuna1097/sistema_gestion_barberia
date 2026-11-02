@@ -204,11 +204,13 @@ function TablaMovimientos({ movimientos, onEliminar }) {
  * @param {object} props
  * @param {ReactNode} props.icono - Ícono o logo a la izquierda
  * @param {string} props.label - Label corto (eyebrow mono uppercase)
- * @param {number} props.monto - Monto neto. Es un resultado: verde, rojo o
- *   negro en cero (colorResultado).
+ * @param {number|null} props.monto - Monto neto. Es un resultado: verde, rojo o
+ *   negro en cero (colorResultado). `null` mientras el día carga o si falló:
+ *   muestra "—" en vez de un número que no es del día elegido.
  */
 function CardTotal({ icono, label, monto }) {
-  const colorMonto = colorResultado(monto);
+  const sinDato = monto === null;
+  const colorMonto = sinDato ? theme.muted : colorResultado(monto);
   return (
     <div style={{
       flex: 1,
@@ -245,7 +247,7 @@ function CardTotal({ icono, label, monto }) {
           color: colorMonto,
           letterSpacing: '-0.02em',
           fontVariantNumeric: 'tabular-nums',
-        }}>{fmtPesos(monto)}</span>
+        }}>{sinDato ? '—' : fmtPesos(monto)}</span>
       </div>
     </div>
   );
@@ -597,6 +599,11 @@ function TabMovimientos({ modalAbierto, onCerrarModal }) {
   const turnoVuelveAReservado =
     movimientoAEliminar?.tipo === 'corte' && !!movimientoAEliminar?.turno_id;
 
+  // Mientras el día carga o si falló, `movimientos` todavía es el del día
+  // anterior: los totales muestran "—" y el Excel queda deshabilitado. El
+  // selector de día sigue a la vista para poder cambiar de día.
+  const hayDatosDelDia = !cargando && !error;
+
   return (
     <>
       {modalAbierto && (
@@ -608,92 +615,90 @@ function TabMovimientos({ modalAbierto, onCerrarModal }) {
         />
       )}
 
-      {cargando ? (
-        <LoadingState />
-      ) : error ? (
-        <EmptyState
-          tone="danger"
-          glyph={<IconoAlerta />}
-          title="No se pudo cargar"
-          body={error}
-          action={
-            <Button variant="secondary" full={false} onClick={() => setIntento(n => n + 1)}>
-              <RefreshCw size={16} strokeWidth={1.75} />
-              Reintentar
-            </Button>
-          }
-        />
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <ConfirmDialog
-            open={!!movimientoAEliminar}
-            title="¿Eliminar este registro?"
-            message="Esta acción no se puede deshacer."
-            confirmLabel="Sí, eliminar"
-            loading={eliminando}
-            onConfirm={confirmarEliminar}
-            onCancel={() => setMovimientoAEliminar(null)}
-          >
-            {movimientoAEliminar && <DetalleRecurso filas={filasDetalleMovimiento(movimientoAEliminar)} />}
-            {turnoVuelveAReservado && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 8,
-                marginTop: 12,
-                fontFamily: theme.body,
-                fontSize: theme.sizeBody,
-                color: theme.muted,
-              }}>
-                <Info size={14} strokeWidth={1.75} style={{ flexShrink: 0, marginTop: 2 }} />
-                <span>
-                  El turno asociado volverá a estado{' '}
-                  <strong style={{ color: theme.ink }}>Reservado</strong>.
-                </span>
-              </div>
-            )}
-          </ConfirmDialog>
-
-          <div style={{ display: 'flex', gap: 12 }}>
-            <CardTotal
-              icono={<Banknote size={28} strokeWidth={1.5} />}
-              label="Efectivo neto"
-              monto={efectivoNeto}
-            />
-            <CardTotal
-              icono={<LogoMercadoPagoConFallback />}
-              label="Mercado Pago neto"
-              monto={mercadoPagoNeto}
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', gap: 16 }}>
-            <TogglePill
-              activo={soloNegocio}
-              onToggle={() => setSoloNegocio(v => !v)}
-              labelOn="Solo Barberos"
-            />
-            <div style={{ justifySelf: 'center' }}>
-              <SelectorDia value={fecha} onChange={setFecha} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <ConfirmDialog
+          open={!!movimientoAEliminar}
+          title="¿Eliminar este registro?"
+          message="Esta acción no se puede deshacer."
+          confirmLabel="Sí, eliminar"
+          loading={eliminando}
+          onConfirm={confirmarEliminar}
+          onCancel={() => setMovimientoAEliminar(null)}
+        >
+          {movimientoAEliminar && <DetalleRecurso filas={filasDetalleMovimiento(movimientoAEliminar)} />}
+          {turnoVuelveAReservado && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+              marginTop: 12,
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              color: theme.muted,
+            }}>
+              <Info size={14} strokeWidth={1.75} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>
+                El turno asociado volverá a estado{' '}
+                <strong style={{ color: theme.ink }}>Reservado</strong>.
+              </span>
             </div>
-            <BotonExportarExcel onClick={exportarExcel} disabled={movimientos.length === 0} />
-          </div>
-
-
-          {movimientosFiltrados.length === 0 ? (
-            <EmptyState
-              glyph={<Inbox size={28} strokeWidth={1.5} />}
-              title="Sin movimientos"
-              body="No hay movimientos registrados en este día."
-            />
-          ) : (
-            <TablaMovimientos
-              movimientos={movimientosFiltrados}
-              onEliminar={setMovimientoAEliminar}
-            />
           )}
+        </ConfirmDialog>
+
+        <div style={{ display: 'flex', gap: 12 }}>
+          <CardTotal
+            icono={<Banknote size={28} strokeWidth={1.5} />}
+            label="Efectivo neto"
+            monto={hayDatosDelDia ? efectivoNeto : null}
+          />
+          <CardTotal
+            icono={<LogoMercadoPagoConFallback />}
+            label="Mercado Pago neto"
+            monto={hayDatosDelDia ? mercadoPagoNeto : null}
+          />
         </div>
-      )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', gap: 16 }}>
+          <TogglePill
+            activo={soloNegocio}
+            onToggle={() => setSoloNegocio(v => !v)}
+            labelOn="Solo Barberos"
+          />
+          <div style={{ justifySelf: 'center' }}>
+            <SelectorDia value={fecha} onChange={setFecha} />
+          </div>
+          <BotonExportarExcel onClick={exportarExcel} disabled={!hayDatosDelDia || movimientos.length === 0} />
+        </div>
+
+
+        {cargando ? (
+          <LoadingState />
+        ) : error ? (
+          <EmptyState
+            tone="danger"
+            glyph={<IconoAlerta />}
+            title="No se pudo cargar"
+            body={error}
+            action={
+              <Button variant="secondary" full={false} onClick={() => setIntento(n => n + 1)}>
+                <RefreshCw size={16} strokeWidth={1.75} />
+                Reintentar
+              </Button>
+            }
+          />
+        ) : movimientosFiltrados.length === 0 ? (
+          <EmptyState
+            glyph={<Inbox size={28} strokeWidth={1.5} />}
+            title="Sin movimientos"
+            body="No hay movimientos registrados en este día."
+          />
+        ) : (
+          <TablaMovimientos
+            movimientos={movimientosFiltrados}
+            onEliminar={setMovimientoAEliminar}
+          />
+        )}
+      </div>
     </>
   );
 }

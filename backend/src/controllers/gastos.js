@@ -205,7 +205,8 @@ export const updateGasto = async (req, res) => {
     }
 
     console.log('[gastos] updateGasto completado | gasto_id:', id);
-    return res.status(200).json(resultado.rows[0]);
+    // monto como número, igual que createGasto (convenciones §4).
+    return res.status(200).json({ ...resultado.rows[0], monto: Number(resultado.rows[0].monto) });
 
   } catch (err) {
     console.error('[gastos] Error en updateGasto:', err);

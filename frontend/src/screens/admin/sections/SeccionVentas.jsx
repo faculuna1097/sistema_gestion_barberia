@@ -6,6 +6,7 @@
 //
 // Sistema de diseño: tokens + Geist + Lucide + onClick. Densidad compacta.
 // Fondo lo da PanelAdmin (theme.surfaceAlt, D7). Loading via LoadingState (D6).
+// Sin ScreenHeader, como el resto del panel (D15): el sidebar ya dice la sección.
 // DataTable se posterga hasta tener un caso con sort/filtros reales (deuda #20).
 
 import { useState, useEffect } from 'react';
@@ -18,7 +19,6 @@ import { cargarChunk } from '../../../utils/cargarChunk';
 import { errorDeRespuesta, mensajeDeError } from '../../../utils/errores';
 import { toast } from '../../../utils/toast';
 import {
-  ScreenHeader,
   LoadingState,
   EmptyState,
   ConfirmDialog,
@@ -592,8 +592,6 @@ export default function SeccionVentas() {
 
   return (
     <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <ScreenHeader title="Ventas" subtitle="Productos vendidos por mes" />
-
       <ConfirmDialog
         open={!!ventaAEliminar}
         title="¿Eliminar esta venta?"

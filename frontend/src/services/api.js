@@ -7,6 +7,8 @@
 // Las funciones de rutas protegidas lo leen automáticamente vía apiFetch().
 // Las funciones de rutas públicas usan fetch() directamente con publicHeaders.
 
+import { errorDeRespuesta } from '../utils/errores';
+
 const BASE_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
   : 'http://localhost:3001/api';
@@ -285,7 +287,8 @@ export const getTurnosDelDia = async (barberoId, fecha) => {
  * @returns {Promise<Object>} { message, corte_id, monto_total, turno_vinculado }
  *   turno_vinculado es false si vino turno_id pero el turno se había cancelado y
  *   el corte quedó sin turno.
- * @throws {Error} con `status` (409: el turno ya está completado o cambió).
+ * @throws {Error} con `status` (409: el turno ya está completado o cambió; 404: el
+ *   turno, el barbero o el servicio ya no existen) y el mensaje del servidor.
  */
 export const registrarCorte = async (datos) => {
   const response = await apiFetchOperativo('/cortes', {
@@ -546,16 +549,14 @@ export const getAdminHorarios = async (barberoId) => {
  * @param {string} barberoId
  * @param {Array} bloques - [{ dia_semana, hora_inicio, hora_fin }]
  * @returns {Promise<Array>} bloques insertados con id
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const putAdminHorarios = async (barberoId, bloques) => {
   const res = await apiFetch(`/admin/horarios/${barberoId}`, {
     method: 'PUT',
     body: JSON.stringify(bloques),
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al guardar horarios');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
@@ -636,6 +637,7 @@ export const getAdminDescansos = async ({ desde, hasta, barberoId }) => {
  * Reenviar con confirmar_cancelacion: true para forzar.
  * @param {Object} datos - { barbero_id, desde, hasta, motivo?, confirmar_cancelacion? }
  * @returns {Promise<Object>} { suspension, turnos_cancelados } o { conflicto: true, turnos_afectados }
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const crearAdminSuspension = async (datos) => {
   const res = await apiFetch('/admin/suspensiones', {
@@ -646,10 +648,7 @@ export const crearAdminSuspension = async (datos) => {
     const body = await res.json();
     return { conflicto: true, ...body };
   }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Error al crear suspensión');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
@@ -660,16 +659,13 @@ export const crearAdminSuspension = async (datos) => {
  * este momento. Los turnos que se cancelaron al crearla no se recuperan.
  * @param {string} suspensionId
  * @returns {Promise<Object>} { ok, suspension: { id, tipo, desde, hasta, liberada_en, liberada_por } }
- * @throws {Error} con el mensaje del servidor (404 no existe, 409 ya terminó o ya se liberó)
+ * @throws {ErrorServidor} con el mensaje del servidor (404 no existe, 409 ya terminó o ya se liberó)
  */
 export const liberarAdminSuspension = async (suspensionId) => {
   const res = await apiFetch(`/admin/suspensiones/${suspensionId}/liberar`, {
     method: 'POST',
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al liberar la suspensión');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
@@ -763,6 +759,7 @@ export const getImagenesAdmin = async () => {
  * @param {number} orden - slot dentro del tipo
  * @param {Blob} blob - imagen WebP ya comprimida
  * @returns {Promise<Object>} { id, tipo, orden, url }
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const subirImagen = async (tipo, orden, blob) => {
   const res = await apiFetch(`/admin/imagenes?tipo=${tipo}&orden=${orden}`, {
@@ -770,10 +767,7 @@ export const subirImagen = async (tipo, orden, blob) => {
     headers: { 'Content-Type': 'image/webp' },
     body: blob,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al subir la imagen');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
