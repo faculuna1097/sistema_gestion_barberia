@@ -15,19 +15,20 @@ import { Banknote, Trash2, Inbox, Construction, RefreshCw, Info, Plus } from 'lu
 
 import { apiFetch } from '../../../services/api';
 import { getFechaHoy } from '../../../utils/fecha';
-import { fmtPesos, formatPago, OPCIONES_FORMA_PAGO } from '../../../utils/formato';
+import { fmtPesos, formatPago } from '../../../utils/formato';
 import {
   labelTipoMovimiento,
   OPCIONES_TIPO_MOVIMIENTO_EXTRA,
   MAX_DESCRIPCION_MOVIMIENTO,
 } from '../../../utils/movimientos';
 import { cargarChunk } from '../../../utils/cargarChunk';
+import { errorDeRespuesta, mensajeDeError } from '../../../utils/errores';
+import { toast } from '../../../utils/toast';
 import { colorResultado } from '../../../utils/colorMonto';
 import {
   Tabs,
   LoadingState,
   EmptyState,
-  Toast,
   ConfirmDialog,
   Button,
   BotonIconoFila,
@@ -40,6 +41,8 @@ import {
   Modal,
   Field,
   InputTiempo,
+  GrupoOpciones,
+  OPCIONES_FORMA_PAGO_TONO,
 } from '../../../components/ui';
 import { theme } from '../../../theme/tokens.js';
 
@@ -49,7 +52,8 @@ import { theme } from '../../../theme/tokens.js';
  * TipoMovimientoPill
  * Pill compacto que indica el tipo de movimiento. El texto sale del catálogo
  * central (utils/movimientos.js); acá solo se decide el color. Aporte y retiro
- * van en neutro: el retiro se distingue por el monto (con "−" y en rojo).
+ * van en neutro: el retiro se distingue por el monto (con "−" y en rojo). El
+ * neutro es neutralSoft y no surfaceAlt, que es el hover de la fila.
  * Local a esta sección. Promover a primitivo cuando aparezca el segundo uso (§7.1).
  * @param {object} props
  * @param {'corte'|'venta'|'gasto'|'aporte_capital'|'retiro_socio'|'otro_ingreso'} props.tipo
@@ -59,11 +63,11 @@ function TipoMovimientoPill({ tipo }) {
     corte:          { background: theme.successSoft, color: theme.success },
     venta:          { background: theme.accentSoft,  color: theme.accent  },
     gasto:          { background: theme.dangerSoft,  color: theme.danger  },
-    aporte_capital: { background: theme.surfaceAlt,  color: theme.inkSoft },
-    retiro_socio:   { background: theme.surfaceAlt,  color: theme.inkSoft },
+    aporte_capital: { background: theme.neutralSoft, color: theme.inkSoft },
+    retiro_socio:   { background: theme.neutralSoft, color: theme.inkSoft },
     otro_ingreso:   { background: theme.successSoft, color: theme.success },
   };
-  const v = variantes[tipo] ?? { background: theme.surfaceAlt, color: theme.muted };
+  const v = variantes[tipo] ?? { background: theme.neutralSoft, color: theme.inkSoft };
   return (
     <span style={{
       display: 'inline-block',
@@ -305,85 +309,6 @@ function BotonNuevoMovimiento({ onClick }) {
   );
 }
 
-// Rótulo de GrupoOpciones: replica la label del primitivo Field (mono micro
-// uppercase, color muted) para que el grupo se vea uniforme con los campos.
-const labelEyebrow = {
-  fontFamily: theme.mono,
-  fontWeight: theme.weightMedium,
-  fontSize: theme.sizeMicro,
-  letterSpacing: '0.04em',
-  textTransform: 'uppercase',
-  color: theme.muted,
-};
-
-/**
- * GrupoOpciones
- * Campo de opción única donde cada opción es un botón (en vez de una lista
- * desplegable). El botón activo se tinta; con muchas opciones el grupo pasa a
- * varias filas sin desbordar.
- * Mismo lenguaje visual que `BotonFormaPago` de SeccionTurnero, que queda sin
- * migrar (deuda anotada): al unificarlos, promover este componente a /ui.
- *
- * @param {object} props
- * @param {string} props.label - Rótulo del grupo (también su nombre accesible)
- * @param {Array<{value: string, label: string, tonoBg?: string, tonoFg?: string}>} props.opciones
- *   `tonoBg` / `tonoFg`: fondo y color de texto/borde del botón activo.
- *   Por defecto `accentSoft` / `accent`.
- * @param {string|null} props.value - Valor elegido; null si no hay ninguno
- * @param {(value: string) => void} props.onChange - Recibe el value de la opción tocada
- */
-function GrupoOpciones({ label, opciones, value, onChange }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <span style={labelEyebrow}>{label}</span>
-      <div role="group" aria-label={label} style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {opciones.map((o) => {
-          const activo = o.value === value;
-          const tonoBg = o.tonoBg ?? theme.accentSoft;
-          const tonoFg = o.tonoFg ?? theme.accent;
-          return (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => onChange(o.value)}
-              aria-pressed={activo}
-              style={{
-                // Base 0 + mínimo max-content: los botones de una fila quedan
-                // del mismo ancho mientras entren, y bajan de fila cuando no.
-                flex: '1 1 0',
-                minWidth: 'max-content',
-                maxWidth: '100%',
-                minHeight: 44,
-                padding: '10px 12px',
-                background: activo ? tonoBg : theme.surface,
-                border: `1px solid ${activo ? tonoFg : theme.hairline}`,
-                borderRadius: theme.radius,
-                color: activo ? tonoFg : theme.inkSoft,
-                fontFamily: theme.body,
-                fontSize: theme.sizeBody,
-                fontWeight: activo ? theme.weightHeading : theme.weightMedium,
-                overflowWrap: 'anywhere',
-                cursor: 'pointer',
-                transition: `background ${theme.transitionFast}, border-color ${theme.transitionFast}, color ${theme.transitionFast}`,
-              }}
-            >
-              {o.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// Formas de pago con los tonos de BadgeFormaPago: efectivo en success,
-// Mercado Pago en accent.
-const TONOS_FORMA_PAGO = {
-  efectivo:     { tonoBg: theme.successSoft, tonoFg: theme.success },
-  mercado_pago: { tonoBg: theme.accentSoft,  tonoFg: theme.accent  },
-};
-const OPCIONES_FORMA_PAGO_TONO = OPCIONES_FORMA_PAGO.map((o) => ({ ...o, ...TONOS_FORMA_PAGO[o.value] }));
-
 /**
  * ModalNuevoMovimiento
  * Formulario de alta de un movimiento extra (retiro, aporte de capital u otro
@@ -445,14 +370,11 @@ function ModalNuevoMovimiento({ fechaInicial, socios, onCerrar, onGuardado }) {
           ...(requiereSocio ? { socio_id: socioElegido } : { descripcion: descripcionLimpia }),
         }),
       });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Error del servidor');
-      }
+      if (!res.ok) throw await errorDeRespuesta(res);
       onGuardado(fecha);
     } catch (err) {
       console.error('[seccionCaja] Error en guardarMovimiento:', err.message);
-      setErrorGuardar(err.message || 'No se pudo registrar el movimiento. Intentá de nuevo.');
+      setErrorGuardar(mensajeDeError(err, 'No se pudo registrar el movimiento. Intentá de nuevo.'));
     } finally {
       setGuardando(false);
     }
@@ -562,7 +484,6 @@ function TabMovimientos({ modalAbierto, onCerrarModal }) {
   const [movimientoAEliminar, setMovimientoAEliminar] = useState(null);
   const [eliminando, setEliminando]                   = useState(false);
   const [soloNegocio, setSoloNegocio]                 = useState(false);
-  const [errorExport, setErrorExport]                 = useState(null);
   const [socios, setSocios]                           = useState([]);
 
   // Carga one-shot de socios (los dueños del formulario de alta). Si falla
@@ -626,10 +547,12 @@ function TabMovimientos({ modalAbierto, onCerrarModal }) {
     setEliminando(true);
     try {
       const res = await apiFetch(`/caja/movimientos/${tipo}/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Error del servidor');
+      if (!res.ok) throw await errorDeRespuesta(res);
       setMovimientos(prev => prev.filter(m => m.id !== id));
     } catch (err) {
       console.error('[seccionCaja] Error en confirmarEliminar:', err.message);
+      // El diálogo se cierra igual; el aviso dice que el movimiento sigue ahí.
+      toast.error(mensajeDeError(err, 'No se pudo eliminar el movimiento. Intentá de nuevo.'));
     } finally {
       setEliminando(false);
       setMovimientoAEliminar(null);
@@ -650,15 +573,10 @@ function TabMovimientos({ modalAbierto, onCerrarModal }) {
 
   const exportarExcel = async () => {
     // El chunk de xlsx se baja recién acá (lazy, #3). Si la descarga falla,
-    // cargarChunk lo convierte en un error con mensaje al usuario en vez de
-    // un unhandled rejection silencioso.
-    let XLSX;
-    try {
-      XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
-    } catch (err) {
-      setErrorExport(err.message);
-      return;
-    }
+    // cargarChunk avisa con un toast y devuelve null, en vez de un unhandled
+    // rejection silencioso.
+    const XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
+    if (!XLSX) return;
     const datos = movimientos.map(m => ({
       Hora:            m.hora,
       Tipo:            labelTipoMovimiento(m.tipo),
@@ -761,11 +679,6 @@ function TabMovimientos({ modalAbierto, onCerrarModal }) {
             <BotonExportarExcel onClick={exportarExcel} disabled={movimientos.length === 0} />
           </div>
 
-          {errorExport && (
-            <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
-              {errorExport}
-            </Toast>
-          )}
 
           {movimientosFiltrados.length === 0 ? (
             <EmptyState

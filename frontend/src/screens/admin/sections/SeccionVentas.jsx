@@ -13,13 +13,14 @@ import { Pencil, Trash2, Package, RefreshCw } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
 import { mesALabel, getMesActual } from '../../../utils/fecha';
-import { fmtPesos, OPCIONES_FORMA_PAGO } from '../../../utils/formato';
+import { fmtPesos, formatPago, OPCIONES_FORMA_PAGO } from '../../../utils/formato';
 import { cargarChunk } from '../../../utils/cargarChunk';
+import { errorDeRespuesta, mensajeDeError } from '../../../utils/errores';
+import { toast } from '../../../utils/toast';
 import {
   ScreenHeader,
   LoadingState,
   EmptyState,
-  Toast,
   ConfirmDialog,
   Modal,
   Select,
@@ -385,7 +386,7 @@ function ModalEditarVenta({ open, venta, form, onChange, onGuardar, onCancelar, 
               background: theme.dangerSoft,
               color: theme.danger,
               fontFamily: theme.body,
-              fontSize: 13,
+              fontSize: theme.sizeBody,
               textAlign: 'center',
             }}>{errorEditar}</div>
           )}
@@ -417,7 +418,6 @@ export default function SeccionVentas() {
   const [formEditar, setFormEditar]             = useState({});
   const [guardando, setGuardando]               = useState(false);
   const [errorEditar, setErrorEditar]           = useState(null);
-  const [errorExport, setErrorExport]           = useState(null);
 
   // Carga de ventas del mes. `intento` re-dispara el efecto en "Reintentar".
   useEffect(() => {
@@ -499,10 +499,7 @@ export default function SeccionVentas() {
           forma_pago:      formEditar.forma_pago,
         }),
       });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Error del servidor');
-      }
+      if (!res.ok) throw await errorDeRespuesta(res);
       const nuevoTotal = Number(formEditar.cantidad) * Number(formEditar.precio_unitario);
       const nuevasVentas = ventas.map((v) => v.id === id ? {
         ...v,
@@ -518,7 +515,7 @@ export default function SeccionVentas() {
       setVentaAEditar(null);
     } catch (err) {
       console.error('[seccionVentas] Error en confirmarEditar:', err.message);
-      setErrorEditar(err.message || 'No se pudo editar la venta. Intentá de nuevo.');
+      setErrorEditar(mensajeDeError(err, 'No se pudo editar la venta. Intentá de nuevo.'));
     } finally {
       setGuardando(false);
     }
@@ -529,7 +526,7 @@ export default function SeccionVentas() {
     setEliminando(true);
     try {
       const res = await apiFetch(`/ventas/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Error del servidor');
+      if (!res.ok) throw await errorDeRespuesta(res);
       const nuevasVentas = ventas.filter((v) => v.id !== id);
       const { totalGen, totalesOrdenados } = recalcularTotales(nuevasVentas);
       setVentas(nuevasVentas);
@@ -537,6 +534,8 @@ export default function SeccionVentas() {
       setTotalesPorProd(totalesOrdenados);
     } catch (err) {
       console.error('[seccionVentas] Error en confirmarEliminar:', err.message);
+      // El diálogo se cierra igual; el aviso dice que la venta sigue ahí.
+      toast.error(mensajeDeError(err, 'No se pudo eliminar la venta. Intentá de nuevo.'));
     } finally {
       setEliminando(false);
       setVentaAEliminar(null);
@@ -545,15 +544,10 @@ export default function SeccionVentas() {
 
   const exportarExcel = async () => {
     // El chunk de xlsx se baja recién acá (lazy, #3). Si la descarga falla
-    // (red caída / hash viejo post-redeploy), cargarChunk lo convierte en un
-    // error con mensaje al usuario en vez de un unhandled rejection silencioso.
-    let XLSX;
-    try {
-      XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
-    } catch (err) {
-      setErrorExport(err.message);
-      return;
-    }
+    // (red caída / hash viejo post-redeploy), cargarChunk avisa con un toast y
+    // devuelve null, en vez de un unhandled rejection silencioso.
+    const XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
+    if (!XLSX) return;
     const wb = XLSX.utils.book_new();
     const filas = ventas.map((v) => ({
       Fecha:             v.fecha,
@@ -561,7 +555,7 @@ export default function SeccionVentas() {
       Cantidad:          Number(v.cantidad),
       'Precio unitario': Number(v.precio_unitario),
       Total:             Number(v.total),
-      'Forma de pago':   v.forma_pago === 'efectivo' ? 'Efectivo' : 'Mercado Pago',
+      'Forma de pago':   formatPago(v.forma_pago),
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Ventas');
 
@@ -636,11 +630,6 @@ export default function SeccionVentas() {
         </div>
       </div>
 
-      {errorExport && (
-        <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
-          {errorExport}
-        </Toast>
-      )}
 
       {cargando ? (
         <LoadingState />

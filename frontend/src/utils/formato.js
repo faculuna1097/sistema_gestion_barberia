@@ -30,19 +30,23 @@ export function fmtPorcentaje(n) {
   return `${Number(n).toLocaleString('es-AR', { maximumFractionDigits: 1 })} %`;
 }
 
-/**
- * formatPago
- * Convierte el código de forma de pago al label legible.
- * @param {string} forma — 'efectivo' o cualquier otro valor (default: 'Mercado Pago').
- * @returns {string}
- */
-export function formatPago(forma) {
-  return forma === 'efectivo' ? 'Efectivo' : 'Mercado Pago';
-}
-
-// Formas de pago del sistema como opciones { value, label }, para selectores
-// y grupos de botones de los formularios.
+// Formas de pago del sistema como opciones { value, label }: la única fuente de
+// sus nombres. La usan los selectores y grupos de botones de los formularios,
+// formatPago (Excel) y BadgeFormaPago. Las columnas forma_pago de la DB solo
+// aceptan estos dos valores (CHECK). Sus colores viven en
+// components/ui/tonosFormaPago.js.
 export const OPCIONES_FORMA_PAGO = [
   { value: 'efectivo',     label: 'Efectivo' },
   { value: 'mercado_pago', label: 'Mercado Pago' },
 ];
+
+/**
+ * formatPago
+ * Convierte el código de forma de pago al label legible. Un código desconocido
+ * se devuelve tal cual, para que un dato raro se vea y no pase por otro.
+ * @param {string} forma - 'efectivo' | 'mercado_pago'
+ * @returns {string} Ej: "Efectivo", "Mercado Pago"; "—" si viene vacío.
+ */
+export function formatPago(forma) {
+  return OPCIONES_FORMA_PAGO.find((o) => o.value === forma)?.label ?? (forma || '—');
+}

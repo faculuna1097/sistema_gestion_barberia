@@ -19,13 +19,14 @@ import { Pencil, Trash2, Receipt, RefreshCw } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
 import { mesALabel, getMesActual } from '../../../utils/fecha';
-import { fmtPesos, OPCIONES_FORMA_PAGO } from '../../../utils/formato';
+import { fmtPesos, formatPago, OPCIONES_FORMA_PAGO } from '../../../utils/formato';
 import { cargarChunk } from '../../../utils/cargarChunk';
+import { errorDeRespuesta, mensajeDeError } from '../../../utils/errores';
+import { toast } from '../../../utils/toast';
 import {
   ScreenHeader,
   LoadingState,
   EmptyState,
-  Toast,
   ConfirmDialog,
   Modal,
   Select,
@@ -45,8 +46,8 @@ import { theme } from '../../../theme/tokens.js';
 /**
  * BadgeCategoria
  * Pill neutro tipo tag para mostrar la categoría en cada fila. Estilos de
- * tokens (`surfaceAlt`/`inkSoft`), sin border. Local — promover si aparece
- * un segundo uso fuera de Gastos.
+ * tokens (`neutralSoft`/`inkSoft`), sin border: no usa `surfaceAlt`, que es el
+ * hover de la fila. Local — promover si aparece un segundo uso fuera de Gastos.
  *
  * @param {object} props
  * @param {string} props.nombre
@@ -61,7 +62,7 @@ function BadgeCategoria({ nombre }) {
       fontSize: theme.sizeMicro,
       fontWeight: theme.weightMedium,
       letterSpacing: '0.02em',
-      background: theme.surfaceAlt,
+      background: theme.neutralSoft,
       color: theme.inkSoft,
     }}>{nombre}</span>
   );
@@ -384,7 +385,7 @@ function ModalEditarGasto({ open, gasto, categorias, form, onChange, onGuardar, 
               background: theme.dangerSoft,
               color: theme.danger,
               fontFamily: theme.body,
-              fontSize: 13,
+              fontSize: theme.sizeBody,
               textAlign: 'center',
             }}>{errorEditar}</div>
           )}
@@ -417,7 +418,6 @@ export default function SeccionGastos() {
   const [formEditar, setFormEditar]             = useState({});
   const [guardando, setGuardando]               = useState(false);
   const [errorEditar, setErrorEditar]           = useState(null);
-  const [errorExport, setErrorExport]           = useState(null);
 
   // Carga one-shot de categorías. Si falla queda como array vacío — el
   // select del modal queda sin opciones, pero la sección no se rompe.
@@ -513,10 +513,7 @@ export default function SeccionGastos() {
           forma_pago:   formEditar.forma_pago,
         }),
       });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Error del servidor');
-      }
+      if (!res.ok) throw await errorDeRespuesta(res);
       const categoriaNombre = categorias.find((c) => c.id === formEditar.categoria_id)?.nombre
         || gastoAEditar.categoria_nombre;
 
@@ -536,7 +533,7 @@ export default function SeccionGastos() {
       setGastoAEditar(null);
     } catch (err) {
       console.error('[seccionGastos] Error en confirmarEditar:', err.message);
-      setErrorEditar(err.message || 'No se pudo editar el gasto. Intentá de nuevo.');
+      setErrorEditar(mensajeDeError(err, 'No se pudo editar el gasto. Intentá de nuevo.'));
     } finally {
       setGuardando(false);
     }
@@ -547,7 +544,7 @@ export default function SeccionGastos() {
     setEliminando(true);
     try {
       const res = await apiFetch(`/gastos/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Error del servidor');
+      if (!res.ok) throw await errorDeRespuesta(res);
       const nuevosGastos = gastos.filter((g) => g.id !== id);
       const { totalGen, totalesOrdenados } = recalcularTotales(nuevosGastos);
       setGastos(nuevosGastos);
@@ -555,6 +552,8 @@ export default function SeccionGastos() {
       setTotalesPorCat(totalesOrdenados);
     } catch (err) {
       console.error('[seccionGastos] Error en confirmarEliminar:', err.message);
+      // El diálogo se cierra igual; el aviso dice que el gasto sigue ahí.
+      toast.error(mensajeDeError(err, 'No se pudo eliminar el gasto. Intentá de nuevo.'));
     } finally {
       setEliminando(false);
       setGastoAEliminar(null);
@@ -563,22 +562,17 @@ export default function SeccionGastos() {
 
   const exportarExcel = async () => {
     // El chunk de xlsx se baja recién acá (lazy, #3). Si la descarga falla,
-    // cargarChunk lo convierte en un error con mensaje al usuario en vez de
-    // un unhandled rejection silencioso.
-    let XLSX;
-    try {
-      XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
-    } catch (err) {
-      setErrorExport(err.message);
-      return;
-    }
+    // cargarChunk avisa con un toast y devuelve null, en vez de un unhandled
+    // rejection silencioso.
+    const XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
+    if (!XLSX) return;
     const wb = XLSX.utils.book_new();
     const filas = gastos.map((g) => ({
       Fecha:           g.fecha,
       Categoría:       g.categoria_nombre,
       Descripción:     g.descripcion,
       Monto:           Number(g.monto),
-      'Forma de pago': g.forma_pago === 'efectivo' ? 'Efectivo' : 'Mercado Pago',
+      'Forma de pago': formatPago(g.forma_pago),
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Gastos');
 
@@ -652,11 +646,6 @@ export default function SeccionGastos() {
         </div>
       </div>
 
-      {errorExport && (
-        <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
-          {errorExport}
-        </Toast>
-      )}
 
       {cargando ? (
         <LoadingState />

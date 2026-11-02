@@ -23,6 +23,7 @@ import { theme } from "../../theme/tokens.js";
 import { fmtPesos } from "../../utils/formato.js";
 import { ALTO_VISIBLE } from "../../utils/pantalla.js";
 import { FondoLocal } from "../../components/ui";
+import { TAM_KIOSKO } from "./wizardStyles.js";
 
 // ─── PanelWizard ──────────────────────────────────────────────────────────────
 /**
@@ -143,7 +144,7 @@ export function BotonOpcion({ activo = false, onClick, variante = "normal", dash
         color: activo ? theme.accent : theme.ink,
         fontFamily: theme.body,
         fontWeight: theme.weightHeading,
-        fontSize: 19,
+        fontSize: TAM_KIOSKO.opcion,
         cursor: "pointer",
         WebkitTapHighlightColor: "transparent",
       }}
@@ -187,7 +188,7 @@ export function CampoTexto({ value, onChange, placeholder, rows = 5, autoFocus =
         border: `1.5px solid ${focus ? theme.accent : theme.hairline}`,
         borderRadius: theme.radius,
         fontFamily: theme.body,
-        fontSize: 19,
+        fontSize: TAM_KIOSKO.opcion,
         color: theme.ink,
         resize: "none",
         outline: "none",
@@ -228,7 +229,7 @@ export function CampoMonto({ value, onChange }) {
           transition: `border-color ${theme.transitionFast}, box-shadow ${theme.transitionFast}`,
         }}
       >
-        <span style={{ fontSize: 40, fontWeight: theme.weightRegular, color: theme.muted }}>$</span>
+        <span style={{ fontSize: TAM_KIOSKO.signoMonto, fontWeight: theme.weightRegular, color: theme.muted }}>$</span>
         <input
           type="text"
           inputMode="numeric"
@@ -245,7 +246,7 @@ export function CampoMonto({ value, onChange }) {
             background: "transparent",
             textAlign: "center",
             fontFamily: theme.body,
-            fontSize: 56,
+            fontSize: TAM_KIOSKO.campoMonto,
             fontWeight: theme.weightHeading,
             color: theme.ink,
             letterSpacing: "-0.02em",
@@ -339,7 +340,7 @@ export function FilaResumen({ label, value, ultima = false }) {
       <span
         style={{
           fontFamily: theme.mono,
-          fontSize: 13,
+          fontSize: TAM_KIOSKO.etiquetaResumen,
           fontWeight: theme.weightMedium,
           letterSpacing: "0.04em",
           textTransform: "uppercase",
@@ -352,7 +353,7 @@ export function FilaResumen({ label, value, ultima = false }) {
       <span
         style={{
           fontFamily: theme.body,
-          fontSize: 18,
+          fontSize: TAM_KIOSKO.valorResumen,
           fontWeight: theme.weightMedium,
           color: theme.ink,
           textAlign: "right",
@@ -590,7 +591,7 @@ const styles = {
   },
   subtitulo: {
     fontFamily: theme.body,
-    fontSize: 15,
+    fontSize: TAM_KIOSKO.subtitulo,
     color: theme.muted,
     margin: "4px 0 0",
   },
@@ -609,13 +610,13 @@ const styles = {
   },
   totalLabel: {
     fontFamily: theme.body,
-    fontSize: 22,
+    fontSize: TAM_KIOSKO.etiquetaTotal,
     fontWeight: theme.weightHeading,
     color: theme.ink,
   },
   totalValor: {
     fontFamily: theme.body,
-    fontSize: 32,
+    fontSize: TAM_KIOSKO.montoTotal,
     fontWeight: theme.weightHeading,
     fontVariantNumeric: "tabular-nums",
   },
@@ -660,7 +661,7 @@ const styles = {
   },
   exitoMonto: {
     fontFamily: theme.body,
-    fontSize: 48,
+    fontSize: TAM_KIOSKO.montoExito,
     fontWeight: theme.weightHeading,
     letterSpacing: "-0.02em",
     margin: 0,

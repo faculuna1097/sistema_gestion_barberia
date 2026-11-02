@@ -5,7 +5,8 @@
 // gastar la cuota de Supabase Storage con archivos pesados.
 //
 // Sistema de diseño: tokens + Geist + Lucide + primitivos. El borrado usa
-// ConfirmDialog; los errores se muestran con Toast.
+// ConfirmDialog; los errores de subida y borrado van en un toast flotante
+// (utils/toast.js) y el de carga, inline con Toast.
 
 import { useState, useEffect, useRef } from 'react';
 import { ImagePlus, X } from 'lucide-react';
@@ -16,6 +17,7 @@ import {
   Toast,
   LoadingState,
 } from '../../../../components/ui';
+import { toast } from '../../../../utils/toast';
 import { theme } from '../../../../theme/tokens.js';
 
 // Definición de los tres grupos de imágenes: cuántos slots tiene cada uno y el
@@ -88,7 +90,6 @@ export default function BloqueImagenes() {
   const [imagenes, setImagenes]     = useState([]);
   const [cargando, setCargando]     = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
-  const [feedback, setFeedback]     = useState(null);  // { tone, texto } | null
 
   // Slot que está subiendo en este momento, identificado como 'tipo-orden'.
   // Solo uno a la vez: la subida es rápida y evita estados ambiguos.
@@ -174,7 +175,6 @@ export default function BloqueImagenes() {
 
     const { tipo, orden } = slot;
     setSubiendo(`${tipo}-${orden}`);
-    setFeedback(null);
     try {
       // Compresión + conversión a WebP en el navegador. La librería se carga
       // on-demand (lazy) recién al subir, no en el arranque del panel; si la
@@ -195,7 +195,7 @@ export default function BloqueImagenes() {
       ]);
     } catch (err) {
       console.error('[bloqueImagenes] Error en handleArchivo:', err.message);
-      if (vivoRef.current) setFeedback({ tone: 'danger', texto: err.message || 'No se pudo subir la imagen.' });
+      if (vivoRef.current) toast.error(err.message || 'No se pudo subir la imagen.');
     } finally {
       if (vivoRef.current) setSubiendo(null);
     }
@@ -216,7 +216,7 @@ export default function BloqueImagenes() {
       console.error('[bloqueImagenes] Error en ejecutarEliminar:', err.message);
       if (vivoRef.current) {
         setAEliminar(null);
-        setFeedback({ tone: 'danger', texto: 'No se pudo eliminar la imagen. Intentá de nuevo.' });
+        toast.error('No se pudo eliminar la imagen. Intentá de nuevo.');
       }
     } finally {
       if (vivoRef.current) setEliminando(false);
@@ -266,15 +266,6 @@ export default function BloqueImagenes() {
 
       <EncabezadoImagenes />
 
-      {feedback && (
-        <Toast
-          tone={feedback.tone}
-          dismissible
-          onDismiss={() => setFeedback(null)}
-        >
-          {feedback.texto}
-        </Toast>
-      )}
 
       {GRUPOS.map((grupo) => {
         const imgs       = imagenesDe(grupo.tipo);
@@ -347,7 +338,7 @@ export default function BloqueImagenes() {
                         <button
                           type="button"
                           aria-label="Eliminar imagen"
-                          onClick={(e) => { e.stopPropagation(); setFeedback(null); setAEliminar(imagen); }}
+                          onClick={(e) => { e.stopPropagation(); setAEliminar(imagen); }}
                           style={{
                             position: 'absolute',
                             top: 4,

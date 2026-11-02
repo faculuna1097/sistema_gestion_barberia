@@ -47,7 +47,6 @@ import {
   IconoAlerta,
   Button,
   LoadingState,
-  Toast,
   BadgeVariacion,
   BotonExportarExcel,
   TogglePill,
@@ -300,7 +299,6 @@ export default function SeccionBalances() {
   const [tabActivo, setTabActivo]                 = useState('mensual');
   const [mesSeleccionado, setMesSeleccionado]     = useState(getMesActual());
   const [mostrarComisiones, setMostrarComisiones] = useState(true);
-  const [errorExport, setErrorExport]             = useState(null);
 
   // Tab mensual.
   const [datosMensual, setDatosMensual]   = useState(null);
@@ -381,19 +379,14 @@ export default function SeccionBalances() {
    * retiros" si el mes los tiene. Tab histórico: 1 hoja.
    * Los montos van siempre con comisiones, sin importar el toggle.
    * @returns {Promise<void>} Descarga el archivo; si falla la carga de xlsx,
-   *   deja el mensaje en `errorExport`.
+   *   cargarChunk ya avisó con un toast.
    */
   const exportarExcel = async () => {
     // El chunk de xlsx se baja recién acá (lazy, #3). Si la descarga falla,
-    // cargarChunk lo convierte en un error con mensaje al usuario en vez de
-    // un unhandled rejection silencioso.
-    let XLSX;
-    try {
-      XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
-    } catch (err) {
-      setErrorExport(err.message);
-      return;
-    }
+    // cargarChunk avisa con un toast y devuelve null, en vez de un unhandled
+    // rejection silencioso.
+    const XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
+    if (!XLSX) return;
     const wb = XLSX.utils.book_new();
 
     if (tabActivo === 'mensual' && datosMensual) {
@@ -563,11 +556,6 @@ export default function SeccionBalances() {
             </div>
           </div>
 
-          {errorExport && (
-            <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
-              {errorExport}
-            </Toast>
-          )}
 
           {cargandoMensual && <LoadingState />}
 
@@ -632,11 +620,6 @@ export default function SeccionBalances() {
             </div>
           </div>
 
-          {errorExport && (
-            <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
-              {errorExport}
-            </Toast>
-          )}
 
           {cargandoHistorico && <LoadingState />}
 

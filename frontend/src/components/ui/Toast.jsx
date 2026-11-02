@@ -1,20 +1,15 @@
 // /frontend/src/components/ui/Toast.jsx
-// Toast inline para feedback efímero de operaciones (guardado exitoso, error
-// de acción, etc.). Pensado para usar en el flujo del padre (no flotante
-// globalmente) — el caller decide dónde renderizarlo. El primitivo solo se
-// ocupa de la presentación visual + auto-dismiss + botón de cerrar opcional.
+// La card visual de un aviso: ícono + texto + botón de cerrar opcional, en el
+// tono que corresponda. Se usa de dos formas (sistema_de_disenio.md §4.8):
 //
-// Patrón de uso: el caller mantiene state { tone, texto }, monta el Toast
-// cuando hay mensaje y le pasa onDismiss para limpiarlo. El Toast dispara
-// el onDismiss cuando expira el autoDismissMs o cuando el usuario clickea
-// el botón X (si dismissible está activo).
-//
-// Construido para cerrar deuda #30 al aparecer el 3er caso real:
-// BannerError de SeccionTurnero, mensajeExito de TabSeguridad. El feedback
-// inline persistente sin auto-dismiss (MensajeFeedback de TabTurnero) NO
-// usa Toast — es un patrón distinto (mensaje en form, no efímero).
+//   - Flotante (lo normal para feedback efímero): no se monta a mano. Se llama
+//     a `toast.show()` / `toast.exito()` / `toast.error()` (utils/toast.js) y
+//     ToastProvider la dibuja centrada arriba, con auto-dismiss.
+//   - Inline: para un mensaje que tiene que quedarse junto a lo que lo causó
+//     (error de carga con "Reintentar", error dentro de un modal abierto, una
+//     nota fija de la pantalla). El caller la monta en su layout y decide
+//     cuándo sacarla.
 
-import { useEffect } from 'react';
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
 
@@ -28,31 +23,22 @@ const TONES = {
 
 /**
  * Toast
- * Banner inline con ícono + texto + (opcional) botón cerrar. Auto-dismiss
- * configurable: si autoDismissMs está definido, dispara onDismiss al expirar.
+ * Card de aviso con ícono + texto + (opcional) botón cerrar. No se va sola: el
+ * auto-dismiss del flotante lo maneja ToastProvider.
  *
  * @param {object} props
  * @param {'success'|'danger'|'warning'|'info'} [props.tone='info'] - Variante visual.
  * @param {React.ReactNode} props.children - Texto del mensaje.
- * @param {() => void} props.onDismiss - Callback cuando se cierra (auto o manual).
- * @param {number} [props.autoDismissMs] - Si está, dispara onDismiss tras ese tiempo.
+ * @param {() => void} [props.onDismiss] - Callback del botón X.
  * @param {boolean} [props.dismissible=false] - Muestra el botón X manual.
  */
 function Toast({
   tone = 'info',
   children,
   onDismiss,
-  autoDismissMs,
   dismissible = false,
 }) {
   const cfg = TONES[tone] ?? TONES.info;
-
-  // Auto-dismiss — limpia el timer al desmontar o si cambia el callback.
-  useEffect(() => {
-    if (!autoDismissMs) return;
-    const id = setTimeout(() => { onDismiss?.(); }, autoDismissMs);
-    return () => clearTimeout(id);
-  }, [autoDismissMs, onDismiss]);
 
   return (
     <div

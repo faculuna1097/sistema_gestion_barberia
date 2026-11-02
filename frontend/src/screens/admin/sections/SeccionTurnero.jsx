@@ -19,9 +19,8 @@
 //   - KPIs del día (Total / Reservados / Completados / No asistió) calculados
 //     sobre el dataset visible del día (sin cancelados), así representan siempre
 //     "lo que hay en el día".
-//   - Errores de acción (cambiar estado / cancelar) se muestran como banner
-//     inline con auto-dismiss. NO se usa alert() ni Toast (Toast queda como
-//     deuda — construir cuando aparezca el segundo caso).
+//   - Errores de acción (cambiar estado / completar / cancelar) se muestran
+//     con un toast flotante (utils/toast.js). NO se usa alert().
 //   - El rango horario de la agenda parte de la jornada de atención real del
 //     local ese día (GET /admin/horario-atencion) y se EXPANDE para incluir
 //     cualquier turno que caiga fuera de ella (padding 1h por extremo). Si el
@@ -81,7 +80,11 @@ import {
   BadgeFormaPago,
   Toast,
   SelectorDia,
+  GrupoOpciones,
+  OPCIONES_FORMA_PAGO_TONO,
+  estiloEtiquetaCampo,
 } from '../../../components/ui';
+import { toast } from '../../../utils/toast';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Constantes y maps
@@ -390,7 +393,8 @@ function EstadoTurnoPill({ estado }) {
         background: c.bg,
         color: c.fg,
         fontFamily: theme.body,
-        fontSize: 12,
+        // sizeMicro: pill de estado, como StatusPill (excepción de §3.6).
+        fontSize: theme.sizeMicro,
         fontWeight: theme.weightHeading,
         letterSpacing: '-0.005em',
         whiteSpace: 'nowrap',
@@ -401,6 +405,16 @@ function EstadoTurnoPill({ estado }) {
     </span>
   );
 }
+
+// Interlineado del cliente y el servicio en BloqueAgenda. Con el global (1,5 →
+// 21 px a 14 px) el nombre del cliente deja de entrar en un turno de menos de
+// ~48 min; con 18 px entra desde ~45 min, igual o mejor que antes de subir la
+// letra de 13/12 a 14. Mismo criterio que INTERLINEADO_TURNO de la app del barbero.
+const INTERLINEADO_BLOQUE = '18px';
+
+// Duración mínima (en minutos) para mostrar el servicio debajo del cliente. Por
+// debajo de 60 el renglón no entra y asomaba recortado bajo el nombre.
+const MIN_DURACION_CON_SERVICIO = 60;
 
 /**
  * BloqueAgenda
@@ -445,7 +459,7 @@ function BloqueAgenda({ turno, rangoInicio, onClick }) {
     >
       <div
         style={{
-          fontSize: 11,
+          fontSize: theme.sizeMicro,
           fontFamily: theme.mono,
           fontWeight: theme.weightHeading,
           opacity: 0.85,
@@ -458,7 +472,8 @@ function BloqueAgenda({ turno, rangoInicio, onClick }) {
       </div>
       <div
         style={{
-          fontSize: 13,
+          fontSize: theme.sizeBody,
+          lineHeight: INTERLINEADO_BLOQUE,
           fontWeight: theme.weightHeading,
           color: theme.ink,
           whiteSpace: 'nowrap',
@@ -468,10 +483,11 @@ function BloqueAgenda({ turno, rangoInicio, onClick }) {
       >
         {turno.cliente_nombre}
       </div>
-      {height >= 50 && (
+      {fin - ini >= MIN_DURACION_CON_SERVICIO && (
         <div
           style={{
-            fontSize: 12,
+            fontSize: theme.sizeBody,
+            lineHeight: INTERLINEADO_BLOQUE,
             color: theme.inkSoft,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
@@ -1011,56 +1027,10 @@ function FilaDetalleConCopia({ label, valor, Icon }) {
   );
 }
 
-/**
- * BotonFormaPago
- * Botón toggle de forma de pago para el modo "completar". Text-only, tintado
- * con el color de BadgeFormaPago correspondiente cuando está activo (efectivo →
- * success, Mercado Pago → accent); surface neutro cuando no. Touch target 44px.
- * @param {string} label
- * @param {boolean} activo
- * @param {Function} onClick
- * @param {string} tonoBg - fondo cuando está activo (el *Soft del color)
- * @param {string} tonoFg - color de texto/borde cuando está activo
- */
-function BotonFormaPago({ label, activo, onClick, tonoBg, tonoFg }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={activo}
-      style={{
-        flex: 1,
-        minHeight: 44,
-        padding: '10px 12px',
-        background: activo ? tonoBg : theme.surface,
-        border: `1px solid ${activo ? tonoFg : theme.hairline}`,
-        borderRadius: theme.radius,
-        color: activo ? tonoFg : theme.inkSoft,
-        fontFamily: theme.body,
-        fontSize: theme.sizeBody,
-        fontWeight: activo ? theme.weightHeading : theme.weightMedium,
-        cursor: 'pointer',
-        transition: `background ${theme.transitionFast}, border-color ${theme.transitionFast}, color ${theme.transitionFast}`,
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
 // Estilos del modo "completar" del ModalDetalleTurno.
-// labelEyebrow replica la label del primitivo Field (mono micro uppercase,
-// color muted) para que "Forma de pago" / "Precio" se vean uniformes con la
-// label del Field de propina.
-const labelEyebrow = {
-  display: 'block',
-  fontFamily: theme.mono,
-  fontWeight: theme.weightMedium,
-  fontSize: theme.sizeMicro,
-  letterSpacing: '0.04em',
-  textTransform: 'uppercase',
-  color: theme.muted,
-};
+// El rótulo "Precio" usa el mismo estilo que la label de Field y de
+// GrupoOpciones (estiloEtiquetaCampo), para que el formulario se vea uniforme.
+const labelPrecio = { ...estiloEtiquetaCampo, display: 'block' };
 
 const precioReadonlyBox = {
   marginTop: 8,
@@ -1069,7 +1039,8 @@ const precioReadonlyBox = {
   border: `1px solid ${theme.hairline}`,
   borderRadius: theme.radius,
   fontFamily: theme.body,
-  fontSize: 15,
+  // Imita el input de Field: mismo tamaño (sizeInput).
+  fontSize: theme.sizeInput,
   fontWeight: theme.weightMedium,
   color: theme.ink,
   fontVariantNumeric: 'tabular-nums',
@@ -1335,31 +1306,20 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
               />
             ) : (
               <>
-                <span style={labelEyebrow}>Precio</span>
+                <span style={labelPrecio}>Precio</span>
                 <div style={precioReadonlyBox}>{fmtPesos(precio)}</div>
               </>
             )}
           </div>
 
-          {/* Forma de pago — dos botones tintados como BadgeFormaPago */}
+          {/* Forma de pago — botones tintados como BadgeFormaPago */}
           <div style={{ marginTop: 16 }}>
-            <span style={labelEyebrow}>Forma de pago</span>
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <BotonFormaPago
-                label="Efectivo"
-                activo={formaPago === 'efectivo'}
-                onClick={() => setFormaPago('efectivo')}
-                tonoBg={theme.successSoft}
-                tonoFg={theme.success}
-              />
-              <BotonFormaPago
-                label="Mercado Pago"
-                activo={formaPago === 'mercado_pago'}
-                onClick={() => setFormaPago('mercado_pago')}
-                tonoBg={theme.accentSoft}
-                tonoFg={theme.accent}
-              />
-            </div>
+            <GrupoOpciones
+              label="Forma de pago"
+              opciones={OPCIONES_FORMA_PAGO_TONO}
+              value={formaPago}
+              onChange={setFormaPago}
+            />
           </div>
 
           {/* Propina — opcional, visible siempre */}
@@ -1480,16 +1440,13 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
   const [error, setError]                 = useState(null);
   const [intento, setIntento]             = useState(0);
   const [accionando, setAccionando]       = useState(null);
-  const [errorAccion, setErrorAccion]     = useState(null);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState(null);
   // Descansos y ausencias del día (armarBloquesNeutros) y el que tiene el detalle abierto.
   const [bloquesNeutros, setBloquesNeutros] = useState([]);
   const [bloqueSeleccionado, setBloqueSeleccionado] = useState(null);
 
-  // El auto-dismiss del banner de error vive dentro del primitivo Toast
-  // (autoDismissMs=6000). El `key` con el texto del error fuerza remount
-  // cuando llega un mensaje nuevo, reiniciando el timer.
-  const mostrarErrorAccion = (mensaje) => setErrorAccion(mensaje);
+  // Error de una acción sobre un turno: toast flotante (se va solo).
+  const mostrarErrorAccion = (mensaje) => toast.error(mensaje);
 
   // ── Carga inicial de barberos ───────────────────────────────────────────
   // En modo barbero `barberos` ya viene del estado inicial ([barberoSesion]) y
@@ -1691,16 +1648,6 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
   return (
     <div style={{ padding: '24px 32px', fontFamily: theme.body, color: theme.ink }}>
 
-      {/* Banner de error de acción */}
-      {errorAccion && (
-        <Toast
-          key={errorAccion}
-          tone="danger"
-          autoDismissMs={6000}
-          dismissible
-          onDismiss={() => setErrorAccion(null)}
-        >{errorAccion}</Toast>
-      )}
 
       {/* ── FILA CONTROLES ─────────────────────────────────────────────── */}
       {/* Grid de 3 columnas (1fr / auto / 1fr) — el SelectorDia queda

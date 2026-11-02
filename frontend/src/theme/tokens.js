@@ -22,6 +22,9 @@ export const theme = {
   mutedSoft:    '#A1A1AA',  // texto deshabilitado / placeholder
   hairline:     '#E4E4E7',  // borders, separadores
   hairlineSoft: '#F4F4F5',  // separadores muy sutiles
+  // Fondo de pills y etiquetas neutras (zinc-200). No usa surfaceAlt porque
+  // ese es el hover de las filas: la etiqueta perdía el fondo al pasar el mouse.
+  neutralSoft:  '#E4E4E7',
 
   // Acento único — indigo.
   accent:       '#4F46E5',
@@ -46,6 +49,10 @@ export const theme = {
   sizeBody:    14,  // texto base
   sizeMicro:   11,  // eyebrows, micro-labels en mayúsculas
 
+  // Tamaño funcional (no de jerarquía): los inputs deben ser ≥16px para
+  // evitar el auto-zoom de iOS Safari al enfocar un campo de texto (iPad).
+  sizeInput:   16,
+
   weightRegular: 400,
   weightMedium:  500,
   weightHeading: 600,
@@ -64,9 +71,14 @@ export const theme = {
   // ── Sombras ───────────────────────────────────────────────────
   shadowSm: '0 1px 2px rgba(0,0,0,0.06)',
   shadowMd: '0 4px 12px rgba(0,0,0,0.06)',
+  // Sombra de una card que flota sobre un overlay (Modal).
+  shadowLg: '0 20px 40px rgba(0,0,0,0.15)',
   // Sombra hacia arriba que marca "hay más contenido abajo" en una zona con
   // scroll interno (ej. TarjetaResumen del wizard). Funcional, no decorativa.
   shadowScroll: '0 -8px 8px -8px rgba(0,0,0,0.12)',
+
+  // Fondo oscuro detrás de un Modal (ink al 50 %).
+  overlay: 'rgba(9, 9, 11, 0.5)',
 
   // ── Transiciones ──────────────────────────────────────────────
   transitionFast:   '.12s ease-out',

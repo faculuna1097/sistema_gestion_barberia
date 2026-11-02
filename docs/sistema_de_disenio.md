@@ -83,6 +83,7 @@ identidad propia en blanco y negro: ver §3.8.
 
 ### 3.1 Colores
 - Neutros: `zinc` (`bg`, `surface`, `surfaceAlt`, `ink`, `inkSoft`, `muted`, `mutedSoft`, `hairline`, `hairlineSoft`).
+- `neutralSoft` (zinc-200, en el panel desde el 2026-11-02): fondo de las pills y etiquetas neutras (ej. "Aporte" y "Retiro" en Caja, la categoría en Gastos), con texto `inkSoft`. No usan `surfaceAlt` porque ese es el hover de las filas de una tabla, y la etiqueta perdía el fondo al pasar el mouse.
 - Acento: `indigo-600` (`accent`). **Un solo acento. No agregar otros chromaticos**.
 - Estados: `success` (green-700), `danger` (red-700), `warning` (amber-700). Discretos.
 
@@ -142,6 +143,7 @@ fuera verde, el verde dejaría de avisar algo.
   - `sizeHeading` (18) — h2/h3, títulos de card.
   - `sizeBody` (14) — texto base.
   - `sizeMicro` (11) — eyebrows, helper text en mono uppercase.
+- `sizeInput` (16) es funcional, no de jerarquía: el texto de los inputs. Con menos de 16 px, Safari hace zoom al enfocar un campo en el iPad o el iPhone. Está en los cuatro fronts (en el panel, desde el 2026-11-02).
 - 3 pesos: regular (400), medium (500), heading (600). Nada de 700+.
 
 ### 3.3 Spacing
@@ -154,7 +156,12 @@ Escala fija: **4, 8, 12, 16, 24, 32**. No usar paddings arbitrarios.
 
 ### 3.5 Sombras
 Mínimas. `shadowSm` para botones primarios, `shadowMd` para cards flotantes
-(ej. modales). **Sin glow, sin gradientes, sin glassmorphism.**
+(ej. los toasts). **Sin glow, sin gradientes, sin glassmorphism.**
+
+En el panel, `Modal` usa `shadowLg` (`0 20px 40px rgba(0,0,0,0.15)`): la card
+flota sobre el `overlay` (`rgba(9, 9, 11, 0.5)`, ink al 50 %), y con
+`shadowMd` no se despega del fondo oscuro. Los dos tokens están solo en el
+panel (2026-11-02): ningún otro front tiene modales.
 
 `shadowScroll` (`0 -8px 8px -8px rgba(0,0,0,0.12)`, desde el 2026-10-29) es una
 sombra hacia arriba que avisa "hay más contenido abajo" en una zona con scroll
@@ -182,12 +189,13 @@ rápido entre cliente y cliente. Por eso usan una escala más grande que la de
 §3.2, que es una excepción escrita y no un descuido: 19 en las opciones y el
 textarea, 18 en los valores del resumen y el botón grande, 13 en las etiquetas
 mono del resumen, 15 en el subtítulo, 22 / 32 en la etiqueta y el monto del
-total, 40 / 56 en el campo de monto y 48 en el monto del éxito. Lo que falta es
-escribirla con nombre en vez de números sueltos (§9 #23).
+total, 40 / 56 en el campo de monto y 48 en el monto del éxito. Desde el
+2026-11-02 está escrita con nombre en `TAM_KIOSKO` (`screens/flows/wizardStyles.js`),
+local a los flujos (§7.1): si otra superficie la necesita, se promueve a `tokens.js`.
 
 Reglas que cambian según densidad:
 - **Tipografía**: el turnero puede usar `sizeHeading` (18) generosamente; gestión prioriza `sizeBody` (14) incluso en títulos de card. **No bajar nunca de 14 en texto leíble**.
-  - **Excepciones en `sizeMicro` (11), decididas el 2026-10-19:** los eyebrows y micro-labels en mono y mayúsculas (incluido `StatusPill`), las pills o chips de categoría (ej. forma de pago y "Sin turno" en `MiPlanilla`) y las etiquetas de la barra de navegación (`BottomNav`). Son rótulos de una o dos palabras que se reconocen de un vistazo, no texto que se lee, y las pestañas van con su ícono. A 14, las pills de cada corte pasarían a dos renglones más seguido.
+  - **Excepciones en `sizeMicro` (11), decididas el 2026-10-19:** los eyebrows y micro-labels en mono y mayúsculas (incluido `StatusPill` y, en el panel, `EstadoTurnoPill` y la hora de los bloques de la Agenda), las pills o chips de categoría (ej. forma de pago y "Sin turno" en `MiPlanilla`) y las etiquetas de la barra de navegación (`BottomNav`). Son rótulos de una o dos palabras que se reconocen de un vistazo, no texto que se lee, y las pestañas van con su ícono. A 14, las pills de cada corte pasarían a dos renglones más seguido.
 - **Tablas**: gestión usa tablas densas (filas de 36–40 px); barbero / turnero priorizan cards.
 - **Whitespace**: aireado en turnero, justo en gestión. Pero **nunca sacrificar legibilidad** por compactar.
 
@@ -417,26 +425,43 @@ es importante en UI también — un primitivo mal documentado se va a usar mal.
 
 ### 4.8 Toasts / feedback efímero
 
-El primitivo `Toast` (`components/ui/Toast.jsx`) es hoy **inline y
-render-state**: NO es flotante global. El caller mantiene un `useState` con el
-mensaje (`{ tone, texto }` o un string), monta `<Toast>` donde su layout lo
-necesita, y le pasa `onDismiss` para limpiarlo. Se usa en `BloqueImagenes`
-(feedback de subida/borrado) y en los **6 handlers de "Exportar a Excel"**
-(error de carga del chunk lazy de `xlsx`, vía el helper `utils/cargarChunk.js`
-→ estado `errorExport` + `<Toast tone="danger">`).
+Desde el 2026-11-02 (deuda #16), el feedback efímero del panel es un **toast
+flotante**: centrado arriba (a 16 px del borde), por encima de los modales y
+con auto-dismiss. Se muestra con la API imperativa de `utils/toast.js`, sin
+estado propio ni nada que montar:
 
-**Consecuencia de diseño:** como el Toast lo renderiza cada componente desde su
-estado, un helper **no puede mostrar un Toast por sí solo**. Por eso
-`cargarChunk` centraliza el import + log + mensaje, pero el `<Toast>` se cablea
-en cada call-site.
+```js
+import { toast } from '../../../utils/toast';
 
-**Dirección futura (target):** unificar **todos** los toasts —confirmación y
-error— a un patrón **flotante, centrado en pantalla y con auto-dismiss**, en
-vez del inline actual. Esto convierte al Toast en un **servicio global**
-(provider/portal + dispatcher imperativo `toast.show()`), y recién ahí se puede
-centralizar el feedback de error en helpers como `cargarChunk`. Es un cambio de
-arquitectura del primitivo + migración de todos los call-sites → **deuda #16 de
-§9**.
+toast.exito('Horario actualizado correctamente.');
+toast.error('No se pudo eliminar el gasto. Intentá de nuevo.');
+toast.show({ tone: 'warning', texto: '…' });
+```
+
+- **`ToastProvider`** (`components/ui/`) dibuja los avisos. Se monta una sola
+  vez, en `main.jsx`, y se registra como despachador de `toast.show()`.
+- **Duración:** 4 s el éxito y la info, 6 s el error y el aviso, que además
+  llevan una X para cerrarlos antes.
+- **Pila:** tres a la vista como máximo (si llega un cuarto, se va el más
+  viejo). Un aviso igual a uno que ya se ve no se duplica: reinicia su tiempo.
+- **Accesibilidad:** el contenedor es una región `aria-live="polite"` que
+  existe siempre, y el toast no toma el foco (no saca al usuario de un modal).
+- Como es un servicio, un helper puede avisar solo: `cargarChunk` muestra el
+  error del exportador y devuelve `null`, y el caller solo hace
+  `if (!XLSX) return;`.
+
+**`Toast` sigue siendo la card visual** (ícono, texto, X opcional). Se monta
+inline solo para un mensaje que tiene que quedarse junto a lo que lo causó:
+- un error de carga con "Reintentar" (Feriados, Horario, Imágenes, y los de
+  horarios y ausencias en Barberos);
+- un error dentro de un modal que sigue abierto (el alta de feriados y los
+  modales de Seguridad), pegado al campo que hay que corregir;
+- una nota fija de la pantalla (el día cerrado con turnos del Turnero).
+
+El texto de un error que viene de la API se elige con `mensajeDeError`
+(`utils/errores.js`): el `error` del servidor si vino; si no (sin red, una
+respuesta que no es JSON), un mensaje genérico en español. Nunca se muestra
+`err.message` crudo ("Failed to fetch").
 
 ---
 
@@ -501,7 +526,15 @@ Si el ícono es chico, el padding del contenedor compensa.
 - Listas → `<ul>` / `<ol>` con `<li>`.
 - Headings con jerarquía (h1 > h2 > h3) sin saltarse niveles.
 
-### 5.6 Idioma del documento
+### 5.6 Foco en los modales
+
+`Modal` del panel (y `ConfirmDialog`, que lo usa) maneja el foco desde el
+2026-11-02: al abrirse lo lleva a la card, Tab y Shift+Tab giran adentro
+mientras está abierto, y al cerrarse vuelve al elemento que lo abrió. Escape lo
+cierra salvo en `loading`. Con un modal sobre otro, solo el de arriba encierra
+el foco. Un modal nuevo usa `Modal` y no reimplementa nada de esto.
+
+### 5.7 Idioma del documento
 
 `<html lang="es">` en `index.html`. Lectores de pantalla lo necesitan para
 elegir la voz correcta.
@@ -532,8 +565,18 @@ pantalla.
 | `SummaryRow` | Fila label/value con border-bottom sutil. |
 
 Propios del panel de gestión (`frontend/src/components/ui/`, no están en el
-turnero): `LoadingState` (spinner Lucide `Loader2`, excepción de §4.5) y `Toast`
-(§4.8), entre otros primitivos de tablas y formularios del admin.
+turnero): `LoadingState` (spinner Lucide `Loader2`, excepción de §4.5), `Toast`
+y `ToastProvider` (§4.8), entre otros primitivos de tablas y formularios del
+admin. Entre ellos:
+- `GrupoOpciones`: campo de opción única con un botón por opción (Caja y el
+  modal de completar turno). Para las formas de pago recibe
+  `OPCIONES_FORMA_PAGO_TONO` (`tonosFormaPago.js`).
+- `estilos.js` → `estiloEtiquetaCampo`: el rótulo mono de `Field` y
+  `GrupoOpciones` (y de cualquier rótulo suelto de un formulario).
+- Las formas de pago tienen una sola fuente: los nombres en `utils/formato.js`
+  (`OPCIONES_FORMA_PAGO`, `formatPago`) y los colores en `tonosFormaPago.js`.
+- `Field` acepta `maxLength`; su input va en `sizeInput` y la ayuda y el error
+  en `sizeBody`.
 
 **Gráficos, sin librería.** El proyecto no tiene librería de gráficos: las
 barras se hacen con divs de ancho proporcional y los tokens del tema.
@@ -751,18 +794,20 @@ actualizá este doc.**
 13. ~~**Regla ESLint `react-hooks/set-state-in-effect` desactivada solo en `frontend-barbero/eslint.config.js`.** Faltaba una postura unificada: desactivarla en todos, o refactorizar el patrón de fetch a "sin setState síncrono en el efecto".~~ — **Resuelto**: está apagada en los cuatro fronts, con el motivo en `convenciones_tecnicas.md` §8.
 14. ~~**Rango horario del timeline hardcodeado**~~ — **Resuelto**: `Agenda.jsx` de `frontend-barbero` ya no usa `7:00`–`22:00` fijo. El rango se deriva por día con `calcularRangoHoras(horarioAtencion, fecha, turnos)`: trae `horario_atencion` del local (`getTenant()`, fetch best-effort una sola vez al montar) y muestra desde `apertura - 1h` hasta `cierre + 1h` del día visible (`floor`/`ceil` para líneas de hora prolijas con horarios no enteros como `10:30`). El rango se expande para que cualquier turno fuera de esa franja siga visible (clamp al min/max entre horario y turnos). Día cerrado: deriva de los turnos del día (±1h) o, sin turnos, cae al default `7`–`22` — mismo camino al que cae si `getTenant()` falla (red de seguridad). `HORA_INICIO`/`HORA_FIN`/`ALTO_TOTAL` pasaron de constantes de módulo a valores derivados por render que bajan por props a `Timeline`/`BloqueTurno`. (Emparenta con la deuda 4, aún abierta en el turnero.)
 15. **`getMisClientes` sin paginación** — la pantalla Clientes de `frontend-barbero` trae todos los clientes históricos del barbero y filtra en cliente. Con 500+ clientes, el render de cards con hover-state (ver deuda 8) puede sentirse lento. Mitigación: paginar el endpoint o virtualizar la lista.
-16. **Toast inline → flotante global.** El primitivo `Toast` es hoy inline / render-state (cada caller mantiene el estado y lo monta en su layout; ver §4.8). El **target** es un Toast **flotante, centrado y con auto-dismiss** servido por un provider global con API imperativa (`toast.show()`). Migrar implica: (1) crear el provider/portal + dispatcher; (2) migrar **todos** los call-sites inline actuales (`BloqueImagenes`, los 6 handlers de export de xlsx vía `errorExport`, y cualquier otro feedback efímero); (3) recién ahí poder centralizar el feedback de error de `cargarChunk`. Hasta entonces, el patrón vigente es el inline (§4.8).
+16. ~~**Toast inline → flotante global.**~~ — **Resuelto (2026-11-02)**: toast flotante servido por `ToastProvider` con `toast.show()` (§4.8); `cargarChunk` avisa solo. Texto original: El primitivo `Toast` es hoy inline / render-state (cada caller mantiene el estado y lo monta en su layout; ver §4.8). El **target** es un Toast **flotante, centrado y con auto-dismiss** servido por un provider global con API imperativa (`toast.show()`). Migrar implica: (1) crear el provider/portal + dispatcher; (2) migrar **todos** los call-sites inline actuales (`BloqueImagenes`, los 6 handlers de export de xlsx vía `errorExport`, y cualquier otro feedback efímero); (3) recién ahí poder centralizar el feedback de error de `cargarChunk`. Hasta entonces, el patrón vigente es el inline (§4.8).
 17. **Estilo de etiqueta "eyebrow" copiado a mano** (mono, 11 px, mayúsculas, `muted`) en unos diez lugares del turnero (`ScreenHeader`, `Field`, `CampoTelefono`, `SelectorDiaHorario`, `SeleccionCuando`, `GestionTurno`…). Candidato a un estilo compartido (ej. un primitivo `Eyebrow`). Visto en el rediseño del turnero (2026-10-08).
 18. **`index.css` repite a mano colores de `tokens.js`** (fondo, anillo de foco, scrollbar) porque el CSS no puede importar el JS; está comentado en cada lugar. Para una sola fuente: exponer los tokens como variables CSS. Visto en el turnero; como `index.css` se copia entre fronts (§8), seguramente pasa en todos.
 19. **Hover con `useState` en pantallas táctiles** (§4.2): iOS dispara `mouseenter` al tocar y el estado queda "pegado" hasta tocar otra cosa (borde gris en `Card`/`SlotChip`, `accentHover` en el primario). Casi no se nota porque la pantalla cambia, pero sí donde no se navega (chips de la reprogramación del turnero). Emparenta con #8: un `:hover` real dentro de `@media (hover: hover)` lo resolvería. **(2026-10-19) Resuelto en `frontend-barbero`** con el hook `useHover` (§4.2), en todos sus hover. **Falta el turnero** (`Card`, `SlotChip`, `Button` y los chips de la reprogramación): copiar el hook a su `src/hooks/` y usarlo igual.
 20. **`Card` tiene `padding` por defecto 14**, fuera de la escala 4/8/12/16/24/32 (§3.3).
 21. **Touch target de los días de `SelectorDiaHorario`**: ~46 px de ancho en 375 px, pero ~41 px dentro de la tarjeta de la reprogramación y ~37 px en pantallas de 320 px, debajo de los 44 de §5.4 (el alto es 48). Al `MiniCalendario` le pasaba lo mismo.
 22. ~~**Textos de 12 px en `frontend-barbero`**~~ — **Resuelto (2026-10-19)**: pasaron a 14 (`sizeBody`), con el valor de `SummaryRow` (13) y la ayuda y el error de `Field` (12). `StatusPill` pasó de 10 a 11 (`sizeMicro`). Quedan en 11, a propósito, las pills de categoría y las etiquetas de la `BottomNav` (excepciones de §3.6). Texto original: (`theme.sizeMicro + 1`), debajo del mínimo de 14 de §3.6: Clientes, CrearTurno, Dashboard, Gestión (tab Horarios, `FilaDia`), Más, MiPlanilla, `KPI` y `TurnoListItem`; `StatusPill` usa 10. Los 12 de `Field` y los 13 de `SummaryRow` ya están en `estado_actual.md` ("Tamaños escritos a mano"). La Agenda y las filas de Gestión → Suspensiones pasaron a 14 el 2026-10-19. Ojo al subirlos: en un bloque de alto fijo, 14 px con el interlineado global (1,5 → 21 px por renglón) puede no entrar; el bloque de turno de la Agenda usa un interlineado de 18 px (`INTERLINEADO_TURNO`). Visto en el paso 5a de la app del barbero.
-23. **La escala del kiosko está escrita como números sueltos** en `frontend/src/screens/flows/wizard.jsx` (19, 18, 13, 15, 22, 32, 40, 56, 48; ver §3.6). Los tamaños son intencionales; lo que falta es nombrarlos: una escala local al archivo (ej. `TAM_KIOSKO = { opcion: 19, valorResumen: 18, … }`), no en `tokens.js`, porque hoy la usa un solo archivo (§7.1). Si otro front o superficie la necesita, se promueve. Visto el 2026-10-29 al documentar §6.4.
+23. ~~**La escala del kiosko está escrita como números sueltos**~~ — **Resuelto (2026-11-02)**: `TAM_KIOSKO` en `wizardStyles.js` (§3.6), con los mismos valores. Texto original: en `frontend/src/screens/flows/wizard.jsx` (19, 18, 13, 15, 22, 32, 40, 56, 48; ver §3.6). Los tamaños son intencionales; lo que falta es nombrarlos: una escala local al archivo (ej. `TAM_KIOSKO = { opcion: 19, valorResumen: 18, … }`), no en `tokens.js`, porque hoy la usa un solo archivo (§7.1). Si otro front o superficie la necesita, se promueve. Visto el 2026-10-29 al documentar §6.4.
 
 ---
 
-*Última actualización: 2026-10-30 — deuda #13 de §9 resuelta: `set-state-in-effect` apagada en los cuatro fronts; §6.4 suma `wizardStyles.js`; §8 corrige lo de `utils/fecha.js` y `utils/formato.js`, que no son copias entre fronts.*
+*Última actualización: 2026-11-02 — tanda 6a de deudas: §4.8 reescrita (toast flotante con `toast.show()`); §3.1 suma `neutralSoft`, §3.2 `sizeInput` en el panel, §3.5 `shadowLg` y `overlay`; §3.6 la escala del kiosko con nombre (`TAM_KIOSKO`) y las pills de la Agenda en `sizeMicro`; §5.6 nueva (foco en los modales); §6.1 suma `GrupoOpciones`, `estiloEtiquetaCampo` y la fuente única de formas de pago; deudas #16 y #23 resueltas.*
+
+*2026-10-30 — deuda #13 de §9 resuelta: `set-state-in-effect` apagada en los cuatro fronts; §6.4 suma `wizardStyles.js`; §8 corrige lo de `utils/fecha.js` y `utils/formato.js`, que no son copias entre fronts.*
 
 *2026-10-30 — deudas #8 y #12 de §9 resueltas: `DataTable` hace el hover de las filas con `<style>` local, y el foco visible quedó auditado (`CampoTelefono` suma el `outline` en su contenedor).*
 

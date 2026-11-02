@@ -67,7 +67,6 @@ import {
   Tabs,
   LoadingState,
   EmptyState,
-  Toast,
   Button,
   IconoAlerta,
   ChipFiltro,
@@ -235,7 +234,6 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
   const [cargando, setCargando]                   = useState(false);
   const [error, setError]                         = useState(null);
   const [intento, setIntento]                     = useState(0);
-  const [errorExport, setErrorExport]             = useState(null);
   // Fechas (YYYY-MM-DD) actualmente expandidas en el tab Detalle.
   // Por defecto solo el día de hoy arranca expandido al cargar la semana.
   const [diasExpandidos, setDiasExpandidos] = useState(new Set());
@@ -284,14 +282,9 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
   const exportarDetalle = async () => {
     if (!detalleData.length) return;
     // El import() va después del early-return: no bajamos el chunk en un export
-    // vacío. Si la descarga falla, cargarChunk lo convierte en error con Toast.
-    let XLSX;
-    try {
-      XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
-    } catch (err) {
-      setErrorExport(err.message);
-      return;
-    }
+    // vacío. Si la descarga falla, cargarChunk avisa con un toast.
+    const XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
+    if (!XLSX) return;
     const filas = [];
     detalleData.forEach((barbero) => {
       const infoComision = resumenData?.barberos.find((b) => b.barbero_id === barbero.barbero_id);
@@ -351,14 +344,9 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
   const exportarResumen = async () => {
     if (!resumenData?.barberos.length) return;
     // El import() va después del early-return: no bajamos el chunk en un export
-    // vacío. Si la descarga falla, cargarChunk lo convierte en error con Toast.
-    let XLSX;
-    try {
-      XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
-    } catch (err) {
-      setErrorExport(err.message);
-      return;
-    }
+    // vacío. Si la descarga falla, cargarChunk avisa con un toast.
+    const XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
+    if (!XLSX) return;
     // En el Excel, con y sin turno van en dos columnas (en pantalla es una sola,
     // "N de M"): así se pueden sumar y filtrar como números. Lo mismo los
     // descansos: cantidad, minutos y % de la jornada, en columnas numéricas.
@@ -498,11 +486,6 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
         />
       </div>
 
-      {errorExport && (
-        <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
-          {errorExport}
-        </Toast>
-      )}
 
       {/* ── TAB DETALLE ───────────────────────────────────────────────────── */}
       {tabActiva === 'detalle' && (

@@ -47,6 +47,7 @@ import {
   Toast,
   InputTiempo,
 } from '../../../../components/ui';
+import { toast } from '../../../../utils/toast';
 import { theme } from '../../../../theme/tokens.js';
 
 // Orden de presentación de los días: Lun→Sáb, Dom al final (índices de DIAS).
@@ -190,7 +191,8 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
   const [bloques, setBloques]     = useState(tieneCache ? normalizarBloques(bloquesIniciales) : []);
   const [cargando, setCargando]   = useState(!tieneCache);
   const [guardando, setGuardando] = useState(false);
-  const [feedback, setFeedback]   = useState(null); // { tone, texto } | null
+  // Error de carga: queda inline (con X); el resultado de guardar va en un toast.
+  const [errorCarga, setErrorCarga] = useState(null);
 
   const vivoRef = useRef(true);
   useEffect(() => {
@@ -207,7 +209,7 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
         if (vivoRef.current) setBloques(normalizarBloques(data));
       } catch (err) {
         console.error('[tabBarberos/Horario] Error cargando:', err.message);
-        if (vivoRef.current) setFeedback({ tone: 'danger', texto: 'No se pudieron cargar los horarios.' });
+        if (vivoRef.current) setErrorCarga('No se pudieron cargar los horarios.');
       } finally {
         if (vivoRef.current) setCargando(false);
       }
@@ -226,7 +228,6 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
       hora_inicio: local?.inicio ?? '09:00',
       hora_fin: local?.fin ?? '18:00',
     }]);
-    setFeedback(null);
   };
 
   /**
@@ -237,7 +238,6 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
    */
   const actualizarBloque = (index, campo, valor) => {
     setBloques((prev) => prev.map((b, i) => (i === index ? { ...b, [campo]: valor } : b)));
-    setFeedback(null);
   };
 
   /**
@@ -246,7 +246,6 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
    */
   const eliminarBloque = (index) => {
     setBloques((prev) => prev.filter((_, i) => i !== index));
-    setFeedback(null);
   };
 
   /**
@@ -254,7 +253,6 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
    */
   const guardar = async () => {
     setGuardando(true);
-    setFeedback(null);
     try {
       const payload = bloques.map(({ dia_semana, hora_inicio, hora_fin }) => ({
         dia_semana, hora_inicio, hora_fin,
@@ -263,10 +261,10 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
       if (!vivoRef.current) return;
       setBloques(resultado);
       onGuardado(resultado);
-      setFeedback({ tone: 'success', texto: 'Horarios guardados correctamente.' });
+      toast.exito('Horarios guardados correctamente.');
     } catch (err) {
       console.error('[tabBarberos/Horario] Error guardando:', err.message);
-      if (vivoRef.current) setFeedback({ tone: 'danger', texto: `Error: ${err.message}` });
+      if (vivoRef.current) toast.error(`Error: ${err.message}`);
     } finally {
       if (vivoRef.current) setGuardando(false);
     }
@@ -289,14 +287,9 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {feedback && (
-        <Toast
-          tone={feedback.tone}
-          autoDismissMs={feedback.tone === 'success' ? 3000 : undefined}
-          dismissible={feedback.tone === 'danger'}
-          onDismiss={() => setFeedback(null)}
-        >
-          {feedback.texto}
+      {errorCarga && (
+        <Toast tone="danger" dismissible onDismiss={() => setErrorCarga(null)}>
+          {errorCarga}
         </Toast>
       )}
 
@@ -493,7 +486,8 @@ function SubPanelAusencias({ barbero }) {
   const [formMotivo, setFormMotivo] = useState('');
   const [creando, setCreando]       = useState(false);
   const [conflicto, setConflicto]   = useState(null);
-  const [feedback, setFeedback]     = useState(null); // { tone, texto } | null
+  // Error de carga: queda inline (con X); el resultado de crear o liberar va en un toast.
+  const [errorCarga, setErrorCarga] = useState(null);
 
   const [liberando, setLiberando]         = useState(null); // id que se está liberando
   const [confirmandoId, setConfirmandoId] = useState(null); // id en confirmación inline
@@ -516,10 +510,10 @@ function SubPanelAusencias({ barbero }) {
   const cargarSuspensiones = async () => {
     try {
       const data = await getAdminSuspensiones(barbero.id, { tipo: 'suspension' });
-      if (vivoRef.current) setSuspensiones(data);
+      if (vivoRef.current) { setSuspensiones(data); setErrorCarga(null); }
     } catch (err) {
       console.error('[tabBarberos/Ausencias] Error cargando:', err.message);
-      if (vivoRef.current) setFeedback({ tone: 'danger', texto: 'No se pudieron cargar las ausencias.' });
+      if (vivoRef.current) setErrorCarga('No se pudieron cargar las ausencias.');
     } finally {
       if (vivoRef.current) setCargando(false);
     }
@@ -537,7 +531,6 @@ function SubPanelAusencias({ barbero }) {
   const crear = async (confirmarCancelacion = false) => {
     if (!puedeCrear) return;
     setCreando(true);
-    setFeedback(null);
     try {
       const datos = {
         barbero_id: barbero.id,
@@ -559,11 +552,11 @@ function SubPanelAusencias({ barbero }) {
       setFormDesde('');
       setFormHasta('');
       setFormMotivo('');
-      setFeedback({ tone: 'success', texto: `Ausencia creada. ${res.turnos_cancelados || 0} turno(s) cancelado(s).` });
+      toast.exito(`Ausencia creada. ${res.turnos_cancelados || 0} turno(s) cancelado(s).`);
       await cargarSuspensiones();
     } catch (err) {
       console.error('[tabBarberos/Ausencias] Error creando:', err.message);
-      if (vivoRef.current) setFeedback({ tone: 'danger', texto: `Error: ${err.message}` });
+      if (vivoRef.current) toast.error(`Error: ${err.message}`);
     } finally {
       if (vivoRef.current) setCreando(false);
     }
@@ -580,18 +573,17 @@ function SubPanelAusencias({ barbero }) {
   const liberar = async (ausencia) => {
     const enCurso = ausenciaEnCurso(ausencia);
     setLiberando(ausencia.id);
-    setFeedback(null);
     try {
       const { suspension } = await liberarAdminSuspension(ausencia.id);
       if (!vivoRef.current) return;
       setSuspensiones((lista) => aplicarLiberacion(lista, suspension));
       setConfirmandoId(null);
-      setFeedback({ tone: 'success', texto: enCurso ? 'Ausencia terminada.' : 'Ausencia liberada.' });
+      toast.exito(enCurso ? 'Ausencia terminada.' : 'Ausencia liberada.');
     } catch (err) {
       console.error('[tabBarberos/Ausencias] Error liberando:', err.message);
       if (vivoRef.current) {
         setConfirmandoId(null);
-        setFeedback({ tone: 'danger', texto: `No se pudo ${enCurso ? 'terminar' : 'liberar'}: ${err.message}` });
+        toast.error(`No se pudo ${enCurso ? 'terminar' : 'liberar'}: ${err.message}`);
       }
     } finally {
       if (vivoRef.current) setLiberando(null);
@@ -605,14 +597,9 @@ function SubPanelAusencias({ barbero }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {feedback && (
-        <Toast
-          tone={feedback.tone}
-          autoDismissMs={feedback.tone === 'success' ? 4000 : undefined}
-          dismissible={feedback.tone === 'danger'}
-          onDismiss={() => setFeedback(null)}
-        >
-          {feedback.texto}
+      {errorCarga && (
+        <Toast tone="danger" dismissible onDismiss={() => setErrorCarga(null)}>
+          {errorCarga}
         </Toast>
       )}
 
