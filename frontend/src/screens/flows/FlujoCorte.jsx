@@ -14,6 +14,7 @@ import { registrarCorte, getTurnosDelDia } from "../../services/api";
 import { getFechaHoy, formatHora } from "../../utils/fecha.js";
 import { theme } from "../../theme/tokens.js";
 import { fmtPesos } from "../../utils/formato.js";
+import { motivoYQueHacer } from "../../utils/errores.js";
 import { Button, BadgeFormaPago, LoadingState, EmptyState } from "../../components/ui";
 import {
   PanelWizard,
@@ -41,11 +42,10 @@ import { wizardStyles } from "./wizardStyles.js";
 function mensajeErrorCorte(err, conTurno) {
   if (err.status === 409) return err.message;
   if (err.status === 404) {
-    const motivo = err.message.endsWith(".") ? err.message : `${err.message}.`;
     const queHacer = conTurno
       ? "Volvé al paso del turno y elegí «Sin turno»."
       : "Volvé al inicio y empezá de nuevo.";
-    return `${motivo} ${queHacer}`;
+    return motivoYQueHacer(err.message, queHacer);
   }
   return "Error al guardar el corte. Intentá de nuevo.";
 }

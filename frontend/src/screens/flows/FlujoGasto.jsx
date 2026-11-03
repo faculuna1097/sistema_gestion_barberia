@@ -12,6 +12,7 @@ import { Banknote, Package } from "lucide-react";
 import { registrarGasto } from "../../services/api";
 import { theme } from "../../theme/tokens.js";
 import { fmtPesos } from "../../utils/formato.js";
+import { mensajeErrorRegistro } from "../../utils/errores.js";
 import { Button, BadgeFormaPago } from "../../components/ui";
 import {
   PanelWizard,
@@ -59,6 +60,9 @@ export default function FlujoGasto({ onVolver, categorias, imagenLocal }) {
   const avanzar = () => setPaso((p) => p + 1);
   const retroceder = () => {
     if (paso === 1) { onVolver(); return; }
+    // El error de la confirmación es de ese intento: al volver no tiene que
+    // reaparecer cuando se llega de nuevo al resumen.
+    setError(null);
     setPaso((p) => p - 1);
   };
 
@@ -82,7 +86,7 @@ export default function FlujoGasto({ onVolver, categorias, imagenLocal }) {
       }, demora);
     } catch (err) {
       console.error('[flujoGasto] Error en confirmarGasto:', err.message);
-      setError("Error al guardar el gasto. Intentá de nuevo.");
+      setError(mensajeErrorRegistro(err, "Error al guardar el gasto. Intentá de nuevo."));
     } finally {
       setEnviando(false);
     }

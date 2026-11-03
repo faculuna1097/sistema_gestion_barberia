@@ -796,7 +796,7 @@ function FilaIngresoSinComision({ label, monto, mostrarComisiones }) {
   return (
     <tr className="om-fila-hover">
       <td style={{ ...tdStyle, color: theme.muted }}>{label}</td>
-      <td style={{ ...tdStyle, textAlign: 'right', color: theme.mutedSoft }}>—</td>
+      <td style={{ ...tdStyle, textAlign: 'right', color: theme.muted }}>—</td>
       <td style={{
         ...tdStyle,
         textAlign: 'right',
@@ -807,8 +807,8 @@ function FilaIngresoSinComision({ label, monto, mostrarComisiones }) {
       </td>
       {mostrarComisiones && (
         <>
-          <td style={{ ...tdStyle, textAlign: 'right', color: theme.mutedSoft }}>—</td>
-          <td style={{ ...tdStyle, textAlign: 'right', color: theme.mutedSoft }}>—</td>
+          <td style={{ ...tdStyle, textAlign: 'right', color: theme.muted }}>—</td>
+          <td style={{ ...tdStyle, textAlign: 'right', color: theme.muted }}>—</td>
           <td style={{
             ...tdStyle,
             textAlign: 'right',
@@ -1012,7 +1012,7 @@ function TablaPorCategoria({ categorias, totalEgresos }) {
  */
 function celdaMontoCapital(monto, color) {
   return monto === 0
-    ? { texto: '—', color: theme.mutedSoft }
+    ? { texto: '—', color: theme.muted }
     : { texto: fmtPesos(monto), color };
 }
 

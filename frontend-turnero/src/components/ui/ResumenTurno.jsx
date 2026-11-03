@@ -10,6 +10,18 @@ import AvatarIniciales from './AvatarIniciales.jsx';
 import IconoPin from './IconoPin.jsx';
 
 /**
+ * ALTO_CIRCULO
+ * Diámetro del avatar o el ícono de cada renglón de quién atiende y dónde.
+ */
+const ALTO_CIRCULO = 28;
+
+/**
+ * ALTO_RENGLON
+ * Alto de un renglón de texto del resumen (14 px × 1,5).
+ */
+const ALTO_RENGLON = 21;
+
+/**
  * textoBarbero
  * Quién atiende, dicho para el cliente.
  * @param {Object} barbero - { id, nombre }; `nombre` es null si "Cualquiera"
@@ -98,7 +110,7 @@ function ResumenTurno({
       }}>
         <Renglon
           icono={barbero.nombre
-            ? <AvatarIniciales nombre={barbero.nombre} size={28}/>
+            ? <AvatarIniciales nombre={barbero.nombre} size={ALTO_CIRCULO}/>
             : <CirculoIcono><IconoPersona/></CirculoIcono>}
           texto={textoBarbero(barbero, barberoAsignado)}
         />
@@ -118,6 +130,9 @@ function ResumenTurno({
 /**
  * Renglon
  * Renglón del resumen: un círculo de 28 px (avatar o ícono) y el texto.
+ * El círculo queda a la altura del primer renglón del texto: con un renglón se
+ * ve igual que centrado; con dos (una dirección larga), acompaña al principio
+ * del texto en vez de quedar entre los dos renglones.
  * @param {ReactNode} props.icono - Decorativo
  * @param {string} props.texto
  */
@@ -125,14 +140,20 @@ function Renglon({ icono, texto }) {
   return (
     <li style={{
       display: 'flex',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       gap: 12,
       fontFamily: theme.body,
       fontSize: theme.sizeBody,
+      lineHeight: `${ALTO_RENGLON}px`,
       color: theme.ink,
     }}>
       <span aria-hidden="true" style={{ display: 'flex', flexShrink: 0 }}>{icono}</span>
-      <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{texto}</span>
+      {/* El padding centra el primer renglón con el círculo */}
+      <span style={{
+        minWidth: 0,
+        overflowWrap: 'anywhere',
+        paddingTop: (ALTO_CIRCULO - ALTO_RENGLON) / 2,
+      }}>{texto}</span>
     </li>
   );
 }
@@ -146,8 +167,8 @@ function Renglon({ icono, texto }) {
 function CirculoIcono({ children }) {
   return (
     <span style={{
-      width: 28,
-      height: 28,
+      width: ALTO_CIRCULO,
+      height: ALTO_CIRCULO,
       borderRadius: 999,
       background: theme.surfaceAlt,
       color: theme.inkSoft,

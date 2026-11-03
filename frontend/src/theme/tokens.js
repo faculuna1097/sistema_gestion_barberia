@@ -18,8 +18,12 @@ export const theme = {
   surfaceAlt:   '#F4F4F5',  // hover suave, fondos de soporte
   ink:          '#09090B',  // texto principal
   inkSoft:      '#27272A',  // texto secundario fuerte
-  muted:        '#71717A',  // texto secundario
-  mutedSoft:    '#A1A1AA',  // texto deshabilitado / placeholder
+  // Texto secundario. Más oscuro que zinc-500 (#71717A, 4,40:1 sobre surfaceAlt)
+  // para llegar a WCAG AA: 5,28:1 sobre blanco, 5,05 sobre #FAFAFA y 4,80 sobre surfaceAlt.
+  muted:        '#6B6B74',
+  // Deshabilitado, bordes en hover y lo decorativo. No es para texto que se lee:
+  // da 2,56:1 sobre blanco.
+  mutedSoft:    '#A1A1AA',
   hairline:     '#E4E4E7',  // borders, separadores
   hairlineSoft: '#F4F4F5',  // separadores muy sutiles
   // Fondo de pills y etiquetas neutras (zinc-200). No usa surfaceAlt porque

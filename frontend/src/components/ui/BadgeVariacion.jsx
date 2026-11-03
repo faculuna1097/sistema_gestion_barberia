@@ -30,7 +30,7 @@ function BadgeVariacion({ pct, sinDatosLabel = 'Sin datos previos' }) {
       <span style={{
         fontFamily: theme.body,
         fontSize: theme.sizeBody,
-        color: theme.mutedSoft,
+        color: theme.muted,
         fontWeight: theme.weightMedium,
       }}>{sinDatosLabel}</span>
     );

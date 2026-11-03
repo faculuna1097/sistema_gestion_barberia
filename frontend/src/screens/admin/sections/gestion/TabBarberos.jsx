@@ -343,7 +343,7 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
                 <span style={{
                   fontFamily: theme.body,
                   fontSize: theme.sizeBody,
-                  color: theme.mutedSoft,
+                  color: theme.muted,
                 }}>
                   Local cerrado
                 </span>
@@ -351,7 +351,7 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
                 <span style={{
                   fontFamily: theme.body,
                   fontSize: theme.sizeBody,
-                  color: theme.mutedSoft,
+                  color: theme.muted,
                 }}>
                   Sin horario
                 </span>
@@ -757,7 +757,7 @@ function SubPanelAusencias({ barbero }) {
                       fontSize: theme.sizeMicro,
                       letterSpacing: '0.02em',
                       textTransform: 'uppercase',
-                      color: theme.mutedSoft,
+                      color: theme.muted,
                     }}>
                       {enCurso ? 'En curso · ' : ''}Cargada por {s.origen === 'admin' ? 'el administrador' : 'el barbero'}
                     </span>
@@ -1176,7 +1176,7 @@ export default function TabBarberos() {
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           {tieneHorarios(row)
             ? <Check size={18} strokeWidth={2.25} color={theme.success} />
-            : <span style={{ color: theme.mutedSoft }}>—</span>}
+            : <span style={{ color: theme.muted }}>—</span>}
         </div>
       ),
     },

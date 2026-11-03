@@ -3,7 +3,8 @@
 // y los dos CTA (WhatsApp + email) en alto contraste sobre el fondo de acento.
 
 import { useState } from 'react';
-import { MessageCircle, Mail, Gift } from 'lucide-react';
+import { Mail, Gift } from 'lucide-react';
+import IconoWhatsApp from '../ui/IconoWhatsApp.jsx';
 import { theme } from '../../theme/tokens.js';
 import { linkWhatsApp, linkEmail } from '../../utils/contacto.js';
 import Container from '../landing/Container.jsx';
@@ -133,7 +134,7 @@ function CtaFinal() {
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginTop: 4 }}>
             <BotonCta href={linkWhatsApp()} solid>
-              <MessageCircle size={18} strokeWidth={2} aria-hidden="true" />
+              <IconoWhatsApp size={18} />
               Quiero empezar
             </BotonCta>
             <BotonCta href={linkEmail()}>

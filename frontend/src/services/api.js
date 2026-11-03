@@ -309,13 +309,15 @@ export const registrarCorte = async (datos) => {
  * Envía una nueva venta al backend.
  * @param {Object} datos - { producto_id, cantidad, precio_unitario, forma_pago }
  * @returns {Promise<Object>} { message, venta_id, monto_total }
+ * @throws {ErrorServidor} con el mensaje del servidor (ej. 400 "Stock
+ *   insuficiente. Disponible: N"; para `mensajeErrorRegistro`)
  */
 export const registrarVenta = async (datos) => {
   const response = await apiFetchOperativo('/ventas', {
     method: 'POST',
     body: JSON.stringify(datos),
   });
-  if (!response.ok) throw new Error('Error al registrar la venta');
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 
@@ -324,13 +326,14 @@ export const registrarVenta = async (datos) => {
  * Envía un nuevo gasto al backend.
  * @param {Object} datos - { categoria_id, descripcion, monto, forma_pago }
  * @returns {Promise<Object>} { message, gasto_id }
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeErrorRegistro`)
  */
 export const registrarGasto = async (datos) => {
   const response = await apiFetchOperativo('/gastos', {
     method: 'POST',
     body: JSON.stringify(datos),
   });
-  if (!response.ok) throw new Error('Error al registrar el gasto');
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 

@@ -679,7 +679,7 @@ function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisi
                   <TdCelda alinear="right">
                     {c.propina > 0
                       ? fmtPesos(c.propina)
-                      : <span style={{ color: theme.mutedSoft }}>—</span>}
+                      : <span style={{ color: theme.muted }}>—</span>}
                   </TdCelda>
                   <TdCelda alinear="right" bold>{fmtPesos(c.monto_servicios + c.propina)}</TdCelda>
                   <TdCelda><BadgeFormaPago forma={c.forma_pago} /></TdCelda>
@@ -737,7 +737,7 @@ function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisi
  */
 function textoConTurno(conTurno, total) {
   if (typeof conTurno !== 'number' || total === 0) {
-    return <span style={{ color: theme.mutedSoft }}>—</span>;
+    return <span style={{ color: theme.muted }}>—</span>;
   }
   return `${conTurno} de ${total}`;
 }
@@ -751,7 +751,7 @@ function textoConTurno(conTurno, total) {
  */
 function textoDescansos(registro) {
   if (!registro || registro.cantidad === 0) {
-    return <span style={{ color: theme.mutedSoft }}>—</span>;
+    return <span style={{ color: theme.muted }}>—</span>;
   }
   return `${registro.cantidad} · ${formatDuracion(registro.minutos)}`;
 }
@@ -1101,14 +1101,14 @@ function ListaConBarras({ titulo, filas, maximo }) {
               <BarraProporcional segmentos={[{ valor: f.total, color: theme.mutedSoft }]} maximo={tope} />
               <span style={{
                 textAlign: 'right',
-                color: vacio ? theme.mutedSoft : theme.muted,
+                color: theme.muted,
                 fontVariantNumeric: 'tabular-nums',
               }}>
                 {vacio ? '—' : `${f.cantidad} corte${f.cantidad !== 1 ? 's' : ''}`}
               </span>
               <span style={{
                 textAlign: 'right',
-                color: vacio ? theme.mutedSoft : theme.ink,
+                color: vacio ? theme.muted : theme.ink,
                 fontWeight: theme.weightMedium,
                 fontVariantNumeric: 'tabular-nums',
               }}>
@@ -1208,7 +1208,7 @@ function RegistroDescansos({ registro }) {
                 </div>
                 <span style={{
                   flexShrink: 0,
-                  color: liberado ? theme.mutedSoft : theme.ink,
+                  color: liberado ? theme.muted : theme.ink,
                   fontWeight: theme.weightMedium,
                   fontVariantNumeric: 'tabular-nums',
                 }}>

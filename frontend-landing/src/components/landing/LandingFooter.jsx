@@ -2,7 +2,8 @@
 // Pie de la landing: marca + tagline, navegación, contacto y copyright.
 
 import { useState } from 'react';
-import { MessageCircle, Mail } from 'lucide-react';
+import { Mail } from 'lucide-react';
+import IconoWhatsApp from '../ui/IconoWhatsApp.jsx';
 import { theme } from '../../theme/tokens.js';
 import { MARCA, CONTACTO } from '../../config/landing.js';
 import { linkWhatsApp, linkEmail } from '../../utils/contacto.js';
@@ -128,7 +129,7 @@ function LandingFooter() {
                 fontSize: theme.sizeMicro,
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
-                color: theme.mutedSoft,
+                color: theme.muted,
                 marginBottom: 4,
               }}
             >
@@ -147,14 +148,14 @@ function LandingFooter() {
                 fontSize: theme.sizeMicro,
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
-                color: theme.mutedSoft,
+                color: theme.muted,
                 marginBottom: 4,
               }}
             >
               Contacto
             </span>
             <FooterLink href={linkWhatsApp()} external>
-              <MessageCircle size={16} strokeWidth={1.75} aria-hidden="true" />
+              <IconoWhatsApp size={16} />
               {CONTACTO.whatsappDisplay}
             </FooterLink>
             <FooterLink href={linkEmail()} external>
@@ -172,7 +173,7 @@ function LandingFooter() {
             borderTop: `1px solid ${theme.hairline}`,
             fontFamily: theme.body,
             fontSize: 13,
-            color: theme.mutedSoft,
+            color: theme.muted,
           }}
         >
           © {ANIO} {MARCA.nombre}. Hecho para barberías.

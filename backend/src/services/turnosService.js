@@ -71,8 +71,9 @@ export const upsertCliente = async (tenantId, { nombre, telefono, email }) => {
 };
 
 // Mensaje del 409 cuando el horario ya no se puede reservar (otro turno o una
-// suspensión). Lo comparten insertarTurno y reprogramarTurno (controllers/turnero.js).
-export const MENSAJE_SLOT_OCUPADO = 'El slot elegido ya no está disponible';
+// suspensión). Lo comparten insertarTurno y reprogramarTurno (controllers/turnero.js
+// y turnos.js). Lo lee el cliente en el turnero: sin la palabra "slot".
+export const MENSAJE_SLOT_OCUPADO = 'Ese horario ya no está disponible. Elegí otro.';
 
 /**
  * Arma el error tipado que los controllers mapean a 409.

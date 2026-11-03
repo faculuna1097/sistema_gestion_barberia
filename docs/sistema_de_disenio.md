@@ -83,6 +83,7 @@ identidad propia en blanco y negro: ver §3.8.
 
 ### 3.1 Colores
 - Neutros: `zinc` (`bg`, `surface`, `surfaceAlt`, `ink`, `inkSoft`, `muted`, `mutedSoft`, `hairline`, `hairlineSoft`).
+- `muted` (`#6B6B74`, desde el 2026-11-03) es el texto secundario: es un poco más oscuro que zinc-500 para llegar a AA (§5.3). `mutedSoft` (`#A1A1AA`) no es para texto que se lee: queda para lo deshabilitado, los bordes en hover y lo decorativo.
 - `neutralSoft` (zinc-200, en el panel desde el 2026-11-02): fondo de las pills y etiquetas neutras (ej. "Aporte" y "Retiro" en Caja, la categoría en Gastos), con texto `inkSoft`. No usan `surfaceAlt` porque ese es el hover de las filas de una tabla, y la etiqueta perdía el fondo al pasar el mouse.
 - Acento: `indigo-600` (`accent`). **Un solo acento. No agregar otros chromaticos**.
 - Estados: `success` (green-700), `danger` (red-700), `warning` (amber-700). Discretos.
@@ -215,6 +216,7 @@ Reglas para íconos:
 - Color = `currentColor` o un token de `theme`. Nunca hardcodear el color.
 - `strokeWidth` típico **1.5–1.75**; `2` para íconos que deben pesar (acción primaria).
 - **Nunca decorativos**. Si un ícono no aporta información o reduce cognición, sacarlo.
+- **Logos de marcas (excepción, desde el 2026-11-03):** Lucide no los trae. Van como SVG inline en el `components/ui/` del front, con el glifo oficial en monocromo (`currentColor`), nunca en el color de la marca: así no suman un segundo acento (§2). Hoy: `IconoWhatsApp` en la landing, en todo lo que abre un chat de WhatsApp (los CTA del hero, el nav, la barra fija del celular, Precio, el cierre y el footer).
 
 ### 3.8 Turnero: identidad propia
 
@@ -530,10 +532,24 @@ sin verificar.
 Objetivo mínimo: **WCAG AA** (4.5:1 para texto normal, 3:1 para texto ≥18 px
 o ≥14 px bold).
 
-Combinaciones a chequear con cuidado (deuda activa — ver §9):
-- `mutedSoft` sobre `surfaceAlt`.
-- `inkSoft` sobre `bg`.
-- Texto blanco sobre `accent` (indigo-600).
+**Grises de texto (medido el 2026-11-03, en pantalla, en los cuatro fronts):**
+
+| Texto | `surface` (#FFF) | `bg` (#FAFAFA) | `surfaceAlt` (#F4F4F5) |
+|---|---|---|---|
+| `muted` (`#6B6B74`) | 5,28:1 | 5,05:1 | 4,80:1 |
+| `mutedSoft` (`#A1A1AA`) | 2,56:1 | 2,46:1 | 2,33:1 |
+
+- **El texto que se lee va en `muted` o más oscuro.** Incluye el "—" de una
+  celda vacía o en cero (es el valor de la celda), los eyebrows y las notas.
+  Sobre `hairline` / `neutralSoft` (zinc-200) `muted` da 4,16:1: ahí las pills
+  usan `inkSoft`.
+- **`mutedSoft` queda solo para lo que no hace falta leer:** controles
+  deshabilitados (flechas de paginación y de período, el "Hoy" del navegador de
+  días de la Agenda, los días sin lugar del turnero), bordes en hover, barras
+  neutras con el número al lado, chevrons y flechas decorativas (`aria-hidden`),
+  el borde de la `MarcaEleccion` del turnero y el punto de "cerrado" del hero,
+  que acompaña al texto.
+- Pendiente de medir: `inkSoft` sobre `bg` y el texto blanco sobre `accent`.
 
 Cuando agregues una combinación nueva de texto/fondo, verificá contraste
 antes de mergear. Herramienta: WebAIM Contrast Checker.
@@ -756,8 +772,8 @@ la estrategia es duplicar**:
 | **Landing** | La base sin `neutralSoft`, `overlay` ni `maxWidth`. Suma `sizeDisplay`, `sizeSection`, `sizeSubheading`, `maxWidthWide`, `maxWidthText`, `sectionGapMin` y `sectionGapMax`. Tiene su propio `shadowLg` (`0 12px 32px rgba(0,0,0,0.10)`, para las capturas que flotan): mismo nombre que el del panel, otro valor. | Google Fonts, `scroll-behavior: smooth`, `om-reveal` y las clases `om-` de §4.1. Sin `om-stroke`, `om-overlay-in` ni `om-dialog-in`. |
 | **Turnero** | Diverge a propósito (§3.8): `bg`, `accent`, `accentHover`, `accentSoft` y los del hero. No tiene `shadowScroll`. | Diverge a propósito (§3.8): `overscroll-behavior`, los colores de su tema y el movimiento `tt-`. |
 
-Los cuatro comparten la escala de tamaños, pesos, spacing (`spacing`), radios y
-los estados.
+Los cuatro comparten la escala de tamaños, pesos, spacing (`spacing`), radios,
+los estados y los neutros de texto (`muted` `#6B6B74` desde el 2026-11-03, §5.3).
 
 **Lo que NO se copia**:
 - Nada del turnero: sus tokens e `index.css` divergen a propósito (§3.8).
@@ -773,9 +789,10 @@ en varios fronts:
   `fechaDeISO`, `fmtHora` y `fmtFechaHora` son iguales, y `fmtFechaLarga` difiere
   (`day: '2-digit'` en el barbero, `'numeric'` en el turnero). La landing no
   tiene `fecha.js`.
-- `formato.js`: `fmtPesos` está en los cuatro, y el del panel es distinto (redondea
-  y pone el signo y un espacio). `capitalizar` está en el barbero y el turnero. El
-  resto de las funciones es propio del panel.
+- `formato.js`: `fmtPesos` está en los cuatro y es la misma (desde el
+  2026-11-03): redondea a pesos y pone el signo y un espacio (`$ 8.000`,
+  `-$ 130.000`). La fuente es la del panel. `capitalizar` está en el barbero y el
+  turnero. El resto de las funciones es propio del panel.
 
 Si en algún momento el dolor de mantener los duplicados es alto, evaluar
 mover todo a un paquete compartido (`packages/ui/`) con npm/pnpm
@@ -823,10 +840,7 @@ actualizá este doc.**
 6. ~~Catálogos (`servicios`, `barberos`) sin `ORDER BY` explícito en backend.~~ — **Resuelto**: servicios ordenan por precio y barberos por nombre (`controllers/turnero.js`, `barberos.js`, `servicios.js`).
 7. ~~`MiniCalendario` "2 semanas" hardcodeado~~ — **Resuelto**: el sublabel se deriva de `dias.length` como "N días".
 8. ~~**Inline styles + `useState` para hover** (§4.1, §4.2) — validado solo para mobile/turnero. **Antes de arrancar el front de gestión**, revisar: las tablas densas con muchas filas hover-ables pueden hacer ruidoso el re-render. Considerar híbrido: tokens en JS + `:hover` puntual via `<style>` scoped donde la performance importe.~~ — **Resuelto**: `DataTable` (panel) hace el hover de las filas con `<style>` local, con una clase única por instancia.
-9. **Contraste WCAG no verificado** — `mutedSoft` sobre `surfaceAlt`, `inkSoft` sobre `bg`, blanco sobre `accent`. Auditar con WebAIM antes de release público. Medido en la landing (2026-10-01):
-   - `mutedSoft` sobre blanco da ≈2.6:1. Por eso las notas al pie (`NotaAlPie`) pasaron a `muted` a 14 px: 4.8:1 sobre blanco y 4.6:1 sobre `bg`.
-   - `muted` sobre `surfaceAlt` queda en ≈4.4:1, apenas debajo de AA. Le pasa a la nota de "números de ejemplo", que está en una sección `tone="alt"`.
-   - En el turnero (2026-10-08): `mutedSoft` sobre blanco da 2,56:1 y `muted` sobre `surfaceAlt` 4,40:1. `mutedSoft` ya no se usa como texto que haya que leer (solo en los días sin lugar de la grilla).
+9. **Contraste WCAG: falta medir `inkSoft` sobre `bg` y el texto blanco sobre `accent`.** Auditar con WebAIM antes de release público. Los grises se resolvieron el 2026-11-03 (tanda 7b): `muted` pasó a `#6B6B74` en los cuatro fronts (4,80:1 sobre `surfaceAlt`, medido en pantalla), y el `mutedSoft` que era texto para leer pasó a `muted` (15 usos en el panel y 7 en la landing; ninguno en el barbero ni el turnero). Qué quedó en `mutedSoft` y por qué, en §5.3.
 10. ~~**Iconografía sin librería elegida**~~ — **Resuelto**: se eligió Lucide (`lucide-react`). Ver §3.7.
 11. ~~**`<html lang="es">`** — verificar que esté en `index.html` de cada front.~~ — **Resuelto**: presente en los cuatro fronts (verificado 2026-09-29).
 12. ~~**Focus visible global** — auditar que todos los primitivos tengan estilo de `:focus-visible`. Hoy `Card` y `Button` sí; el resto, sin verificar.~~ — **Resuelto**: hay una regla `*:focus-visible` global en los cuatro fronts, y los campos que anulan el `outline` tienen anillo propio (`InputTiempo`, `Select`, `SearchInput`, `CampoTexto`, `CampoMonto`). `CampoTelefono` lleva además el `outline` en su contenedor, porque con error el borde no cambia.
@@ -844,7 +858,11 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-11-03 — tanda 7a de deudas (turnero): §4.2 suma `useHover` en el turnero; §6.1, el padding de `Card` y el `scroll-padding-bottom` de `StickyFooter`; deudas #17, #19, #20 y #21 resueltas.*
+*Última actualización: 2026-11-03 — §3.7 suma la excepción de los logos de marcas (`IconoWhatsApp` en la landing).*
+
+*2026-11-03 — tanda 7b de deudas: `muted` pasa a `#6B6B74` en los cuatro fronts (§3.1, §5.3 con la tabla de contraste y qué queda en `mutedSoft`, §8); `fmtPesos` igual en los cuatro (§8); deuda #9 resuelta para los grises.*
+
+*2026-11-03 — tanda 7a de deudas (turnero): §4.2 suma `useHover` en el turnero; §6.1, el padding de `Card` y el `scroll-padding-bottom` de `StickyFooter`; deudas #17, #19, #20 y #21 resueltas.*
 
 *2026-11-03 — tanda 6c de deudas: §4.6 suma la pantalla angosta del panel (`usePantallaAngosta`, sidebar encima del contenido, segundo renglón en las tablas, `Tabs` con `mostrarIconos`).*
 

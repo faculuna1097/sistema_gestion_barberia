@@ -68,7 +68,7 @@ function GestionTurno({ token, tenant }) {
       setMensaje({ kind: 'ok', text: 'Turno cancelado. Te llegará un email de confirmación.' });
     } catch (err) {
       console.error('[GestionTurno] Error cancelando:', err.message);
-      setMensaje({ kind: 'err', text: err.message });
+      setMensaje({ kind: 'err', text: mensajeDeError(err) });
     } finally {
       setProcesando(false);
       setConfirmCancel(false);
