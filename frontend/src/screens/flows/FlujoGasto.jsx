@@ -30,10 +30,15 @@ import { wizardStyles } from "./wizardStyles.js";
 // Tiene que coincidir con MAX_DESCRIPCION_GASTO de backend/src/utils/constantes.js.
 const MAX_DESCRIPCION_GASTO = 200;
 
+// Categoría de la compra de mercadería para vender: al registrarla se recuerda
+// actualizar el stock. Tiene que coincidir con el nombre que siembra
+// backend/src/scripts/crearTenant.js (CATEGORIAS_GASTO_BASE).
+const CATEGORIA_PRODUCTOS_VENTA = "Productos para venta";
+
 /**
  * FlujoGasto
- * Wizard de 5 pasos para registrar un gasto. La lógica de negocio (envío,
- * recordatorio de stock para categoría "Productos") se mantiene intacta.
+ * Wizard de 5 pasos para registrar un gasto. Con la categoría
+ * CATEGORIA_PRODUCTOS_VENTA, el éxito recuerda actualizar el stock.
  *
  * @param {Object} props
  * @param {Function} props.onVolver — vuelve a MainScreen
@@ -67,7 +72,8 @@ export default function FlujoGasto({ onVolver, categorias, imagenLocal }) {
   };
 
   // ── Envío ───────────────────────────────────────────────────────────────────
-  // Si la categoría es Productos se da más tiempo para leer el recordatorio de stock.
+  // Con la categoría de productos para venta se da más tiempo para leer el
+  // recordatorio de stock.
   const confirmarGasto = async () => {
     const payload = {
       categoria_id: categoriaSeleccionada.id,
@@ -80,7 +86,7 @@ export default function FlujoGasto({ onVolver, categorias, imagenLocal }) {
     try {
       await registrarGasto(payload);
       setExito(true);
-      const demora = categoriaSeleccionada?.nombre === "Productos" ? 4500 : 2500;
+      const demora = categoriaSeleccionada?.nombre === CATEGORIA_PRODUCTOS_VENTA ? 4500 : 2500;
       setTimeout(() => {
         onVolver();
       }, demora);
@@ -101,7 +107,7 @@ export default function FlujoGasto({ onVolver, categorias, imagenLocal }) {
         monto={montoFinal}
         montoColor={theme.danger}
       >
-        {categoriaSeleccionada?.nombre === "Productos" && (
+        {categoriaSeleccionada?.nombre === CATEGORIA_PRODUCTOS_VENTA && (
           <AvisoExito Icon={Package}>
             Si compraste productos para vender, recordá actualizar el stock en{" "}
             <strong style={{ color: theme.ink }}>Gestión → Productos</strong>

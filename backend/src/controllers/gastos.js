@@ -35,8 +35,8 @@ export const createGasto = async (req, res) => {
 
   try {
     // Única validación que consulta la base: va después de las que solo miran el
-    // body. El FK de gasto.categoria_id es simple, así que sin esto se podría
-    // guardar una categoría de otro tenant.
+    // body. El FK compuesto (tenant_id, categoria_id) rechazaría igual una
+    // categoría de otro tenant, pero con un 500; esto la convierte en un 404.
     if (!(await categoriaEnTenant(categoria_id, req.tenant_id))) {
       return res.status(404).json({ error: 'Categoría no encontrada' });
     }

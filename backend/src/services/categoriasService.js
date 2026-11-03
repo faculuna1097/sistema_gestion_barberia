@@ -1,7 +1,8 @@
 // /backend/src/services/categoriasService.js
-// Helpers del recurso "categoría de gasto". Espejo de barberosService: es la red
-// de seguridad a nivel app por encima del FK simple de gasto.categoria_id, y
-// convierte una categoría ajena en un 404 limpio.
+// Helpers del recurso "categoría de gasto". Espejo de barberosService: el FK
+// compuesto gasto(tenant_id, categoria_id) ya impide guardar una categoría de
+// otro tenant; esta validación previa la convierte en un 404 limpio en vez de
+// un 500 por la violación del FK.
 
 import { query } from '../config/db.js';
 import { esUUID } from '../utils/validarUuid.js';

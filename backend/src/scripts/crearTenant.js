@@ -1,6 +1,7 @@
 // /backend/src/scripts/crearTenant.js
 // Crea un nuevo tenant en la DB con su PIN y sus credenciales operativas hasheados
-// y suscripción vigente hasta fin de mes.
+// y suscripción vigente hasta fin de mes. Siembra el horario de atención default y
+// las categorías de gasto predeterminadas.
 //
 // Uso:
 //   cd backend
@@ -16,6 +17,24 @@
 import bcrypt from 'bcrypt';
 import { query } from '../config/db.js';
 import { errorCredencialesOperativas, hashearPasswordOperativa } from '../utils/credencialesOperativas.js';
+
+// Categorías de gasto predeterminadas: todos los tenants tienen las mismas y no se
+// agregan propias (decidido el 2026-11-03). Cada tenant tiene su copia, para que el
+// FK compuesto gasto(tenant_id, categoria_id) aplique. "Productos para venta" tiene
+// que coincidir con CATEGORIA_PRODUCTOS_VENTA de frontend/src/screens/flows/FlujoGasto.jsx
+// (el iPad recuerda actualizar el stock). Si cambia la lista, actualizar también
+// onboarding.md (paso 2c) y los tenants existentes.
+const CATEGORIAS_GASTO_BASE = [
+  'Alquiler',
+  'Comida y/o bebidas',
+  'Impuestos',
+  'Insumos',
+  'Limpieza',
+  'Mantenimiento',
+  'Otros',
+  'Productos para venta',
+  'Servicios',
+];
 
 /**
  * Calcula el último día del mes actual en formato YYYY-MM-DD.
@@ -108,7 +127,25 @@ async function crearTenant() {
       console.warn('[crearTenant] ⚠ Cargá el horario manualmente desde el panel admin (TabNegocio).');
     }
 
-    // 7. Output
+    // 7. Seed de las categorías de gasto predeterminadas, en una sola sentencia
+    // (entran todas o ninguna). Best-effort como el horario: si falla, el tenant ya
+    // quedó creado y se cargan con el SQL de onboarding.md (paso 2c).
+    let categoriasSeedOk = true;
+    try {
+      await query(
+        `INSERT INTO categoria_gasto (tenant_id, nombre)
+         SELECT $1, nombre FROM unnest($2::text[]) AS nombre`,
+        [tenantId, CATEGORIAS_GASTO_BASE]
+      );
+    } catch (errCategorias) {
+      categoriasSeedOk = false;
+      console.warn(
+        `[crearTenant] ⚠ El tenant se creó, pero falló el seed de las categorías de gasto: ${errCategorias.message}`
+      );
+      console.warn('[crearTenant] ⚠ Cargalas con el SQL de onboarding.md (paso 2c).');
+    }
+
+    // 8. Output
     console.log('[crearTenant] ✅ Tenant creado correctamente');
     console.log(`  ID:           ${tenantId}`);
     console.log(`  Nombre:       ${nombre}`);
@@ -116,6 +153,7 @@ async function crearTenant() {
     console.log(`  Operativo:    ${usuarioOperativo}`);
     console.log(`  Suscripción:  vigente hasta ${fechaSuscripcion}`);
     console.log(`  Horario:      ${horarioSeedOk ? 'L-S 10:00-19:00 (default, ajustable desde el admin)' : 'NO seedeado — cargar manualmente'}`);
+    console.log(`  Categorías:   ${categoriasSeedOk ? `${CATEGORIAS_GASTO_BASE.length} de gasto predeterminadas` : 'NO seedeadas — cargar con el SQL de onboarding.md'}`);
     console.log(`  URL:          ${subdominio}.barbermanager.app`);
 
     process.exit(0);

@@ -4,8 +4,7 @@ import { query } from '../config/db.js';
 /**
  * getCategorias
  * Devuelve las categorías de gasto activas del tenant, ordenadas alfabéticamente.
- * Usa `IS NOT FALSE` porque categoria_gasto.activo todavía acepta NULL: un NULL
- * cuenta como activa, igual que antes de filtrar.
+ * Son las predeterminadas que siembra crearTenant.js; no hay categorías propias.
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
  * @returns {JSON} Array de categorías con id y nombre
  */
@@ -14,7 +13,7 @@ export const getCategorias = async (req, res) => {
     const result = await query(
       `SELECT id, nombre
        FROM categoria_gasto
-       WHERE tenant_id = $1 AND activo IS NOT FALSE
+       WHERE tenant_id = $1 AND activo = true
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );

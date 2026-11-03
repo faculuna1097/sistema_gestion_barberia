@@ -22,7 +22,7 @@ Antes de arrancar, tener:
 
 1. El cliente acuerda contratar el sistema y te pasa: nombre del negocio, subdominio deseado, PIN inicial y las credenciales operativas que quiere.
 2. Corrés `crearTenant.js` para dar de alta el tenant en la DB, con sus credenciales del modo operativo.
-3. Cargás los dueños del negocio (tabla `socio`) y las categorías de gasto, por SQL.
+3. Cargás los dueños del negocio (tabla `socio`) por SQL. Las categorías de gasto ya las creó el script.
 4. Verificás que el subdominio responde, el login operativo entra y el PIN funciona.
 5. Le entregás al cliente la URL, las credenciales operativas y el PIN. Le mandás el manual por separado.
 6. (Opcional, cuando llegue) Cargás el logo y las imágenes del cliente desde el panel (Gestión → Negocio).
@@ -53,9 +53,10 @@ node src/scripts/crearTenant.js "Nombre Barbería" subdominio 1234 usuario passw
 - Setea `suscripcion_vigente_hasta` al último día del mes actual.
 - Inserta el tenant con `activo = true`.
 - Seedea el horario de atención default en `tenant_horario_atencion`: **Lunes a Sábado 10:00-19:00** (domingo cerrado). El dueño lo ajusta desde el panel admin (Gestión → Negocio) al activar la cuenta.
-- Imprime el UUID, nombre, subdominio, usuario operativo, fecha de suscripción, horario y URL.
+- Crea las 9 categorías de gasto predeterminadas (ver Paso 2c).
+- Imprime el UUID, nombre, subdominio, usuario operativo, fecha de suscripción, horario, categorías y URL.
 
-> Si el seed del horario falla (caso raro), el script igual termina con éxito: el tenant queda creado y se avisa por consola para cargar el horario manualmente desde el admin.
+> Si el seed del horario o el de las categorías falla (caso raro), el script igual termina con éxito: el tenant queda creado y se avisa por consola. El horario se carga desde el admin; las categorías, con el SQL del Paso 2c.
 
 **Output esperado:**
 
@@ -67,6 +68,7 @@ node src/scripts/crearTenant.js "Nombre Barbería" subdominio 1234 usuario passw
   Operativo:    usuario
   Suscripción:  vigente hasta YYYY-MM-DD
   Horario:      L-S 10:00-19:00 (default, ajustable desde el admin)
+  Categorías:   9 de gasto predeterminadas
   URL:          subdominio.barbermanager.app
 ```
 
@@ -128,20 +130,38 @@ WHERE id = '<socio_id>' AND tenant_id = '<tenant_uuid>';
 
 ## Paso 2c — Categorías de gasto
 
-`crearTenant.js` no crea categorías de gasto, y sin ellas el flujo de gasto del iPad queda
-vacío. Hoy se cargan a mano por SQL, con la misma lista base que usa Kingsai:
+`crearTenant.js` crea las categorías de gasto: no hay que hacer nada. Todos los tenants tienen
+las mismas 9 y no se agregan propias (decidido el 2026-11-03). Si un gasto no entra en ninguna,
+va a "Otros".
+
+| Categoría | Qué va ahí |
+|---|---|
+| Alquiler | El alquiler del local |
+| Comida y/o bebidas | Café, bebidas, bidones de agua y comida para los clientes |
+| Impuestos | Monotributo, ingresos brutos, tasas |
+| Insumos | Lo que se gasta al cortar: filos, cuellitos, productos de uso |
+| Limpieza | Papel, rollo de cocina, desodorante, bolsas |
+| Mantenimiento | Arreglos, herramientas, recarga de matafuegos |
+| Otros | Lo que no entra en ninguna |
+| Productos para venta | Mercadería para vender: el iPad recuerda actualizar el stock |
+| Servicios | Luz, agua, gas, internet, teléfono, apps |
+
+- No hay "Sueldos" a propósito: las comisiones de los barberos ya se descuentan en Balances, y
+  cargarlas como gasto las restaría dos veces.
+- El nombre "Productos para venta" tiene que coincidir con `CATEGORIA_PRODUCTOS_VENTA` de
+  `frontend/src/screens/flows/FlujoGasto.jsx`: es lo que dispara el recordatorio de stock. La
+  lista vive en `CATEGORIAS_GASTO_BASE` (`crearTenant.js`). Si cambia, actualizar esta tabla y
+  sumarla a los tenants existentes.
+- Una categoría no se borra: se oculta con `activo = false`. Sus gastos la siguen referenciando.
+
+**Solo si el script avisó que falló el seed de las categorías**, cargalas por SQL:
 
 ```sql
-INSERT INTO categoria_gasto (tenant_id, nombre) VALUES
-  ('<tenant_uuid>', 'Alquiler'),
-  ('<tenant_uuid>', 'Impuestos'),
-  ('<tenant_uuid>', 'Otros'),
-  ('<tenant_uuid>', 'Productos'),
-  ('<tenant_uuid>', 'Servicios');
+INSERT INTO categoria_gasto (tenant_id, nombre)
+SELECT '<tenant_uuid>', nombre
+FROM unnest(ARRAY['Alquiler', 'Comida y/o bebidas', 'Impuestos', 'Insumos', 'Limpieza',
+                  'Mantenimiento', 'Otros', 'Productos para venta', 'Servicios']) AS nombre;
 ```
-
-La categoría "Productos" dispara en el iPad el recordatorio de actualizar el stock. Hay una
-deuda abierta para automatizar esta carga (ver `estado_actual.md`).
 
 ---
 
@@ -191,7 +211,7 @@ Pasarle al cliente:
 - [ ] Tenant creado en DB con UUID conocido.
 - [ ] Credenciales operativas cargadas y probadas.
 - [ ] Dueños cargados en `socio` (vinculados a su barbero si cortan).
-- [ ] Categorías de gasto cargadas.
+- [ ] Las 9 categorías de gasto creadas (el script lo imprime).
 - [ ] Subdominio responde correctamente.
 - [ ] PIN entra al panel admin.
 - [ ] Suscripción vigente hasta fin del mes actual (default automático del script).
