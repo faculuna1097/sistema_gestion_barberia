@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 
 import Tabs from '../../../components/ui/Tabs.jsx';
+import { usePantallaAngosta } from '../../../hooks/usePantallaAngosta';
 
 import TabBarberos  from './gestion/TabBarberos.jsx';
 import TabServicios from './gestion/TabServicios.jsx';
@@ -46,6 +47,9 @@ const TABS_ITEMS = [
  */
 export default function SeccionGestion() {
   const [tabActiva, setTabActiva] = useState('barberos');
+  // En pantalla angosta las 6 pestañas con ícono no entran (miden 650 px):
+  // Negocio y Seguridad quedaban fuera de la vista. Sin íconos miden ~506.
+  const angosta = usePantallaAngosta();
 
   return (
     <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -53,6 +57,7 @@ export default function SeccionGestion() {
         items={TABS_ITEMS}
         value={tabActiva}
         onChange={setTabActiva}
+        mostrarIconos={!angosta}
       />
 
       <div>

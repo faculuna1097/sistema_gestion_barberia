@@ -33,6 +33,7 @@ import { theme } from "../theme/tokens.js";
 import { Field, Button, LogoCirculo } from "../components/ui";
 import FondoLocal from "../components/ui/FondoLocal.jsx";
 import { loginOperativo } from "../services/api";
+import { mensajeDeError } from "../utils/errores";
 
 /**
  * PantallaLoginOperativo
@@ -63,7 +64,9 @@ export default function PantallaLoginOperativo({ onAcceso, imagenLogo, imagenLoc
       onAcceso(token);
     } catch (err) {
       console.error('[pantallaLoginOperativo] Error en submit:', err.message);
-      setError(err.message || "Credenciales inválidas. Intentá de nuevo.");
+      // Con credenciales incorrectas, el servidor dice "Credenciales inválidas".
+      // Sin red, el genérico: no son las credenciales lo que falló.
+      setError(mensajeDeError(err, "No se pudo iniciar sesión. Intentá de nuevo."));
       setPassword(""); // limpia la password para no exponerla
     } finally {
       setEnviando(false);

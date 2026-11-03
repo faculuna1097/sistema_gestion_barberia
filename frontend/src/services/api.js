@@ -395,11 +395,13 @@ export const loginPanel = async (pin) => {
  * Autentica al modo operativo con usuario + password contra el endpoint
  * /api/auth/operativo/login. Si las credenciales son correctas, guarda el
  * JWT en memoria y en localStorage (vía setAuthTokenOperativo) y devuelve
- * el token. Si son incorrectas, lanza un Error.
+ * el token.
  *
  * @param {string} usuario
  * @param {string} password
  * @returns {Promise<string>} el JWT recibido
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`);
+ *   con credenciales incorrectas, "Credenciales inválidas"
  */
 export const loginOperativo = async (usuario, password) => {
   const response = await fetch(`${BASE_URL}/auth/operativo/login`, {
@@ -407,10 +409,7 @@ export const loginOperativo = async (usuario, password) => {
     headers: publicHeaders,
     body: JSON.stringify({ usuario, password }),
   });
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(data.error || 'Credenciales inválidas');
-  }
+  if (!response.ok) throw await errorDeRespuesta(response);
   const { token } = await response.json();
   setAuthTokenOperativo(token);
   return token;
@@ -470,16 +469,14 @@ export const getAdminTurnos = async (fecha, barberoId = null) => {
  * @param {string} turnoId
  * @param {'no_asistio'} estado
  * @returns {Promise<Object>} { id, estado }
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const patchAdminTurnoEstado = async (turnoId, estado) => {
   const res = await apiFetch(`/admin/turnos/${turnoId}/estado`, {
     method: 'PATCH',
     body: JSON.stringify({ estado }),
   });
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error || 'Error al cambiar estado del turno');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
@@ -497,16 +494,14 @@ export const patchAdminTurnoEstado = async (turnoId, estado) => {
  *   servicio_id es opcional: si se manda, el corte se registra con ese servicio y
  *   el turno se sincroniza a él; si se omite, el backend deriva el servicio del turno.
  * @returns {Promise<Object>} { id, estado: 'completado', servicio_id, corte_id, monto_total }
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const completarAdminTurno = async (turnoId, datos) => {
   const res = await apiFetch(`/admin/turnos/${turnoId}/completar`, {
     method: 'POST',
     body: JSON.stringify(datos),
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al completar el turno');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
@@ -515,15 +510,13 @@ export const completarAdminTurno = async (turnoId, datos) => {
  * Cancela un turno (DELETE lógico → estado 'cancelado').
  * @param {string} turnoId
  * @returns {Promise<Object>} turno cancelado
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const cancelarAdminTurno = async (turnoId) => {
   const res = await apiFetch(`/admin/turnos/${turnoId}`, {
     method: 'DELETE',
   });
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error || 'Error al cancelar turno');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
@@ -691,16 +684,14 @@ export const getCredencialesOperativas = async () => {
  * campos es opcional; enviar solo lo que se quiere cambiar.
  * @param {Object} datos - { usuario?: string, password?: string }
  * @returns {Promise<void>}
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const actualizarCredencialesOperativas = async (datos) => {
   const res = await apiFetch('/admin/operativo/credenciales', {
     method: 'PUT',
     body: JSON.stringify(datos),
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al actualizar credenciales operativas');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -723,16 +714,14 @@ export const getAdminTurneroConfig = async () => {
  * Actualiza la configuración del turnero.
  * @param {Object} datos - { duracion_slot_minutos }
  * @returns {Promise<Object>} { duracion_slot_minutos }
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const putAdminTurneroConfig = async (datos) => {
   const res = await apiFetch('/admin/turnero/config', {
     method: 'PUT',
     body: JSON.stringify(datos),
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al guardar configuración del turnero');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 

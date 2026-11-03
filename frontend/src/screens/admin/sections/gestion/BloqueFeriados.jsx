@@ -23,6 +23,7 @@ import {
   Toast,
   LoadingState,
 } from '../../../../components/ui';
+import { errorDeRespuesta, mensajeDeError } from '../../../../utils/errores';
 import { toast } from '../../../../utils/toast';
 import { theme } from '../../../../theme/tokens.js';
 
@@ -213,10 +214,7 @@ export default function BloqueFeriados() {
         return;
       }
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Error del servidor');
-      }
+      if (!res.ok) throw await errorDeRespuesta(res);
 
       const data = await res.json();
       if (!vivoRef.current) return;
@@ -233,7 +231,7 @@ export default function BloqueFeriados() {
     } catch (err) {
       console.error('[bloqueFeriados] Error en ejecutarAlta:', err.message);
       // El error se muestra donde esté el usuario (modal de alta o de cascada).
-      if (vivoRef.current) setErrorModal(err.message || 'No se pudo agregar el feriado.');
+      if (vivoRef.current) setErrorModal(mensajeDeError(err, 'No se pudo agregar el feriado. Intentá de nuevo.'));
     } finally {
       if (vivoRef.current) setGuardando(false);
     }

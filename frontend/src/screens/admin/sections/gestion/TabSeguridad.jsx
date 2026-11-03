@@ -31,6 +31,7 @@ import {
   Toast,
   BotonIconoFila,
 } from '../../../../components/ui';
+import { errorDeRespuesta, mensajeDeError } from '../../../../utils/errores';
 import { toast } from '../../../../utils/toast';
 import { theme } from '../../../../theme/tokens.js';
 
@@ -364,14 +365,11 @@ function ModalCambiarPin({ open, onClose, onSuccess }) {
         method: 'PUT',
         body: JSON.stringify({ pin_actual: pinActual, pin_nuevo: pinNuevo }),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Error del servidor');
-      }
+      if (!res.ok) throw await errorDeRespuesta(res);
       onSuccess();
     } catch (err) {
       console.error('[modalCambiarPin] Error:', err.message);
-      setError(err.message || 'No se pudo cambiar el PIN.');
+      setError(mensajeDeError(err, 'No se pudo cambiar el PIN. Intentá de nuevo.'));
     } finally {
       setGuardando(false);
     }
@@ -473,7 +471,7 @@ function ModalCambiarUsuario({ open, onClose, usuarioActual, onSuccess }) {
       onSuccess(usuarioLimpio);
     } catch (err) {
       console.error('[modalCambiarUsuario] Error:', err.message);
-      setError(err.message || 'No se pudo cambiar el usuario.');
+      setError(mensajeDeError(err, 'No se pudo cambiar el usuario. Intentá de nuevo.'));
     } finally {
       setGuardando(false);
     }
@@ -568,7 +566,7 @@ function ModalCambiarPassword({ open, onClose, onSuccess }) {
       onSuccess();
     } catch (err) {
       console.error('[modalCambiarPassword] Error:', err.message);
-      setError(err.message || 'No se pudo cambiar la contraseña.');
+      setError(mensajeDeError(err, 'No se pudo cambiar la contraseña. Intentá de nuevo.'));
     } finally {
       setGuardando(false);
     }

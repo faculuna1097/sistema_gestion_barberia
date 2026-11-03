@@ -12,6 +12,7 @@ import { Plus, ClipboardList, AlertTriangle, RefreshCw } from 'lucide-react';
 
 import { apiFetch, getServiciosAdmin } from '../../../../services/api';
 import { fmtPesos } from '../../../../utils/formato';
+import { errorDeRespuesta, mensajeDeError } from '../../../../utils/errores';
 import {
   Button,
   Field,
@@ -62,15 +63,12 @@ function ModalServicio({ servicio, onGuardar, onCerrar }) {
 
     try {
       const res = await apiFetch(path, { method, body: JSON.stringify(body) });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Error del servidor');
-      }
+      if (!res.ok) throw await errorDeRespuesta(res);
       const servicioGuardado = await res.json();
       onGuardar(servicioGuardado, esEdicion);
     } catch (err) {
       console.error('[tabServicios] Error en handleGuardar:', err.message);
-      setError(err.message || 'No se pudo guardar el servicio. Intentá de nuevo.');
+      setError(mensajeDeError(err, 'No se pudo guardar el servicio. Intentá de nuevo.'));
     } finally {
       setGuardando(false);
     }

@@ -12,6 +12,7 @@ import { useState, useEffect } from 'react';
 import { CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
 
 import { getAdminTurneroConfig, putAdminTurneroConfig } from '../../../../services/api';
+import { mensajeDeError } from '../../../../utils/errores';
 import {
   Button,
   Field,
@@ -123,7 +124,7 @@ export default function TabTurnero() {
       setFeedback({ tipo: 'success', texto: 'Configuración guardada correctamente.' });
     } catch (err) {
       console.error('[tabTurnero] Error guardando:', err.message);
-      setFeedback({ tipo: 'danger', texto: err.message || 'No se pudo guardar la configuración.' });
+      setFeedback({ tipo: 'danger', texto: mensajeDeError(err, 'No se pudo guardar la configuración. Intentá de nuevo.') });
     } finally {
       setGuardando(false);
     }

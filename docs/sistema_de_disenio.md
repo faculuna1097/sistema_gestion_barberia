@@ -418,6 +418,26 @@ Cuando el ancho permita, se centra en columna con `PageContainer`
 falta (ej. una `DataTable` ancha en desktop pasa a ser una lista de cards
 en mobile).
 
+**Panel de gestión: pantalla angosta (desde el 2026-11-03).** El panel se usa
+en escritorio y en el iPad. Con el iPad en vertical (744 a 834 px) o en Split
+View, el sidebar abierto (220 px) dejaba ~484 px para el contenido, y las tablas
+dejaban Editar, Eliminar y Exportar fuera de la vista. El corte es la ventana de
+**menos de 1024 px** (`usePantallaAngosta`, en `frontend/src/hooks/`), que mira
+el ancho y no la orientación: un iPad horizontal con Split View también es
+angosto. En web no se puede obligar la orientación (Safari en iOS no deja
+bloquearla).
+- **Sidebar:** en lo angosto queda cerrado en un riel de íconos de 64 px. Al
+  abrirlo va **encima** del contenido (no lo empuja), con el fondo `overlay` y
+  `shadowLg`, y se cierra al elegir una sección, al tocar el fondo o con Escape.
+  En pantalla ancha, colapsar y expandir siguen como siempre.
+- **Tablas:** con el riel, el contenido tiene 616–706 px. Si una tabla igual no
+  entra, sus datos secundarios pasan a un segundo renglón dentro de la celda, en
+  `muted`, en vez de esconder columnas. Ej.: Ventas pone "2 × $ 500" bajo el
+  producto. Las acciones de una fila quedan siempre a la vista.
+- **Pestañas:** `Tabs` acepta `mostrarIconos={false}`; Gestión lo usa en lo
+  angosto (sus 6 pestañas con ícono miden 650 px).
+- Desde 1024 px (el iPad horizontal) el panel se ve como en escritorio.
+
 ### 4.7 Comentarios obligatorios
 
 Cada función, componente y helper lleva JSDoc explicando **qué hace, qué
@@ -820,7 +840,9 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-11-02 — tanda 6b de deudas: §8 corregido (qué hay de verdad en `tokens.js` e `index.css` de cada front, que no son idénticos); §3.5 aclara el `shadowLg` de la landing; §6.1, `ScreenHeader` ya no se usa en el panel.*
+*Última actualización: 2026-11-03 — tanda 6c de deudas: §4.6 suma la pantalla angosta del panel (`usePantallaAngosta`, sidebar encima del contenido, segundo renglón en las tablas, `Tabs` con `mostrarIconos`).*
+
+*2026-11-02 — tanda 6b de deudas: §8 corregido (qué hay de verdad en `tokens.js` e `index.css` de cada front, que no son idénticos); §3.5 aclara el `shadowLg` de la landing; §6.1, `ScreenHeader` ya no se usa en el panel.*
 
 *2026-11-02 — tanda 6a de deudas: §4.8 reescrita (toast flotante con `toast.show()`); §3.1 suma `neutralSoft`, §3.2 `sizeInput` en el panel, §3.5 `shadowLg` y `overlay`; §3.6 la escala del kiosko con nombre (`TAM_KIOSKO`) y las pills de la Agenda en `sizeMicro`; §5.6 nueva (foco en los modales); §6.1 suma `GrupoOpciones`, `estiloEtiquetaCampo` y la fuente única de formas de pago; deudas #16 y #23 resueltas.*
 

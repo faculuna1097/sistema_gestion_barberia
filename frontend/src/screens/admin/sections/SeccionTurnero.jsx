@@ -85,6 +85,7 @@ import {
   estiloEtiquetaCampo,
 } from '../../../components/ui';
 import { toast } from '../../../utils/toast';
+import { mensajeDeError } from '../../../utils/errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Constantes y maps
@@ -1409,6 +1410,20 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
   );
 }
 
+/**
+ * textoErrorAccion
+ * Texto del aviso cuando falla una acción sobre un turno. Si el servidor mandó
+ * un motivo, va después de la acción ("No se pudo cancelar el turno: <motivo>");
+ * si no (sin red, una respuesta que no es JSON), un genérico en español.
+ * @param {string} accion - Qué no se pudo hacer, sin punto final. Ej.: "No se pudo cancelar el turno"
+ * @param {unknown} err - Lo que atrapó el `catch`
+ * @returns {string}
+ */
+function textoErrorAccion(accion, err) {
+  const motivo = mensajeDeError(err, '');
+  return motivo ? `${accion}: ${motivo}` : `${accion}. Intentá de nuevo.`;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Componente principal
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1547,7 +1562,7 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
       );
     } catch (err) {
       console.error('[seccionTurnero] Error en cambiarEstado:', err.message);
-      mostrarErrorAccion(`No se pudo cambiar el estado: ${err.message}`);
+      mostrarErrorAccion(textoErrorAccion('No se pudo cambiar el estado', err));
     } finally {
       setAccionando(null);
     }
@@ -1584,7 +1599,7 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
       setTurnoSeleccionado(null);
     } catch (err) {
       console.error('[seccionTurnero] Error en completarTurno:', err.message);
-      mostrarErrorAccion(`No se pudo completar el turno: ${err.message}`);
+      mostrarErrorAccion(textoErrorAccion('No se pudo completar el turno', err));
     } finally {
       setAccionando(null);
     }
@@ -1600,7 +1615,7 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
       setTurnoSeleccionado(null);
     } catch (err) {
       console.error('[seccionTurnero] Error en cancelarTurno:', err.message);
-      mostrarErrorAccion(`No se pudo cancelar el turno: ${err.message}`);
+      mostrarErrorAccion(textoErrorAccion('No se pudo cancelar el turno', err));
     } finally {
       setAccionando(null);
     }

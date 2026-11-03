@@ -18,6 +18,7 @@ import { fmtPesos, formatPago, OPCIONES_FORMA_PAGO } from '../../../utils/format
 import { cargarChunk } from '../../../utils/cargarChunk';
 import { errorDeRespuesta, mensajeDeError } from '../../../utils/errores';
 import { toast } from '../../../utils/toast';
+import { usePantallaAngosta } from '../../../hooks/usePantallaAngosta';
 import {
   LoadingState,
   EmptyState,
@@ -78,6 +79,11 @@ function CampoFijo({ label, children, numeric }) {
  * Tabla densa con detalle por venta + footer "Total del mes". Los montos van
  * en ink: son ingresos (sistema_de_disenio §3.1.1).
  *
+ * En pantalla angosta (iPad en vertical), Cantidad y Precio unitario dejan de
+ * ser columnas y pasan a un segundo renglón bajo el producto ("2 × $ 500"):
+ * con las 7 columnas la tabla mide ~625 px y Editar y Eliminar quedaban fuera
+ * de la card.
+ *
  * @param {object} props
  * @param {Array} props.ventas
  * @param {number} props.totalGeneral
@@ -86,11 +92,14 @@ function CampoFijo({ label, children, numeric }) {
  * @param {boolean} props.accionesDeshabilitadas
  */
 function TablaVentas({ ventas, totalGeneral, onEditar, onEliminar, accionesDeshabilitadas }) {
+  const compacta = usePantallaAngosta();
   const columnas = [
     { label: 'Fecha',           align: 'left'   },
     { label: 'Producto',        align: 'left'   },
-    { label: 'Cantidad',        align: 'center' },
-    { label: 'Precio unitario', align: 'right'  },
+    ...(compacta ? [] : [
+      { label: 'Cantidad',        align: 'center' },
+      { label: 'Precio unitario', align: 'right'  },
+    ]),
     { label: 'Total',           align: 'right'  },
     { label: 'Forma de pago',   align: 'left'   },
     { label: '',                align: 'center', width: 88 },
@@ -136,9 +145,23 @@ function TablaVentas({ ventas, totalGeneral, onEditar, onEliminar, accionesDesha
             return (
               <tr key={v.id} className="om-fila-hover">
                 <td style={{ ...tdBase, color: theme.muted, whiteSpace: 'nowrap' }}>{v.fecha}</td>
-                <td style={{ ...tdBase, fontWeight: theme.weightMedium }}>{v.producto_nombre}</td>
-                <td style={{ ...tdBase, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{v.cantidad}</td>
-                <td style={{ ...tdBase, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtPesos(v.precio_unitario)}</td>
+                <td style={{ ...tdBase, fontWeight: theme.weightMedium }}>
+                  {v.producto_nombre}
+                  {compacta && (
+                    <div style={{
+                      fontWeight: theme.weightRegular,
+                      color: theme.muted,
+                      fontVariantNumeric: 'tabular-nums',
+                      whiteSpace: 'nowrap',
+                    }}>{v.cantidad} × {fmtPesos(v.precio_unitario)}</div>
+                  )}
+                </td>
+                {!compacta && (
+                  <>
+                    <td style={{ ...tdBase, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{v.cantidad}</td>
+                    <td style={{ ...tdBase, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtPesos(v.precio_unitario)}</td>
+                  </>
+                )}
                 <td style={{ ...tdBase, textAlign: 'right', fontWeight: theme.weightHeading, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtPesos(v.total)}</td>
                 <td style={tdBase}><BadgeFormaPago forma={v.forma_pago} /></td>
                 <td style={{ ...tdBase, padding: '6px 8px', textAlign: 'center', width: 88 }}>
@@ -165,7 +188,7 @@ function TablaVentas({ ventas, totalGeneral, onEditar, onEliminar, accionesDesha
         </tbody>
         <tfoot>
           <tr>
-            <td colSpan={4} style={{
+            <td colSpan={compacta ? 2 : 4} style={{
               padding: '14px 12px',
               fontFamily: theme.body,
               fontSize: theme.sizeBody,
