@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { theme } from '../theme/tokens.js';
+import { estiloEyebrow } from '../components/ui/estilos.js';
 import { fmtPesos } from '../utils/formato.js';
 import { fechaDeISO, DIAS_RESERVABLES } from '../utils/fecha.js';
 import { useDisponibilidad } from '../hooks/useDisponibilidad.js';
@@ -140,13 +141,8 @@ function SelectorBarbero({ barberos, elegido, onElegir }) {
   return (
     <section aria-labelledby="cuando-barbero">
       <div id="cuando-barbero" style={{
-        fontFamily: theme.mono,
-        fontWeight: theme.weightMedium,
-        fontSize: theme.sizeMicro,
+        ...estiloEyebrow,
         lineHeight: '16px',
-        letterSpacing: '0.04em',
-        textTransform: 'uppercase',
-        color: theme.muted,
         marginBottom: 8,
       }}>Barbero</div>
 

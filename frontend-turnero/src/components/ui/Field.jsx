@@ -3,6 +3,7 @@
 
 import { useId, useState } from 'react';
 import { theme } from '../../theme/tokens.js';
+import { estiloEyebrow, MARGEN_SCROLL_CAMPO } from './estilos.js';
 
 /**
  * Field
@@ -55,15 +56,8 @@ function Field({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {/* Label superior en estilo "eyebrow" (uppercase + mono) */}
-      <label htmlFor={inputId} style={{
-        fontFamily: theme.mono,
-        fontWeight: theme.weightMedium,
-        fontSize: theme.sizeMicro,
-        letterSpacing: '0.04em',
-        textTransform: 'uppercase',
-        color: theme.muted,
-      }}>{label}</label>
+      {/* Label superior en estilo "eyebrow" */}
+      <label htmlFor={inputId} style={estiloEyebrow}>{label}</label>
 
       <input
         ref={ref}
@@ -90,6 +84,8 @@ function Field({
           color: theme.ink,
           transition: `border-color ${theme.transitionFast}, box-shadow ${theme.transitionFast}`,
           boxShadow: focus ? `0 0 0 3px ${theme.accent}26` : 'none',
+          // Al enfocarlo, que también se vea la ayuda o el error de abajo.
+          scrollMarginBottom: MARGEN_SCROLL_CAMPO,
         }}
       />
 

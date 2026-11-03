@@ -2,6 +2,8 @@
 // Centraliza las llamadas HTTP a los endpoints públicos del turnero.
 // Sin auth — el turnero del cliente es anónimo.
 
+import { TEXTO_DEMASIADOS_INTENTOS } from '../utils/errores.js';
+
 // Base de la API. `BASE_API` apunta a `/api` y `BASE_URL` al namespace
 // `/api/turnero`. La mayoría de los endpoints del turnero cuelgan de
 // `BASE_URL`; los de imágenes viven en `/api/negocio/*`, fuera de ese
@@ -26,6 +28,22 @@ const publicHeaders = {
   'Content-Type': 'application/json',
   ...(subdominio ? { 'X-Tenant-Subdomain': subdominio } : {}),
 };
+
+/**
+ * errorDeEscritura
+ * Arma el error de una escritura que falló (reservar, cancelar, reprogramar):
+ * el mensaje del backend (`error`) o `generico`, salvo un 429, que lleva
+ * siempre el texto propio del turnero (TEXTO_DEMASIADOS_INTENTOS).
+ * @param {Response} res - Respuesta con `ok` en false
+ * @param {string} generico - Texto si el backend no mandó `error`
+ * @returns {Promise<Error>} Con `status` (el HTTP)
+ */
+async function errorDeEscritura(res, generico) {
+  const body = await res.json().catch(() => ({}));
+  const err = new Error(res.status === 429 ? TEXTO_DEMASIADOS_INTENTOS : (body.error || generico));
+  err.status = res.status;
+  return err;
+}
 
 /**
  * getTenant
@@ -118,8 +136,8 @@ export const getDiasDisponibles = async (barberoId, servicioId, desde, hasta) =>
  * @param {Object} datos - { servicio_id, barbero_id, inicio, nombre, telefono, email, origen? }.
  *   `origen`: por qué link llegó el cliente (ej. 'instagram'); se omite si no hay
  * @returns {Promise<Object>} { turno_id, token_gestion }
- * @throws {Error} Con `status` (el HTTP) y el mensaje del backend. Un error de
- *   red llega sin `status`.
+ * @throws {Error} Con `status` (el HTTP) y el mensaje del backend (ver
+ *   errorDeEscritura). Un error de red llega sin `status`.
  */
 export const crearTurno = async (datos) => {
   const res = await fetch(`${BASE_URL}/turnos`, {
@@ -127,12 +145,7 @@ export const crearTurno = async (datos) => {
     headers: publicHeaders,
     body: JSON.stringify(datos),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const err = new Error(body.error || 'Error al crear turno');
-    err.status = res.status;
-    throw err;
-  }
+  if (!res.ok) throw await errorDeEscritura(res, 'Error al crear turno');
   return res.json();
 };
 
@@ -153,16 +166,14 @@ export const getTurnoPorToken = async (token) => {
  * Cancela un turno por su token_gestion.
  * @param {string} token
  * @returns {Promise<Object>} { ok: true }
+ * @throws {Error} Con `status` y el mensaje del backend (ver errorDeEscritura)
  */
 export const cancelarTurno = async (token) => {
   const res = await fetch(`${BASE_URL}/turnos/${token}/cancelar`, {
     method: 'POST',
     headers: publicHeaders,
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Error al cancelar turno');
-  }
+  if (!res.ok) throw await errorDeEscritura(res, 'Error al cancelar turno');
   return res.json();
 };
 
@@ -172,6 +183,7 @@ export const cancelarTurno = async (token) => {
  * @param {string} token
  * @param {string} inicio - ISO timestamp del nuevo inicio
  * @returns {Promise<Object>} { ok: true, turno: { id, inicio, fin } }
+ * @throws {Error} Con `status` y el mensaje del backend (ver errorDeEscritura)
  */
 export const reprogramarTurno = async (token, inicio) => {
   const res = await fetch(`${BASE_URL}/turnos/${token}/reprogramar`, {
@@ -179,11 +191,6 @@ export const reprogramarTurno = async (token, inicio) => {
     headers: publicHeaders,
     body: JSON.stringify({ inicio }),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const err = new Error(body.error || 'Error al reprogramar turno');
-    err.status = res.status;
-    throw err;
-  }
+  if (!res.ok) throw await errorDeEscritura(res, 'Error al reprogramar turno');
   return res.json();
 };

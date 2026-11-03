@@ -2,6 +2,7 @@
 // Header de pantalla — eyebrow + title + subtitle. Acompaña a TopBar.
 
 import { theme } from '../../theme/tokens.js';
+import { estiloEyebrow } from './estilos.js';
 
 /**
  * ScreenHeader
@@ -15,12 +16,7 @@ function ScreenHeader({ eyebrow, title, subtitle }) {
     <div style={{ padding: '4px 16px 16px' }}>
       {eyebrow && (
         <div style={{
-          fontFamily: theme.mono,
-          fontWeight: theme.weightMedium,
-          fontSize: theme.sizeMicro,
-          letterSpacing: '0.04em',
-          textTransform: 'uppercase',
-          color: theme.muted,
+          ...estiloEyebrow,
           marginBottom: 6,
         }}>{eyebrow}</div>
       )}

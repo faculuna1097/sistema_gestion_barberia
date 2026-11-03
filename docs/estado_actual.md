@@ -356,19 +356,13 @@ Deudas detectadas durante la feature de movimientos extra (2026-09-30), verifica
 - **(nueva, 2026-10-01) — Landing: `linkWhatsApp()` y `linkEmail()` no manejan `null`.** El comentario de `config/landing.js` dice que la UI lo maneja, pero con `CONTACTO.whatsapp` en `null` los CTA armarían `https://wa.me/null?...` (los módulos de SEO sí lo cubren). Menor: hoy los valores están cargados.
 - **(nueva, 2026-10-01) — Landing: datos de la competencia con fecha.** El bloque "¿Y frente a otras apps de turnos?" y la FAQ 5 afirman cosas de Fresha, Booksy y Setmore relevadas el 01/10/2026. Revisarlas cada tanto (o si cambian sus precios) y actualizar la nota al pie. Cómo, en [`decisiones_landing_ia.md`](./decisiones_landing_ia.md).
 
-Deudas detectadas durante el rediseño del turnero (2026-10), verificadas contra los docs. Las de UI y accesibilidad están en [`sistema_de_disenio.md`](./sistema_de_disenio.md) §9 (#9 y #17–#21).
+Deudas detectadas durante el rediseño del turnero (2026-10), verificadas contra los docs. Las de UI y accesibilidad están en [`sistema_de_disenio.md`](./sistema_de_disenio.md) §9 (#9 y #18).
 
 - **Celulares argentinos en E.164 sin el 9** (`+5411…`). Hay que decidirlo antes de usar el teléfono del cliente para mensajes de WhatsApp (que usan `+549…`). Entra en "Base de clientes". Pariente: el `tel:` del local en la landing usa los dígitos tal cual están guardados, sin código de país (anda marcando desde Argentina).
-- **Turnero, teléfono:** tipear a mano un número que empieza con `+` se traba a los 10 dígitos (el tope cuenta el código de país). Pegarlo o autocompletarlo funciona. Ya pasaba antes.
 - **Turnero, carga:**
   - Sin foto del local, el hero mide ~182 px contra los `45svh` del skeleton y salta al cargar. Aceptado: el skeleton no sabe si hay foto.
-  - La gestión del turno espera el tenant de `App` antes de montarse (columna en blanco → skeleton → contenido), y su skeleton no tiene el bloque del calendario ni los botones de reprogramar y cancelar: el contenido baja ~100 px al cargar.
-  - `actualizarFavicon` (`App.jsx`) apunta al logo aunque la imagen no cargue (favicon roto); la landing sí cae a las iniciales.
-- **Turnero, datos del cliente:** "Reservar otro turno" y el "atrás" desde el éxito borran nombre, teléfono y email, y "Volver" desde "Confirmá tu turno" sin confirmar pierde lo tipeado (se guarda recién al confirmar). Ya pasaba antes.
+  - La gestión del turno espera el tenant de `App` antes de montarse: la columna queda en blanco y después aparece el skeleton. El skeleton ya tiene los mismos bloques que el contenido (desde el 2026-11-03, no salta).
 - **Turnero, reintento del 409:** con "Cualquier barbero" suma un POST al límite de 3 por minuto: dos intentos fallidos seguidos pueden dar 429 antes. Raro.
-- **Turnero, reprogramación:** si falla la confirmación (ej. 409, el horario se ocupó), los horarios no se recargan y el aviso sale arriba de la página, fuera de vista si se scrolleó. Ya pasaba antes.
-- **Turnero, `HorarioSemanal` sin feriados:** en un feriado, el hero dice "Cerrado" pero la fila de hoy muestra el horario normal. Ya pasaba antes.
-- **Turnero, menores:** en desktop, con más barberos que ancho, la fila del equipo muestra la scrollbar horizontal del estilo global; una dirección de dos renglones centra el pin entre los dos; `fmtDiaAccesible` también arma texto visible ("Te esperamos el jueves 8 de octubre") y el nombre quedó corto.
 
 Deudas detectadas durante la Feature 1 de la app del barbero (2026-10-15 / 2026-10-29), verificadas contra los docs. Decisiones de la feature en [`decisiones_descansos.md`](./decisiones_descansos.md).
 

@@ -2,8 +2,8 @@
 // Chip de horario clickable. Lo usa SelectorDiaHorario ("¿Cuándo?" y la
 // reprogramación de la gestión).
 
-import { useState } from 'react';
 import { theme } from '../../theme/tokens.js';
+import { useHover } from '../../hooks/useHover.js';
 import { fmtHora } from '../../utils/fecha.js';
 
 /**
@@ -16,13 +16,13 @@ export const ALTO_SLOT = 48;
 /**
  * SlotChip
  * Botón con la hora del slot; ocupa el ancho de su celda de la grilla.
- * Estados: normal, hover, seleccionado.
+ * Estados: normal, hover (solo con mouse, ver useHover), seleccionado.
  * @param {string} props.iso - ISO timestamp del slot
  * @param {boolean} [props.selected=false]
  * @param {Function} props.onClick
  */
 function SlotChip({ iso, selected = false, onClick }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
 
   // Resolución del color de border: selected > hover > default.
   const borderColor = selected
@@ -33,8 +33,7 @@ function SlotChip({ iso, selected = false, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...eventosHover}
       aria-pressed={selected}
       className="tt-presionable"
       style={{

@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { theme } from '../theme/tokens.js';
+import { estiloEyebrow } from '../components/ui/estilos.js';
 import { fmtPesos } from '../utils/formato.js';
 import { useEleccionConPausa } from '../hooks/useEleccionConPausa.js';
 import {
@@ -117,12 +118,7 @@ function ServicioCard({ servicio, selected, onClick }) {
           }}>{servicio.nombre}</div>
 
           <div style={{
-            fontFamily: theme.mono,
-            fontWeight: theme.weightMedium,
-            fontSize: theme.sizeMicro,
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-            color: theme.muted,
+            ...estiloEyebrow,
             marginTop: 4,
           }}>
             {servicio.duracion_minutos} min

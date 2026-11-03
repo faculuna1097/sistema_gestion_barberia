@@ -5,9 +5,11 @@
 // arma el hook useDisponibilidad). Lo usan "¿Cuándo?" (SeleccionCuando) y la
 // reprogramación de la gestión del turno (GestionTurno).
 
+import { useState } from 'react';
 import { theme } from '../../theme/tokens.js';
+import { estiloEyebrow } from './estilos.js';
 import {
-  diaNumero, diaDeSemana, esHoy, fmtDiaAccesible, fmtMes, nombreMes,
+  diaNumero, diaDeSemana, esHoy, fmtDiaEnOracion, fmtMes, nombreMes,
 } from '../../utils/fecha.js';
 import Button from './Button.jsx';
 import EmptyState from './EmptyState.jsx';
@@ -21,15 +23,21 @@ const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 // Alto de la celda de un día (la real y su skeleton: no salta al cargar).
 const ALTO_DIA = 48;
 
-// Separación entre celdas de las grillas. En 375 px, 4 deja las celdas de los
-// días en ~45 px de ancho: por encima del mínimo tocable de 44.
+// Separación visible entre los días de la grilla.
 const GAP_GRILLA = 4;
 
 // Grilla de días: 7 columnas parejas (minmax evita que una celda la desborde).
+// Entre columnas no hay gap: cada día ocupa su columna entera y se dibuja con
+// medio gap de aire a cada lado (MEDIO_GAP), así el área tocable incluye el
+// espacio entre días sin que se vea distinto. El margen negativo compensa ese
+// aire en los bordes. Con 375 px de pantalla, un día toca 49 px de ancho en
+// "¿Cuándo?" y 44,8 en la reprogramación (antes, 45,6 y 40,8).
+const MEDIO_GAP = GAP_GRILLA / 2;
 const estiloGrillaDias = {
   display: 'grid',
   gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-  gap: GAP_GRILLA,
+  rowGap: GAP_GRILLA,
+  margin: `0 -${MEDIO_GAP}px`,
 };
 
 // Grilla de horarios: 4 columnas parejas.
@@ -207,13 +215,8 @@ function GrillaDias({ dias, diasDisponibles, cargando, fecha, onElegir }) {
         {DIAS_SEMANA.map((d) => (
           <div key={d} aria-hidden="true" style={{
             paddingBottom: 4,
-            fontFamily: theme.mono,
-            fontWeight: theme.weightMedium,
-            fontSize: theme.sizeMicro,
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
+            ...estiloEyebrow,
             textAlign: 'center',
-            color: theme.muted,
           }}>{d}</div>
         ))}
 
@@ -221,7 +224,7 @@ function GrillaDias({ dias, diasDisponibles, cargando, fecha, onElegir }) {
           // El primer día va en su columna; los demás siguen solos.
           const ubicacion = i === 0 ? { gridColumnStart: columnaInicial } : undefined;
           return cargando ? (
-            <div key={dia} aria-hidden="true" style={ubicacion}>
+            <div key={dia} aria-hidden="true" style={{ ...ubicacion, padding: `0 ${MEDIO_GAP}px` }}>
               <Skeleton height={ALTO_DIA} radius={theme.radius}/>
             </div>
           ) : (
@@ -251,6 +254,11 @@ function GrillaDias({ dias, diasDisponibles, cargando, fecha, onElegir }) {
  * el texto en gris claro. Así se ve de un vistazo qué días atiende.
  * El aria-label lo lee entero: "martes 6 de octubre" o "…, sin turnos".
  * Aparece con un fundido corto al reemplazar a su skeleton.
+ *
+ * Área tocable: el botón ocupa la columna entera (incluido el aire entre días)
+ * y la caja que se ve va adentro, con MEDIO_GAP de margen a cada lado. El
+ * anillo de foco se dibuja en la caja (no en el botón), a 2 px como el global,
+ * así se ve igual que antes.
  * @param {string} props.fecha - YYYY-MM-DD
  * @param {boolean} props.primera - True si es el primer día de la grilla (ahí
  *   el mes ya está en el título: no lleva el mes abreviado)
@@ -260,8 +268,11 @@ function GrillaDias({ dias, diasDisponibles, cargando, fecha, onElegir }) {
  * @param {Object} [props.style] - Ubicación en la grilla (columna del primer día)
  */
 function CeldaDia({ fecha, primera, disponible, elegida, onElegir, style }) {
+  // Foco por teclado (no por toque ni clic): prende el anillo de la caja.
+  const [focoVisible, setFocoVisible] = useState(false);
+
   const hoy = esHoy(fecha);
-  const etiqueta = [hoy ? 'Hoy' : null, fmtDiaAccesible(fecha), disponible ? null : 'sin turnos']
+  const etiqueta = [hoy ? 'Hoy' : null, fmtDiaEnOracion(fecha), disponible ? null : 'sin turnos']
     .filter(Boolean)
     .join(', ');
 
@@ -294,41 +305,55 @@ function CeldaDia({ fecha, primera, disponible, elegida, onElegir, style }) {
     <button
       type="button"
       onClick={() => onElegir(fecha)}
+      onFocus={(e) => setFocoVisible(e.currentTarget.matches(':focus-visible'))}
+      onBlur={() => setFocoVisible(false)}
       disabled={!disponible}
       aria-pressed={elegida}
       aria-label={etiqueta}
       className="tt-presionable tt-aparecer"
       style={{
+        display: 'block',
+        width: '100%',
+        padding: `0 ${MEDIO_GAP}px`,
+        background: 'transparent',
+        border: 'none',
+        // El anillo va en la caja de adentro (focoVisible).
+        outline: 'none',
+        cursor: disponible ? 'pointer' : 'not-allowed',
+        fontFamily: theme.body,
+        lineHeight: 1.15,
+        // `transform` acompaña al achique de tt-presionable (index.css) al tocar.
+        transition: `transform ${theme.transitionFast}`,
+        ...style,
+      }}
+    >
+      <span style={{
         height: ALTO_DIA,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 0,
         background: fondo,
         border: `1px solid ${borde}`,
         borderRadius: theme.radius,
-        cursor: disponible ? 'pointer' : 'not-allowed',
-        fontFamily: theme.body,
-        lineHeight: 1.15,
-        // `transform` acompaña al achique de tt-presionable (index.css) al tocar.
-        transition: `background ${theme.transitionFast}, border-color ${theme.transitionFast}, transform ${theme.transitionFast}`,
-        ...style,
-      }}
-    >
-      {marca && (
+        outline: focoVisible ? `2px solid ${theme.accent}` : 'none',
+        outlineOffset: 2,
+        transition: `background ${theme.transitionFast}, border-color ${theme.transitionFast}`,
+      }}>
+        {marca && (
+          <span style={{
+            fontSize: theme.sizeMicro,
+            fontWeight: theme.weightMedium,
+            color: colorMarca,
+          }}>{marca}</span>
+        )}
         <span style={{
-          fontSize: theme.sizeMicro,
-          fontWeight: theme.weightMedium,
-          color: colorMarca,
-        }}>{marca}</span>
-      )}
-      <span style={{
-        fontSize: theme.sizeHeading,
-        fontWeight: pesoNumero,
-        letterSpacing: '-0.01em',
-        color: colorNumero,
-      }}>{diaNumero(fecha)}</span>
+          fontSize: theme.sizeHeading,
+          fontWeight: pesoNumero,
+          letterSpacing: '-0.01em',
+          color: colorNumero,
+        }}>{diaNumero(fecha)}</span>
+      </span>
     </button>
   );
 }
@@ -344,7 +369,7 @@ function CeldaDia({ fecha, primera, disponible, elegida, onElegir, style }) {
  */
 function ListaHorarios({ fecha, horarios, horario, onElegir }) {
   return (
-    <ul aria-label={`Horarios del ${fmtDiaAccesible(fecha)}`} style={estiloGrillaHorarios}>
+    <ul aria-label={`Horarios del ${fmtDiaEnOracion(fecha)}`} style={estiloGrillaHorarios}>
       {horarios.map((iso, i) => (
         <li key={iso} className="tt-escalonado" style={{ '--tt-indice': i }}>
           <SlotChip iso={iso} selected={iso === horario} onClick={() => onElegir(iso)}/>

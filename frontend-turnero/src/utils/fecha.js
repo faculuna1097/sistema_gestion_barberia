@@ -8,6 +8,9 @@ import { capitalizar } from './formato.js';
  * DIAS_RESERVABLES
  * Cuántos días hacia adelante (contando hoy) puede elegir el cliente, tanto al
  * reservar como al reprogramar. Un solo número para los dos flujos.
+ * Tiene que coincidir con DIAS_RESERVABLES de backend/src/utils/constantes.js,
+ * que rechaza (400) una reserva o reprogramación más allá de ese tope: si acá
+ * fuera mayor, la grilla ofrecería días que el backend no acepta.
  */
 export const DIAS_RESERVABLES = 15;
 
@@ -144,14 +147,15 @@ export function fmtMes(fechaStr) {
 }
 
 /**
- * fmtDiaAccesible
- * Fecha para leer en voz alta (aria-label) o para ir dentro de una oración
- * ("Te esperamos el martes 6 de octubre"): día de la semana, número y mes,
- * sin la coma que agrega el formato de es-AR.
+ * fmtDiaEnOracion
+ * Fecha para ir dentro de una oración, en pantalla ("Te esperamos el martes 6
+ * de octubre") o en un aria-label ("Horarios del martes 6 de octubre"): día de
+ * la semana, número y mes, en minúscula y sin la coma que agrega el formato de
+ * es-AR.
  * @param {string} fechaStr - 'YYYY-MM-DD'
  * @returns {string} Ej: "martes 6 de octubre"
  */
-export function fmtDiaAccesible(fechaStr) {
+export function fmtDiaEnOracion(fechaStr) {
   const [y, m, d] = fechaStr.split('-').map(Number);
   const fecha = new Date(y, m - 1, d);
   const diaSemana = fecha.toLocaleDateString('es-AR', { weekday: 'long' });

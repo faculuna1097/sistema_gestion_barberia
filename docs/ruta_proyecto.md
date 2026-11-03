@@ -1,6 +1,6 @@
 # Ruta del proyecto - Sistema de Gestion de Barberia
 
-Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y actualizado por última vez el 2026-11-03 (tanda 6c: `frontend/src/hooks/usePantallaAngosta.js`). Antes, el 2026-11-02 (tanda 6a, en `frontend/src/`: `components/ui/GrupoOpciones.jsx`, `ToastProvider.jsx`, `tonosFormaPago.js`, `estilos.js`, `utils/errores.js` y `utils/toast.js`). Antes, el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
+Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y actualizado por última vez el 2026-11-03 (tanda 7a, en `frontend-turnero/src/`: `components/ui/estilos.js`, `hooks/useHover.js` y `utils/errores.js`). Antes, el 2026-11-03 (tanda 6c: `frontend/src/hooks/usePantallaAngosta.js`). Antes, el 2026-11-02 (tanda 6a, en `frontend/src/`: `components/ui/GrupoOpciones.jsx`, `ToastProvider.jsx`, `tonosFormaPago.js`, `estilos.js`, `utils/errores.js` y `utils/toast.js`). Antes, el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
 
 Este documento lista las carpetas y archivos del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP. Para mantenerlo, regenerar los arboles desde `git ls-files` en vez de parchearlos a mano.
 
@@ -437,6 +437,7 @@ frontend-turnero/
     |       |-- Card.jsx
     |       |-- ConfirmDialog.jsx
     |       |-- EmptyState.jsx
+    |       |-- estilos.js           estiloEyebrow y MARGEN_SCROLL_CAMPO
     |       |-- Field.jsx
     |       |-- IconoAlerta.jsx
     |       |-- IconoPin.jsx
@@ -455,6 +456,7 @@ frontend-turnero/
     |-- hooks/
     |   |-- useDisponibilidad.js
     |   |-- useEleccionConPausa.js
+    |   |-- useHover.js          hover solo con mouse (copia del de frontend-barbero)
     |   |-- useListaRemota.js
     |   `-- useNavegacion.js
     |-- screens/
@@ -470,6 +472,7 @@ frontend-turnero/
     |   `-- tokens.js
     `-- utils/
         |-- calendario.js
+        |-- errores.js           textos de error de la API (sin conexión, 429)
         |-- fecha.js
         |-- formato.js
         |-- mapa.js

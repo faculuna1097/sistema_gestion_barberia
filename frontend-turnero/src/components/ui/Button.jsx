@@ -1,14 +1,15 @@
 // /frontend-turnero/src/components/ui/Button.jsx
 // Botón unificado con 4 variantes. Reemplaza todos los <button> ad-hoc del proyecto.
 
-import { useState } from 'react';
 import { theme } from '../../theme/tokens.js';
+import { useHover } from '../../hooks/useHover.js';
 
 /**
  * Button
  * Botón principal del sistema. Variantes: primary | ghost | secondary | danger.
  * Con `href` se renderiza como link (`<a>`) con el mismo aspecto: para lo que
  * navega a otra página (ej. WhatsApp, un mapa), según §5.5 del sistema de diseño.
+ * El hover solo existe con mouse (useHover): en táctil no queda "pegado".
  * @param {ReactNode} props.children - Contenido del botón
  * @param {Function} [props.onClick] - Handler de click
  * @param {'primary'|'ghost'|'secondary'|'danger'} [props.variant='primary'] - Estilo visual
@@ -32,7 +33,7 @@ function Button({
   externo = false,
   style,
 }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
 
   // Estilos base comunes a todas las variantes.
   const base = {
@@ -84,8 +85,7 @@ function Button({
         target={externo ? '_blank' : undefined}
         rel={externo ? 'noopener noreferrer' : undefined}
         onClick={onClick}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
+        {...eventosHover}
         className="tt-presionable"
         style={{ ...base, ...variants[variant], textDecoration: 'none', ...style }}
       >
@@ -99,8 +99,7 @@ function Button({
       type={type}
       form={form}
       onClick={disabled ? undefined : onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...eventosHover}
       disabled={disabled}
       className="tt-presionable"
       style={{ ...base, ...variants[variant], ...style }}

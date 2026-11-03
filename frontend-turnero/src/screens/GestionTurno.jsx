@@ -3,10 +3,12 @@
 // Carga el turno por token y permite: ver, agregarlo al calendario, cancelar
 // (con confirm dialog) o reprogramar.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getTurnoPorToken, cancelarTurno, reprogramarTurno } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
+import { estiloEyebrow } from '../components/ui/estilos.js';
 import { fmtPesos } from '../utils/formato.js';
+import { mensajeDeError } from '../utils/errores.js';
 import {
   fmtFechaLarga, fmtHora, fmtFechaHora, fechaDeISO, DIAS_RESERVABLES,
 } from '../utils/fecha.js';
@@ -76,11 +78,15 @@ function GestionTurno({ token, tenant }) {
   /**
    * handleConfirmarReprogramacion
    * Reprograma el turno al horario elegido en el panel. Solo se llama desde
-   * su botón de confirmar.
+   * su botón de confirmar. Si sale bien, cierra el panel y avisa arriba. Si
+   * falla, relanza el error: lo muestra el panel, junto a su botón, que es
+   * donde está mirando el cliente.
    * @param {string} inicio - ISO del horario nuevo
+   * @throws {Error} El error de reprogramarTurno (con `status` si llegó al backend)
    */
   const handleConfirmarReprogramacion = async (inicio) => {
     setProcesando(true);
+    setMensaje(null);
     try {
       const res = await reprogramarTurno(token, inicio);
       setDatos(prev => ({
@@ -89,9 +95,6 @@ function GestionTurno({ token, tenant }) {
       }));
       cerrarReprogramacion();
       setMensaje({ kind: 'ok', text: 'Turno reprogramado correctamente.' });
-    } catch (err) {
-      console.error('[GestionTurno] Error reprogramando:', err.message);
-      setMensaje({ kind: 'err', text: err.message });
     } finally {
       setProcesando(false);
     }
@@ -191,14 +194,7 @@ function GestionTurno({ token, tenant }) {
           </div>
 
           {/* Fecha + hora grande */}
-          <div style={{
-            fontFamily: theme.mono,
-            fontWeight: theme.weightMedium,
-            fontSize: theme.sizeMicro,
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-            color: theme.muted,
-          }}>{fmtFechaLarga(fechaDeISO(turno.inicio))}</div>
+          <div style={estiloEyebrow}>{fmtFechaLarga(fechaDeISO(turno.inicio))}</div>
 
           <div style={{
             fontFamily: theme.body,
@@ -331,10 +327,14 @@ function GestionTurno({ token, tenant }) {
  * el botón de confirmar reprograma.
  * Monta su propia carga (useDisponibilidad): se pide al abrir el panel y se
  * descarta al cerrarlo.
+ * Si la reprogramación falla (ej. 409: el horario se ocupó), el aviso aparece
+ * al pie del panel, donde estaba el botón, y se vuelven a pedir los días y
+ * los horarios: el horario ocupado deja de ofrecerse y deja de estar marcado.
  * @param {Object} props.barbero - Barbero del turno ({ id, nombre }), fijo
  * @param {Object} props.servicio - Servicio del turno ({ id, ... })
  * @param {boolean} props.procesando - True mientras se manda la reprogramación
- * @param {Function} props.onConfirmar - Recibe el ISO del horario elegido
+ * @param {Function} props.onConfirmar - Recibe el ISO del horario elegido; devuelve
+ *   una promesa que se rechaza si la reprogramación falla
  * @param {Function} props.onCerrar - Cierra el panel sin reprogramar
  */
 function ReprogramarPanel({ barbero, servicio, procesando, onConfirmar, onCerrar }) {
@@ -344,6 +344,43 @@ function ReprogramarPanel({ barbero, servicio, procesando, onConfirmar, onCerrar
   // del día que se ve: al cambiar de día, deja de estar marcado.
   const [slotElegido, setSlotElegido] = useState(null);
   const slotVigente = agenda.horarios.includes(slotElegido) ? slotElegido : null;
+
+  // Error de la última confirmación; se borra al elegir otro horario.
+  const [error, setError] = useState(null);
+  const errorRef = useRef(null);
+  // True desde que falla la confirmación hasta que el aviso se trae a la vista.
+  const errorPorMostrar = useRef(false);
+
+  // El aviso nuevo, a la vista, recién cuando terminan de recargarse días y
+  // horarios: el aviso va debajo de los horarios, y al reemplazar el skeleton
+  // (dos renglones) por los horarios reales el panel crece y lo empuja hacia
+  // abajo. Una sola vez por error: si después el cliente cambia de día, la
+  // pantalla no salta al aviso.
+  useEffect(() => {
+    if (!error || !errorPorMostrar.current) return;
+    if (agenda.estadoDias === 'cargando' || agenda.estadoHorarios === 'cargando') return;
+    errorPorMostrar.current = false;
+    errorRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [error, agenda.estadoDias, agenda.estadoHorarios]);
+
+  /**
+   * confirmar
+   * Manda la reprogramación. Si falla, muestra el aviso y recarga días y
+   * horarios (los dos: si solo se recargaran los días, el día elegido
+   * volvería a mostrar los horarios de antes).
+   */
+  const confirmar = async () => {
+    setError(null);
+    try {
+      await onConfirmar(slotVigente);
+    } catch (err) {
+      console.error('[GestionTurno] Error reprogramando:', err.message);
+      setError(mensajeDeError(err));
+      errorPorMostrar.current = true;
+      agenda.reintentarDias();
+      agenda.reintentarHorarios();
+    }
+  };
 
   return (
     <div style={{
@@ -382,9 +419,21 @@ function ReprogramarPanel({ barbero, servicio, procesando, onConfirmar, onCerrar
         estadoHorarios={agenda.estadoHorarios}
         onReintentarHorarios={agenda.reintentarHorarios}
         horario={slotVigente}
-        onElegirHorario={(iso) => { if (!procesando) setSlotElegido(iso); }}
+        onElegirHorario={(iso) => {
+          if (procesando) return;
+          setSlotElegido(iso);
+          setError(null);
+        }}
         textoSinDias={`${barbero.nombre} no tiene turnos libres en los próximos ${DIAS_RESERVABLES} días.`}
       />
+
+      {/* Error de la confirmación: al pie del panel, aunque el horario
+          elegido ya no esté y el botón de confirmar desaparezca. */}
+      {error && (
+        <div ref={errorRef} style={{ marginTop: 20 }}>
+          <BannerMensaje kind="err" text={error}/>
+        </div>
+      )}
 
       {/* Footer del panel — confirmar (sólo aparece cuando hay slot pre-elegido) */}
       {slotVigente && (
@@ -394,12 +443,7 @@ function ReprogramarPanel({ barbero, servicio, procesando, onConfirmar, onCerrar
           borderTop: `1px solid ${theme.hairlineSoft}`,
         }}>
           <div style={{
-            fontFamily: theme.mono,
-            fontWeight: theme.weightMedium,
-            fontSize: theme.sizeMicro,
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-            color: theme.muted,
+            ...estiloEyebrow,
             marginBottom: 4,
           }}>Reprogramar a</div>
 
@@ -411,7 +455,7 @@ function ReprogramarPanel({ barbero, servicio, procesando, onConfirmar, onCerrar
             marginBottom: 12,
           }}>{fmtFechaHora(slotVigente)}</div>
 
-          <Button onClick={() => onConfirmar(slotVigente)} disabled={procesando}>
+          <Button onClick={confirmar} disabled={procesando}>
             {procesando ? 'Confirmando…' : 'Confirmar reprogramación'}
           </Button>
         </div>
@@ -424,14 +468,15 @@ function ReprogramarPanel({ barbero, servicio, procesando, onConfirmar, onCerrar
 
 /**
  * BannerMensaje
- * Banner verde (ok) o rojo (err) que aparece después de una acción.
+ * Banner verde (ok) o rojo (err) que aparece después de una acción. El lector
+ * de pantalla lo anuncia al aparecer (`role`: alert el error, status el ok).
  * @param {'ok'|'err'} props.kind
  * @param {string} props.text
  */
 function BannerMensaje({ kind, text }) {
   const esOk = kind === 'ok';
   return (
-    <div style={{
+    <div role={esOk ? 'status' : 'alert'} style={{
       background: esOk ? theme.successSoft : theme.dangerSoft,
       border: `1px solid ${(esOk ? theme.success : theme.danger)}33`,
       borderRadius: theme.radius,
@@ -446,43 +491,99 @@ function BannerMensaje({ kind, text }) {
 }
 
 /**
+ * ALTO_BOTON
+ * Alto de un Button medido en pantalla (12 px de padding arriba y abajo, el
+ * texto y el borde). Lo usa el skeleton para reservar el lugar de cada botón.
+ */
+const ALTO_BOTON = 46.6;
+
+/**
+ * RenglonSkeleton
+ * Un renglón de texto en skeleton: una caja del alto del renglón real con la
+ * barra centrada, así el skeleton mide lo mismo que el texto que reemplaza.
+ * @param {number} props.alto - Alto del renglón real (tamaño de letra × 1,5)
+ * @param {number} props.barra - Alto de la barra
+ * @param {number|string} props.width - Ancho de la barra
+ * @param {number} [props.radius] - Radio de la barra
+ */
+function RenglonSkeleton({ alto, barra, width, radius }) {
+  return (
+    <div style={{ height: alto, display: 'flex', alignItems: 'center' }}>
+      <Skeleton height={barra} width={width} radius={radius}/>
+    </div>
+  );
+}
+
+/**
  * SkeletonGestion
- * Placeholder visual mientras carga el turno por token.
+ * Silueta mientras carga el turno por token, con los mismos bloques y las
+ * mismas alturas que la pantalla de un turno reservado (card del turno,
+ * "Agregar al calendario" con su segunda opción, "A nombre de", Reprogramar y
+ * Cancelar, y "Reservar otro turno"): el contenido no salta al llegar.
  */
 function SkeletonGestion() {
   return (
-    <div>
-      {/* Card principal skeleton */}
+    <div aria-hidden="true">
+      {/* Card del turno: pill de estado, fecha, hora y barbero + servicio */}
       <div style={{
         background: theme.surface,
         border: `1px solid ${theme.hairline}`,
         borderRadius: theme.radiusLg,
         padding: 16,
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-          <Skeleton height={20} width={80} radius={999}/>
-          <Skeleton height={12} width={50}/>
+        {/* 23 px: lo que mide el renglón de la pill real (inline-flex en un bloque) */}
+        <div style={{ height: 23, display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+          <Skeleton height={21} width={96} radius={999}/>
         </div>
-        <Skeleton height={10} width={140} style={{ marginBottom: 8 }}/>
-        <Skeleton height={28} width={120} style={{ marginBottom: 16 }}/>
-        <div style={{ borderTop: `1px solid ${theme.hairlineSoft}`, paddingTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <RenglonSkeleton alto={16.5} barra={10} width={140}/>
+        <div style={{ marginTop: 4 }}>
+          <RenglonSkeleton alto={42} barra={28} width={110}/>
+        </div>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          marginTop: 14,
+          paddingTop: 12,
+          borderTop: `1px solid ${theme.hairlineSoft}`,
+        }}>
           <Skeleton height={36} width={36} radius={999}/>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <Skeleton height={14} width="50%"/>
-            <Skeleton height={11} width="70%"/>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <RenglonSkeleton alto={21} barra={14} width="45%"/>
+            <RenglonSkeleton alto={21} barra={14} width="70%"/>
           </div>
-          <Skeleton height={14} width={60}/>
+          <Skeleton height={14} width={56}/>
         </div>
       </div>
 
-      {/* Summary rows skeleton */}
-      <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {[0, 1, 2].map(i => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, borderBottom: `1px solid ${theme.hairlineSoft}` }}>
-            <Skeleton height={10} width={80}/>
-            <Skeleton height={12} width={140}/>
-          </div>
-        ))}
+      {/* "Agregar al calendario" y, debajo, la otra opción */}
+      <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+        <Skeleton height={ALTO_BOTON} radius={theme.radius}/>
+        <RenglonSkeleton alto={ALTO_BOTON} barra={14} width={150}/>
+      </div>
+
+      {/* "A nombre de" */}
+      <div style={{
+        marginTop: 16,
+        padding: '10px 0',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderBottom: `1px solid ${theme.hairlineSoft}`,
+      }}>
+        <RenglonSkeleton alto={21} barra={10} width={80}/>
+        <RenglonSkeleton alto={21} barra={14} width={120}/>
+      </div>
+
+      {/* Reprogramar y Cancelar turno */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+        <Skeleton height={ALTO_BOTON} radius={theme.radius}/>
+        <Skeleton height={ALTO_BOTON} radius={theme.radius}/>
+      </div>
+
+      {/* "Reservar otro turno" */}
+      <div style={{ marginTop: 32, display: 'flex', justifyContent: 'center' }}>
+        <RenglonSkeleton alto={ALTO_BOTON} barra={14} width={140}/>
       </div>
     </div>
   );

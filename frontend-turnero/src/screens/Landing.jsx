@@ -29,6 +29,7 @@ import { fmtTelefono, linkWhatsApp } from '../utils/telefono.js';
 import { rutaResena } from '../utils/rutas.js';
 import { linkMapa } from '../utils/mapa.js';
 import { useEleccionConPausa } from '../hooks/useEleccionConPausa.js';
+import { useHover, PUEDE_HOVER } from '../hooks/useHover.js';
 import {
   PageContainer, Button, StickyFooter, Skeleton, EmptyState, AvatarIniciales, IconoAlerta, IconoPin,
 } from '../components/ui';
@@ -229,7 +230,7 @@ function Landing({
           </Seccion>
 
           <Seccion id="landing-info" titulo="Horarios y contacto">
-            <HorarioSemanal horarioAtencion={tenant.horario_atencion} />
+            <HorarioSemanal horarioAtencion={tenant.horario_atencion} feriados={tenant.feriados} />
 
             {tenant.direccion && (
               <LineaContacto
@@ -584,20 +585,20 @@ function estiloFilaServicio({ resaltada = false } = {}) {
  * FilaServicio
  * Fila tocable de un servicio: nombre y duración a la izquierda, precio y
  * chevron a la derecha. El fondo de hover/marcado sobresale 8 px a cada lado
- * para que el texto quede alineado con el título de la sección.
+ * para que el texto quede alineado con el título de la sección. El hover solo
+ * existe con mouse (useHover).
  * @param {Object} props.servicio - { nombre, precio, duracion_minutos }
  * @param {boolean} props.marcada - True mientras corre la pausa de la elección
  * @param {Function} props.onClick
  */
 function FilaServicio({ servicio, marcada, onClick }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
 
   return (
     <button
       type="button"
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...eventosHover}
       className="tt-presionable"
       style={estiloFilaServicio({ resaltada: marcada || hover })}
     >
@@ -661,8 +662,12 @@ function RenglonSkeleton({ width }) {
 
 /**
  * FilaHorizontal
- * Lista horizontal que sangra hasta los bordes de la columna y scrollea de
- * costado si los ítems no entran. El padding deja lugar al anillo de foco.
+ * Lista de ítems en fila que sangra hasta los bordes de la columna. El
+ * padding deja lugar al anillo de foco. Si los ítems no entran:
+ * - en táctil, scrollea de costado (se desliza con el dedo, sin barra);
+ * - con mouse (PUEDE_HOVER), pasa a otro renglón: sin trackpad, un scroll de
+ *   costado obliga a usar la barra, y con muchos barberos se veía la barra
+ *   del estilo global debajo de la fila.
  * @param {string} [props.className] - Clase de movimiento (ej. tt-aparecer)
  * @param {boolean} [props.oculta] - aria-hidden (para el skeleton)
  * @param {ReactNode} props.children - Los <li>
@@ -676,7 +681,7 @@ function FilaHorizontal({ className, oculta, children }) {
         listStyle: 'none',
         display: 'flex',
         gap: 4,
-        overflowX: 'auto',
+        ...(PUEDE_HOVER ? { flexWrap: 'wrap' } : { overflowX: 'auto' }),
         margin: '0 -16px',
         padding: '4px 12px',
       }}
@@ -709,13 +714,13 @@ const estiloItemBarbero = {
 /**
  * ItemBarbero
  * Barbero tocable: avatar de iniciales y nombre debajo (hasta dos renglones).
- * Hover y marcado se ven como un aro alrededor del avatar.
+ * Hover (solo con mouse, useHover) y marcado se ven como un aro alrededor del avatar.
  * @param {Object} props.barbero - { id, nombre }
  * @param {boolean} props.marcado - True mientras corre la pausa de la elección
  * @param {Function} props.onClick
  */
 function ItemBarbero({ barbero, marcado, onClick }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
 
   let aro = 'none';
   if (marcado) aro = `0 0 0 2px ${theme.bg}, 0 0 0 4px ${theme.accent}`;
@@ -725,8 +730,7 @@ function ItemBarbero({ barbero, marcado, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...eventosHover}
       className="tt-presionable"
       style={{
         ...estiloItemBarbero,
@@ -802,12 +806,30 @@ const estiloIconoInfo = { display: 'flex', flexShrink: 0, color: theme.muted };
  * HorarioSemanal
  * Fila "Horario de atención" que despliega u oculta la grilla de los 7 días,
  * con el día de hoy resaltado. El estado abierto/cerrado de ahora va en el hero.
+ * Cada fila es la próxima vez que cae ese día, de hoy a 6 días adelante (la
+ * grilla ya marca "hoy": se lee como esta semana). Si esa fecha es feriado, la
+ * fila dice "Cerrado · feriado" en vez del horario, igual que el hero hoy.
  * @param {Array<Object>} props.horarioAtencion - [{ dia_semana, hora_inicio, hora_fin }]
+ * @param {Array<Object>} [props.feriados] - Feriados del tenant [{ fecha: 'YYYY-MM-DD' }]
  */
-function HorarioSemanal({ horarioAtencion = [] }) {
+function HorarioSemanal({ horarioAtencion = [], feriados = [] }) {
   const [expandido, setExpandido] = useState(false);
 
-  const diaHoy = new Date().getDay();
+  const hoy = new Date();
+  const diaHoy = hoy.getDay();
+  const fechasFeriado = new Set(feriados.map((f) => f.fecha));
+
+  /**
+   * esFeriadoEstaSemana
+   * True si la próxima fecha de ese día de la semana (hoy incluido) es feriado.
+   * @param {number} diaSemana - 0=domingo … 6=sábado
+   * @returns {boolean}
+   */
+  const esFeriadoEstaSemana = (diaSemana) => {
+    const fecha = new Date(hoy);
+    fecha.setDate(hoy.getDate() + ((diaSemana - diaHoy + 7) % 7));
+    return fechasFeriado.has(fechaLocalISO(fecha));
+  };
 
   return (
     <div>
@@ -835,6 +857,8 @@ function HorarioSemanal({ horarioAtencion = [] }) {
           {ORDEN_SEMANA.map((diaSemana, i) => {
             const dia = horarioAtencion.find((h) => h.dia_semana === diaSemana);
             const esHoy = diaSemana === diaHoy;
+            let horario = dia ? `${dia.hora_inicio} – ${dia.hora_fin}` : 'Cerrado';
+            if (dia && esFeriadoEstaSemana(diaSemana)) horario = 'Cerrado · feriado';
             return (
               <li key={diaSemana} style={{
                 display: 'flex',
@@ -848,7 +872,7 @@ function HorarioSemanal({ horarioAtencion = [] }) {
                 fontWeight: esHoy ? theme.weightMedium : theme.weightRegular,
               }}>
                 <span>{esHoy ? `${NOMBRES_DIA[diaSemana]} (hoy)` : NOMBRES_DIA[diaSemana]}</span>
-                <span>{dia ? `${dia.hora_inicio} – ${dia.hora_fin}` : 'Cerrado'}</span>
+                <span>{horario}</span>
               </li>
             );
           })}
@@ -859,10 +883,20 @@ function HorarioSemanal({ horarioAtencion = [] }) {
 }
 
 /**
+ * ALTO_RENGLON_INFO
+ * Alto de un renglón de texto de la sección de info (14 px × 1,5).
+ */
+const ALTO_RENGLON_INFO = 21;
+
+/**
  * LineaContacto
  * Fila de contacto clickable: ícono + texto, renderizada como `<a>`.
  * Cumple el touch target mínimo de 44 px; el foco por teclado lo dibuja
  * el :focus-visible global de index.css.
+ * Ícono y texto van juntos en un bloque centrado en la fila; adentro, el
+ * ícono queda a la altura del primer renglón. Con un renglón se ve igual que
+ * centrado; con dos (una dirección larga), el ícono acompaña al principio del
+ * texto en vez de quedar entre los dos renglones.
  * @param {string} props.href - Destino del link (`tel:`, mapa, reseñas)
  * @param {boolean} [props.externo=false] - True si el link abre en otra pestaña
  * @param {JSX.Element} props.icono - Ícono a la izquierda
@@ -876,8 +910,10 @@ function LineaContacto({ href, externo = false, icono, texto }) {
       rel={externo ? 'noopener noreferrer' : undefined}
       style={{ ...estiloLineaInfo, textDecoration: 'none' }}
     >
-      <span style={estiloIconoInfo}>{icono}</span>
-      <span>{texto}</span>
+      <span style={{ display: 'flex', alignItems: 'flex-start', gap: estiloLineaInfo.gap }}>
+        <span style={{ ...estiloIconoInfo, height: ALTO_RENGLON_INFO, alignItems: 'center' }}>{icono}</span>
+        <span>{texto}</span>
+      </span>
     </a>
   );
 }

@@ -1,10 +1,12 @@
 // /frontend-turnero/src/utils/telefono.js
-// Helpers de teléfono: países del selector, topes de dígitos, conversión a/desde
+// Helpers de teléfono: países del selector, topes de dígitos, conversión a
 // E.164, normalización de lo que entrega el autocompletado del navegador,
 // formato para mostrar y link de WhatsApp.
 // Funciones puras (sin React) para poder probarlas con Node.
 
-import { AsYouType, parsePhoneNumber, parsePhoneNumberFromString } from 'libphonenumber-js';
+import {
+  AsYouType, getCountryCallingCode, parsePhoneNumber, parsePhoneNumberFromString,
+} from 'libphonenumber-js';
 
 /**
  * PAISES
@@ -37,20 +39,42 @@ export const MAX_DIGITOS_POR_PAIS = {
 };
 
 /**
- * telefonoDesdeE164
- * Dado un número en formato E.164 (ej. "+5491133111686"), deriva el país y el
- * número nacional ya formateado, para precargar el campo cuando el cliente
- * vuelve atrás en el wizard. Si no se puede parsear, devuelve null.
- * @param {string} e164 - Número en formato E.164
- * @returns {{ pais: string, nacional: string } | null}
+ * TOPE_AR_COMPLETO
+ * Dígitos de un número argentino escrito con su prefijo y sin "+": "54 9" + 10
+ * ("54 9 11 3311 1686") o "0" + 10 + "15" ("011 15 3311 1686"). Los dos son 13.
  */
-export function telefonoDesdeE164(e164) {
-  try {
-    const p = parsePhoneNumber(e164);
-    return { pais: p.country, nacional: new AsYouType(p.country).input(p.nationalNumber) };
-  } catch {
-    return null;
+const TOPE_AR_COMPLETO = 13;
+
+/**
+ * topeDigitos
+ * Cuántos dígitos acepta el campo mientras el cliente escribe. Sin "+", el
+ * tope del país elegido. Con "+", el número trae el código de país adelante:
+ * el tope es ese código más el tope del país al que pertenece (y el 9 de
+ * celular en Argentina: "+54 9 11 3311 1686" son 13 dígitos). Así se puede
+ * terminar de escribir el número completo, y normalizarTelefonoCompleto lo
+ * pasa a país + número nacional en cuanto es válido.
+ * Mientras el código todavía no coincide con ningún país de PAISES (ej. "+5"),
+ * o si es de otro país, queda el tope del país elegido, como antes.
+ * Sin "+", con Argentina elegida, un número que arranca con 54 (el código de
+ * país sin el "+") o con 0 (el 0 de la marcación nacional: "011 15 …",
+ * "0351 15 …") tampoco es el número nacional de 10 dígitos, que nunca empieza
+ * así: el tope sube a TOPE_AR_COMPLETO para poder terminarlo. Cualquier otro
+ * número sigue frenando en 10.
+ * @param {string} crudo - Valor crudo del input
+ * @param {string} pais - ISO del país elegido en el selector
+ * @returns {number}
+ */
+export function topeDigitos(crudo, pais) {
+  const tope = MAX_DIGITOS_POR_PAIS[pais] ?? 15;
+  if (!crudo.trim().startsWith('+')) {
+    const conPrefijo = pais === 'AR' && /^(54|0)/.test(crudo.replace(/\D/g, ''));
+    return conPrefijo ? TOPE_AR_COMPLETO : tope;
   }
+  const digitos = crudo.replace(/\D/g, '');
+  const destino = PAISES.find((p) => digitos.startsWith(getCountryCallingCode(p.iso)));
+  if (!destino) return tope;
+  const nueveDeCelular = destino.iso === 'AR' ? 1 : 0;
+  return getCountryCallingCode(destino.iso).length + MAX_DIGITOS_POR_PAIS[destino.iso] + nueveDeCelular;
 }
 
 /**
@@ -78,7 +102,8 @@ export function telefonoAE164(nacional, pais) {
  * dígitos del país.
  *
  * Solo actúa si el valor empieza con "+" o trae más dígitos que el tope del
- * país actual (lo que un tipeo normal nunca produce). En Argentina saca el 9
+ * país actual (el número nacional tipeado nunca lo pasa; sí uno con su
+ * prefijo, ver topeDigitos). En Argentina saca el 9
  * de celular del número nacional (11 → 10 dígitos), porque el form trabaja con
  * los 10 dígitos estándar y el E.164 se arma igual con `telefonoAE164`.
  *

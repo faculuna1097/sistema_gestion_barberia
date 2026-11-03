@@ -4,7 +4,7 @@
 // calendario, ver cómo llegar, ver o cambiar el turno, o reservar otro.
 
 import { theme } from '../theme/tokens.js';
-import { fechaDeISO, fmtDiaAccesible, fmtHora, sumarMinutos } from '../utils/fecha.js';
+import { fechaDeISO, fmtDiaEnOracion, fmtHora, sumarMinutos } from '../utils/fecha.js';
 import { eventoDeTurno } from '../utils/calendario.js';
 import { rutaGestion, urlGestion } from '../utils/rutas.js';
 import { linkMapa } from '../utils/mapa.js';
@@ -27,14 +27,15 @@ function primerNombre(nombre) {
  * Pantalla de éxito. Sin "Volver": el flujo ya se cerró (el "atrás" del
  * celular lleva a la landing, ver useNavegacion#cerrarFlujo).
  * @param {Object} props.reserva - Reserva confirmada: servicio, barbero,
- *   barberoAsignado, horario, nombre, email
+ *   barberoAsignado, horario
+ * @param {Object} props.cliente - Datos con los que se confirmó: { nombre, email, ... }
  * @param {Object} props.tenant - { nombre, direccion }
  * @param {Object} props.resultado - Respuesta del POST: { turno_id, token_gestion }
  * @param {Function} props.onNuevaReserva - "Reservar otro turno": vuelve a la landing
  */
-function TurnoConfirmado({ reserva, tenant, resultado, onNuevaReserva }) {
+function TurnoConfirmado({ reserva, cliente, tenant, resultado, onNuevaReserva }) {
   const { servicio, barbero, horario } = reserva;
-  const nombre = primerNombre(reserva.nombre);
+  const nombre = primerNombre(cliente.nombre);
 
   const evento = eventoDeTurno({
     turnoId: resultado.turno_id,
@@ -80,7 +81,7 @@ function TurnoConfirmado({ reserva, tenant, resultado, onNuevaReserva }) {
               letterSpacing: '-0.01em',
               lineHeight: 1.35,
             }}>
-              Te esperamos el {fmtDiaAccesible(fechaDeISO(horario))} a las {fmtHora(horario)}.
+              Te esperamos el {fmtDiaEnOracion(fechaDeISO(horario))} a las {fmtHora(horario)}.
             </span>
           </h2>
 
@@ -93,7 +94,7 @@ function TurnoConfirmado({ reserva, tenant, resultado, onNuevaReserva }) {
           }}>
             Te mandamos el detalle a{' '}
             <span style={{ color: theme.ink, fontWeight: theme.weightMedium, overflowWrap: 'anywhere' }}>
-              {reserva.email}
+              {cliente.email.trim()}
             </span>
             .
           </p>

@@ -23,8 +23,8 @@ import GestionTurno from './screens/GestionTurno.jsx';
 
 /**
  * SELECCION_VACIA
- * La parte de la reserva que se elige en el flujo (sin los datos del
- * cliente). Cada entrada desde la landing arranca de acá.
+ * La reserva que se elige en el flujo (sin los datos del cliente, que viven
+ * aparte: ver CLIENTE_VACIO). Cada entrada desde la landing arranca de acá.
  * - `barbero`: antes de elegir horario, el barbero que se marca al entrar a
  *   "¿Cuándo?" (null = "Cualquiera"; viene de la landing si se tocó un
  *   barbero). Después, el barbero que atiende el turno.
@@ -40,12 +40,14 @@ const SELECCION_VACIA = {
 };
 
 /**
- * RESERVA_VACIA
- * Estado inicial de la reserva en memoria (y el de cada flujo nuevo).
+ * CLIENTE_VACIO
+ * Datos del cliente tal como los escribe en "Confirmá tu turno": nombre, país
+ * del selector, teléfono nacional (formateado, como se ve en el campo) y email.
+ * El E.164 se arma recién al confirmar.
  */
-const RESERVA_VACIA = {
-  ...SELECCION_VACIA,
+const CLIENTE_VACIO = {
   nombre: '',
+  pais: 'AR',
   telefono: '',
   email: '',
 };
@@ -64,21 +66,29 @@ function esUrlHttps(url) {
 
 /**
  * actualizarFavicon — apunta el <link rel="icon"> del documento al logo del
- * tenant. Si el link no existe, lo crea. Reusa la imagen del logo que ya se
- * descarga para la UI (cache hit, sin pedido extra). Reemplaza el favicon
- * placeholder de index.html. Si no hay logo, deja el placeholder (marca BarberManager).
+ * tenant, recién cuando la imagen carga: si el link no existe, lo crea. Reusa
+ * la imagen del logo que ya se descarga para la UI (cache hit, sin pedido
+ * extra). Si no hay logo, o si no carga (URL rota, sin red), queda el favicon
+ * de marca de index.html (BarberManager), en vez de un ícono roto.
  * @param {string|null} url — URL del logo (tenant_imagen tipo='logo').
  * @returns {void}
  */
 function actualizarFavicon(url) {
   if (!url) return;
-  let link = document.querySelector("link[rel='icon']");
-  if (!link) {
-    link = document.createElement('link');
-    link.rel = 'icon';
-    document.head.appendChild(link);
-  }
-  link.href = url;
+  const prueba = new Image();
+  prueba.onload = () => {
+    let link = document.querySelector("link[rel='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = url;
+  };
+  prueba.onerror = () => {
+    console.warn('[App] actualizarFavicon — el logo no cargó, queda el favicon de marca');
+  };
+  prueba.src = url;
 }
 
 function App() {
@@ -107,17 +117,25 @@ function App() {
   const barberos = useListaRemota(getBarberos, { nombre: 'barberos', activa: enFlujoReserva });
 
   // Estado de la reserva en curso (solo en memoria).
-  const [reserva, setReserva] = useState(RESERVA_VACIA);
+  const [reserva, setReserva] = useState(SELECCION_VACIA);
+
+  // Datos del cliente: en memoria de la pestaña durante toda la visita (sin
+  // localStorage). Una reserva nueva no los borra: al volver desde "Confirmá
+  // tu turno", al "atrás" desde el éxito o con "Reservar otro turno", el
+  // formulario aparece prellenado y editable. Una recarga los pierde (el
+  // "Reservar otro turno" de la gestión del turno es una carga nueva).
+  const [cliente, setCliente] = useState(CLIENTE_VACIO);
 
   // Resultado post-confirmación ({ turno_id, token_gestion }).
   const [resultado, setResultado] = useState(null);
 
   /**
    * reiniciarReserva
-   * Descarta la reserva en memoria: arranca un flujo nuevo desde la landing.
+   * Descarta la reserva en memoria (no los datos del cliente): arranca un
+   * flujo nuevo desde la landing.
    */
   const reiniciarReserva = () => {
-    setReserva(RESERVA_VACIA);
+    setReserva(SELECCION_VACIA);
     setResultado(null);
   };
 
@@ -215,11 +233,20 @@ function App() {
   };
 
   /**
+   * actualizarCliente
+   * Merge parcial sobre los datos del cliente.
+   * @param {Object} datos - Campos a actualizar (de CLIENTE_VACIO)
+   */
+  const actualizarCliente = (datos) => {
+    setCliente(prev => ({ ...prev, ...datos }));
+  };
+
+  /**
    * entrarDesdeLanding
    * Arranca una elección desde la landing (el CTA, un servicio o un barbero).
    * Descarta lo elegido antes —si el cliente volvió a la landing, empieza de
-   * nuevo— pero conserva sus datos (nombre, teléfono, email) si ya los había
-   * escrito. Va a la primera pantalla a la que le falta su dato:
+   * nuevo—; sus datos (nombre, teléfono, email) viven aparte y siguen. Va a la
+   * primera pantalla a la que le falta su dato:
    * - con un servicio → "¿Cuándo?", con "Cualquiera";
    * - con un barbero → servicio, y después "¿Cuándo?" con ese barbero marcado;
    * - desde el CTA → servicio, y después "¿Cuándo?" con "Cualquiera".
@@ -297,10 +324,11 @@ function App() {
         return (
           <ConfirmarTurno
             reserva={reserva}
+            cliente={cliente}
             tenant={tenant}
             barberos={barberos.datos}
             origen={origen}
-            onGuardarDatos={actualizarReserva}
+            onCambiarCliente={actualizarCliente}
             onCambiarBarbero={(barbero) => actualizarReserva({ barbero })}
             onExito={(res) => { setResultado(res); nav.cerrarFlujo('exito'); }}
             onVolver={nav.volver}
@@ -312,6 +340,7 @@ function App() {
         return (
           <TurnoConfirmado
             reserva={reserva}
+            cliente={cliente}
             tenant={tenant}
             resultado={resultado}
             onNuevaReserva={() => { reiniciarReserva(); nav.volverAlInicio(); }}

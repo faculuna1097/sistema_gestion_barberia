@@ -352,9 +352,13 @@ const [hover, eventosHover] = useHover();
 - Si el elemento necesita su propio `onMouseLeave` (ej. `TeclaPin`, que
   también apaga el "apretado"), va después del spread y llama a
   `eventosHover.onMouseLeave?.()`.
-- Un componente nuevo del barbero con hover usa el hook. El panel sigue con el
-  `useState` (es de escritorio); el turnero, que tiene el mismo problema, no
-  tiene el hook todavía.
+- Un componente nuevo del barbero o del turnero con hover usa el hook. El
+  panel sigue con el `useState` (es de escritorio).
+- **En el turnero (desde el 2026-11-03)** está la misma copia
+  (`frontend-turnero/src/hooks/useHover.js`), en `Card`, `SlotChip`, `Button` y
+  las filas de servicio y de barbero de la landing. La fila del equipo de la
+  landing usa `PUEDE_HOVER` para el layout: con mouse pasa a otro renglón, en
+  táctil scrollea de costado.
 
 ### 4.3 Click handlers: `onClick`, NO `onPointerDown`
 
@@ -572,11 +576,11 @@ pantalla.
 | Componente | Para qué |
 |---|---|
 | `Button` | 4 variantes: `primary`, `secondary`, `ghost`, `danger`. En el turnero acepta `href` (+ `externo`) y se dibuja como `<a>`, y `form` para un submit fuera del `<form>`. |
-| `Card` | Contenedor con border, hover, selected, accesible con teclado. |
+| `Card` | Contenedor con border, hover, selected, accesible con teclado. En el turnero, padding por defecto de 16 (desde el 2026-11-03; antes 14, fuera de la escala de §3.3). |
 | `Field` | Input + label + helper + error invalid. En el turnero acepta `name`, `autoComplete`, `inputMode` y `ref`. |
 | `TopBar` | Header con "← Volver" + slot derecho opcional. |
 | `ScreenHeader` | Eyebrow + title + subtitle. El panel ya no lo usa (D15, desde 2026-11-02 en ninguna sección): queda en su `components/ui/` para copiarlo a un front nuevo. |
-| `StickyFooter` | Footer anclado abajo con border-top, safe-area iOS. No está en el panel: si un front nuevo lo necesita, se copia del barbero. |
+| `StickyFooter` | Footer anclado abajo con border-top, safe-area iOS. No está en el panel: si un front nuevo lo necesita, se copia del barbero. En el turnero (desde el 2026-11-03), mientras está montado su alto es el `scroll-padding-bottom` del documento: lo que se enfoca con Tab o el "siguiente" del teclado queda por encima del footer. `Field` y `CampoTelefono` suman `MARGEN_SCROLL_CAMPO` al input para que también se vea la ayuda o el error. |
 | `EmptyState` | Glyph + title + body + acción opcional. |
 | `Skeleton` | Bloque con shimmer. |
 | `StatusPill` | Pill chiquito con dot + label de estado. |
@@ -830,17 +834,19 @@ actualizá este doc.**
 14. ~~**Rango horario del timeline hardcodeado**~~ — **Resuelto**: `Agenda.jsx` de `frontend-barbero` ya no usa `7:00`–`22:00` fijo. El rango se deriva por día con `calcularRangoHoras(horarioAtencion, fecha, turnos)`: trae `horario_atencion` del local (`getTenant()`, fetch best-effort una sola vez al montar) y muestra desde `apertura - 1h` hasta `cierre + 1h` del día visible (`floor`/`ceil` para líneas de hora prolijas con horarios no enteros como `10:30`). El rango se expande para que cualquier turno fuera de esa franja siga visible (clamp al min/max entre horario y turnos). Día cerrado: deriva de los turnos del día (±1h) o, sin turnos, cae al default `7`–`22` — mismo camino al que cae si `getTenant()` falla (red de seguridad). `HORA_INICIO`/`HORA_FIN`/`ALTO_TOTAL` pasaron de constantes de módulo a valores derivados por render que bajan por props a `Timeline`/`BloqueTurno`. (Emparenta con la deuda 4, aún abierta en el turnero.)
 15. **`getMisClientes` sin paginación** — la pantalla Clientes de `frontend-barbero` trae todos los clientes históricos del barbero y filtra en cliente. Con 500+ clientes, el render de cards con hover-state (ver deuda 8) puede sentirse lento. Mitigación: paginar el endpoint o virtualizar la lista.
 16. ~~**Toast inline → flotante global.**~~ — **Resuelto (2026-11-02)**: toast flotante servido por `ToastProvider` con `toast.show()` (§4.8); `cargarChunk` avisa solo. Texto original: El primitivo `Toast` es hoy inline / render-state (cada caller mantiene el estado y lo monta en su layout; ver §4.8). El **target** es un Toast **flotante, centrado y con auto-dismiss** servido por un provider global con API imperativa (`toast.show()`). Migrar implica: (1) crear el provider/portal + dispatcher; (2) migrar **todos** los call-sites inline actuales (`BloqueImagenes`, los 6 handlers de export de xlsx vía `errorExport`, y cualquier otro feedback efímero); (3) recién ahí poder centralizar el feedback de error de `cargarChunk`. Hasta entonces, el patrón vigente es el inline (§4.8).
-17. **Estilo de etiqueta "eyebrow" copiado a mano** (mono, 11 px, mayúsculas, `muted`) en unos diez lugares del turnero (`ScreenHeader`, `Field`, `CampoTelefono`, `SelectorDiaHorario`, `SeleccionCuando`, `GestionTurno`…). Candidato a un estilo compartido (ej. un primitivo `Eyebrow`). Visto en el rediseño del turnero (2026-10-08).
+17. ~~**Estilo de etiqueta "eyebrow" copiado a mano** (mono, 11 px, mayúsculas, `muted`) en unos diez lugares del turnero (`ScreenHeader`, `Field`, `CampoTelefono`, `SelectorDiaHorario`, `SeleccionCuando`, `GestionTurno`…). Candidato a un estilo compartido (ej. un primitivo `Eyebrow`). Visto en el rediseño del turnero (2026-10-08).~~ — **Resuelto (2026-11-03)**: `estiloEyebrow` en `frontend-turnero/src/components/ui/estilos.js` (mismo criterio que el `estiloEtiquetaCampo` del panel), en los diez lugares. `StatusPill` queda aparte: es una pill, con sus colores.
 18. **`index.css` repite a mano colores de `tokens.js`** (fondo, anillo de foco, scrollbar) porque el CSS no puede importar el JS; está comentado en cada lugar. Para una sola fuente: exponer los tokens como variables CSS. Visto en el turnero; como `index.css` se copia entre fronts (§8), seguramente pasa en todos.
-19. **Hover con `useState` en pantallas táctiles** (§4.2): iOS dispara `mouseenter` al tocar y el estado queda "pegado" hasta tocar otra cosa (borde gris en `Card`/`SlotChip`, `accentHover` en el primario). Casi no se nota porque la pantalla cambia, pero sí donde no se navega (chips de la reprogramación del turnero). Emparenta con #8: un `:hover` real dentro de `@media (hover: hover)` lo resolvería. **(2026-10-19) Resuelto en `frontend-barbero`** con el hook `useHover` (§4.2), en todos sus hover. **Falta el turnero** (`Card`, `SlotChip`, `Button` y los chips de la reprogramación): copiar el hook a su `src/hooks/` y usarlo igual.
-20. **`Card` tiene `padding` por defecto 14**, fuera de la escala 4/8/12/16/24/32 (§3.3).
-21. **Touch target de los días de `SelectorDiaHorario`**: ~46 px de ancho en 375 px, pero ~41 px dentro de la tarjeta de la reprogramación y ~37 px en pantallas de 320 px, debajo de los 44 de §5.4 (el alto es 48). Al `MiniCalendario` le pasaba lo mismo.
+19. ~~**Hover con `useState` en pantallas táctiles** (§4.2): iOS dispara `mouseenter` al tocar y el estado queda "pegado" hasta tocar otra cosa (borde gris en `Card`/`SlotChip`, `accentHover` en el primario). Casi no se nota porque la pantalla cambia, pero sí donde no se navega (chips de la reprogramación del turnero). Emparenta con #8: un `:hover` real dentro de `@media (hover: hover)` lo resolvería. **(2026-10-19) Resuelto en `frontend-barbero`** con el hook `useHover` (§4.2), en todos sus hover. **Falta el turnero** (`Card`, `SlotChip`, `Button` y los chips de la reprogramación): copiar el hook a su `src/hooks/` y usarlo igual.~~ — **Resuelto en el turnero (2026-11-03)**: `useHover` en `Card`, `SlotChip`, `Button` y las filas de la landing (§4.2).
+20. ~~**`Card` tiene `padding` por defecto 14**, fuera de la escala 4/8/12/16/24/32 (§3.3).~~ — **Resuelto en el turnero (2026-11-03)**: el default pasó a 16. En el turnero solo lo usa la card de cada servicio en "Elegí un servicio" (de 72,6 a 76,6 px de alto). El `Card` del panel y el del barbero siguen en 14, pero todos sus usos pasan el padding a mano.
+21. ~~**Touch target de los días de `SelectorDiaHorario`**: ~46 px de ancho en 375 px, pero ~41 px dentro de la tarjeta de la reprogramación y ~37 px en pantallas de 320 px, debajo de los 44 de §5.4 (el alto es 48). Al `MiniCalendario` le pasaba lo mismo.~~ — **Resuelto desde 375 px (2026-11-03)**: el botón de cada día ocupa la columna entera, con el espacio entre días adentro, y la caja visible no cambió (medida al píxel). En 375 px: 49,6 en "¿Cuándo?" y 44,8 en la reprogramación. En 320 px queda en 41,7: llegar a 44 ahí exige cambiar el diseño.
 22. ~~**Textos de 12 px en `frontend-barbero`**~~ — **Resuelto (2026-10-19)**: pasaron a 14 (`sizeBody`), con el valor de `SummaryRow` (13) y la ayuda y el error de `Field` (12). `StatusPill` pasó de 10 a 11 (`sizeMicro`). Quedan en 11, a propósito, las pills de categoría y las etiquetas de la `BottomNav` (excepciones de §3.6). Texto original: (`theme.sizeMicro + 1`), debajo del mínimo de 14 de §3.6: Clientes, CrearTurno, Dashboard, Gestión (tab Horarios, `FilaDia`), Más, MiPlanilla, `KPI` y `TurnoListItem`; `StatusPill` usa 10. Los 12 de `Field` y los 13 de `SummaryRow` ya están en `estado_actual.md` ("Tamaños escritos a mano"). La Agenda y las filas de Gestión → Suspensiones pasaron a 14 el 2026-10-19. Ojo al subirlos: en un bloque de alto fijo, 14 px con el interlineado global (1,5 → 21 px por renglón) puede no entrar; el bloque de turno de la Agenda usa un interlineado de 18 px (`INTERLINEADO_TURNO`). Visto en el paso 5a de la app del barbero.
 23. ~~**La escala del kiosko está escrita como números sueltos**~~ — **Resuelto (2026-11-02)**: `TAM_KIOSKO` en `wizardStyles.js` (§3.6), con los mismos valores. Texto original: en `frontend/src/screens/flows/wizard.jsx` (19, 18, 13, 15, 22, 32, 40, 56, 48; ver §3.6). Los tamaños son intencionales; lo que falta es nombrarlos: una escala local al archivo (ej. `TAM_KIOSKO = { opcion: 19, valorResumen: 18, … }`), no en `tokens.js`, porque hoy la usa un solo archivo (§7.1). Si otro front o superficie la necesita, se promueve. Visto el 2026-10-29 al documentar §6.4.
 
 ---
 
-*Última actualización: 2026-11-03 — tanda 6c de deudas: §4.6 suma la pantalla angosta del panel (`usePantallaAngosta`, sidebar encima del contenido, segundo renglón en las tablas, `Tabs` con `mostrarIconos`).*
+*Última actualización: 2026-11-03 — tanda 7a de deudas (turnero): §4.2 suma `useHover` en el turnero; §6.1, el padding de `Card` y el `scroll-padding-bottom` de `StickyFooter`; deudas #17, #19, #20 y #21 resueltas.*
+
+*2026-11-03 — tanda 6c de deudas: §4.6 suma la pantalla angosta del panel (`usePantallaAngosta`, sidebar encima del contenido, segundo renglón en las tablas, `Tabs` con `mostrarIconos`).*
 
 *2026-11-02 — tanda 6b de deudas: §8 corregido (qué hay de verdad en `tokens.js` e `index.css` de cada front, que no son idénticos); §3.5 aclara el `shadowLg` de la landing; §6.1, `ScreenHeader` ya no se usa en el panel.*
 

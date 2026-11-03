@@ -8,13 +8,15 @@ import { AsYouType, isValidPhoneNumber, getCountryCallingCode } from 'libphonenu
 import { crearTurno, getDisponibilidad } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { fechaDeISO } from '../utils/fecha.js';
+import { mensajeDeError } from '../utils/errores.js';
 import {
-  PAISES, MAX_DIGITOS_POR_PAIS, telefonoDesdeE164, telefonoAE164, normalizarTelefonoCompleto,
+  PAISES, topeDigitos, telefonoAE164, normalizarTelefonoCompleto,
 } from '../utils/telefono.js';
 import {
   PageContainer, TopBar, ScreenHeader, Progress,
   Field, Button, StickyFooter, ResumenTurno,
 } from '../components/ui';
+import { estiloEyebrow, MARGEN_SCROLL_CAMPO } from '../components/ui/estilos.js';
 
 // Formato de email: el mismo que valida el backend (utils/validarTexto.js), así
 // un email que el backend rechazaría se marca acá, en el campo.
@@ -25,10 +27,6 @@ const FORM_ID = 'form-confirmar-turno';
 
 // Campos del formulario, en el orden en que se ven: el primero con error es el que se enfoca.
 const CAMPOS = ['nombre', 'telefono', 'email'];
-
-// Texto cuando el pedido no llega al backend (sin conexión, timeout): el
-// mensaje del navegador ("Failed to fetch") no le dice nada al cliente.
-const TEXTO_SIN_CONEXION = 'No pudimos conectarnos. Revisá tu conexión y probá de nuevo.';
 
 /**
  * capitalizarNombre
@@ -100,28 +98,26 @@ async function buscarOtroBarbero({ servicioId, horario, barberoId, barberos }) {
  *   ocupar" y el botón pasa a ser "Elegir otro horario" (vuelve a "¿Cuándo?").
  * Cualquier otro error muestra el mensaje del backend y deja reintentar.
  *
- * @param {Object} props.reserva - Reserva de App: servicio, barbero, barberoAsignado,
- *   horario y los datos previos del cliente (nombre, telefono en E.164, email)
+ * Los datos del cliente viven en App (no acá): cada cambio sube con
+ * `onCambiarCliente`, así siguen escritos si el cliente vuelve a "¿Cuándo?" o
+ * reserva otro turno.
+ *
+ * @param {Object} props.reserva - Reserva de App: servicio, barbero, barberoAsignado, horario
+ * @param {Object} props.cliente - Datos del cliente de App: { nombre, pais, telefono
+ *   (nacional, como se ve en el campo), email }
  * @param {Object} props.tenant - { nombre, direccion }
  * @param {Array<Object>} props.barberos - Lista de App ({ id, nombre }), para el reintento
  * @param {string|null} props.origen - Por qué link llegó el cliente; se manda en el POST
- * @param {Function} props.onGuardarDatos - Recibe { nombre, telefono (E.164), email };
- *   se llama al confirmar, así los datos siguen si el cliente vuelve a elegir horario
+ * @param {Function} props.onCambiarCliente - Recibe los campos de `cliente` que cambiaron
  * @param {Function} props.onCambiarBarbero - Recibe el barbero nuevo del reintento
  * @param {Function} props.onExito - Recibe { turno_id, token_gestion }
  * @param {Function} props.onVolver - Vuelve a "¿Cuándo?"
  */
 function ConfirmarTurno({
-  reserva, tenant, barberos, origen,
-  onGuardarDatos, onCambiarBarbero, onExito, onVolver,
+  reserva, cliente, tenant, barberos, origen,
+  onCambiarCliente, onCambiarBarbero, onExito, onVolver,
 }) {
-  // Si vuelve a esta pantalla, el teléfono viene en E.164: se descompone en país + número.
-  const telefonoPrevio = reserva.telefono ? telefonoDesdeE164(reserva.telefono) : null;
-
-  const [nombre, setNombre] = useState(reserva.nombre || '');
-  const [pais, setPais] = useState(telefonoPrevio?.pais || 'AR');
-  const [telefono, setTelefono] = useState(telefonoPrevio?.nacional || '');
-  const [email, setEmail] = useState(reserva.email || '');
+  const { nombre, pais, telefono, email } = cliente;
 
   // touched: el error de un campo se muestra recién al salir de él (blur) o
   // al intentar confirmar. Evita gritarle al cliente apenas entra.
@@ -166,21 +162,21 @@ function ConfirmarTurno({
    * (AsYouType: "1133111686" → "11 3311 1686"). Se crea una instancia nueva por
    * llamada para reformatear el string completo (uso recomendado en inputs
    * controlados de React). Frena la entrada al llegar al tope de dígitos del país.
-   * Si llega un número completo (autocompletado o pegado, con "+" o con más
-   * dígitos que el tope), lo interpreta y ajusta país + número nacional.
+   * Si llega un número completo (autocompletado, pegado o tipeado con "+"),
+   * lo interpreta y ajusta país + número nacional. Con "+", el tope cuenta el
+   * código de país (topeDigitos), así se puede terminar de escribirlo.
    * @param {string} crudo - Valor crudo del input
    */
   const handleTelefonoChange = (crudo) => {
     const completo = normalizarTelefonoCompleto(crudo, pais);
     if (completo) {
-      setPais(completo.pais);
-      setTelefono(completo.nacional);
+      onCambiarCliente({ pais: completo.pais, telefono: completo.nacional });
       return;
     }
-    // Freno duro: ignoramos la tecla si excede el tope de dígitos del país.
+    // Freno duro: ignoramos la tecla si excede el tope de dígitos.
     const digitos = crudo.replace(/\D/g, '');
-    if (digitos.length > (MAX_DIGITOS_POR_PAIS[pais] ?? 15)) return;
-    setTelefono(new AsYouType(pais).input(crudo));
+    if (digitos.length > topeDigitos(crudo, pais)) return;
+    onCambiarCliente({ telefono: new AsYouType(pais).input(crudo) });
   };
 
   /**
@@ -191,8 +187,7 @@ function ConfirmarTurno({
    * @param {string} nuevoIso - ISO del país elegido
    */
   const handlePaisChange = (nuevoIso) => {
-    setPais(nuevoIso);
-    setTelefono('');
+    onCambiarCliente({ pais: nuevoIso, telefono: '' });
   };
 
   /**
@@ -232,15 +227,14 @@ function ConfirmarTurno({
 
   /**
    * confirmar
-   * Guarda los datos en la reserva, la manda y, si sale bien, avanza al éxito.
-   * Si falla, deja el error para mostrarlo arriba del botón.
+   * Manda la reserva y, si sale bien, avanza al éxito. Si falla, deja el error
+   * para mostrarlo arriba del botón.
    * @param {Object} datos - { nombre, telefono (E.164), email } ya limpios
    */
   const confirmar = async (datos) => {
     enviandoRef.current = true;
     setEnviando(true);
     setError(null);
-    onGuardarDatos(datos);
     try {
       const resultado = await reservar(datos);
       onExito(resultado);
@@ -248,7 +242,7 @@ function ConfirmarTurno({
       console.error('[ConfirmarTurno] Error confirmando el turno:', err.message);
       setError(err.status === 409
         ? { tipo: 'ocupado' }
-        : { tipo: 'envio', texto: err.status ? err.message : TEXTO_SIN_CONEXION });
+        : { tipo: 'envio', texto: mensajeDeError(err) });
     } finally {
       enviandoRef.current = false;
       setEnviando(false);
@@ -319,7 +313,7 @@ function ConfirmarTurno({
             name="name"
             autoComplete="name"
             value={nombre}
-            onChange={(valor) => setNombre(capitalizarNombre(valor))}
+            onChange={(valor) => onCambiarCliente({ nombre: capitalizarNombre(valor) })}
             onBlur={() => setTouched(t => ({ ...t, nombre: true }))}
             placeholder="Diego Pereyra"
             error={errorVisible('nombre')}
@@ -344,7 +338,7 @@ function ConfirmarTurno({
             name="email"
             autoComplete="email"
             value={email}
-            onChange={setEmail}
+            onChange={(valor) => onCambiarCliente({ email: valor })}
             onBlur={() => setTouched(t => ({ ...t, email: true }))}
             placeholder="vos@correo.com"
             helper="Te mandamos la confirmación y el link para cambiar el turno."
@@ -426,15 +420,8 @@ function CampoTelefono({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {/* Label superior en estilo "eyebrow" (uppercase + mono), asociada al input */}
-      <label htmlFor={inputId} style={{
-        fontFamily: theme.mono,
-        fontWeight: theme.weightMedium,
-        fontSize: theme.sizeMicro,
-        letterSpacing: '0.04em',
-        textTransform: 'uppercase',
-        color: theme.muted,
-      }}>{label}</label>
+      {/* Label superior en estilo "eyebrow", asociada al input */}
+      <label htmlFor={inputId} style={estiloEyebrow}>{label}</label>
 
       {/* Contenedor bordeado que agrupa país + número como un solo campo. El
           outline repite el *:focus-visible global: con error el borde no cambia
@@ -504,6 +491,8 @@ function CampoTelefono({
             fontSize: theme.sizeInput,
             color: theme.ink,
             outline: 'none',
+            // Al enfocarlo, que también se vea el error de abajo (como en Field).
+            scrollMarginBottom: MARGEN_SCROLL_CAMPO,
           }}
         />
       </div>
