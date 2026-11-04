@@ -7,7 +7,7 @@
 import { registrarCorte, MENSAJE_TURNO_INEXISTENTE, MENSAJE_TOTAL_EXCEDIDO } from '../services/cortesService.js';
 import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { calcularDuracionServicio } from '../services/turnosService.js';
-import { esMontoValido, sumaMontosValida } from '../utils/validarNumero.js';
+import { esMontoValido, sumaMontosValida, mensajeMontoInvalido } from '../utils/validarNumero.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
 import { esUUID } from '../utils/validarUuid.js';
 
@@ -43,10 +43,10 @@ export const createCorte = async (req, res) => {
     return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });
   }
   if (!esMontoValido(precio)) {
-    return res.status(400).json({ error: 'precio es requerido y debe ser un número >= 0' });
+    return res.status(400).json({ error: mensajeMontoInvalido('precio') });
   }
   if (propina !== undefined && !esMontoValido(propina)) {
-    return res.status(400).json({ error: 'propina debe ser un número >= 0' });
+    return res.status(400).json({ error: mensajeMontoInvalido('propina', { requerido: false }) });
   }
   if (!sumaMontosValida(precio, propina ?? 0)) {
     return res.status(400).json({ error: MENSAJE_TOTAL_EXCEDIDO });

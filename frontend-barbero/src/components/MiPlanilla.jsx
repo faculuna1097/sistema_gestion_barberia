@@ -15,6 +15,7 @@ import { ChevronLeft, ChevronRight, ChevronDown, ClipboardX, TrendingUp, Trendin
 import { getPlanilla, getResumenPlanilla } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { fmtPesos, capitalizar } from '../utils/formato.js';
+import { sumarComision, textoPorcentajeComision } from '../utils/comision.js';
 import { colorResultado } from '../utils/colorMonto.js';
 import { useHover } from '../hooks/useHover.js';
 import {
@@ -86,23 +87,17 @@ function agruparPorDia(cortes) {
 }
 
 /**
- * calcularComisionDia
- * Comisión del barbero por los cortes de un día. Replica EXACTO el cálculo del
- * backend (resumenSemanal): porcentaje = % sobre servicios + propinas; fijo =
- * monto por corte (sin propinas). Así la suma de los días da la comisión
- * semanal del Hero y los números cierran. La rama `fijo` no se usa hoy: no hay
- * barberos con comisión fija, toda comisión es porcentaje (docs/estado_actual.md).
- * @param {Array} cortes - cortes del día
- * @param {'porcentaje'|'fijo'} tipo - comision_tipo del barbero
- * @param {number} valor - comision_valor del barbero
+ * cobroDelDia
+ * Lo que cobra el barbero por los cortes de un día: la comisión de cada corte
+ * (la manda el backend, con el % guardado en el corte) más las propinas. No
+ * repite la fórmula de la comisión: así la suma de los días da la comisión
+ * semanal del Hero, que también viene del backend.
+ * @param {Array<{comision: number, propina: number}>} cortes - cortes del día
  * @returns {number}
  */
-function calcularComisionDia(cortes, tipo, valor) {
-  const montoServicios = cortes.reduce((s, c) => s + Number(c.monto_servicios || 0), 0);
+function cobroDelDia(cortes) {
   const propinas = cortes.reduce((s, c) => s + Number(c.propina || 0), 0);
-  if (tipo === 'porcentaje' && valor != null) return montoServicios * Number(valor) / 100 + propinas;
-  if (tipo === 'fijo' && valor != null) return Number(valor) * cortes.length;
-  return 0;
+  return sumarComision(cortes) + propinas;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -203,11 +198,7 @@ export default function MiPlanilla() {
         <>
           <HeroComision resumen={miResumen} comisionPrev={comisionPrev} />
           <DesgloseSemanal resumen={miResumen} cantidadCortes={cortes.length} />
-          <DetalleCortes
-            diasConCortes={diasConCortes}
-            comisionTipo={miResumen?.comision_tipo}
-            comisionValor={miResumen?.comision_valor}
-          />
+          <DetalleCortes diasConCortes={diasConCortes} />
         </>
       )}
     </div>
@@ -328,17 +319,13 @@ function BotonFlecha({ children, onClick, aria, disabled = false }) {
 function HeroComision({ resumen, comisionPrev }) {
   // Si no hay resumen del backend, defaults a 0.
   const comision = Number(resumen?.comision ?? 0);
-  const tipo = resumen?.comision_tipo;
-  const valor = resumen?.comision_valor;
 
-  // Sub-label que explica cómo se calcula la comisión (porcentaje incluye
-  // propinas, igual que el backend; fijo es un monto por corte).
-  let detalleComision = '—';
-  if (tipo === 'porcentaje' && valor != null) {
-    detalleComision = `${valor}% de ${fmtPesos(Number(resumen?.monto_servicios ?? 0))} + propinas`;
-  } else if (tipo === 'fijo' && valor != null) {
-    detalleComision = `${fmtPesos(Number(valor))} fijo por corte`;
-  }
+  // Sub-label que explica cómo se calcula la comisión: el % de los cortes de la
+  // semana sobre los servicios, más las propinas. Si se le cambió el % en el
+  // medio de la semana, va el rango (ej. "45–50%").
+  const detalleComision = resumen
+    ? `${textoPorcentajeComision(resumen.comision_porcentajes, resumen.comision_valor)} de ${fmtPesos(Number(resumen.monto_servicios ?? 0))} + propinas`
+    : '—';
 
   // Tendencia vs. semana anterior — sólo si hay una base previa > 0.
   const hayComparacion = comisionPrev != null && comisionPrev > 0;
@@ -451,7 +438,7 @@ function DesgloseSemanal({ resumen, cantidadCortes }) {
  * Lista de cortes agrupados por día. Si no hay cortes, muestra EmptyState inline.
  * @param {Array<{ fecha: string, cortes: Array }>} props.diasConCortes
  */
-function DetalleCortes({ diasConCortes, comisionTipo, comisionValor }) {
+function DetalleCortes({ diasConCortes }) {
   const hoy = fechaHoyISO();
   // Sólo el día de hoy arranca desplegado (igual que el panel de gestión).
   // En semanas pasadas, hoy no está en la lista → arrancan todos contraídos.
@@ -495,8 +482,6 @@ function DetalleCortes({ diasConCortes, comisionTipo, comisionValor }) {
               key={fecha}
               fecha={fecha}
               cortes={cortes}
-              comisionTipo={comisionTipo}
-              comisionValor={comisionValor}
               expandido={expandidos.has(fecha)}
               esHoy={fecha === hoy}
               onToggle={() => toggle(fecha)}
@@ -515,8 +500,8 @@ function DetalleCortes({ diasConCortes, comisionTipo, comisionValor }) {
  * arranca desplegado (lo controla DetalleCortes). La comisión del día va en
  * negro: es un subtotal de la semanal, que es la que va en verde (§3.1.1).
  */
-function DiaConCortes({ fecha, cortes, comisionTipo, comisionValor, expandido, esHoy, onToggle }) {
-  const comisionDia = calcularComisionDia(cortes, comisionTipo, comisionValor);
+function DiaConCortes({ fecha, cortes, expandido, esHoy, onToggle }) {
+  const comisionDia = cobroDelDia(cortes);
   const Chevron = expandido ? ChevronDown : ChevronRight;
 
   return (

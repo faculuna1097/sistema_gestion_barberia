@@ -8,11 +8,11 @@ import { query } from '../config/db.js';
 import bcrypt from 'bcrypt';
 import { pinColisiona } from '../utils/pin.js';
 import { esUUID } from '../utils/validarUuid.js';
-import { esMontoValido, esEnteroNoNegativo, ENTERO_MAXIMO } from '../utils/validarNumero.js';
+import { esMontoValido, esEnteroNoNegativo, ENTERO_MAXIMO, mensajeMontoInvalido } from '../utils/validarNumero.js';
 import { invalidar } from '../middlewares/tenantMiddleware.js';
 
 const SALT_ROUNDS = 10;
-const MENSAJE_PRECIO_INVALIDO = 'precio es requerido y debe ser un número >= 0';
+const MENSAJE_PRECIO_INVALIDO = mensajeMontoInvalido('precio');
 
 /**
  * errorStockProducto

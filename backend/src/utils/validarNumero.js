@@ -11,6 +11,8 @@
 // Tope de las columnas numeric(10,2). Se compara el valor tal como llega, sin redondear:
 // Postgres redondea antes de chequear, y 99999999.995 pasaría a 100000000.00 y daría 500.
 export const MONTO_MAXIMO = 99999999.99;
+// MONTO_MAXIMO como lo lee el usuario, para los mensajes de error.
+export const MONTO_MAXIMO_TEXTO = '99.999.999,99';
 // Desde este valor, numeric(10,2) redondea a 100000000.00 y se pasa de su tope.
 const MONTO_REDONDEA_FUERA = 99999999.995;
 // Tope de las columnas integer de stock y cantidades.
@@ -31,6 +33,20 @@ export function esMontoValido(valor) {
   }
   const n = Number(valor);
   return Number.isFinite(n) && n >= 0 && n <= MONTO_MAXIMO;
+}
+
+/**
+ * mensajeMontoInvalido
+ * Texto del 400 de un monto que no pasa esMontoValido. Nombra el rango, así un
+ * monto con un dígito de más dice cuál es el máximo (antes decía solo ">= 0").
+ * @param {string} campo - Nombre del campo en el body (ej. 'monto', 'precio').
+ * @param {Object} [opciones]
+ * @param {boolean} [opciones.requerido=true] - Si el campo es obligatorio (lo dice el texto).
+ * @returns {string} Ej: 'monto es requerido y debe ser un número entre 0 y 99.999.999,99'
+ */
+export function mensajeMontoInvalido(campo, { requerido = true } = {}) {
+  const rango = `debe ser un número entre 0 y ${MONTO_MAXIMO_TEXTO}`;
+  return requerido ? `${campo} es requerido y ${rango}` : `${campo} ${rango}`;
 }
 
 /**

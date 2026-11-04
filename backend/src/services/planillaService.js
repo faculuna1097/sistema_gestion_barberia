@@ -8,6 +8,7 @@ import { query } from '../config/db.js';
 import { TZ } from '../utils/constantes.js';
 import { listarBloquesDescanso } from './descansosService.js';
 import { suspensionSolapaSql, finEfectivoSql } from './suspensionesService.js';
+import { comisionCorteSql, porcentajeComisionSql, porcentajesDistintos } from '../utils/comision.js';
 
 /**
  * Calcula el lunes y domingo de la semana que contiene la fecha dada.
@@ -36,6 +37,9 @@ const BARBERO_VIGENTE_EN_SEMANA =
 /**
  * Detalle semanal de cortes, opcionalmente filtrado por barbero.
  * Incluye a los barberos vigentes sin cortes en la semana, con `cortes: []`.
+ * Cada corte trae su `comision_porcentaje` y su `comision` (sin propina, en
+ * centavos; utils/comision.js): los fronts suman esos valores para la comisión
+ * del día y no repiten la fórmula.
  * @param {Object} filtros - { tenantId, semana (YYYY-MM-DD), barberoId? }
  * @returns {Promise<Array>} agrupado por barbero
  */
@@ -65,6 +69,8 @@ export const detalleSemanal = async ({ tenantId, semana, barberoId }) => {
        c.forma_pago,
        (c.turno_id IS NOT NULL)                            AS con_turno,
        c.id                                                AS corte_id,
+       ${porcentajeComisionSql('c', 'b')}                 AS comision_porcentaje,
+       ${comisionCorteSql('c', 'b')}                      AS comision,
        c.timestamp
      FROM barbero b
      LEFT JOIN corte c
@@ -103,6 +109,10 @@ export const detalleSemanal = async ({ tenantId, semana, barberoId }) => {
       forma_pago: row.forma_pago,
       // true si el corte vino de un turno; false si fue un cliente sin turno.
       con_turno: row.con_turno,
+      // % guardado en el corte (o el actual del barbero si el corte no lo tiene)
+      // y la comisión de este corte, sin la propina.
+      comision_porcentaje: Number(row.comision_porcentaje),
+      comision: Number(row.comision),
     });
   }
 
@@ -112,6 +122,13 @@ export const detalleSemanal = async ({ tenantId, semana, barberoId }) => {
 /**
  * Resumen semanal consolidado (una fila por barbero con totales y comisión).
  * Incluye a los barberos vigentes sin cortes en la semana, con totales en 0.
+ *
+ * Por barbero: `comision_servicios` es la suma de la comisión de cada corte (con
+ * el % guardado en el corte; utils/comision.js) y `comision` es lo que se le paga:
+ * `comision_servicios` + propinas. `comision_porcentajes` son los % distintos de
+ * sus cortes en la semana ([] si no cortó). `comision_tipo` (siempre
+ * 'porcentaje') y `comision_valor` (el % actual del barbero) se mantienen para
+ * los fronts anteriores, que calculan la comisión del día con ellos.
  * @param {Object} filtros - { tenantId, semana (YYYY-MM-DD), barberoId? }
  * @returns {Promise<{ barberos: Array, totales: Object }>}
  */
@@ -137,7 +154,10 @@ export const resumenSemanal = async ({ tenantId, semana, barberoId }) => {
        COUNT(c.id) FILTER (WHERE c.turno_id IS NOT NULL)::int AS cortes_con_turno,
        COUNT(c.id) FILTER (WHERE c.turno_id IS NULL)::int     AS cortes_sin_turno,
        COALESCE(SUM(c.precio), 0)                AS monto_servicios,
-       COALESCE(SUM(c.propina), 0)               AS propinas
+       COALESCE(SUM(c.propina), 0)               AS propinas,
+       COALESCE(SUM(${comisionCorteSql('c', 'b')}), 0) AS comision_servicios,
+       array_agg(DISTINCT ${porcentajeComisionSql('c', 'b')}) FILTER (WHERE c.id IS NOT NULL)
+                                                 AS comision_porcentajes
      FROM barbero b
      LEFT JOIN corte c
             ON c.barbero_id = b.id
@@ -156,20 +176,14 @@ export const resumenSemanal = async ({ tenantId, semana, barberoId }) => {
     const montoServicios = Number(b.monto_servicios);
     const propinas       = Number(b.propinas);
     const totalGenerado  = montoServicios + propinas;
-    const comisionValor  = Number(b.comision_valor);
-
-    // La rama `fijo` no se usa hoy: no hay barberos con comisión fija, toda
-    // comisión es porcentaje (ver la deuda en docs/estado_actual.md).
-    const comision =
-      b.comision_tipo === 'porcentaje'
-        ? montoServicios * comisionValor / 100 + propinas
-        : comisionValor * cantidadCortes;
+    const comisionServicios = Number(b.comision_servicios);
 
     return {
       barbero_id: b.barbero_id,
       barbero_nombre: b.barbero_nombre,
       comision_tipo: b.comision_tipo,
-      comision_valor: comisionValor,
+      comision_valor: Number(b.comision_valor),
+      comision_porcentajes: porcentajesDistintos(b.comision_porcentajes),
       cantidad_cortes: cantidadCortes,
       // Desglose de cantidad_cortes: siempre suman lo mismo.
       cortes_con_turno: Number(b.cortes_con_turno),
@@ -177,7 +191,9 @@ export const resumenSemanal = async ({ tenantId, semana, barberoId }) => {
       monto_servicios: montoServicios,
       propinas,
       total_generado: totalGenerado,
-      comision: Math.round(comision * 100) / 100,
+      comision_servicios: comisionServicios,
+      // Lo que se le paga: comisión de los servicios + propinas.
+      comision: Math.round((comisionServicios + propinas) * 100) / 100,
     };
   });
 

@@ -1,6 +1,6 @@
 // /backend/src/controllers/ventas.js
 import { query } from '../config/db.js';
-import { esMontoValido, esCantidadValida } from '../utils/validarNumero.js';
+import { esMontoValido, esCantidadValida, mensajeMontoInvalido } from '../utils/validarNumero.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
 import { esUUID } from '../utils/validarUuid.js';
 import { aplicarMutacionesStock } from '../utils/stock.js';
@@ -22,7 +22,7 @@ export const createVenta = async (req, res) => {
     return res.status(400).json({ error: 'cantidad es requerida y debe ser un entero >= 1' });
   }
   if (!esMontoValido(precio_unitario)) {
-    return res.status(400).json({ error: 'precio_unitario es requerido y debe ser un número >= 0' });
+    return res.status(400).json({ error: mensajeMontoInvalido('precio_unitario') });
   }
   if (!esUUID(producto_id)) {
     return res.status(404).json({ error: 'Producto no encontrado' });
@@ -180,7 +180,7 @@ export const updateVenta = async (req, res) => {
     return res.status(400).json({ error: 'cantidad es requerida y debe ser un entero >= 1' });
   }
   if (!esMontoValido(precio_unitario)) {
-    return res.status(400).json({ error: 'precio_unitario es requerido y debe ser un número >= 0' });
+    return res.status(400).json({ error: mensajeMontoInvalido('precio_unitario') });
   }
   if (!esFormaPagoValida(forma_pago)) {
     return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });

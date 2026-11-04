@@ -408,7 +408,8 @@ export default function BloqueImagenes() {
                     transition: `border-color ${theme.transitionFast}`,
                   }}
                 >
-                  <ImagePlus size={22} strokeWidth={1.5} color={theme.mutedSoft} />
+                  {/* muted y no mutedSoft: es un ícono sin texto, y WCAG pide 3:1 (da 4,80:1 sobre surfaceAlt). */}
+                  <ImagePlus size={22} strokeWidth={1.5} color={theme.muted} />
                 </button>
               )}
             </div>

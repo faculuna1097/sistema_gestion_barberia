@@ -11,9 +11,9 @@
 --   - corte: UNIQUE corte_turno_unico (turno_id) WHERE turno_id IS NOT NULL
 --     (un turno se vincula a un solo corte; violación → 23505).
 --   - barbero_suspension: índice (barbero_id, desde, hasta).
---   - barbero.comision_tipo: el CHECK admite 'fijo', pero hoy no hay barberos con
---     comisión fija: toda comisión es porcentaje (decisión de negocio; ver la deuda
---     "Comisión: siempre porcentaje" en estado_actual.md).
+--   - Comisión: siempre un porcentaje sobre el precio del servicio (decisión de
+--     negocio del 2026-09-29). El tipo 'fijo' se sacó del CHECK el 2026-11-03. La
+--     fórmula vive solo en backend/src/utils/comision.js.
 --   - Row Level Security ACTIVADO y sin policies en las 18 tablas (desde 2026-09-30).
 --     Cierra la API automática de Supabase (roles anon / authenticated); el backend
 --     entra como owner (postgres) y RLS no le aplica. Toda tabla nueva se crea con
@@ -55,7 +55,12 @@ CREATE TABLE public.barbero (
   tenant_id uuid NOT NULL,
   nombre text NOT NULL,
   pin text NOT NULL,
-  comision_tipo text DEFAULT 'porcentaje'::text CHECK (comision_tipo = ANY (ARRAY['porcentaje'::text, 'fijo'::text])),
+  -- comision_tipo: solo 'porcentaje' desde el 2026-11-03 (antes admitía 'fijo', sin
+  -- filas). Se conserva porque el backend anterior la lee y la escribe, y los fronts
+  -- anteriores la usan en Planillas; se puede borrar cuando ningún front publicado la use.
+  comision_tipo text DEFAULT 'porcentaje'::text CONSTRAINT barbero_comision_tipo_check CHECK (comision_tipo = 'porcentaje'::text),
+  -- comision_valor: % actual del barbero (0 a 100, lo valida el backend). Vale para
+  -- los cortes nuevos: cada corte guarda el suyo en corte.comision_porcentaje.
   comision_valor numeric(10,2) DEFAULT 0,
   -- activo y created_at: NOT NULL desde el 2026-11-03 (no había NULLs).
   activo boolean NOT NULL DEFAULT true,
@@ -106,6 +111,13 @@ CREATE TABLE public.corte (
   servicio_id uuid NOT NULL,
   precio numeric NOT NULL,
   turno_id uuid,
+  -- % de comisión del barbero al registrar el corte (2026-11-03): un cambio de %
+  -- vale solo para adelante. Lo completa registrarCorte en el mismo INSERT; los
+  -- cortes anteriores se rellenaron con el % de su barbero ese día. Mismo tipo que
+  -- barbero.comision_valor y sin CHECK, para que copiarlo nunca falle. Nullable hasta
+  -- el deploy del backend que lo escribe (pasos en estado_actual.md); mientras tanto,
+  -- un corte sin % usa el actual del barbero (backend/src/utils/comision.js).
+  comision_porcentaje numeric(10,2),
   CONSTRAINT corte_pkey PRIMARY KEY (id),
   CONSTRAINT corte_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id) ON DELETE CASCADE,
   -- FK compuestos con tenant_id: hacen imposible que un corte referencie un

@@ -1,6 +1,6 @@
 // /backend/src/controllers/gastos.js
 import { query } from '../config/db.js';
-import { esMontoValido } from '../utils/validarNumero.js';
+import { esMontoValido, mensajeMontoInvalido } from '../utils/validarNumero.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
 import { esUUID } from '../utils/validarUuid.js';
 import { TZ, MAX_DESCRIPCION_GASTO } from '../utils/constantes.js';
@@ -27,7 +27,7 @@ export const createGasto = async (req, res) => {
     return res.status(400).json({ error: `descripcion debe ser un texto de hasta ${MAX_DESCRIPCION_GASTO} caracteres` });
   }
   if (!esMontoValido(monto)) {
-    return res.status(400).json({ error: 'monto es requerido y debe ser un número >= 0' });
+    return res.status(400).json({ error: mensajeMontoInvalido('monto') });
   }
   if (!esFormaPagoValida(forma_pago)) {
     return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });
@@ -180,7 +180,7 @@ export const updateGasto = async (req, res) => {
     return res.status(400).json({ error: `descripcion debe ser un texto de hasta ${MAX_DESCRIPCION_GASTO} caracteres` });
   }
   if (!esMontoValido(monto)) {
-    return res.status(400).json({ error: 'monto es requerido y debe ser un número >= 0' });
+    return res.status(400).json({ error: mensajeMontoInvalido('monto') });
   }
   if (!esFormaPagoValida(forma_pago)) {
     return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });

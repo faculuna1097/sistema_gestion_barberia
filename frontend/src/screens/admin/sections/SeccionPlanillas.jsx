@@ -34,10 +34,11 @@
 // semana. El EmptyState de cada tab queda solo para cuando no hay ningún
 // barbero que listar (ej. semanas anteriores al alta de todos).
 //
-// Comisión por día: comisión calculada sobre monto_servicios (nunca sobre
-// propinas), según comision_tipo del barbero ("porcentaje" o "fijo" por corte).
-// Hoy no hay barberos con comisión fija: siempre es porcentaje (ver la deuda
-// "Comisión: siempre porcentaje" en docs/estado_actual.md).
+// Comisión: siempre un porcentaje sobre los servicios (nunca sobre las
+// propinas), con el % guardado en cada corte. La calcula el backend
+// (backend/src/utils/comision.js) y manda la de cada corte en el detalle: la del
+// día es la suma de sus cortes (utils/comision.js), y la de la semana viene en el
+// resumen. Este archivo no repite la fórmula.
 //
 // Sistema de diseño: tokens + Geist + Lucide + onClick. Densidad compacta.
 // El fondo del contenedor lo da PanelAdmin (theme.surfaceAlt, D7 del plan).
@@ -62,6 +63,7 @@ import {
 } from '../../../utils/fecha';
 import { fmtPesos, fmtPorcentaje, formatPago, OPCIONES_FORMA_PAGO } from '../../../utils/formato';
 import { textoEstadoBloque } from '../../../utils/descansos';
+import { sumarComision, porcentajesDeCortes, textoPorcentajeComision } from '../../../utils/comision';
 import { cargarChunk } from '../../../utils/cargarChunk';
 import {
   Tabs,
@@ -124,22 +126,6 @@ function textoCliente(corte) {
   if (corte.con_turno === false) return 'sin turno';
   if (corte.con_turno === true) return corte.cliente_nombre || '—';
   return '—';
-}
-
-/**
- * Calcula la comisión del día sobre el monto de servicios.
- * La rama `fijo` no se usa hoy (no hay barberos con comisión fija). Si
- * volviera: los que llaman le suman las propinas en los dos tipos, y el
- * backend no se las suma a `fijo` (deuda en docs/estado_actual.md).
- * @param {number} montoServicios
- * @param {'porcentaje'|'fijo'} tipo
- * @param {number} valor
- * @param {number} cantidadCortes
- * @returns {number}
- */
-function calcularComisionDia(montoServicios, tipo, valor, cantidadCortes) {
-  if (tipo === 'porcentaje') return montoServicios * valor / 100;
-  return valor * cantidadCortes;
 }
 
 /**
@@ -308,12 +294,7 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
         });
         if (mostrarComisiones && infoComision) {
           const { servicios: montoDelDia, propinas: propinaDelDia, total: totalDelDia } = sumarCortes(cd);
-          const comisionDelDia = calcularComisionDia(
-            montoDelDia,
-            infoComision.comision_tipo,
-            infoComision.comision_valor,
-            cd.length,
-          );
+          const comisionDelDia = sumarComision(cd);
           // La comisión del día suma las propinas (van siempre al barbero), igual
           // que el "Pago" del día en pantalla y la comisión semanal del backend:
           // así los subtotales de los días suman lo del subtotal de la semana.
@@ -585,15 +566,14 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
  * @param {boolean} props.expandido
  * @param {boolean} props.esHoy
  * @param {() => void} props.onToggle
- * @param {object|null} props.infoComisionActiva - Info de comisión del barbero
- *   (tipo, valor, etc.) tomada del resumen. `null` si no se cargó.
+ * @param {object|null} props.infoComisionActiva - Fila del barbero en el resumen.
+ *   `null` si no se cargó (entonces no se muestra el pago del día). La comisión
+ *   del día sale de los cortes; de acá solo se toma el % actual de respaldo.
  * @param {boolean} props.mostrarComisiones
  */
 function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisionActiva, mostrarComisiones }) {
   const { servicios: totalMonto, propinas: totalPropina, total: totalGeneral } = sumarCortes(cortesDelDia);
-  const comisionDelDia = infoComisionActiva
-    ? calcularComisionDia(totalMonto, infoComisionActiva.comision_tipo, infoComisionActiva.comision_valor, cortesDelDia.length)
-    : 0;
+  const comisionDelDia = sumarComision(cortesDelDia);
 
   const Chevron = expandido ? ChevronDown : ChevronRight;
 
@@ -711,9 +691,7 @@ function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisi
                     marginLeft: 6,
                     letterSpacing: '0.02em',
                   }}>
-                    {infoComisionActiva.comision_tipo === 'porcentaje'
-                      ? `${infoComisionActiva.comision_valor}% + prop`
-                      : `$${infoComisionActiva.comision_valor}/c + prop`}
+                    {textoPorcentajeComision(porcentajesDeCortes(cortesDelDia), infoComisionActiva.comision_valor)} + prop
                   </span>
                 </span>
               ) : null}
@@ -821,8 +799,7 @@ function TablaResumen({ resumenData, descansos, mostrarComisiones, onVerDetalle 
                     marginLeft: 6,
                     letterSpacing: '0.02em',
                   }}>
-                    {/* Con `fijo` (hoy sin uso) el backend no suma propinas. */}
-                    {b.comision_tipo === 'porcentaje' ? `${b.comision_valor}% + prop` : `$${b.comision_valor}/c`}
+                    {textoPorcentajeComision(b.comision_porcentajes, b.comision_valor)} + prop
                   </span>
                 </td>
               )}
@@ -873,11 +850,9 @@ function TablaResumen({ resumenData, descansos, mostrarComisiones, onVerDetalle 
 
 /**
  * renglonesPago
- * Renglones de "Pago de la semana": comisión, propinas y total a pagar. El
- * total es `comision` del backend (ya incluye las propinas) y la comisión sola
- * sale de restarle las propinas: el modal no repite la fórmula de comisión.
- * Con `fijo` (hoy sin uso) el backend no suma propinas, así que la comisión va
- * sin el renglón de propinas.
+ * Renglones de "Pago de la semana": comisión, propinas y total a pagar. Los
+ * montos vienen del backend: `comision_servicios` (sin propinas) y `comision`
+ * (ya incluye las propinas). El modal no repite la fórmula.
  * Todo en neutro: Planillas la ven el dueño y el barbero, y para uno este monto
  * es una salida y para el otro lo que cobra (sistema_de_disenio §3.1.1).
  * @param {object} resumen - Fila del barbero en /admin/planilla/resumen.
@@ -890,16 +865,10 @@ function renglonesPago(resumen) {
     monto: resumen.comision,
     variante: 'total',
   };
-  if (resumen.comision_tipo !== 'porcentaje') {
-    return [
-      { label: `Comisión (${fmtPesos(resumen.comision_valor)} por corte)`, monto: resumen.comision },
-      total,
-    ];
-  }
   return [
     {
-      label: `Comisión (${resumen.comision_valor}% de servicios)`,
-      monto: resumen.comision - resumen.propinas,
+      label: `Comisión (${textoPorcentajeComision(resumen.comision_porcentajes, resumen.comision_valor)} de servicios)`,
+      monto: resumen.comision_servicios,
     },
     { operador: '+', label: 'Propinas', monto: resumen.propinas },
     total,

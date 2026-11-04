@@ -202,14 +202,22 @@ export function CampoTexto({ value, onChange, placeholder, rows = 5, autoFocus =
 }
 
 // ─── CampoMonto ─────────────────────────────────────────────────────────────────
+// Tope del campo: 99.999.999, el máximo entero de las columnas numeric(10,2) del
+// backend (MONTO_MAXIMO = 99.999.999,99 en backend/src/utils/validarNumero.js).
+// El campo solo acepta pesos enteros. En un corte, precio + propina igual puede
+// pasar el tope del total: eso lo responde el backend (MENSAJE_TOTAL_EXCEDIDO).
+const MAX_DIGITOS_MONTO = 8;
+
 /**
  * CampoMonto
  * Input numérico grande ($). Usa type="text" + inputMode="numeric" + filtro `\D`
  * (abre el numpad en iPad sin los efectos colaterales de type="number").
+ * Acepta hasta MAX_DIGITOS_MONTO dígitos: un dígito de más no se escribe, en vez
+ * de llegar al backend y volver con un 400.
  *
  * @param {Object} props
  * @param {string} props.value      — solo dígitos (string)
- * @param {Function} props.onChange — recibe el string ya filtrado
+ * @param {Function} props.onChange — recibe el string ya filtrado y recortado
  * @returns {JSX.Element}
  */
 export function CampoMonto({ value, onChange }) {
@@ -234,7 +242,8 @@ export function CampoMonto({ value, onChange }) {
           type="text"
           inputMode="numeric"
           value={value}
-          onChange={(e) => onChange(e.target.value.replace(/\D/g, ""))}
+          maxLength={MAX_DIGITOS_MONTO}
+          onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, MAX_DIGITOS_MONTO))}
           placeholder="0"
           autoFocus
           onFocus={() => setFocus(true)}

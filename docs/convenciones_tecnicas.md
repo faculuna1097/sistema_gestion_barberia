@@ -93,7 +93,7 @@ Qué se responde depende de dónde viene el id:
 
 Se validan con `backend/src/utils/validarNumero.js` antes de tocar la DB. Sin tope, Postgres responde con el error `22003` y el usuario ve un 500.
 
-- `esMontoValido`: columnas `numeric(10,2)`, de 0 a `MONTO_MAXIMO` (99.999.999,99). Se compara el valor tal como llega: Postgres redondea antes de chequear, y 99999999.995 pasaría a 100000000.00.
+- `esMontoValido`: columnas `numeric(10,2)`, de 0 a `MONTO_MAXIMO` (99.999.999,99). Se compara el valor tal como llega: Postgres redondea antes de chequear, y 99999999.995 pasaría a 100000000.00. El 400 se arma con `mensajeMontoInvalido(campo)`, que nombra el rango ("monto es requerido y debe ser un número entre 0 y 99.999.999,99").
 - `esCantidadValida` y `esEnteroNoNegativo`: columnas `integer`, hasta `ENTERO_MAXIMO` (2.147.483.647).
 - `esMontoPositivo` no tiene tope, porque `movimiento_extra.monto` es `numeric` sin precisión. `esEnteroPositivo` tampoco: es para un valor que no va a una columna.
 - **Sumas:** que cada valor entre en su columna no alcanza.

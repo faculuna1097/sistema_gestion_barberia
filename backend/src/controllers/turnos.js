@@ -14,7 +14,7 @@ import { validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { existeFeriado } from '../services/feriadosService.js';
 import { validarContacto } from '../utils/validarTexto.js';
 import { esFechaISO, parsearInstante } from '../utils/validarFecha.js';
-import { esMontoValido, sumaMontosValida } from '../utils/validarNumero.js';
+import { esMontoValido, sumaMontosValida, mensajeMontoInvalido } from '../utils/validarNumero.js';
 import { MENSAJE_TOTAL_EXCEDIDO } from '../services/cortesService.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
 import { esUUID } from '../utils/validarUuid.js';
@@ -249,10 +249,10 @@ export const completarTurno = async (req, res) => {
     return res.status(400).json({ error: "forma_pago es requerida y debe ser 'efectivo' o 'mercado_pago'" });
   }
   if (!esMontoValido(precio)) {
-    return res.status(400).json({ error: 'precio es requerido y debe ser un número >= 0' });
+    return res.status(400).json({ error: mensajeMontoInvalido('precio') });
   }
   if (propina !== undefined && !esMontoValido(propina)) {
-    return res.status(400).json({ error: 'propina debe ser un número >= 0' });
+    return res.status(400).json({ error: mensajeMontoInvalido('propina', { requerido: false }) });
   }
   if (!sumaMontosValida(precio, propina ?? 0)) {
     return res.status(400).json({ error: MENSAJE_TOTAL_EXCEDIDO });

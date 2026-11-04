@@ -169,6 +169,7 @@ backend/
     |       |-- mailProvider.js
     |       `-- resendProvider.js
     `-- utils/
+        |-- comision.js          fórmula de la comisión de un corte (única fuente)
         |-- constantes.js
         |-- credencialesOperativas.js
         |-- errores422.js
@@ -336,6 +337,7 @@ frontend/
     `-- utils/
         |-- cargarChunk.js
         |-- colorMonto.js
+        |-- comision.js          suma la comisión de los cortes y arma el texto del %
         |-- descansos.js
         |-- errores.js           mensaje de error para el usuario (servidor o genérico)
         |-- fecha.js
@@ -407,6 +409,7 @@ frontend-barbero/
     |   `-- tokens.js
     `-- utils/
         |-- colorMonto.js
+        |-- comision.js          suma la comisión de los cortes y arma el texto del %
         |-- fecha.js
         |-- formato.js
         `-- seleccionSlots.js

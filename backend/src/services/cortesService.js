@@ -12,6 +12,7 @@
 
 import { query } from '../config/db.js';
 import { TZ } from '../utils/constantes.js';
+import { MONTO_MAXIMO_TEXTO } from '../utils/validarNumero.js';
 
 // Mensaje del 404 de un turno que no existe o no es de ese barbero. Lo comparten
 // registrarCorte y el controller, que responde lo mismo ante un turno_id mal formado.
@@ -19,7 +20,7 @@ export const MENSAJE_TURNO_INEXISTENTE = 'El turno no existe o es de otro barber
 
 // Mensaje del 400 de un corte cuyo total no entra en corte.monto_total. Lo comparten
 // los dos controllers que llaman a registrarCorte.
-export const MENSAJE_TOTAL_EXCEDIDO = 'precio más propina no puede superar 99.999.999,99';
+export const MENSAJE_TOTAL_EXCEDIDO = `precio más propina no puede superar ${MONTO_MAXIMO_TEXTO}`;
 
 /**
  * Arma un error tipado de registrarCorte que cada controller mapea a HTTP.
@@ -37,6 +38,7 @@ const errorCorte = (code, mensaje) => {
  * registrarCorte
  * Inserta un corte y, si viene turnoId, marca ese turno como 'completado' y
  * sincroniza turno.servicio_id con el servicio del corte (consistencia corte↔turno).
+ * El corte guarda el % de comisión actual del barbero (corte.comision_porcentaje).
  * Insertador central de cortes (ver cabecera del archivo).
  *
  * Todo va en UNA sola sentencia (CTEs que modifican datos, atómica sin
@@ -80,6 +82,8 @@ export const registrarCorte = async ({
   try {
     // $8 es el turno (o NULL si es walk-in). Con NULL el UPDATE no toca nada y
     // el INSERT entra por la primera condición. No es idempotente: va sin reintento.
+    // El corte guarda el % de comisión que tiene el barbero en este momento
+    // (corte.comision_porcentaje): un cambio de % posterior no lo toca (utils/comision.js).
     // Un turno marcado 'no_asistio' solo se completa el mismo día del turno (hora
     // argentina, $11): pasado ese día, la marca queda como está.
     result = await query(
@@ -91,9 +95,11 @@ export const registrarCorte = async ({
                  OR (inicio AT TIME ZONE $11)::date = (now() AT TIME ZONE $11)::date)
          RETURNING id
        ), nuevo AS (
-         INSERT INTO corte (tenant_id, barbero_id, servicio_id, precio, forma_pago, propina, monto_total, turno_id)
+         INSERT INTO corte (tenant_id, barbero_id, servicio_id, precio, forma_pago, propina, monto_total, turno_id,
+                            comision_porcentaje)
          SELECT $1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::text, $6::numeric, $7::numeric,
-                (SELECT id FROM completado)
+                (SELECT id FROM completado),
+                (SELECT comision_valor FROM barbero WHERE id = $2::uuid AND tenant_id = $1::uuid)
           WHERE $8::uuid IS NULL
              OR EXISTS (SELECT 1 FROM completado)
              OR ($10::boolean AND EXISTS (

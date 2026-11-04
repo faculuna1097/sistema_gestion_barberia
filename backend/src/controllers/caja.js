@@ -5,6 +5,7 @@ import { esMontoPositivo } from '../utils/validarNumero.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
 import { esFechaISO, esFechaFutura, hoyISO } from '../utils/validarFecha.js';
 import { esUUID } from '../utils/validarUuid.js';
+import { porcentajeComisionSql } from '../utils/comision.js';
 import {
   TIPOS_MOVIMIENTO_EXTRA,
   MAX_DESCRIPCION_MOVIMIENTO,
@@ -52,7 +53,10 @@ export const getMovimientosDia = async (req, res) => {
          c.monto_total AS monto,
          c.forma_pago,
          c.turno_id,
-         b.comision_valor,
+         -- % de comisión de este corte (el guardado al registrarlo): el filtro
+         -- "Solo barberos" del panel saca los del 100%. Se llama comision_valor
+         -- por compatibilidad con el panel.
+         ${porcentajeComisionSql('c', 'b')} AS comision_valor,
          'corte' AS tipo
        FROM corte c
        JOIN barbero b  ON c.barbero_id  = b.id

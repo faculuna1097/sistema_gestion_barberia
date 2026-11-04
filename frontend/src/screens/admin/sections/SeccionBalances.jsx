@@ -34,6 +34,7 @@ import {
 
 import { apiFetch } from '../../../services/api';
 import { fmtPesos, formatPago } from '../../../utils/formato';
+import { textoPorcentajeComision } from '../../../utils/comision';
 import { getMesActual, mesALabel } from '../../../utils/fecha';
 import { labelTipoMovimiento } from '../../../utils/movimientos';
 import { cargarChunk } from '../../../utils/cargarChunk';
@@ -394,7 +395,10 @@ export default function SeccionBalances() {
         Barbero:           b.nombre,
         Cortes:            b.cortes,
         'Monto servicios': b.monto_servicios,
-        'Comisión %':      b.comision_valor,
+        // Un número si tuvo un solo %; el rango como texto si se le cambió en el mes.
+        'Comisión %':      b.comision_porcentajes.length > 1
+          ? textoPorcentajeComision(b.comision_porcentajes, b.comision_valor)
+          : (b.comision_porcentajes[0] ?? b.comision_valor),
         'Monto comisión':  b.monto_comision,
         'Neto negocio':    b.neto_negocio,
       }));
@@ -873,7 +877,7 @@ function TablaPorBarbero({ datos, mostrarComisiones }) {
                   color: theme.muted,
                   fontVariantNumeric: 'tabular-nums',
                 }}>
-                  {b.comision_valor}%
+                  {textoPorcentajeComision(b.comision_porcentajes, b.comision_valor)}
                 </td>
                 <td style={{
                   ...tdStyle,

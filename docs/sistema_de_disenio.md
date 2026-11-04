@@ -549,6 +549,9 @@ o ≥14 px bold).
   neutras con el número al lado, chevrons y flechas decorativas (`aria-hidden`),
   el borde de la `MarcaEleccion` del turnero y el punto de "cerrado" del hero,
   que acompaña al texto.
+- **Un ícono necesario sin texto al lado** (WCAG pide 3:1) va en `muted`: el
+  "+" de subir imagen de Gestión → Negocio da 4,80:1 sobre `surfaceAlt`
+  (con `mutedSoft` daba 2,33:1; cambiado el 2026-11-03).
 - Pendiente de medir: `inkSoft` sobre `bg` y el texto blanco sobre `accent`.
 
 Cuando agregues una combinación nueva de texto/fondo, verificá contraste
