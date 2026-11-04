@@ -10,7 +10,7 @@
 // guarda el backend anterior hasta el deploy) usa el % actual del barbero. Ver el
 // paso del deploy en docs/estado_actual.md.
 //
-// Criterio de redondeo (M11): la comisión de cada corte se redondea a centavos y
+// Criterio de redondeo: la comisión de cada corte se redondea a centavos y
 // los totales son sumas de esos valores. Así el Balance mensual, el histórico y
 // las Planillas (por corte, por día y por semana) dan siempre lo mismo.
 

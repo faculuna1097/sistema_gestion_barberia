@@ -70,7 +70,7 @@ de límites/hardening**, no en fugas de datos entre tenants por lectura.
 | **2.2** | Mutaciones por `id` sin `tenant_id` redundante | 🟢 Bajo | ✅ **RESUELTO** (parte app; `tenant_id` en EXCLUDE = defensa en profundidad **diferida**) | Filtro `AND tenant_id` en writes por PK (tanda 7a) |
 | **2.3** | Comentario stale en `turnosOperativo.js` | 🟢 Bajo | ✅ **RESUELTO** | Cabecera corregida (tanda 1) |
 | **3.2** | Validación de inputs públicos débil | 🟢 Bajo (era MEDIO) | ✅ **RESUELTO** | `utils/validarTexto.js` en `crearTurno`/`crearTurnoAdmin` (tanda 7a) |
-| **3.3** | PII del cliente al portador del `token_gestion` (token en URL) | 🟢 Bajo | ⚠️ **MITIGADO** (recorte de PII opcional **diferido**) | `Referrer-Policy: no-referrer` vía helmet cierra la fuga por `Referer` (tanda 7a) |
+| **3.3** | PII del cliente al portador del `token_gestion` (token en URL) | 🟢 Bajo | ⚠️ **MITIGADO** (recorte de PII hecho después, el 2026-10-30) | `Referrer-Policy: no-referrer` vía helmet cierra la fuga por `Referer` (tanda 7a) |
 | **4.3** | `ssl: rejectUnauthorized:false` (cert DB no validado) | 🟢 Bajo | ✅ **RESUELTO** | CA de Supabase pinneada, `rejectUnauthorized:true` (fix 4.3) |
 | **4.4** | Cliente de Supabase Storage con init eager | 🟢 Bajo | ✅ **RESUELTO** | `getSupabase()` perezoso (tanda 7a) |
 | **5.3** | `qs` (backend) DoS moderada | 🟢 Bajo | ✅ **RESUELTO** | `npm audit fix` → 0 vulns backend (tanda 1) |
@@ -122,19 +122,20 @@ rationale explícito** (abajo) — no es trabajo olvidado, es deuda evaluada y a
    difiere:** el FK compuesto de `barbero_id`/`servicio_id` (tanda 4) ya cierra el
    agujero real; esto es refuerzo marginal que requiere más cambio de schema.
 4. **Follow-ups anti-abuso del turnero público (parte de 3.1).** Captcha/Turnstile,
-   límite por `(tenant, email/teléfono)`, tope de reservas activas por cliente, y
-   manejo del 429 en la UI. **Por qué se difiere:** el doble rate-limit por IP ya
-   corta el abuso masivo; estos son defensa adicional a activar **si el abuso
-   aparece** (varios requieren cuenta externa + widget en el front).
-5. **Recorte de PII en `getTurnoPorToken` (parte de 3.3).** No devolver
-   `email`/`telefono` en la respuesta de gestión por token. **Por qué se difiere:**
-   la fuga por `Referer` ya está cerrada por helmet; recortar los campos exige
-   confirmar contra `frontend-turnero` que la pantalla no los use (no verificable en
-   frío). Riesgo residual inherente al diseño "gestión por link".
-6. **`DeprecationWarning` cosmético de pg (nota en 4.1).** El `SET
-   statement_timeout` en `pool.on('connect')` dispara un warning de pg que anticipa
-   un cambio en pg@9. **Por qué se difiere:** hoy es puramente cosmético (el timeout
-   se aplica correcto, verificado); resolver antes de subir a pg@9.
+   límite por `(tenant, email/teléfono)` y tope de reservas activas por cliente.
+   **Por qué se difiere:** el doble rate-limit por IP ya corta el abuso masivo;
+   estos son defensa adicional a activar **si el abuso aparece** (varios requieren
+   cuenta externa + widget en el front). **(2026-11-03)** El manejo del 429 en la
+   UI, que también estaba en este punto, quedó resuelto: las reservas, cancelaciones
+   y reprogramaciones del turnero muestran un texto propio ante un 429.
+5. ~~**Recorte de PII en `getTurnoPorToken` (parte de 3.3).**~~ — **Resuelto
+   (2026-10-30, en `feature/descansos-agenda`):** la respuesta trae del cliente
+   solo el `nombre`, y la gestión del turno muestra "A nombre de". El backend y el
+   turnero conviene que salgan juntos (`estado_actual.md` → Pendientes).
+6. ~~**`DeprecationWarning` cosmético de pg (nota en 4.1).**~~ — **Resuelto
+   (2026-10-30, en `feature/descansos-agenda`):** el `SET statement_timeout` pasó
+   al hook `onConnect` del pool (`config/db.js`), que se espera antes de entregar
+   la conexión; sin warning y con el timeout de 5 s verificado por el pooler.
 7. **Monitoreo de saturación del pool (mejora operativa de 4.1).** Instrumentar
    alertas de saturación de las 3 conexiones. Mejora de observabilidad, no un fix.
 8. **Función almacenada para atomicidad dura de stock (mejora futura de 6.2).** La
@@ -522,6 +523,9 @@ necesita, y evitar que el token termine en `Referer` hacia terceros
 > removerlos podría romper esa UI. Queda como follow-up a validar contra
 > `frontend-turnero` antes de recortar. El riesgo residual (portador del link ve
 > la PII del propio cliente del turno) es inherente al diseño "gestión por link".
+>
+> **Recortado (2026-10-30):** la respuesta trae del cliente solo el `nombre`
+> (ver "Deudas diferidas", punto 5).
 
 **Prioridad de ataque en esta fase:** 3.1 primero (se combina con el CRÍTICO
 2.1 y ataca un activo real, la entregabilidad), luego 3.2, después 3.3.
@@ -581,6 +585,9 @@ depende del plan de Supabase.
 > deuda de mantenimiento a resolver antes de subir a pg@9 (ej. mover el `SET` a un
 > wrapper de checkout de conexión o a la config de arranque de sesión). No
 > accionable en esta serie: no afecta funcionalidad ni seguridad.
+>
+> **Resuelto (2026-10-30):** el `SET` pasó al hook `onConnect` del pool (ver
+> "Deudas diferidas", punto 6).
 
 #### 4.2 [MEDIO] UPDATEs relativos no idempotentes + retry-once pueden doble-aplicar ante un blip de conexión
 Los contadores de stock se actualizan de forma **relativa**: `UPDATE producto SET
