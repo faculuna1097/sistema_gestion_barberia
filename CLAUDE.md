@@ -65,6 +65,7 @@ Excepción: podés leer los archivos `.md` de contexto general (los que están e
 | `/docs/SQL_Schema.md` | Schema completo de la DB (referencia, no ejecutar). |
 | `/docs/onboarding.md`| Alta de un cliente nuevo.
 | `/docs/plan_app_barbero.md` | Plan de trabajo de los cambios a la app del barbero (`frontend-barbero`): tabla de features con su estado, datos de prueba en demo y próximos cambios. Las dos primeras features (descansos en la Agenda; cortes con/sin turno en las planillas) están hechas y archivadas en `decisiones_descansos.md`. |
+| `/docs/plan_monitoreo_prod.md` | Plan autocontenido del monitoreo de producción: avisos al celular por Discord (uptime, crash de Railway, errores con Sentry, rate limiter) y diagnóstico a pedido con Claude en la nube. Decisiones cerradas, modo de trabajo orquestador/ejecutores y fases. Planificado, sin arrancar: antes van otras features. |
 | `/docs/performance_frontends.md` | Diagnóstico de performance de los fronts + trabajo de fondo pendiente (migrar región de Supabase). La metodología de medición vive en `convenciones_tecnicas.md` §10. |
 | `/docs/deudas_tecnicas_frontend.md` | **Archivado (2026-06-07).** Historia del rediseño del panel de gestión: cómo se resolvió cada deuda. El estado vigente de deudas vive en `estado_actual.md`. |
 | `/docs/decisiones_mail_recordatorio.md` | **Archivado.** Núcleo de decisiones del mail de recordatorio (lote diario, noche anterior): modelo elegido, claim atómico, Railway Cron, opt-in. En producción. La activación opt-in en kingsai está pendiente en `estado_actual.md`. |
