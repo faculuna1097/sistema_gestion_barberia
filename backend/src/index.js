@@ -109,6 +109,17 @@ app.use((req, res, next) => {
   next();
 });
 
+// --- Ruta de salud (health check) ---
+// Va ANTES de tenantMiddleware: tiene que responder sin header de subdominio ni
+// JWT. Montada después, le respondía 400 "Tenant no identificado" a cualquier
+// sonda (healthcheck de Railway, monitor de uptime, curl), y no servía para lo
+// único que existe: distinguir "backend caído" de "backend vivo que rechaza el
+// request". Va también antes del log de acceso, para que una sonda periódica no
+// llene los logs de Railway con una línea por minuto.
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ENDPOINT DE PLATAFORMA — operación manual, FUERA de la cadena tenant/JWT.
 //
@@ -122,8 +133,8 @@ app.use((req, res, next) => {
 // edición directa de operativo_token_version/activo) el caché en memoria del
 // tenantMiddleware queda stale; este endpoint lo limpia sin redeploy.
 //
-// Queda antes del logger global de abajo (que corre tras tenantMiddleware), así
-// que no aparece en el log de acceso HTTP: por eso loguea su propio evento.
+// Queda antes del log de acceso global de abajo, así que no aparece en él: por
+// eso loguea su propio evento.
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/plataforma/cache/invalidate', verificarClavePlataforma, (req, res) => {
   const { subdominio } = req.body;
@@ -135,14 +146,14 @@ app.post('/api/plataforma/cache/invalidate', verificarClavePlataforma, (req, res
   return res.json({ ok: true, subdominio });
 });
 
-// tenantMiddleware — corre en TODAS las rutas antes que cualquier controller.
-// Resuelve el tenant desde el header X-Tenant-Subdomain (producción)
-// o desde TENANT_ID en .env (desarrollo local).
-app.use(tenantMiddleware);
-
-// Middleware de logging global — loguea cada request que llega al servidor.
+// Log de acceso global — una línea por request que llega al servidor.
 // El body se sanitiza antes de loguear para no filtrar credenciales (PINs,
 // passwords) a los logs de Railway. Ver /utils/sanitizarLogs.js.
+//
+// Va ANTES de tenantMiddleware a propósito: montado después, un request que el
+// middleware rechaza (400 sin header de subdominio, 404 subdominio que no
+// resuelve) no dejaba ninguna línea en Railway, y una falla de "no puedo entrar"
+// no tenía rastro en los logs.
 app.use((req, res, next) => {
   const bodyLog = req.body && Object.keys(req.body).length
     ? `— body: ${JSON.stringify(sanitizarObjeto(req.body))}`
@@ -151,10 +162,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// --- Ruta de salud (health check) ---
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+// tenantMiddleware — corre en TODAS las rutas de abajo, antes que cualquier controller.
+// Resuelve el tenant desde el header X-Tenant-Subdomain (producción)
+// o desde TENANT_ID en .env (desarrollo local).
+app.use(tenantMiddleware);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RUTAS PÚBLICAS — accesibles sin token

@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Delete, AlertCircle, ChevronRight } from 'lucide-react';
 
 import { getBarberos, loginBarbero } from '../services/api.js';
+import { problemaDeAcceso, fallaDeLogin } from '../utils/errores.js';
 import { theme } from '../theme/tokens.js';
 import { useHover } from '../hooks/useHover.js';
 import {
@@ -26,6 +27,8 @@ import {
 
 // Estados de la fase PIN. Renombramos para evitar shadowing con `estado` local.
 const PIN_ESTADO = { IDLE: 'idle', ERROR: 'error', EXITO: 'exito' };
+
+const MENSAJE_PIN_INCORRECTO = 'PIN incorrecto. Intentá de nuevo.';
 
 // Distribución del teclado de PIN. `null` = celda vacía (esquina inferior izquierda).
 const TECLAS_PIN = [
@@ -64,8 +67,10 @@ export default function Login({ onAcceso, logoUrl, nombreNegocio }) {
       const data = await getBarberos();
       setBarberos(data);
     } catch (err) {
-      console.error('[Login] Error cargando barberos:', err.message);
-      setErrorCarga('No se pudo cargar la lista de barberos.');
+      console.error('[Login] Error cargando barberos:', err.message, '| status:', err.status);
+      // Subdominio que no existe o servidor caído: se dice la causa. Sin red,
+      // el mensaje de siempre.
+      setErrorCarga(problemaDeAcceso(err) ?? 'No se pudo cargar la lista de barberos.');
     } finally {
       setCargando(false);
     }
@@ -329,11 +334,16 @@ function PantallaPin({ barbero, onVolver, onAcceso }) {
   const [pin, setPin] = useState('');
   const [estado, setEstado] = useState(PIN_ESTADO.IDLE);
   const [shake, setShake] = useState(false);
+  // falla: mensaje de un login que falló por algo que no es el PIN
+  // (subdominio, servidor, rate limit, sin red). Queda hasta el próximo dígito.
+  const [falla, setFalla] = useState(null);
 
   /**
    * validarPin
-   * Llama al backend con el PIN ingresado. Maneja éxito (timeout + onAcceso)
-   * y error (shake + reset).
+   * Llama al backend con el PIN ingresado. Maneja éxito (timeout + onAcceso),
+   * PIN incorrecto (401: shake + reset) y cualquier otra falla (borra el PIN
+   * sin shake, porque no es culpa de lo que tipeó, y muestra la causa).
+   * @param {string} pinIngresado - PIN de 4 dígitos
    */
   const validarPin = useCallback(async (pinIngresado) => {
     try {
@@ -341,7 +351,12 @@ function PantallaPin({ barbero, onVolver, onAcceso }) {
       setEstado(PIN_ESTADO.EXITO);
       setTimeout(() => onAcceso(token, bDevuelto), 600);
     } catch (err) {
-      console.error('[Login] Error en validarPin:', err.message);
+      console.error('[Login] Error en validarPin:', err.message, '| status:', err.status);
+      if (err.status !== 401) {
+        setPin('');
+        setFalla(fallaDeLogin(err, MENSAJE_PIN_INCORRECTO, 'No se pudo iniciar sesión. Intentá de nuevo.'));
+        return;
+      }
       setEstado(PIN_ESTADO.ERROR);
       setShake(true);
       setTimeout(() => {
@@ -361,6 +376,7 @@ function PantallaPin({ barbero, onVolver, onAcceso }) {
       if (actual.length >= 4 || estado === PIN_ESTADO.EXITO) return actual;
       const nuevo = actual + digito;
       setEstado(PIN_ESTADO.IDLE);
+      setFalla(null);
       if (nuevo.length === 4) validarPin(nuevo);
       return nuevo;
     });
@@ -373,6 +389,7 @@ function PantallaPin({ barbero, onVolver, onAcceso }) {
   const borrarDigito = useCallback(() => {
     if (estado === PIN_ESTADO.EXITO) return;
     setEstado(PIN_ESTADO.IDLE);
+    setFalla(null);
     setPin((p) => p.slice(0, -1));
   }, [estado]);
 
@@ -387,10 +404,10 @@ function PantallaPin({ barbero, onVolver, onAcceso }) {
   }, [agregarDigito, borrarDigito]);
 
   // Color contextual del mensaje de subtítulo.
-  const mensajeColor = estado === PIN_ESTADO.ERROR ? theme.danger : theme.muted;
+  const mensajeColor = estado === PIN_ESTADO.ERROR || falla ? theme.danger : theme.muted;
   const mensaje = estado === PIN_ESTADO.ERROR
-    ? 'PIN incorrecto. Intentá de nuevo.'
-    : 'Ingresá tu PIN de 4 dígitos';
+    ? MENSAJE_PIN_INCORRECTO
+    : (falla ?? 'Ingresá tu PIN de 4 dígitos');
 
   return (
     <>

@@ -27,13 +27,17 @@
 //   imagenLogo   — URL del logo (tenant_imagen tipo='logo'). Fallback: Lock.
 //   imagenLocal  — URL de la foto del local (tenant_imagen tipo='local').
 //                  Si no hay, el fondo cae a surfaceAlt liso.
+//   avisoAcceso  — { mensaje, conContacto } | null. Falla de acceso detectada al
+//                  abrir el sistema (subdominio que no existe, servidor caído;
+//                  ver `problemaDeAcceso`). Se muestra antes de que tipeen nada,
+//                  hasta la primera respuesta del login.
 
 import { useState } from "react";
 import { theme } from "../theme/tokens.js";
-import { Field, Button, LogoCirculo } from "../components/ui";
+import { Field, Button, LogoCirculo, ContactoSoporte } from "../components/ui";
 import FondoLocal from "../components/ui/FondoLocal.jsx";
 import { loginOperativo } from "../services/api";
-import { mensajeDeError } from "../utils/errores";
+import { fallaDeLogin } from "../utils/errores";
 
 /**
  * PantallaLoginOperativo
@@ -41,11 +45,15 @@ import { mensajeDeError } from "../utils/errores";
  * Maneja su propio estado local de inputs, error inline y flag de envío.
  * La persistencia del token ocurre dentro de loginOperativo() en api.js.
  */
-export default function PantallaLoginOperativo({ onAcceso, imagenLogo, imagenLocal }) {
+export default function PantallaLoginOperativo({ onAcceso, imagenLogo, imagenLocal, avisoAcceso = null }) {
   const [usuario,  setUsuario]  = useState("");
   const [password, setPassword] = useState("");
+  // error: { mensaje, conContacto } del último intento, o null.
   const [error,    setError]    = useState(null);
   const [enviando, setEnviando] = useState(false);
+  // huboRespuesta: ya se intentó un login, así que el aviso de la carga inicial
+  // (avisoAcceso) deja de aplicar: manda lo que respondió el login.
+  const [huboRespuesta, setHuboRespuesta] = useState(false);
 
   /**
    * submit — valida que los campos no estén vacíos, llama a loginOperativo y
@@ -54,7 +62,7 @@ export default function PantallaLoginOperativo({ onAcceso, imagenLogo, imagenLoc
   const submit = async (e) => {
     e.preventDefault();
     if (!usuario.trim() || !password) {
-      setError("Ingresá usuario y contraseña.");
+      setError({ mensaje: "Ingresá usuario y contraseña.", conContacto: false });
       return;
     }
     setEnviando(true);
@@ -63,15 +71,21 @@ export default function PantallaLoginOperativo({ onAcceso, imagenLogo, imagenLoc
       const token = await loginOperativo(usuario.trim(), password);
       onAcceso(token);
     } catch (err) {
-      console.error('[pantallaLoginOperativo] Error en submit:', err.message);
-      // Con credenciales incorrectas, el servidor dice "Credenciales inválidas".
-      // Sin red, el genérico: no son las credenciales lo que falló.
-      setError(mensajeDeError(err, "No se pudo iniciar sesión. Intentá de nuevo."));
+      console.error('[pantallaLoginOperativo] Error en submit:', err.message, '| status:', err.status);
+      // "Credenciales inválidas" solo con un 401. Un subdominio que no existe,
+      // el servidor caído o un rate limit dicen su causa (fallaDeLogin). Sin
+      // red, el genérico: no son las credenciales lo que falló.
+      setError(fallaDeLogin(err, "Credenciales inválidas", "No se pudo iniciar sesión. Intentá de nuevo."));
       setPassword(""); // limpia la password para no exponerla
     } finally {
+      setHuboRespuesta(true);
       setEnviando(false);
     }
   };
+
+  // Lo que se muestra ahora: el error del último intento, o si todavía no hubo
+  // ninguno, la falla que se detectó al abrir el sistema.
+  const errorVisible = error ?? (huboRespuesta ? null : avisoAcceso);
 
   return (
     // blurPx 10: más desenfoque que MainScreen (4) → sensación de "bloqueo".
@@ -123,13 +137,13 @@ export default function PantallaLoginOperativo({ onAcceso, imagenLogo, imagenLoc
             <p style={{
               fontFamily: theme.body,
               fontSize: theme.sizeBody,
-              fontWeight: error ? theme.weightMedium : theme.weightRegular,
-              color: error ? theme.danger : theme.muted,
+              fontWeight: errorVisible ? theme.weightMedium : theme.weightRegular,
+              color: errorVisible ? theme.danger : theme.muted,
               margin: 0,
               minHeight: 22,
               transition: `color ${theme.transitionFast}`,
             }}>
-              {error || "Ingresá las credenciales del local"}
+              {errorVisible?.mensaje ?? "Ingresá las credenciales del local"}
             </p>
           </div>
 
@@ -163,6 +177,8 @@ export default function PantallaLoginOperativo({ onAcceso, imagenLogo, imagenLoc
               {enviando ? 'Ingresando…' : 'Ingresar'}
             </Button>
           </div>
+
+          {errorVisible?.conContacto && <ContactoSoporte />}
         </form>
       </div>
     </FondoLocal>

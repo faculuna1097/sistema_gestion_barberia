@@ -3,9 +3,14 @@
 // Rutas públicas (login, disponibilidad, servicios) usan fetch directo.
 // Rutas protegidas (/api/admin/*) usan apiFetch con JWT.
 
+import { errorDeRespuesta, fetchConDiagnostico } from '../utils/errores.js';
+
 const BASE_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
   : 'http://localhost:3001/api';
+
+// Para diagnosticar un pedido que no recibió respuesta (fetchConDiagnostico).
+const URL_HEALTH = `${BASE_URL}/health`;
 
 // Extraer subdominio del hostname actual.
 // Solo se considera subdominio si estamos en el dominio de producción.
@@ -92,11 +97,14 @@ export const apiFetch = async (path, options = {}) => {
  * Lista barberos activos del tenant (para el selector de login).
  * Usa /api/turnero/barberos porque es el único endpoint público de listado
  * tras la privatización de /api/barberos.
+ * Es el primer pedido de la app: si el subdominio no existe o el servidor no
+ * responde, falla acá, antes del PIN.
  * @returns {Promise<Array>} [{ id, nombre }]
+ * @throws {ErrorServidor} con status y codigo (para `problemaDeAcceso`)
  */
 export const getBarberos = async () => {
-  const res = await fetch(`${BASE_URL}/turnero/barberos`, { headers: publicHeaders });
-  if (!res.ok) throw new Error('Error al obtener barberos');
+  const res = await fetchConDiagnostico(`${BASE_URL}/turnero/barberos`, { headers: publicHeaders }, URL_HEALTH);
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
@@ -118,17 +126,16 @@ export const getImagenesNegocio = async () => {
  * @param {string} barberoId
  * @param {string} pin - PIN de 4 dígitos
  * @returns {Promise<Object>} { token, barbero: { id, nombre } }
+ * @throws {ErrorServidor} (401 PIN incorrecto, 404 subdominio que no existe,
+ *   429, 5xx…); la pantalla elige el mensaje con `fallaDeLogin`
  */
 export const loginBarbero = async (barberoId, pin) => {
-  const res = await fetch(`${BASE_URL}/auth/barbero/login`, {
+  const res = await fetchConDiagnostico(`${BASE_URL}/auth/barbero/login`, {
     method: 'POST',
     headers: publicHeaders,
     body: JSON.stringify({ barbero_id: barberoId, pin }),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Error al iniciar sesión');
-  }
+  }, URL_HEALTH);
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 

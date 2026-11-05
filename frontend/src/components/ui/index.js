@@ -39,6 +39,7 @@ export { default as ToastProvider }   from './ToastProvider.jsx';
 export { default as InputTiempo }     from './InputTiempo.jsx';
 export { default as FondoLocal }      from './FondoLocal.jsx';
 export { default as LogoCirculo }     from './LogoCirculo.jsx';
+export { default as ContactoSoporte } from './ContactoSoporte.jsx';
 export { default as TogglePill }       from './TogglePill.jsx';
 export { default as BadgeFormaPago }   from './BadgeFormaPago.jsx';
 export { default as BotonExportarExcel } from './BotonExportarExcel.jsx';

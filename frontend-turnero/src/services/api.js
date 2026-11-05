@@ -2,7 +2,7 @@
 // Centraliza las llamadas HTTP a los endpoints públicos del turnero.
 // Sin auth — el turnero del cliente es anónimo.
 
-import { TEXTO_DEMASIADOS_INTENTOS } from '../utils/errores.js';
+import { TEXTO_DEMASIADOS_INTENTOS, fetchConDiagnostico } from '../utils/errores.js';
 
 // Base de la API. `BASE_API` apunta a `/api` y `BASE_URL` al namespace
 // `/api/turnero`. La mayoría de los endpoints del turnero cuelgan de
@@ -13,6 +13,9 @@ const BASE_API = import.meta.env.VITE_API_URL
   : 'http://localhost:3001/api';
 
 const BASE_URL = `${BASE_API}/turnero`;
+
+// Para diagnosticar un pedido que no recibió respuesta (fetchConDiagnostico).
+const URL_HEALTH = `${BASE_API}/health`;
 
 // Extraer subdominio del hostname actual.
 // Solo se considera subdominio si estamos en el dominio de producción.
@@ -49,11 +52,20 @@ async function errorDeEscritura(res, generico) {
  * getTenant
  * Obtiene datos públicos del tenant (nombre, contacto, horario, feriados).
  * El logo y demás imágenes se obtienen aparte con getImagenesNegocio().
+ * Es el primer pedido del turnero: si el subdominio no existe o el servidor no
+ * responde, falla acá. El error lleva `status` y `codigo` (ej.
+ * 'tenant_no_encontrado') para que App elija el texto con `mensajeDeCargaDelLocal`.
  * @returns {Promise<Object>} { id, nombre, telefono, direccion, horario_atencion, feriados }
  */
 export const getTenant = async () => {
-  const res = await fetch(`${BASE_URL}/tenant`, { headers: publicHeaders });
-  if (!res.ok) throw new Error('Error al obtener tenant');
+  const res = await fetchConDiagnostico(`${BASE_URL}/tenant`, { headers: publicHeaders }, URL_HEALTH);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(body.error || 'Error al obtener tenant');
+    err.status = res.status;
+    err.codigo = typeof body.codigo === 'string' ? body.codigo : null;
+    throw err;
+  }
   return res.json();
 };
 

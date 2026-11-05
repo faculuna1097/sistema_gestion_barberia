@@ -11,6 +11,7 @@
 import { Fragment, useState, useEffect } from 'react';
 import { getTenant, getImagenesNegocio, getServicios, getBarberos } from './services/api.js';
 import { RUTA_TURNERO, extraerTokenGestion, esRutaResena, leerOrigen } from './utils/rutas.js';
+import { mensajeDeCargaDelLocal } from './utils/errores.js';
 import { useNavegacion } from './hooks/useNavegacion.js';
 import { useListaRemota } from './hooks/useListaRemota.js';
 import { PageContainer, EmptyState, Button, IconoAlerta } from './components/ui';
@@ -167,8 +168,10 @@ function App() {
           .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))[0]?.url || null;
         actualizarFavicon(logoUrl);
       } catch (err) {
-        console.error('[App] Error cargando tenant:', err.message);
-        setError('No se pudo cargar la información del negocio');
+        console.error('[App] Error cargando tenant:', err.message, '| status:', err.status);
+        // Link a un local que no existe, servidor caído o sin conexión: se dice
+        // la causa, así el cliente sabe si reintentar o pedir el link correcto.
+        setError(mensajeDeCargaDelLocal(err, 'No se pudo cargar la información del negocio'));
       } finally {
         setCargando(false);
       }

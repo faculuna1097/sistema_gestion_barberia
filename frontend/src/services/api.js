@@ -7,11 +7,14 @@
 // Las funciones de rutas protegidas lo leen automáticamente vía apiFetch().
 // Las funciones de rutas públicas usan fetch() directamente con publicHeaders.
 
-import { errorDeRespuesta } from '../utils/errores';
+import { errorDeRespuesta, fetchConDiagnostico } from '../utils/errores';
 
 const BASE_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
   : 'http://localhost:3001/api';
+
+// Para diagnosticar un pedido que no recibió respuesta (fetchConDiagnostico).
+const URL_HEALTH = `${BASE_URL}/health`;
 
 // Extraer subdominio del hostname actual.
 // Solo se considera subdominio si estamos en el dominio de producción. En
@@ -194,7 +197,9 @@ export const apiFetchOperativo = async (path, options = {}) => {
     ...(subdominio ? { 'X-Tenant-Subdomain': subdominio } : {}),
     ...(options.headers || {}),
   };
-  const response = await fetch(url, { ...options, headers });
+  // Con diagnóstico: la precarga del arranque necesita saber si, sin
+  // respuesta, el servidor está caído o no hay red (PantallaError).
+  const response = await fetchConDiagnostico(url, { ...options, headers }, URL_HEALTH);
   if (response.status === 401) {
     console.warn('[api] apiFetchOperativo — 401 | path:', path, '| limpiando token y notificando a la app');
     clearAuthTokenOperativo();
@@ -223,7 +228,7 @@ export const apiFetchOperativo = async (path, options = {}) => {
  */
 export const getBarberosOperativo = async () => {
   const response = await apiFetchOperativo(`/barberos`);
-  if (!response.ok) throw new Error('Error al obtener barberos');
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 
@@ -235,7 +240,7 @@ export const getBarberosOperativo = async () => {
  */
 export const getServicios = async () => {
   const response = await apiFetchOperativo(`/servicios`);
-  if (!response.ok) throw new Error('Error al obtener servicios');
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 
@@ -247,7 +252,7 @@ export const getServicios = async () => {
  */
 export const getProductos = async () => {
   const response = await apiFetchOperativo(`/productos`);
-  if (!response.ok) throw new Error('Error al obtener productos');
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 
@@ -259,7 +264,7 @@ export const getProductos = async () => {
  */
 export const getCategorias = async () => {
   const response = await apiFetchOperativo(`/categorias`);
-  if (!response.ok) throw new Error('Error al obtener categorías');
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 
@@ -346,8 +351,8 @@ export const registrarGasto = async (datos) => {
  * (tenant_imagen tipo='logo').
  */
 export const getNegocio = async () => {
-  const response = await fetch(`${BASE_URL}/negocio`, { headers: publicHeaders });
-  if (!response.ok) throw new Error('Error al obtener datos del negocio');
+  const response = await fetchConDiagnostico(`${BASE_URL}/negocio`, { headers: publicHeaders }, URL_HEALTH);
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 
@@ -358,8 +363,8 @@ export const getNegocio = async () => {
  * @returns {Promise<Array>} [{ id, tipo: 'local'|'corte'|'logo', orden, url }]
  */
 export const getImagenesNegocio = async () => {
-  const response = await fetch(`${BASE_URL}/negocio/imagenes`, { headers: publicHeaders });
-  if (!response.ok) throw new Error('Error al obtener imágenes del negocio');
+  const response = await fetchConDiagnostico(`${BASE_URL}/negocio/imagenes`, { headers: publicHeaders }, URL_HEALTH);
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 
@@ -372,16 +377,17 @@ export const getImagenesNegocio = async () => {
  *   - 200: PIN correcto → { token, rol: 'admin'|'barbero', aviso_pago?, barbero? }
  *           (barbero: { id, nombre } solo cuando rol='barbero')
  *   - 402: suscripción vencida (solo path admin) → lanza error con bloqueado: true
- *   - otros: PIN incorrecto u otro error → lanza error con bloqueado: false
+ *   - otros: lanza un ErrorServidor (401 PIN incorrecto, 404 subdominio que no
+ *     existe, 429, 5xx…); la pantalla elige el mensaje con `fallaDeLogin`
  * @param {string} pin - PIN de 4 dígitos ingresado por el usuario
  * @returns {Promise<Object>} { token, rol, aviso_pago, barbero }
  */
 export const loginPanel = async (pin) => {
-  const response = await fetch(`${BASE_URL}/auth/panel/login`, {
+  const response = await fetchConDiagnostico(`${BASE_URL}/auth/panel/login`, {
     method: 'POST',
     headers: publicHeaders,
     body: JSON.stringify({ pin }),
-  });
+  }, URL_HEALTH);
 
   if (response.status === 402) {
     const err = new Error('Suscripción vencida');
@@ -389,7 +395,7 @@ export const loginPanel = async (pin) => {
     throw err;
   }
 
-  if (!response.ok) throw new Error('PIN incorrecto');
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json(); // { token, rol, aviso_pago, barbero }
 };
 
@@ -407,11 +413,11 @@ export const loginPanel = async (pin) => {
  *   con credenciales incorrectas, "Credenciales inválidas"
  */
 export const loginOperativo = async (usuario, password) => {
-  const response = await fetch(`${BASE_URL}/auth/operativo/login`, {
+  const response = await fetchConDiagnostico(`${BASE_URL}/auth/operativo/login`, {
     method: 'POST',
     headers: publicHeaders,
     body: JSON.stringify({ usuario, password }),
-  });
+  }, URL_HEALTH);
   if (!response.ok) throw await errorDeRespuesta(response);
   const { token } = await response.json();
   setAuthTokenOperativo(token);
