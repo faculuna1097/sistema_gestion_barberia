@@ -2,8 +2,9 @@
 // Par de CTA de contacto (WhatsApp + Email) reusado en Hero, Plan y CTA final.
 // Centraliza los textos y los links (utils/contacto.js) para no repetirlos.
 
-import { MessageCircle, Mail } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import Button from '../ui/Button.jsx';
+import IconoWhatsApp from '../ui/IconoWhatsApp.jsx';
 import { linkWhatsApp, linkEmail } from '../../utils/contacto.js';
 
 /**
@@ -40,7 +41,7 @@ function CTAGroup({
         variant="primary"
         full={false}
       >
-        <MessageCircle size={18} strokeWidth={2} aria-hidden="true" />
+        <IconoWhatsApp size={18} />
         {primaryLabel}
       </Button>
       <Button

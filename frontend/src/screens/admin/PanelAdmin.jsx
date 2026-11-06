@@ -3,6 +3,11 @@
 // 64px colapsado) + área de contenido a la derecha. Cada sección del sidebar
 // renderiza su componente correspondiente en el main.
 //
+// Pantalla angosta (menos de 1024 px: el iPad en vertical o Split View): el
+// sidebar queda cerrado en un riel de íconos de 64 px, así el contenido tiene
+// lugar para las tablas. Si se abre, aparece encima del contenido con un fondo
+// oscuro, y se cierra al elegir una sección, al tocar afuera o con Escape.
+//
 // Props:
 //   onCerrarSesion  — callback para volver a la pantalla operativa.
 //   avisosPago      — si true, muestra el banner de aviso de pago al tope.
@@ -15,7 +20,7 @@
 //                     Se usa para su identidad en el sidebar (D5) y se propaga a
 //                     las secciones (lo consumen recién en la Fase 6).
 
-import { useState, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import {
   Home, DollarSign, ClipboardList, BarChart3, ShoppingBag,
   Receipt, Calendar, Settings, LogOut, ChevronLeft, ChevronRight,
@@ -23,6 +28,7 @@ import {
 } from "lucide-react";
 import { theme } from "../../theme/tokens.js";
 import { AvatarIniciales, LoadingState, ErrorBoundary } from "../../components/ui";
+import { usePantallaAngosta } from "../../hooks/usePantallaAngosta";
 
 // Las 8 secciones se cargan con React.lazy: cada una baja en su propio chunk JS
 // on-demand recién al abrirla (#7 de docs/performance_frontends.md). El render
@@ -325,6 +331,36 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago, nombreNegocio, 
   const [mostrarAviso, setMostrarAviso]   = useState(avisosPago);
   const [colapsado, setColapsado]         = useState(false);
   const [hoverLogout, setHoverLogout]     = useState(false);
+  // En pantalla angosta el sidebar arranca cerrado y `menuAbierto` lo abre
+  // encima del contenido. `colapsado` es la preferencia de la pantalla ancha.
+  const angosta = usePantallaAngosta();
+  const [menuAbierto, setMenuAbierto]     = useState(false);
+  const menuFlotante = angosta && menuAbierto;
+  const sidebarColapsado = angosta ? !menuAbierto : colapsado;
+
+  // Al pasar a pantalla ancha (rotar el iPad) se descarta el menú abierto: si
+  // no, volvería a aparecer abierto al rotar de nuevo.
+  useEffect(() => {
+    if (!angosta) setMenuAbierto(false);
+  }, [angosta]);
+
+  // Escape cierra el menú flotante.
+  useEffect(() => {
+    if (!menuFlotante) return;
+    const alTeclear = (e) => { if (e.key === 'Escape') setMenuAbierto(false); };
+    document.addEventListener('keydown', alTeclear);
+    return () => document.removeEventListener('keydown', alTeclear);
+  }, [menuFlotante]);
+
+  /**
+   * elegirSeccion
+   * Muestra la sección elegida en el sidebar y, si estaba flotando, cierra el menú.
+   * @param {string} id - Id de la sección (ver SECCIONES)
+   */
+  const elegirSeccion = (id) => {
+    setSeccionActiva(id);
+    setMenuAbierto(false);
+  };
 
   const SeccionActual = seccionesVisibles.find((s) => s.id === seccionActiva)?.componente;
 
@@ -338,11 +374,24 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago, nombreNegocio, 
       background: theme.bg,
       color: theme.ink,
       overflow: 'hidden',
+      position: 'relative',
     }}>
+      {/* Pantalla angosta: el riel de 64 px ocupa su lugar en el layout y el
+          sidebar va encima (position absolute), así al abrirse no empuja el
+          contenido. El fondo oscuro cierra el menú al tocarlo. */}
+      {angosta && <div style={{ width: 64, minWidth: 64 }} />}
+      {menuFlotante && (
+        <div
+          aria-hidden="true"
+          onClick={() => setMenuAbierto(false)}
+          style={{ position: 'absolute', inset: 0, zIndex: 50, background: theme.overlay }}
+        />
+      )}
+
       {/* ── SIDEBAR (tema claro) ─────────────────────────────────────────── */}
       <aside style={{
-        width: colapsado ? 64 : 220,
-        minWidth: colapsado ? 64 : 220,
+        width: sidebarColapsado ? 64 : 220,
+        minWidth: sidebarColapsado ? 64 : 220,
         height: '100vh',
         background: theme.surface,
         borderRight: `1px solid ${theme.hairline}`,
@@ -350,11 +399,13 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago, nombreNegocio, 
         flexDirection: 'column',
         overflow: 'hidden',
         transition: `width ${theme.transitionMedium}, min-width ${theme.transitionMedium}`,
+        ...(angosta && { position: 'absolute', top: 0, left: 0, zIndex: 51 }),
+        ...(menuFlotante && { boxShadow: theme.shadowLg }),
       }}>
         <div style={{ padding: '16px 0 12px' }}>
           <BotonToggleSidebar
-            colapsado={colapsado}
-            onToggle={() => setColapsado(!colapsado)}
+            colapsado={sidebarColapsado}
+            onToggle={() => (angosta ? setMenuAbierto(!menuAbierto) : setColapsado(!colapsado))}
             nombreNegocio={nombreNegocio}
           />
         </div>
@@ -376,8 +427,8 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago, nombreNegocio, 
               Icon={s.Icon}
               label={s.label}
               activo={seccionActiva === s.id}
-              colapsado={colapsado}
-              onClick={() => setSeccionActiva(s.id)}
+              colapsado={sidebarColapsado}
+              onClick={() => elegirSeccion(s.id)}
             />
           ))}
         </nav>
@@ -392,7 +443,7 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago, nombreNegocio, 
 
         {/* Identidad de quien entró (D5): solo en modo barbero, sobre el logout. */}
         {esBarbero && barberoSesion && (
-          <IdentidadBarbero nombre={barberoSesion.nombre} colapsado={colapsado} />
+          <IdentidadBarbero nombre={barberoSesion.nombre} colapsado={sidebarColapsado} />
         )}
 
         {/* Footer: cerrar sesión */}
@@ -402,12 +453,12 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago, nombreNegocio, 
             onClick={onCerrarSesion}
             onMouseEnter={() => setHoverLogout(true)}
             onMouseLeave={() => setHoverLogout(false)}
-            title={colapsado ? "Cerrar sesión" : undefined}
+            title={sidebarColapsado ? "Cerrar sesión" : undefined}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: 12,
-              padding: colapsado ? '10px 0' : '10px 16px 10px 20px',
+              padding: sidebarColapsado ? '10px 0' : '10px 16px 10px 20px',
               margin: '0 8px',
               width: 'calc(100% - 16px)',
               border: 'none',
@@ -418,13 +469,13 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago, nombreNegocio, 
               fontWeight: theme.weightRegular,
               cursor: 'pointer',
               borderRadius: theme.radius,
-              justifyContent: colapsado ? 'center' : 'flex-start',
+              justifyContent: sidebarColapsado ? 'center' : 'flex-start',
               textAlign: 'left',
               transition: `background ${theme.transitionFast}`,
             }}
           >
             <LogOut size={18} aria-hidden="true" style={{ flexShrink: 0 }} />
-            {!colapsado && <span>Cerrar sesión</span>}
+            {!sidebarColapsado && <span>Cerrar sesión</span>}
           </button>
         </div>
       </aside>

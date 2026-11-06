@@ -1,10 +1,11 @@
 // /backend/src/controllers/caja.js
 import { query } from '../config/db.js';
-import { aplicarMutacionesStock } from '../utils/stock.js';
 import { TZ } from '../utils/constantes.js';
 import { esMontoPositivo } from '../utils/validarNumero.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
 import { esFechaISO, esFechaFutura, hoyISO } from '../utils/validarFecha.js';
+import { esUUID } from '../utils/validarUuid.js';
+import { porcentajeComisionSql } from '../utils/comision.js';
 import {
   TIPOS_MOVIMIENTO_EXTRA,
   MAX_DESCRIPCION_MOVIMIENTO,
@@ -12,6 +13,15 @@ import {
   sentidoDeMovimiento,
 } from '../utils/movimientos.js';
 import { socioActivoEnTenant } from '../services/sociosService.js';
+import { eliminarGasto, eliminarVenta } from '../services/movimientosService.js';
+
+// Mensaje del 404 de los tipos base; los de movimiento_extra comparten uno solo.
+const NO_ENCONTRADO_POR_TIPO = {
+  corte: 'Corte no encontrado',
+  venta: 'Venta no encontrada',
+  gasto: 'Gasto no encontrado',
+};
+const MOVIMIENTO_NO_ENCONTRADO = 'Movimiento no encontrado';
 
 /**
  * getMovimientosDia
@@ -43,7 +53,10 @@ export const getMovimientosDia = async (req, res) => {
          c.monto_total AS monto,
          c.forma_pago,
          c.turno_id,
-         b.comision_valor,
+         -- % de comisión de este corte (el guardado al registrarlo): el filtro
+         -- "Solo barberos" del panel saca los del 100%. Se llama comision_valor
+         -- por compatibilidad con el panel.
+         ${porcentajeComisionSql('c', 'b')} AS comision_valor,
          'corte' AS tipo
        FROM corte c
        JOIN barbero b  ON c.barbero_id  = b.id
@@ -81,13 +94,13 @@ export const getMovimientosDia = async (req, res) => {
          g.timestamp,
          TO_CHAR(g.timestamp AT TIME ZONE $2, 'HH24:MI') AS hora,
          NULL AS barbero_nombre,
-         cg.nombre || ': ' || g.descripcion AS detalle,
+         COALESCE(cg.nombre, 'Sin categoría') || ': ' || g.descripcion AS detalle,
          g.monto AS monto,
          g.forma_pago,
          NULL AS comision_valor,
          'gasto' AS tipo
        FROM gasto g
-       JOIN categoria_gasto cg ON g.categoria_id = cg.id
+       LEFT JOIN categoria_gasto cg ON g.categoria_id = cg.id
        WHERE g.tenant_id = $1
          AND DATE(g.timestamp AT TIME ZONE $2) = $3::date
        ORDER BY g.timestamp ASC`,
@@ -123,14 +136,20 @@ export const getMovimientosDia = async (req, res) => {
 
     // ── Merge, sentido y orden cronológico (más reciente primero) ────────────
     // pg devuelve los NUMERIC como string: la API expone el monto como número,
-    // igual que el 201 de crearMovimientoExtra.
+    // igual que el 201 de crearMovimientoExtra. `comision_valor` también (solo los
+    // cortes la traen; el resto manda NULL, que sigue siendo null).
     const movimientos = [
       ...cortesResult.rows,
       ...ventasResult.rows,
       ...gastosResult.rows,
       ...extrasResult.rows,
     ]
-      .map((m) => ({ ...m, monto: Number(m.monto), sentido: sentidoDeMovimiento(m.tipo) }))
+      .map((m) => ({
+        ...m,
+        monto: Number(m.monto),
+        comision_valor: m.comision_valor === null ? null : Number(m.comision_valor),
+        sentido: sentidoDeMovimiento(m.tipo),
+      }))
       .sort((b, a) => new Date(a.timestamp) - new Date(b.timestamp));
 
     res.json({ movimientos });
@@ -158,7 +177,7 @@ export const getMovimientosDia = async (req, res) => {
  *   400 si falla una validación; 404 si el socio no existe, es de otro tenant o está inactivo.
  */
 export const crearMovimientoExtra = async (req, res) => {
-  const { tipo, monto, forma_pago, socio_id, descripcion, fecha } = req.body || {};
+  const { tipo, monto, forma_pago, socio_id, descripcion, fecha } = req.body;
 
   if (!esTipoMovimientoExtra(tipo)) {
     return res.status(400).json({ error: "tipo debe ser 'aporte_capital', 'retiro_socio' u 'otro_ingreso'" });
@@ -249,10 +268,20 @@ export const crearMovimientoExtra = async (req, res) => {
  * @param {string} req.params.tipo - 'corte' | 'venta' | 'gasto' | 'aporte_capital' | 'retiro_socio' | 'otro_ingreso'
  * @param {string} req.params.id   - UUID del registro
  * @param {string} req.tenant_id   - Inyectado por tenantMiddleware
- * @returns {JSON} { ok: true } — 404 si el registro no existe en el tenant; 400 si el tipo es inválido
+ * @returns {JSON} { ok: true } — 404 si el registro no existe en el tenant o el id
+ *   está mal formado; 400 si el tipo es inválido
  */
 export const eliminarMovimiento = async (req, res) => {
   const { tipo, id } = req.params;
+
+  const esTipoBase = Object.hasOwn(NO_ENCONTRADO_POR_TIPO, tipo);
+  if (!esTipoBase && !esTipoMovimientoExtra(tipo)) {
+    return res.status(400).json({ error: 'Tipo inválido' });
+  }
+  // Un id mal formado no puede ser ningún registro.
+  if (!esUUID(id)) {
+    return res.status(404).json({ error: esTipoBase ? NO_ENCONTRADO_POR_TIPO[tipo] : MOVIMIENTO_NO_ENCONTRADO });
+  }
 
   try {
     if (tipo === 'corte') {
@@ -263,7 +292,7 @@ export const eliminarMovimiento = async (req, res) => {
         [id, req.tenant_id]
       );
       if (corteResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Corte no encontrado' });
+        return res.status(404).json({ error: NO_ENCONTRADO_POR_TIPO.corte });
       }
       const { turno_id } = corteResult.rows[0];
 
@@ -311,58 +340,30 @@ export const eliminarMovimiento = async (req, res) => {
       console.log('[caja] eliminarMovimiento — corte eliminado | id:', id);
 
     } else if (tipo === 'venta') {
-      const ventaResult = await query(
-        'SELECT producto_id, cantidad FROM venta WHERE id = $1 AND tenant_id = $2',
-        [id, req.tenant_id]
-      );
-      if (ventaResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Venta no encontrada' });
-      }
-      const { producto_id, cantidad } = ventaResult.rows[0];
-
-      // Restaurar stock primero (helper con compensación) y borrar la venta
-      // después; si el DELETE falla, revertimos el restore (auditoría 6.2).
-      const revertirStock = await aplicarMutacionesStock([{ producto_id, delta: cantidad }], req.tenant_id);
-      console.log('[caja] eliminarMovimiento — stock restaurado | producto_id:', producto_id, '| cantidad:', cantidad);
-      let ventaDelRes;
-      try {
-        ventaDelRes = await query('DELETE FROM venta WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
-      } catch (err) {
-        await revertirStock();
-        throw err;
-      }
-      // Igual que deleteVenta: si el DELETE no borró nada (fila desaparecida entre
-      // el SELECT y el DELETE por un borrado concurrente), el restore que ya
-      // aplicamos sobra → lo revertimos para no doble-sumar el stock.
-      if (ventaDelRes.rowCount === 0) {
-        await revertirStock();
-        console.warn('[caja] eliminarMovimiento — venta ya no existía al borrar (carrera) | id:', id);
-        return res.status(404).json({ error: 'Venta no encontrada' });
+      if (!(await eliminarVenta(id, req.tenant_id))) {
+        return res.status(404).json({ error: NO_ENCONTRADO_POR_TIPO.venta });
       }
       console.log('[caja] eliminarMovimiento — venta eliminada | id:', id);
 
     } else if (tipo === 'gasto') {
-      const gastoDelRes = await query('DELETE FROM gasto WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
       // Contrato consistente con las ramas corte/venta: 404 si no borró nada
       // (id inexistente o de otro tenant) en vez de un 200 engañoso.
-      if (gastoDelRes.rowCount === 0) {
-        return res.status(404).json({ error: 'Gasto no encontrado' });
+      if (!(await eliminarGasto(id, req.tenant_id))) {
+        return res.status(404).json({ error: NO_ENCONTRADO_POR_TIPO.gasto });
       }
       console.log('[caja] eliminarMovimiento — gasto eliminado | id:', id);
 
-    } else if (esTipoMovimientoExtra(tipo)) {
-      // El filtro por tipo evita borrar, por ejemplo, un retiro desde la URL de un aporte.
+    } else {
+      // Movimiento extra: el tipo ya se validó al entrar. El filtro por tipo evita
+      // borrar, por ejemplo, un retiro desde la URL de un aporte.
       const extraDelRes = await query(
         'DELETE FROM movimiento_extra WHERE id = $1 AND tenant_id = $2 AND tipo = $3',
         [id, req.tenant_id, tipo]
       );
       if (extraDelRes.rowCount === 0) {
-        return res.status(404).json({ error: 'Movimiento no encontrado' });
+        return res.status(404).json({ error: MOVIMIENTO_NO_ENCONTRADO });
       }
       console.log('[caja] eliminarMovimiento — movimiento extra eliminado | id:', id, '| tipo:', tipo);
-
-    } else {
-      return res.status(400).json({ error: 'Tipo inválido' });
     }
 
     res.json({ ok: true });

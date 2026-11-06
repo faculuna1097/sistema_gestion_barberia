@@ -63,10 +63,25 @@ function actualizarFavicon(url) {
   link.href = url;
 }
 
+/**
+ * elegirLogo — de las imágenes públicas del tenant, el logo que va en el
+ * favicon y en el login: el de menor `orden` (puede no haber ninguno).
+ * @param {Array<{ tipo: string, orden: number|null, url: string }>} imagenes
+ * @returns {string|null} URL del logo, o null si el tenant no tiene
+ */
+function elegirLogo(imagenes) {
+  return (imagenes || [])
+    .filter((i) => i.tipo === 'logo')
+    .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))[0]?.url || null;
+}
+
 function App() {
   const [token, setToken] = useState(null);
   const [barbero, setBarbero] = useState(null);
   const [seccion, setSeccion] = useState(SECCION.DASHBOARD);
+  // Nombre y logo del tenant (null mientras cargan o si fallan). Los usa el
+  // bloque de marca del Login.
+  const [branding, setBranding] = useState({ nombreNegocio: null, logoUrl: null });
 
   // Registra el handler que api.js dispara cuando apiFetch recibe 401 (token
   // expirado o revocado: cambio de PIN o barbero desactivado). El token del
@@ -82,23 +97,28 @@ function App() {
     return () => setOnUnauthorized(null);
   }, []);
 
-  // Branding del tab (título = nombre del tenant, favicon = su logo). Va acá y
-  // no en Login porque si el barbero ya tiene sesión el Login no se renderiza.
-  // Best-effort: si falla, queda el default de index.html (marca BarberManager).
+  // Branding del tenant: una sola carga del nombre y el logo para toda la app.
+  // Acá se aplican al tab (título y favicon), que tienen que verse también con
+  // la sesión abierta, cuando el Login no se renderiza; el Login los recibe por
+  // props para su bloque de marca.
+  // Best-effort y por separado: si falla uno, se usa el otro. Si fallan, quedan
+  // el título y el favicon de index.html (marca BarberManager) y el login sin marca.
   useEffect(() => {
     let activo = true;
     (async () => {
-      try {
-        const [tenant, imagenes] = await Promise.all([getTenant(), getImagenesNegocio()]);
-        if (!activo) return;
-        if (tenant?.nombre) document.title = tenant.nombre;
-        const logoUrl = (imagenes || [])
-          .filter((i) => i.tipo === 'logo')
-          .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))[0]?.url || null;
-        actualizarFavicon(logoUrl);
-      } catch (err) {
-        console.warn('[App] branding del tenant — falló, se mantiene el default:', err.message);
+      const [tenant, imagenes] = await Promise.allSettled([getTenant(), getImagenesNegocio()]);
+      if (!activo) return;
+      if (tenant.status === 'rejected') {
+        console.warn('[App] getTenant — falló, sin nombre del negocio:', tenant.reason?.message);
       }
+      if (imagenes.status === 'rejected') {
+        console.warn('[App] getImagenesNegocio — falló, sin logo:', imagenes.reason?.message);
+      }
+      const nombreNegocio = tenant.value?.nombre || null;
+      const logoUrl = imagenes.status === 'fulfilled' ? elegirLogo(imagenes.value) : null;
+      if (nombreNegocio) document.title = nombreNegocio;
+      actualizarFavicon(logoUrl);
+      setBranding({ nombreNegocio, logoUrl });
     })();
     return () => { activo = false; };
   }, []);
@@ -128,7 +148,13 @@ function App() {
   }, []);
 
   if (!token) {
-    return <Login onAcceso={onLogin} />;
+    return (
+      <Login
+        onAcceso={onLogin}
+        logoUrl={branding.logoUrl}
+        nombreNegocio={branding.nombreNegocio}
+      />
+    );
   }
 
   /**

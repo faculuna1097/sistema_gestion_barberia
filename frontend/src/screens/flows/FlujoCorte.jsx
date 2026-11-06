@@ -9,21 +9,46 @@
 // pre-selección del servicio del turno, payload) se mantiene intacta.
 
 import { useState, useEffect } from "react";
-import { Banknote, Check, X, CalendarOff } from "lucide-react";
+import { Banknote, Check, X, CalendarOff, CalendarX } from "lucide-react";
 import { registrarCorte, getTurnosDelDia } from "../../services/api";
 import { getFechaHoy, formatHora } from "../../utils/fecha.js";
 import { theme } from "../../theme/tokens.js";
 import { fmtPesos } from "../../utils/formato.js";
+import { motivoYQueHacer } from "../../utils/errores.js";
 import { Button, BadgeFormaPago, LoadingState, EmptyState } from "../../components/ui";
 import {
   PanelWizard,
   BotonOpcion,
   CampoMonto,
+  TarjetaResumen,
   FilaResumen,
   FilaTotal,
   PantallaExito,
-  wizardStyles,
+  AvisoExito,
 } from "./wizard.jsx";
+import { wizardStyles } from "./wizardStyles.js";
+
+/**
+ * mensajeErrorCorte
+ * Texto del error al confirmar el corte. Con un 409 (el turno ya se completó o
+ * cambió) o un 404 (el turno, el barbero o el servicio ya no existen),
+ * reintentar no sirve: se muestra el motivo del servidor y qué hacer. Con un
+ * 404 y un turno elegido, lo más probable es que el turno se haya borrado: al
+ * volver al paso del turno la lista se recarga y se puede elegir "Sin turno".
+ * @param {Error & { status?: number }} err - Error de registrarCorte
+ * @param {boolean} conTurno - Si el corte venía de un turno
+ * @returns {string}
+ */
+function mensajeErrorCorte(err, conTurno) {
+  if (err.status === 409) return err.message;
+  if (err.status === 404) {
+    const queHacer = conTurno
+      ? "Volvé al paso del turno y elegí «Sin turno»."
+      : "Volvé al inicio y empezá de nuevo.";
+    return motivoYQueHacer(err.message, queHacer);
+  }
+  return "Error al guardar el corte. Intentá de nuevo.";
+}
 
 /**
  * FlujoCorte
@@ -48,6 +73,9 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState(null);
   const [exito, setExito] = useState(false);
+  // true si se eligió un turno pero el backend registró el corte sin turno (el
+  // turno se había cancelado mientras tanto): la pantalla de éxito lo avisa.
+  const [quedoSinTurno, setQuedoSinTurno] = useState(false);
 
   // ── Estado del paso 2 (turnos del día) ──────────────────────────────────────
   // turnoSeleccionado: turno elegido, o null si el corte es walk-in (sin reserva).
@@ -92,6 +120,9 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
   const avanzar = () => setPaso((p) => p + 1);
   const retroceder = () => {
     if (paso === 1) { onVolver(); return; }
+    // El error de la confirmación es de ese intento: si el usuario vuelve (ej. a
+    // elegir "Sin turno" tras un 404), no tiene que reaparecer al llegar de nuevo.
+    setError(null);
     // Paso 5 (propina): si estamos en el input de monto → volver a Sí/No sin cambiar de paso.
     if (paso === 5 && tienePropina !== null) {
       setTienePropina(null);
@@ -120,14 +151,17 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
     setEnviando(true);
     setError(null);
     try {
-      await registrarCorte(payload);
+      const res = await registrarCorte(payload);
+      const sinTurno = Boolean(turnoSeleccionado) && res.turno_vinculado === false;
+      setQuedoSinTurno(sinTurno);
       setExito(true);
+      // Con el aviso de "sin turno" se da más tiempo para leerlo.
       setTimeout(() => {
         onVolver();
-      }, 2500);
+      }, sinTurno ? 4500 : 2500);
     } catch (err) {
       console.error('[flujoCorte] Error en confirmarCorte:', err.message);
-      setError("Error al guardar el corte. Intentá de nuevo.");
+      setError(mensajeErrorCorte(err, Boolean(turnoSeleccionado)));
     } finally {
       setEnviando(false);
     }
@@ -140,7 +174,13 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
         imagenLocal={imagenLocal}
         titulo="¡Corte registrado!"
         monto={montoTotal}
-      />
+      >
+        {quedoSinTurno && (
+          <AvisoExito Icon={CalendarX}>
+            El turno se había cancelado: el corte quedó registrado como cliente sin turno.
+          </AvisoExito>
+        )}
+      </PantallaExito>
     );
   }
 
@@ -332,22 +372,30 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
   if (paso === 6) {
     const hayPropina = propinaFinal > 0;
     return (
-      <PanelWizard paso={6} total={6} titulo="Confirmá el corte" onVolver={retroceder} imagenLocal={imagenLocal} maxAncho={560}>
-        <div style={wizardStyles.resumenCard}>
+      <PanelWizard
+        paso={6}
+        total={6}
+        titulo="Confirmá el corte"
+        onVolver={retroceder}
+        imagenLocal={imagenLocal}
+        maxAncho={560}
+        pie={
+          <>
+            {error && <p style={wizardStyles.errorTexto}>{error}</p>}
+            <Button variant="primary" disabled={enviando} onClick={confirmarCorte} style={wizardStyles.btnGrande}>
+              {enviando ? "Guardando..." : "Confirmar corte"}
+            </Button>
+          </>
+        }
+      >
+        <TarjetaResumen total={<FilaTotal label="Total" value={fmtPesos(montoTotal)} />}>
           <FilaResumen label="Barbero" value={barberoSeleccionado?.nombre} />
           {turnoSeleccionado && <FilaResumen label="Cliente" value={turnoSeleccionado.cliente_nombre} />}
           <FilaResumen label="Servicio" value={servicioSeleccionado?.nombre} />
           <FilaResumen label="Precio" value={fmtPesos(servicioSeleccionado?.precio)} />
           <FilaResumen label="Pago" value={<BadgeFormaPago forma={formaPago} />} ultima={!hayPropina} />
           {hayPropina && <FilaResumen label="Propina" value={fmtPesos(propinaFinal)} ultima />}
-          <FilaTotal label="Total" value={fmtPesos(montoTotal)} />
-        </div>
-
-        {error && <p style={wizardStyles.errorTexto}>{error}</p>}
-
-        <Button variant="primary" disabled={enviando} onClick={confirmarCorte} style={wizardStyles.btnGrande}>
-          {enviando ? "Guardando..." : "Confirmar corte"}
-        </Button>
+        </TarjetaResumen>
       </PanelWizard>
     );
   }

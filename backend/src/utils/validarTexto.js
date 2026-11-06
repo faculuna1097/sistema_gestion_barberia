@@ -2,7 +2,10 @@
 // Validación y normalización de los inputs de texto libre de una reserva
 // (nombre, teléfono, email). Centraliza los topes de longitud y el formato de
 // email que comparten el turnero público (crearTurno) y el backoffice
-// (crearTurnoAdmin). Ver auditoría 3.2.
+// (crearTurnoAdmin). Ver auditoría 3.2. También el formato E.164 de un
+// teléfono (el WhatsApp del negocio que expone el turnero), el de una URL
+// https (el link de reseñas de Google del negocio) y el del origen del cliente
+// (por qué link llegó al turnero).
 
 // Topes de longitud de los inputs libres del cliente. Son cotas defensivas: un
 // nombre/teléfono legítimo entra holgado. El objetivo no es validar "formato de
@@ -26,6 +29,59 @@ const REGEX_EMAIL = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
  */
 export function esEmailValido(email) {
   return typeof email === 'string' && REGEX_EMAIL.test(email.trim());
+}
+
+// Teléfono en formato E.164: "+", código de país sin 0 inicial y 8 a 15
+// dígitos en total, sin espacios ni guiones (ej. "+5491133111686").
+const REGEX_TELEFONO_E164 = /^\+[1-9]\d{7,14}$/;
+
+/**
+ * esTelefonoE164
+ * Valida que un valor sea un teléfono en formato E.164 (tras recortar
+ * espacios). Es el formato en que se carga el WhatsApp del negocio
+ * (`tenant.configuracion.whatsapp`); el front arma el link de wa.me con él.
+ * @param {*} telefono - Valor a validar (de la DB o del body).
+ * @returns {boolean} true si es un string con forma E.164.
+ */
+export function esTelefonoE164(telefono) {
+  return typeof telefono === 'string' && REGEX_TELEFONO_E164.test(telefono.trim());
+}
+
+/**
+ * esUrlHttps
+ * Valida que un valor sea una URL absoluta con protocolo https (tras recortar
+ * espacios). Es el formato del link de reseñas de Google del negocio
+ * (`tenant.configuracion.resena_url`), al que el turnero redirige: con este
+ * chequeo, un valor mal cargado no termina en un redirect a cualquier lado.
+ * @param {*} valor - Valor a validar (de la DB).
+ * @returns {boolean} true si es un string con una URL https válida.
+ */
+export function esUrlHttps(valor) {
+  if (typeof valor !== 'string') return false;
+  try {
+    return new URL(valor.trim()).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+// Origen del cliente: minúsculas, dígitos, guion y guion bajo, de 1 a 30. Es
+// el mismo formato del CHECK de `turno.origen_link` y del front del turnero.
+const REGEX_ORIGEN = /^[a-z0-9_-]{1,30}$/;
+
+/**
+ * normalizarOrigen
+ * Normaliza el origen del cliente que manda el turnero (el `?origen=` del link
+ * por el que llegó, ej. 'instagram'). Misma regla que el front: a minúsculas y
+ * el formato de REGEX_ORIGEN. Es un dato de marketing, opcional: si no cumple,
+ * se descarta (null) en vez de rechazar la reserva.
+ * @param {*} valor - `req.body.origen` (puede faltar o no ser texto).
+ * @returns {string|null} El origen normalizado, o null si falta o no cumple.
+ */
+export function normalizarOrigen(valor) {
+  if (typeof valor !== 'string') return null;
+  const origen = valor.toLowerCase();
+  return REGEX_ORIGEN.test(origen) ? origen : null;
 }
 
 /**

@@ -15,7 +15,7 @@
 //
 // Sistema de diseño: tokens + Geist + Lucide + onClick. Densidad compacta.
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Plus, Users, Check, Clock, CalendarOff, CalendarClock,
   Trash2, AlertTriangle, RefreshCw,
@@ -28,7 +28,7 @@ import {
   getAdminHorarioAtencion,
   getAdminSuspensiones,
   crearAdminSuspension,
-  eliminarAdminSuspension,
+  liberarAdminSuspension,
 } from '../../../../services/api';
 import { TZ, DIAS, aHoraCorta } from '../../../../utils/fecha';
 import {
@@ -47,6 +47,8 @@ import {
   Toast,
   InputTiempo,
 } from '../../../../components/ui';
+import { toast } from '../../../../utils/toast';
+import { errorDeRespuesta, mensajeDeError } from '../../../../utils/errores';
 import { theme } from '../../../../theme/tokens.js';
 
 // Orden de presentación de los días: Lun→Sáb, Dom al final (índices de DIAS).
@@ -190,7 +192,8 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
   const [bloques, setBloques]     = useState(tieneCache ? normalizarBloques(bloquesIniciales) : []);
   const [cargando, setCargando]   = useState(!tieneCache);
   const [guardando, setGuardando] = useState(false);
-  const [feedback, setFeedback]   = useState(null); // { tone, texto } | null
+  // Error de carga: queda inline (con X); el resultado de guardar va en un toast.
+  const [errorCarga, setErrorCarga] = useState(null);
 
   const vivoRef = useRef(true);
   useEffect(() => {
@@ -207,7 +210,7 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
         if (vivoRef.current) setBloques(normalizarBloques(data));
       } catch (err) {
         console.error('[tabBarberos/Horario] Error cargando:', err.message);
-        if (vivoRef.current) setFeedback({ tone: 'danger', texto: 'No se pudieron cargar los horarios.' });
+        if (vivoRef.current) setErrorCarga('No se pudieron cargar los horarios.');
       } finally {
         if (vivoRef.current) setCargando(false);
       }
@@ -226,7 +229,6 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
       hora_inicio: local?.inicio ?? '09:00',
       hora_fin: local?.fin ?? '18:00',
     }]);
-    setFeedback(null);
   };
 
   /**
@@ -237,7 +239,6 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
    */
   const actualizarBloque = (index, campo, valor) => {
     setBloques((prev) => prev.map((b, i) => (i === index ? { ...b, [campo]: valor } : b)));
-    setFeedback(null);
   };
 
   /**
@@ -246,7 +247,6 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
    */
   const eliminarBloque = (index) => {
     setBloques((prev) => prev.filter((_, i) => i !== index));
-    setFeedback(null);
   };
 
   /**
@@ -254,7 +254,6 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
    */
   const guardar = async () => {
     setGuardando(true);
-    setFeedback(null);
     try {
       const payload = bloques.map(({ dia_semana, hora_inicio, hora_fin }) => ({
         dia_semana, hora_inicio, hora_fin,
@@ -263,10 +262,10 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
       if (!vivoRef.current) return;
       setBloques(resultado);
       onGuardado(resultado);
-      setFeedback({ tone: 'success', texto: 'Horarios guardados correctamente.' });
+      toast.exito('Horarios guardados correctamente.');
     } catch (err) {
       console.error('[tabBarberos/Horario] Error guardando:', err.message);
-      if (vivoRef.current) setFeedback({ tone: 'danger', texto: `Error: ${err.message}` });
+      if (vivoRef.current) toast.error(mensajeDeError(err, 'No se pudieron guardar los horarios. Intentá de nuevo.'));
     } finally {
       if (vivoRef.current) setGuardando(false);
     }
@@ -289,14 +288,9 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {feedback && (
-        <Toast
-          tone={feedback.tone}
-          autoDismissMs={feedback.tone === 'success' ? 3000 : undefined}
-          dismissible={feedback.tone === 'danger'}
-          onDismiss={() => setFeedback(null)}
-        >
-          {feedback.texto}
+      {errorCarga && (
+        <Toast tone="danger" dismissible onDismiss={() => setErrorCarga(null)}>
+          {errorCarga}
         </Toast>
       )}
 
@@ -349,7 +343,7 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
                 <span style={{
                   fontFamily: theme.body,
                   fontSize: theme.sizeBody,
-                  color: theme.mutedSoft,
+                  color: theme.muted,
                 }}>
                   Local cerrado
                 </span>
@@ -357,7 +351,7 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
                 <span style={{
                   fontFamily: theme.body,
                   fontSize: theme.sizeBody,
-                  color: theme.mutedSoft,
+                  color: theme.muted,
                 }}>
                   Sin horario
                 </span>
@@ -446,10 +440,40 @@ function SubPanelHorario({ barbero, bloquesIniciales, horarioLocal, onEstado, gu
 
 // ─── Tab Ausencias (dentro del modal de agenda) ───────────────────────────────
 /**
+ * ausenciaEnCurso
+ * True si la ausencia ya empezó: liberarla la termina en este momento.
+ * @param {{ desde: string }} ausencia
+ * @returns {boolean}
+ */
+function ausenciaEnCurso(ausencia) {
+  return new Date(ausencia.desde) <= new Date();
+}
+
+/**
+ * aplicarLiberacion
+ * Aplica a la lista la ausencia liberada tal como la devolvió el servidor
+ * (convenciones §8): si se liberó antes de empezar, sale de la lista (ya no
+ * bloquea nada); si estaba en curso, queda con su nuevo fin (el momento en que
+ * se terminó). Función pura.
+ * @param {Array} lista - ausencias de getAdminSuspensiones
+ * @param {{ id, desde, liberada_en }} liberada - `suspension` de la respuesta
+ * @returns {Array} la lista nueva
+ */
+function aplicarLiberacion(lista, liberada) {
+  if (new Date(liberada.liberada_en) <= new Date(liberada.desde)) {
+    return lista.filter((s) => s.id !== liberada.id);
+  }
+  return lista.map((s) => (s.id === liberada.id ? { ...s, hasta: liberada.liberada_en } : s));
+}
+
+/**
  * SubPanelAusencias
- * Lista, crea y elimina ausencias (suspensiones) de un barbero. La creación
- * maneja el flujo de conflicto 409 (turnos que se cancelarían). El borrado usa
- * confirmación inline de 2 pasos (sin ConfirmDialog anidado dentro del modal).
+ * Lista, crea y libera ausencias (suspensiones) de un barbero. Lista solo las de
+ * tipo 'suspension': los descansos se ven en la agenda del Turnero y en
+ * Planillas. La creación maneja el flujo de conflicto 409 (turnos que se
+ * cancelarían). Liberar ("Terminar" si está en curso) no borra la fila: queda
+ * como registro (decisiones_descansos.md). Usa confirmación inline de 2 pasos
+ * (sin ConfirmDialog anidado dentro del modal).
  *
  * @param {object} props
  * @param {object} props.barbero - { id, nombre }
@@ -463,9 +487,10 @@ function SubPanelAusencias({ barbero }) {
   const [formMotivo, setFormMotivo] = useState('');
   const [creando, setCreando]       = useState(false);
   const [conflicto, setConflicto]   = useState(null);
-  const [feedback, setFeedback]     = useState(null); // { tone, texto } | null
+  // Error de carga: queda inline (con X); el resultado de crear o liberar va en un toast.
+  const [errorCarga, setErrorCarga] = useState(null);
 
-  const [eliminando, setEliminando]       = useState(null); // id en proceso de borrado
+  const [liberando, setLiberando]         = useState(null); // id que se está liberando
   const [confirmandoId, setConfirmandoId] = useState(null); // id en confirmación inline
 
   const vivoRef = useRef(true);
@@ -480,24 +505,26 @@ function SubPanelAusencias({ barbero }) {
   const puedeCrear = formDesde !== '' && formHasta !== '' && !rangoInvalido;
 
   /**
-   * cargarSuspensiones — fetch de ausencias futuras del barbero.
+   * cargarSuspensiones — fetch de las ausencias del barbero que no terminaron
+   * (solo tipo 'suspension'). Con useCallback la función cambia solo si cambia
+   * el barbero: el efecto de abajo la puede tener de dependencia sin recargar en
+   * cada render. También la llama `crear` después de crear una ausencia.
    */
-  const cargarSuspensiones = async () => {
+  const cargarSuspensiones = useCallback(async () => {
     try {
-      const data = await getAdminSuspensiones(barbero.id);
-      if (vivoRef.current) setSuspensiones(data);
+      const data = await getAdminSuspensiones(barbero.id, { tipo: 'suspension' });
+      if (vivoRef.current) { setSuspensiones(data); setErrorCarga(null); }
     } catch (err) {
       console.error('[tabBarberos/Ausencias] Error cargando:', err.message);
-      if (vivoRef.current) setFeedback({ tone: 'danger', texto: 'No se pudieron cargar las ausencias.' });
+      if (vivoRef.current) setErrorCarga('No se pudieron cargar las ausencias.');
     } finally {
       if (vivoRef.current) setCargando(false);
     }
-  };
+  }, [barbero.id]);
 
   useEffect(() => {
     cargarSuspensiones();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [barbero.id]);
+  }, [cargarSuspensiones]);
 
   /**
    * crear — crea una ausencia. Maneja el conflicto 409 (turnos afectados).
@@ -506,7 +533,6 @@ function SubPanelAusencias({ barbero }) {
   const crear = async (confirmarCancelacion = false) => {
     if (!puedeCrear) return;
     setCreando(true);
-    setFeedback(null);
     try {
       const datos = {
         barbero_id: barbero.id,
@@ -528,33 +554,43 @@ function SubPanelAusencias({ barbero }) {
       setFormDesde('');
       setFormHasta('');
       setFormMotivo('');
-      setFeedback({ tone: 'success', texto: `Ausencia creada. ${res.turnos_cancelados || 0} turno(s) cancelado(s).` });
+      toast.exito(`Ausencia creada. ${res.turnos_cancelados || 0} turno(s) cancelado(s).`);
       await cargarSuspensiones();
     } catch (err) {
       console.error('[tabBarberos/Ausencias] Error creando:', err.message);
-      if (vivoRef.current) setFeedback({ tone: 'danger', texto: `Error: ${err.message}` });
+      if (vivoRef.current) toast.error(mensajeDeError(err, 'No se pudo crear la ausencia. Intentá de nuevo.'));
     } finally {
       if (vivoRef.current) setCreando(false);
     }
   };
 
   /**
-   * eliminar — borra una ausencia por id (tras confirmación inline).
-   * @param {string} id
+   * liberar — libera (o termina, si está en curso) una ausencia, tras la
+   * confirmación inline. El cambio se dibuja con la respuesta del servidor
+   * (aplicarLiberacion) y después se recarga por detrás (convenciones §8). Si
+   * falla, el aviso y la recarga: pudo haber cambiado por otro lado (ya liberada,
+   * ya terminada).
+   * @param {Object} ausencia
    */
-  const eliminar = async (id) => {
-    setEliminando(id);
+  const liberar = async (ausencia) => {
+    const enCurso = ausenciaEnCurso(ausencia);
+    setLiberando(ausencia.id);
     try {
-      await eliminarAdminSuspension(id);
+      const { suspension } = await liberarAdminSuspension(ausencia.id);
       if (!vivoRef.current) return;
+      setSuspensiones((lista) => aplicarLiberacion(lista, suspension));
       setConfirmandoId(null);
-      await cargarSuspensiones();
+      toast.exito(enCurso ? 'Ausencia terminada.' : 'Ausencia liberada.');
     } catch (err) {
-      console.error('[tabBarberos/Ausencias] Error eliminando:', err.message);
-      if (vivoRef.current) setFeedback({ tone: 'danger', texto: `Error: ${err.message}` });
+      console.error('[tabBarberos/Ausencias] Error liberando:', err.message);
+      if (vivoRef.current) {
+        setConfirmandoId(null);
+        toast.error(mensajeDeError(err, `No se pudo ${enCurso ? 'terminar' : 'liberar'} la ausencia. Intentá de nuevo.`));
+      }
     } finally {
-      if (vivoRef.current) setEliminando(null);
+      if (vivoRef.current) setLiberando(null);
     }
+    cargarSuspensiones();
   };
 
   if (cargando) return <LoadingState />;
@@ -563,14 +599,9 @@ function SubPanelAusencias({ barbero }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {feedback && (
-        <Toast
-          tone={feedback.tone}
-          autoDismissMs={feedback.tone === 'success' ? 4000 : undefined}
-          dismissible={feedback.tone === 'danger'}
-          onDismiss={() => setFeedback(null)}
-        >
-          {feedback.texto}
+      {errorCarga && (
+        <Toast tone="danger" dismissible onDismiss={() => setErrorCarga(null)}>
+          {errorCarga}
         </Toast>
       )}
 
@@ -618,7 +649,7 @@ function SubPanelAusencias({ barbero }) {
         </div>
 
         {rangoInvalido && (
-          <span style={{ fontFamily: theme.body, fontSize: 12, color: theme.danger }}>
+          <span style={{ fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.danger }}>
             La fecha "Desde" debe ser anterior a "Hasta".
           </span>
         )}
@@ -690,60 +721,88 @@ function SubPanelAusencias({ barbero }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {suspensiones.map((s) => {
             const confirmando = confirmandoId === s.id;
+            const enCurso = ausenciaEnCurso(s);
+            const procesando = liberando === s.id;
             return (
               <div
                 key={s.id}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
                   border: `1px solid ${theme.hairline}`,
                   borderRadius: theme.radius,
                   padding: '10px 12px',
                 }}
               >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                  <span style={{
-                    fontFamily: theme.body,
-                    fontWeight: theme.weightMedium,
-                    fontSize: theme.sizeBody,
-                    color: theme.ink,
-                  }}>
-                    {fmtFechaHora(s.desde)} → {fmtFechaHora(s.hasta)}
-                  </span>
-                  {s.motivo && (
-                    <span style={{ fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.muted }}>
-                      {s.motivo}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                    <span style={{
+                      fontFamily: theme.body,
+                      fontWeight: theme.weightMedium,
+                      fontSize: theme.sizeBody,
+                      color: theme.ink,
+                    }}>
+                      {fmtFechaHora(s.desde)} → {fmtFechaHora(s.hasta)}
                     </span>
+                    {s.motivo && (
+                      <span style={{ fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.muted }}>
+                        {s.motivo}
+                      </span>
+                    )}
+                    <span style={{
+                      fontFamily: theme.mono,
+                      fontSize: theme.sizeMicro,
+                      letterSpacing: '0.02em',
+                      textTransform: 'uppercase',
+                      color: theme.muted,
+                    }}>
+                      {enCurso ? 'En curso · ' : ''}Cargada por {s.origen === 'admin' ? 'el administrador' : 'el barbero'}
+                    </span>
+                  </div>
+
+                  {!confirmando && (
+                    <div style={{ flexShrink: 0 }}>
+                      <Button
+                        variant="secondary"
+                        full={false}
+                        onClick={() => setConfirmandoId(s.id)}
+                        ariaLabel={`${enCurso ? 'Terminar' : 'Liberar'} la ausencia del ${fmtFechaHora(s.desde)}`}
+                      >
+                        {enCurso ? 'Terminar' : 'Liberar'}
+                      </Button>
+                    </div>
                   )}
-                  <span style={{
-                    fontFamily: theme.mono,
-                    fontSize: theme.sizeMicro,
-                    letterSpacing: '0.02em',
-                    textTransform: 'uppercase',
-                    color: theme.mutedSoft,
-                  }}>
-                    Origen: {s.origen}
-                  </span>
                 </div>
 
-                {confirmando ? (
-                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                    <Button variant="danger" onClick={() => eliminar(s.id)} disabled={eliminando === s.id} full={false}>
-                      {eliminando === s.id ? 'Eliminando…' : 'Sí, eliminar'}
-                    </Button>
-                    <Button variant="ghost" onClick={() => setConfirmandoId(null)} disabled={eliminando === s.id} full={false}>
-                      No
-                    </Button>
+                {/* Confirmación inline: dice qué pasa con los horarios y que los
+                    turnos cancelados al crearla no vuelven. */}
+                {confirmando && (
+                  <div style={{
+                    marginTop: 10,
+                    paddingTop: 10,
+                    borderTop: `1px solid ${theme.hairlineSoft}`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                  }}>
+                    <span style={{ fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.inkSoft, lineHeight: 1.5 }}>
+                      {enCurso
+                        ? 'La ausencia termina ahora y los horarios que quedan vuelven a estar disponibles para reservar.'
+                        : 'La ausencia se libera y esos horarios vuelven a estar disponibles para reservar.'}
+                      {' '}Los turnos que se cancelaron al crearla no se recuperan.
+                    </span>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <Button variant="primary" onClick={() => liberar(s)} disabled={procesando} full={false}>
+                        {procesando ? 'Procesando…' : (enCurso ? 'Sí, terminar' : 'Sí, liberar')}
+                      </Button>
+                      <Button variant="ghost" onClick={() => setConfirmandoId(null)} disabled={procesando} full={false}>
+                        Volver
+                      </Button>
+                    </div>
                   </div>
-                ) : (
-                  <BotonIconoFila
-                    tono="danger"
-                    ariaLabel="Eliminar ausencia"
-                    icono={<Trash2 size={14} strokeWidth={1.75} />}
-                    onClick={() => setConfirmandoId(s.id)}
-                  />
                 )}
               </div>
             );
@@ -882,15 +941,12 @@ function ModalDatosBarbero({ barbero, onGuardar, onCerrar }) {
 
     try {
       const res = await apiFetch(path, { method, body: JSON.stringify(body) });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Error del servidor');
-      }
+      if (!res.ok) throw await errorDeRespuesta(res);
       const barberoGuardado = await res.json();
       onGuardar(barberoGuardado, esEdicion);
     } catch (err) {
       console.error('[tabBarberos] Error en handleGuardar:', err.message);
-      setError(err.message || 'No se pudo guardar el barbero. Intentá de nuevo.');
+      setError(mensajeDeError(err, 'No se pudo guardar el barbero. Intentá de nuevo.'));
     } finally {
       setGuardando(false);
     }
@@ -1120,7 +1176,7 @@ export default function TabBarberos() {
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           {tieneHorarios(row)
             ? <Check size={18} strokeWidth={2.25} color={theme.success} />
-            : <span style={{ color: theme.mutedSoft }}>—</span>}
+            : <span style={{ color: theme.muted }}>—</span>}
         </div>
       ),
     },

@@ -5,10 +5,10 @@
 // Está siempre en el HTML (la página se pre-renderiza); la clase
 // `om-solo-mobile` (index.css) la oculta en desktop.
 
-import { MessageCircle } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
 import { linkWhatsApp } from '../../utils/contacto.js';
 import Button from '../ui/Button.jsx';
+import IconoWhatsApp from '../ui/IconoWhatsApp.jsx';
 
 /**
  * MobileCtaBar
@@ -35,7 +35,7 @@ function MobileCtaBar() {
         }}
       >
         <Button href={linkWhatsApp()} external variant="primary" full>
-          <MessageCircle size={18} strokeWidth={2} aria-hidden="true" />
+          <IconoWhatsApp size={18} />
           Probá tu primer mes gratis
         </Button>
       </div>

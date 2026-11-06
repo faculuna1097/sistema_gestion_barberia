@@ -6,6 +6,7 @@
 //
 // Sistema de diseño: tokens + Geist + Lucide + onClick. Densidad compacta.
 // Fondo lo da PanelAdmin (theme.surfaceAlt, D7). Loading via LoadingState (D6).
+// Sin ScreenHeader, como el resto del panel (D15): el sidebar ya dice la sección.
 // DataTable se posterga hasta tener un caso con sort/filtros reales (deuda #20).
 
 import { useState, useEffect } from 'react';
@@ -13,13 +14,14 @@ import { Pencil, Trash2, Package, RefreshCw } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
 import { mesALabel, getMesActual } from '../../../utils/fecha';
-import { fmtPesos, OPCIONES_FORMA_PAGO } from '../../../utils/formato';
+import { fmtPesos, formatPago, OPCIONES_FORMA_PAGO } from '../../../utils/formato';
 import { cargarChunk } from '../../../utils/cargarChunk';
+import { errorDeRespuesta, mensajeDeError } from '../../../utils/errores';
+import { toast } from '../../../utils/toast';
+import { usePantallaAngosta } from '../../../hooks/usePantallaAngosta';
 import {
-  ScreenHeader,
   LoadingState,
   EmptyState,
-  Toast,
   ConfirmDialog,
   Modal,
   Select,
@@ -77,6 +79,11 @@ function CampoFijo({ label, children, numeric }) {
  * Tabla densa con detalle por venta + footer "Total del mes". Los montos van
  * en ink: son ingresos (sistema_de_disenio §3.1.1).
  *
+ * En pantalla angosta (iPad en vertical), Cantidad y Precio unitario dejan de
+ * ser columnas y pasan a un segundo renglón bajo el producto ("2 × $ 500"):
+ * con las 7 columnas la tabla mide ~625 px y Editar y Eliminar quedaban fuera
+ * de la card.
+ *
  * @param {object} props
  * @param {Array} props.ventas
  * @param {number} props.totalGeneral
@@ -85,11 +92,14 @@ function CampoFijo({ label, children, numeric }) {
  * @param {boolean} props.accionesDeshabilitadas
  */
 function TablaVentas({ ventas, totalGeneral, onEditar, onEliminar, accionesDeshabilitadas }) {
+  const compacta = usePantallaAngosta();
   const columnas = [
     { label: 'Fecha',           align: 'left'   },
     { label: 'Producto',        align: 'left'   },
-    { label: 'Cantidad',        align: 'center' },
-    { label: 'Precio unitario', align: 'right'  },
+    ...(compacta ? [] : [
+      { label: 'Cantidad',        align: 'center' },
+      { label: 'Precio unitario', align: 'right'  },
+    ]),
     { label: 'Total',           align: 'right'  },
     { label: 'Forma de pago',   align: 'left'   },
     { label: '',                align: 'center', width: 88 },
@@ -135,9 +145,23 @@ function TablaVentas({ ventas, totalGeneral, onEditar, onEliminar, accionesDesha
             return (
               <tr key={v.id} className="om-fila-hover">
                 <td style={{ ...tdBase, color: theme.muted, whiteSpace: 'nowrap' }}>{v.fecha}</td>
-                <td style={{ ...tdBase, fontWeight: theme.weightMedium }}>{v.producto_nombre}</td>
-                <td style={{ ...tdBase, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{v.cantidad}</td>
-                <td style={{ ...tdBase, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtPesos(v.precio_unitario)}</td>
+                <td style={{ ...tdBase, fontWeight: theme.weightMedium }}>
+                  {v.producto_nombre}
+                  {compacta && (
+                    <div style={{
+                      fontWeight: theme.weightRegular,
+                      color: theme.muted,
+                      fontVariantNumeric: 'tabular-nums',
+                      whiteSpace: 'nowrap',
+                    }}>{v.cantidad} × {fmtPesos(v.precio_unitario)}</div>
+                  )}
+                </td>
+                {!compacta && (
+                  <>
+                    <td style={{ ...tdBase, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{v.cantidad}</td>
+                    <td style={{ ...tdBase, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtPesos(v.precio_unitario)}</td>
+                  </>
+                )}
                 <td style={{ ...tdBase, textAlign: 'right', fontWeight: theme.weightHeading, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtPesos(v.total)}</td>
                 <td style={tdBase}><BadgeFormaPago forma={v.forma_pago} /></td>
                 <td style={{ ...tdBase, padding: '6px 8px', textAlign: 'center', width: 88 }}>
@@ -164,7 +188,7 @@ function TablaVentas({ ventas, totalGeneral, onEditar, onEliminar, accionesDesha
         </tbody>
         <tfoot>
           <tr>
-            <td colSpan={4} style={{
+            <td colSpan={compacta ? 2 : 4} style={{
               padding: '14px 12px',
               fontFamily: theme.body,
               fontSize: theme.sizeBody,
@@ -385,7 +409,7 @@ function ModalEditarVenta({ open, venta, form, onChange, onGuardar, onCancelar, 
               background: theme.dangerSoft,
               color: theme.danger,
               fontFamily: theme.body,
-              fontSize: 13,
+              fontSize: theme.sizeBody,
               textAlign: 'center',
             }}>{errorEditar}</div>
           )}
@@ -417,7 +441,6 @@ export default function SeccionVentas() {
   const [formEditar, setFormEditar]             = useState({});
   const [guardando, setGuardando]               = useState(false);
   const [errorEditar, setErrorEditar]           = useState(null);
-  const [errorExport, setErrorExport]           = useState(null);
 
   // Carga de ventas del mes. `intento` re-dispara el efecto en "Reintentar".
   useEffect(() => {
@@ -499,10 +522,7 @@ export default function SeccionVentas() {
           forma_pago:      formEditar.forma_pago,
         }),
       });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Error del servidor');
-      }
+      if (!res.ok) throw await errorDeRespuesta(res);
       const nuevoTotal = Number(formEditar.cantidad) * Number(formEditar.precio_unitario);
       const nuevasVentas = ventas.map((v) => v.id === id ? {
         ...v,
@@ -518,7 +538,7 @@ export default function SeccionVentas() {
       setVentaAEditar(null);
     } catch (err) {
       console.error('[seccionVentas] Error en confirmarEditar:', err.message);
-      setErrorEditar(err.message || 'No se pudo editar la venta. Intentá de nuevo.');
+      setErrorEditar(mensajeDeError(err, 'No se pudo editar la venta. Intentá de nuevo.'));
     } finally {
       setGuardando(false);
     }
@@ -529,7 +549,7 @@ export default function SeccionVentas() {
     setEliminando(true);
     try {
       const res = await apiFetch(`/ventas/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Error del servidor');
+      if (!res.ok) throw await errorDeRespuesta(res);
       const nuevasVentas = ventas.filter((v) => v.id !== id);
       const { totalGen, totalesOrdenados } = recalcularTotales(nuevasVentas);
       setVentas(nuevasVentas);
@@ -537,6 +557,8 @@ export default function SeccionVentas() {
       setTotalesPorProd(totalesOrdenados);
     } catch (err) {
       console.error('[seccionVentas] Error en confirmarEliminar:', err.message);
+      // El diálogo se cierra igual; el aviso dice que la venta sigue ahí.
+      toast.error(mensajeDeError(err, 'No se pudo eliminar la venta. Intentá de nuevo.'));
     } finally {
       setEliminando(false);
       setVentaAEliminar(null);
@@ -545,15 +567,10 @@ export default function SeccionVentas() {
 
   const exportarExcel = async () => {
     // El chunk de xlsx se baja recién acá (lazy, #3). Si la descarga falla
-    // (red caída / hash viejo post-redeploy), cargarChunk lo convierte en un
-    // error con mensaje al usuario en vez de un unhandled rejection silencioso.
-    let XLSX;
-    try {
-      XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
-    } catch (err) {
-      setErrorExport(err.message);
-      return;
-    }
+    // (red caída / hash viejo post-redeploy), cargarChunk avisa con un toast y
+    // devuelve null, en vez de un unhandled rejection silencioso.
+    const XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
+    if (!XLSX) return;
     const wb = XLSX.utils.book_new();
     const filas = ventas.map((v) => ({
       Fecha:             v.fecha,
@@ -561,7 +578,7 @@ export default function SeccionVentas() {
       Cantidad:          Number(v.cantidad),
       'Precio unitario': Number(v.precio_unitario),
       Total:             Number(v.total),
-      'Forma de pago':   v.forma_pago === 'efectivo' ? 'Efectivo' : 'Mercado Pago',
+      'Forma de pago':   formatPago(v.forma_pago),
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Ventas');
 
@@ -598,8 +615,6 @@ export default function SeccionVentas() {
 
   return (
     <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <ScreenHeader title="Ventas" subtitle="Productos vendidos por mes" />
-
       <ConfirmDialog
         open={!!ventaAEliminar}
         title="¿Eliminar esta venta?"
@@ -636,11 +651,6 @@ export default function SeccionVentas() {
         </div>
       </div>
 
-      {errorExport && (
-        <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
-          {errorExport}
-        </Toast>
-      )}
 
       {cargando ? (
         <LoadingState />

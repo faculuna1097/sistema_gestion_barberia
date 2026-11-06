@@ -48,7 +48,7 @@ function VideoEmbed({ src, youtubeId, poster, aspect = '16 / 9', title = 'Video 
             alignItems: 'center',
             justifyContent: 'center',
             gap: 10,
-            color: theme.mutedSoft,
+            color: theme.muted,
           }}
         >
           <VideoIcon size={30} strokeWidth={1.5} aria-hidden="true" />

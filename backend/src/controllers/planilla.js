@@ -1,10 +1,10 @@
 // /backend/src/controllers/planilla.js
 // Controller del backoffice para planilla semanal con scoping por rol.
-// Thin wrapper. Cobertura: plan_turnero_v2.md sección 5 (/api/admin/planilla).
+// Thin wrapper. Cobertura: decisiones_turnero.md.
 
-import { detalleSemanal, resumenSemanal } from '../services/planillaService.js';
-
-const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+import { detalleSemanal, resumenSemanal, descansosSemanal } from '../services/planillaService.js';
+import { esFechaISO } from '../utils/validarFecha.js';
+import { filtroBarberoSegunRol } from '../utils/scopingRol.js';
 
 /**
  * GET /api/admin/planilla?semana=YYYY-MM-DD&barbero_id=X
@@ -13,15 +13,13 @@ const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
  */
 export const getPlanilla = async (req, res) => {
   const { semana } = req.query;
-  if (!semana || !REGEX_FECHA.test(semana)) {
+  if (!esFechaISO(semana)) {
     return res.status(400).json({ error: 'semana debe tener formato YYYY-MM-DD' });
   }
 
-  let barberoId;
-  if (req.rol === 'barbero') {
-    barberoId = req.barbero_id;
-  } else if (req.query.barbero_id) {
-    barberoId = req.query.barbero_id;
+  const { barberoId, error } = filtroBarberoSegunRol(req);
+  if (error) {
+    return res.status(400).json({ error });
   }
 
   try {
@@ -40,15 +38,13 @@ export const getPlanilla = async (req, res) => {
  */
 export const getResumen = async (req, res) => {
   const { semana } = req.query;
-  if (!semana || !REGEX_FECHA.test(semana)) {
+  if (!esFechaISO(semana)) {
     return res.status(400).json({ error: 'semana debe tener formato YYYY-MM-DD' });
   }
 
-  let barberoId;
-  if (req.rol === 'barbero') {
-    barberoId = req.barbero_id;
-  } else if (req.query.barbero_id) {
-    barberoId = req.query.barbero_id;
+  const { barberoId, error } = filtroBarberoSegunRol(req);
+  if (error) {
+    return res.status(400).json({ error });
   }
 
   try {
@@ -57,5 +53,32 @@ export const getResumen = async (req, res) => {
   } catch (err) {
     console.error('[planilla] Error en getResumen:', err);
     res.status(500).json({ error: 'Error al obtener resumen' });
+  }
+};
+
+/**
+ * GET /api/admin/planilla/descansos?semana=YYYY-MM-DD&barbero_id=X
+ * Registro de descansos de la semana por barbero (decisiones_descansos.md → "Registro del dueño").
+ * Misma regla de scoping que getPlanilla: el barbero ve solo el suyo.
+ * @returns {JSON} array de { barbero_id, barbero_nombre, cantidad, minutos,
+ *   minutos_jornada, porcentaje, bloques: [...] } (ver descansosSemanal)
+ */
+export const getDescansosSemana = async (req, res) => {
+  const { semana } = req.query;
+  if (!esFechaISO(semana)) {
+    return res.status(400).json({ error: 'semana debe tener formato YYYY-MM-DD' });
+  }
+
+  const { barberoId, error } = filtroBarberoSegunRol(req);
+  if (error) {
+    return res.status(400).json({ error });
+  }
+
+  try {
+    const resultado = await descansosSemanal({ tenantId: req.tenant_id, semana, barberoId });
+    res.json(resultado);
+  } catch (err) {
+    console.error('[planilla] Error en getDescansosSemana:', err);
+    res.status(500).json({ error: 'Error al obtener el registro de descansos' });
   }
 };

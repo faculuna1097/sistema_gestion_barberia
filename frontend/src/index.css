@@ -2,8 +2,28 @@
    Reset global + carga de fuentes + animaciones reutilizables.
    No define estilos de componentes — eso vive en los .jsx de /components/ui/. */
 
-/* ── Geist + Geist Mono via Google Fonts ─────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+/* ── Geist + Geist Mono, servidas desde /public/fonts ────────── */
+/* Son los mismos woff2 (alfabeto latin) que servía Google Fonts: fuentes
+   variables, un solo archivo para todos los pesos. Los rangos de peso son los
+   que se pedían a Google (400–700 y 400–500). Servirlas desde el propio dominio
+   evita la cadena en serie CSS de Google → fuente y un dominio más
+   (performance_frontends.md). Un carácter fuera del alfabeto latin (ej. "ł")
+   cae a la fuente del sistema. */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/geist-latin.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url('/fonts/geist-mono-latin.woff2') format('woff2');
+}
 
 /* ── Reset moderno mínimo ────────────────────────────────────── */
 *, *::before, *::after {

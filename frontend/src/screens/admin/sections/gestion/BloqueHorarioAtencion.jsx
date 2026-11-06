@@ -1,6 +1,6 @@
 // /frontend/src/screens/admin/sections/gestion/BloqueHorarioAtencion.jsx
 // Bloque de gestión del horario semanal de atención del negocio.
-// Se renderiza dentro de TabNegocio. Cobertura: plan_horario_atencion.md §3.8.
+// Se renderiza dentro de TabNegocio. Cobertura: decisiones_horario_atencion.md.
 //
 // Sistema de diseño: tokens + Geist + primitivos + onClick. El modal de
 // confirmación de la cascada 409 usa ConfirmDialog + DetalleRecurso (mismo
@@ -19,6 +19,8 @@ import {
   Toast,
   LoadingState,
 } from '../../../../components/ui';
+import { toast } from '../../../../utils/toast';
+import { errorDeRespuesta, mensajeDeError } from '../../../../utils/errores';
 import { theme } from '../../../../theme/tokens.js';
 
 // Nombres de día indexados por dia_semana (0=domingo .. 6=sábado),
@@ -154,7 +156,6 @@ export default function BloqueHorarioAtencion() {
   const [cargando, setCargando]       = useState(true);
   const [guardando, setGuardando]     = useState(false);
   const [errorCarga, setErrorCarga]   = useState(null);     // fallo de carga → bloque de error + retry
-  const [feedback, setFeedback]       = useState(null);     // { tone, texto } | null
   const [deltaConfirmar, setDeltaConf] = useState(null);    // delta del 409 → ConfirmDialog
   const [intento, setIntento]         = useState(0);
 
@@ -192,7 +193,6 @@ export default function BloqueHorarioAtencion() {
    * @param {number} diaSemana
    */
   const toggleDia = (diaSemana) => {
-    setFeedback(null);
     setDias((prev) => prev.map((d) =>
       d.dia_semana === diaSemana ? { ...d, abierto: !d.abierto } : d
     ));
@@ -205,7 +205,6 @@ export default function BloqueHorarioAtencion() {
    * @param {string} valor
    */
   const cambiarHora = (diaSemana, campo, valor) => {
-    setFeedback(null);
     setDias((prev) => prev.map((d) =>
       d.dia_semana === diaSemana ? { ...d, [campo]: valor } : d
     ));
@@ -224,7 +223,6 @@ export default function BloqueHorarioAtencion() {
    */
   const ejecutarGuardado = async (confirmarCascada) => {
     setGuardando(true);
-    setFeedback(null);
 
     const horarios = dias
       .filter((d) => d.abierto)
@@ -243,10 +241,7 @@ export default function BloqueHorarioAtencion() {
         return;
       }
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Error del servidor');
-      }
+      if (!res.ok) throw await errorDeRespuesta(res);
 
       const data = await res.json();
       if (!vivoRef.current) return;
@@ -259,16 +254,13 @@ export default function BloqueHorarioAtencion() {
       const huboCascada = c.turnos_cancelados > 0 || c.bloques_eliminados > 0 || c.bloques_truncados > 0;
       if (huboCascada) {
         const bloques = c.bloques_eliminados + c.bloques_truncados;
-        setFeedback({
-          tone: 'success',
-          texto: `Horario actualizado · ${c.turnos_cancelados} turno(s) cancelado(s) · ${bloques} bloque(s) de barbero actualizado(s).`,
-        });
+        toast.exito(`Horario actualizado · ${c.turnos_cancelados} turno(s) cancelado(s) · ${bloques} bloque(s) de barbero actualizado(s).`);
       } else {
-        setFeedback({ tone: 'success', texto: 'Horario actualizado correctamente.' });
+        toast.exito('Horario actualizado correctamente.');
       }
     } catch (err) {
       console.error('[bloqueHorarioAtencion] Error en ejecutarGuardado:', err.message);
-      if (vivoRef.current) setFeedback({ tone: 'danger', texto: err.message || 'No se pudo guardar el horario. Intentá de nuevo.' });
+      if (vivoRef.current) toast.error(mensajeDeError(err, 'No se pudo guardar el horario. Intentá de nuevo.'));
     } finally {
       if (vivoRef.current) setGuardando(false);
     }
@@ -412,16 +404,6 @@ export default function BloqueHorarioAtencion() {
         })}
       </div>
 
-      {feedback && (
-        <Toast
-          tone={feedback.tone}
-          autoDismissMs={feedback.tone === 'success' ? 4000 : undefined}
-          dismissible={feedback.tone === 'danger'}
-          onDismiss={() => setFeedback(null)}
-        >
-          {feedback.texto}
-        </Toast>
-      )}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button

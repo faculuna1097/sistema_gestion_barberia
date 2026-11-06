@@ -21,6 +21,12 @@ export default defineConfig([
       },
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
+    rules: {
+      // Apagada en los 4 fronts: el patrón de carga de datos del proyecto (fetch
+      // en useEffect con setCargando(true)) dispara falsos positivos. Ver
+      // convenciones_tecnicas.md §8.
+      'react-hooks/set-state-in-effect': 'off',
+    },
   },
   // Entrada del build SSR: exporta funciones (render, JSON-LD, llms.txt) y no
   // pasa nunca por el fast refresh del dev server, así que la regla no aplica.

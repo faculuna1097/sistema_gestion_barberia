@@ -3,11 +3,11 @@
 // Protegido: en index.js la ruta /api/turnos se monta con verificarToken +
 // requiereRol('operativo', 'admin'). Expone los turnos reservados del día de un
 // barbero para que FlujoCorte permita registrar un corte vinculado al turno.
-// Cobertura: plan_turnero_v2.md sección 9.4 (pantalla "registrar corte").
+// Cobertura: decisiones_turnero.md.
 
 import { listarTurnosOperativos } from '../services/turnosService.js';
-
-const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+import { esFechaISO } from '../utils/validarFecha.js';
+import { esUUID, MENSAJE_BARBERO_ID_INVALIDO } from '../utils/validarUuid.js';
 
 /**
  * getTurnosOperativos
@@ -23,8 +23,11 @@ export const getTurnosOperativos = async (req, res) => {
   if (!barbero_id || !fecha) {
     return res.status(400).json({ error: 'barbero_id y fecha son requeridos' });
   }
-  if (!REGEX_FECHA.test(fecha)) {
+  if (!esFechaISO(fecha)) {
     return res.status(400).json({ error: 'fecha debe tener formato YYYY-MM-DD' });
+  }
+  if (!esUUID(barbero_id)) {
+    return res.status(400).json({ error: MENSAJE_BARBERO_ID_INVALIDO });
   }
 
   try {

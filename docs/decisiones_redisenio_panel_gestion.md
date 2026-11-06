@@ -29,14 +29,18 @@ admin se conservan acá con su rationale.
 | **D10** | Jerarquía de **tablas densas**: sin bandas grises; total anclado con `border-top: 2px solid accent` (línea indigo) | El gris claro se usaba para 3 cosas distintas dentro de la tabla y se confundía con el fondo → la jerarquía se perdía. La línea indigo de 2px en el total ancla la mirada en el dato más importante. Aplicado a Balances/Caja/Ventas/Gastos/Planillas. |
 | **D11** | `SeccionTurnero` **sin `ScreenHeader`** | Es densa por naturaleza (agenda barbero × hora); el header comía ~80px de verticalidad sin agregar info que la agenda no autoexplique. |
 | **D12** | Agenda del turnero **in-house con CSS grid + position absolute**, sin librería de calendar | `react-big-calendar`/`FullCalendar` implican ~50–150kb gz + overrides agresivos para respetar los tokens; el caso es acotado (un día, sin recurrencia ni drag&drop) y posicionar bloques en grilla es ~20 líneas. Cero dependencia que mantener. Reevaluar si aparece drag&drop/resize/vistas múltiples. |
-| D13/**D15** | `SeccionGestion` **sin `ScreenHeader`** (D15 revierte el D13 inicial) | Pedido del usuario. **Pendiente abierto, no decidido:** sacar los headers del resto del admin sería un pase global. El sidebar ya indica en qué sección estás. |
+| D13/**D15** | `SeccionGestion` **sin `ScreenHeader`** (D15 revierte el D13 inicial) | Pedido del usuario. **Pendiente resuelto el 2026-11-02 (ver abajo):** sacar los headers del resto del admin sería un pase global. El sidebar ya indica en qué sección estás. |
 | **D14** | Densidad de fila distinta: tablas de **reporte** (`hairlineSoft`, compactas) vs `DataTable` **CRUD táctil** (~46–48px, `hairline`) | El admin corre también en iPad: las tablas CRUD se tocan con el dedo (≥44px touch target + separador claro); las de reporte se escanean con mouse, donde compactar pesa más. |
 | **D16** | Layout de `TabNegocio` = **un único bloque dividido** (Horario franja full-width + Feriados \| Imágenes en columnas) | El usuario no quería scrollear el tab; las 3 secciones del negocio son config relacionada → un panel se lee mejor que 3 cards sueltas. Se removió el form de nombre/URL (se editan por DB; ver deuda #43). |
 
 ## Pendiente de producto (abierto)
 
-¿Se sacan los `ScreenHeader` de **todo** el admin? Ya se removieron de Gestión, Turnero,
+~~¿Se sacan los `ScreenHeader` de **todo** el admin? Ya se removieron de Gestión, Turnero,
 Planillas, Balances y Caja (commit `a99e6f1`); **solo quedan en `SeccionVentas` y
-`SeccionGastos`**. Terminar de sacarlos —o decidir conservarlos— es lo que queda. No decidido.
+`SeccionGastos`**. Terminar de sacarlos —o decidir conservarlos— es lo que queda. No decidido.~~
+
+**Resuelto (2026-11-02, tanda 6b de deudas):** se sacaron también de Ventas y Gastos, por
+consistencia con D15. Ninguna sección del panel tiene `ScreenHeader`; el subtítulo de cada
+una no se movió a otro lado (el sidebar dice la sección y el selector de mes, el período).
 
 *— Fin del documento (archivado: núcleo de decisiones) —*

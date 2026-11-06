@@ -11,18 +11,30 @@
 --   - corte: UNIQUE corte_turno_unico (turno_id) WHERE turno_id IS NOT NULL
 --     (un turno se vincula a un solo corte; violación → 23505).
 --   - barbero_suspension: índice (barbero_id, desde, hasta).
---   - barbero.comision_tipo: el CHECK admite 'fijo', pero hoy no hay barberos con
---     comisión fija: toda comisión es porcentaje (decisión de negocio; ver la deuda
---     "Comisión: siempre porcentaje" en estado_actual.md).
+--   - Comisión: siempre un porcentaje sobre el precio del servicio (decisión de
+--     negocio del 2026-09-29). El tipo 'fijo' se sacó del CHECK el 2026-11-03. La
+--     fórmula vive solo en backend/src/utils/comision.js.
 --   - Row Level Security ACTIVADO y sin policies en las 18 tablas (desde 2026-09-30).
 --     Cierra la API automática de Supabase (roles anon / authenticated); el backend
 --     entra como owner (postgres) y RLS no le aplica. Toda tabla nueva se crea con
 --     ALTER TABLE ... ENABLE ROW LEVEL SECURITY (el SQL editor no lo activa solo).
+--     Excepción a propósito: las 3 vistas web_* (al final del archivo).
+--   - FK de tenant_id con ON DELETE CASCADE solo en barbero, servicio, producto,
+--     corte, venta, categoria_gasto, gasto y cierre_caja (leído de la DB el
+--     2026-11-03). En las demás tablas el FK es sin acción, así que borrar un tenant
+--     falla mientras le queden filas ahí: la baja de un tenant es activo = false
+--     (onboarding.md).
+--   - Web de Kingsai: barbero, servicio y tenant_horario_atencion tienen triggers
+--     web_deploy_* que pueden disparar un deploy real de la web de Kingsai. Detalle
+--     al final del archivo. Nada de eso está en el repo: vive solo en la DB.
 
 CREATE TABLE public.tenant (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   nombre_negocio text NOT NULL,
   pin_admin text NOT NULL,
+  -- Claves que lee el código: recordatorio.activo (mail de recordatorio), whatsapp
+  -- (E.164) y resena_url (https, link de reseñas de Google) que expone el turnero.
+  -- Ver onboarding.md → Notas.
   configuracion jsonb DEFAULT '{}'::jsonb,
   activo boolean DEFAULT true,
   created_at timestamp with time zone DEFAULT now(),
@@ -43,14 +55,20 @@ CREATE TABLE public.barbero (
   tenant_id uuid NOT NULL,
   nombre text NOT NULL,
   pin text NOT NULL,
-  comision_tipo text DEFAULT 'porcentaje'::text CHECK (comision_tipo = ANY (ARRAY['porcentaje'::text, 'fijo'::text])),
-  comision_valor numeric DEFAULT 0,
-  activo boolean DEFAULT true,
-  created_at timestamp with time zone DEFAULT now(),
+  -- comision_tipo: solo 'porcentaje' desde el 2026-11-03 (antes admitía 'fijo', sin
+  -- filas). Se conserva porque el backend anterior la lee y la escribe, y los fronts
+  -- anteriores la usan en Planillas; se puede borrar cuando ningún front publicado la use.
+  comision_tipo text DEFAULT 'porcentaje'::text CONSTRAINT barbero_comision_tipo_check CHECK (comision_tipo = 'porcentaje'::text),
+  -- comision_valor: % actual del barbero (0 a 100, lo valida el backend). Vale para
+  -- los cortes nuevos: cada corte guarda el suyo en corte.comision_porcentaje.
+  comision_valor numeric(10,2) DEFAULT 0,
+  -- activo y created_at: NOT NULL desde el 2026-11-03 (no había NULLs).
+  activo boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
   email text,
   token_version integer NOT NULL DEFAULT 0,
   CONSTRAINT barbero_pkey PRIMARY KEY (id),
-  CONSTRAINT barbero_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  CONSTRAINT barbero_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id) ON DELETE CASCADE,
   -- Target de los FK compuestos (tenant_id, barbero_id) de turno y corte.
   -- Trivialmente satisfacible: id ya es PK (único por sí solo).
   CONSTRAINT barbero_tenant_id_id_key UNIQUE (tenant_id, id)
@@ -59,12 +77,13 @@ CREATE TABLE public.servicio (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   tenant_id uuid NOT NULL,
   nombre text NOT NULL,
-  precio numeric NOT NULL,
-  activo boolean DEFAULT true,
-  created_at timestamp with time zone DEFAULT now(),
+  precio numeric(10,2) NOT NULL,
+  -- activo y created_at: NOT NULL desde el 2026-11-03.
+  activo boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
   cantidad_slots integer NOT NULL DEFAULT 1 CHECK (cantidad_slots > 0 AND cantidad_slots <= 20),
   CONSTRAINT servicio_pkey PRIMARY KEY (id),
-  CONSTRAINT servicio_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  CONSTRAINT servicio_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id) ON DELETE CASCADE,
   -- Target de los FK compuestos (tenant_id, servicio_id) de turno y corte.
   CONSTRAINT servicio_tenant_id_id_key UNIQUE (tenant_id, id)
 );
@@ -72,27 +91,35 @@ CREATE TABLE public.producto (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   tenant_id uuid NOT NULL,
   nombre text NOT NULL,
-  precio numeric NOT NULL,
+  precio numeric(10,2) NOT NULL,
   stock_actual integer DEFAULT 0,
   stock_minimo integer DEFAULT 0,
-  activo boolean DEFAULT true,
-  created_at timestamp with time zone DEFAULT now(),
+  -- activo y created_at: NOT NULL desde el 2026-11-03.
+  activo boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT producto_pkey PRIMARY KEY (id),
-  CONSTRAINT producto_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
+  CONSTRAINT producto_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id) ON DELETE CASCADE
 );
 CREATE TABLE public.corte (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   tenant_id uuid NOT NULL,
   barbero_id uuid NOT NULL,
   forma_pago text NOT NULL CHECK (forma_pago = ANY (ARRAY['efectivo'::text, 'mercado_pago'::text])),
-  propina numeric DEFAULT 0,
-  monto_total numeric NOT NULL,
+  propina numeric(10,2) DEFAULT 0,
+  monto_total numeric(10,2) NOT NULL,
   timestamp timestamp with time zone DEFAULT now(),
   servicio_id uuid NOT NULL,
   precio numeric NOT NULL,
   turno_id uuid,
+  -- % de comisión del barbero al registrar el corte (2026-11-03): un cambio de %
+  -- vale solo para adelante. Lo completa registrarCorte en el mismo INSERT; los
+  -- cortes anteriores se rellenaron con el % de su barbero ese día. Mismo tipo que
+  -- barbero.comision_valor y sin CHECK, para que copiarlo nunca falle. Nullable hasta
+  -- el deploy del backend que lo escribe (pasos en estado_actual.md); mientras tanto,
+  -- un corte sin % usa el actual del barbero (backend/src/utils/comision.js).
+  comision_porcentaje numeric(10,2),
   CONSTRAINT corte_pkey PRIMARY KEY (id),
-  CONSTRAINT corte_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  CONSTRAINT corte_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id) ON DELETE CASCADE,
   -- FK compuestos con tenant_id: hacen imposible que un corte referencie un
   -- barbero/servicio/turno de OTRO tenant (aislamiento estructural, auditoría 2.1).
   CONSTRAINT corte_barbero_tenant_fkey  FOREIGN KEY (tenant_id, barbero_id)  REFERENCES public.barbero(tenant_id, id),
@@ -106,48 +133,63 @@ CREATE TABLE public.venta (
   tenant_id uuid NOT NULL,
   producto_id uuid NOT NULL,
   cantidad integer NOT NULL DEFAULT 1,
-  precio_unitario numeric NOT NULL,
+  precio_unitario numeric(10,2) NOT NULL,
   forma_pago text NOT NULL CHECK (forma_pago = ANY (ARRAY['efectivo'::text, 'mercado_pago'::text])),
   timestamp timestamp with time zone DEFAULT now(),
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT venta_pkey PRIMARY KEY (id),
-  CONSTRAINT venta_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  CONSTRAINT venta_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id) ON DELETE CASCADE,
   CONSTRAINT venta_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.producto(id)
 );
+-- Categorías de gasto: todos los tenants tienen las mismas 9 predeterminadas y no
+-- se agregan propias (decidido el 2026-11-03). Cada tenant tiene su copia (no hay
+-- filas globales), sembrada por crearTenant.js (CATEGORIAS_GASTO_BASE); la lista y
+-- el SQL de respaldo están en onboarding.md, paso 2c.
+-- Cambios del 2026-11-03: tenant_id y activo NOT NULL, UNIQUE (tenant_id, id) y
+-- DROP de es_default (no la leía nadie y tenía valores distintos según el tenant).
+-- No tiene created_at.
 CREATE TABLE public.categoria_gasto (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  tenant_id uuid,
+  tenant_id uuid NOT NULL,
   nombre text NOT NULL,
-  es_default boolean DEFAULT false,
-  activo boolean DEFAULT true,
+  activo boolean NOT NULL DEFAULT true,
   CONSTRAINT categoria_gasto_pkey PRIMARY KEY (id),
-  CONSTRAINT categoria_gasto_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
+  CONSTRAINT categoria_gasto_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id) ON DELETE CASCADE,
+  -- Target del FK compuesto (tenant_id, categoria_id) de gasto.
+  CONSTRAINT categoria_gasto_tenant_id_id_key UNIQUE (tenant_id, id)
 );
 CREATE TABLE public.gasto (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   tenant_id uuid NOT NULL,
   categoria_id uuid,
   descripcion text NOT NULL,
-  monto numeric NOT NULL,
+  monto numeric(10,2) NOT NULL,
+  -- timestamp: cuándo se hizo el gasto (lo que muestran Gastos, Caja y Balances).
+  -- created_at: cuándo se registró (auditoría), igual que en movimiento_extra. Hoy
+  -- el backend no deja cargar un gasto con otra fecha, así que coinciden; se
+  -- conserva a propósito (decisión del 2026-10-30), no es una columna de más.
   timestamp timestamp with time zone DEFAULT now(),
   created_at timestamp with time zone DEFAULT now(),
   forma_pago text NOT NULL DEFAULT 'efectivo'::text CHECK (forma_pago = ANY (ARRAY['efectivo'::text, 'mercado_pago'::text])),
   CONSTRAINT gasto_pkey PRIMARY KEY (id),
-  CONSTRAINT gasto_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
-  CONSTRAINT gasto_categoria_id_fkey FOREIGN KEY (categoria_id) REFERENCES public.categoria_gasto(id)
+  CONSTRAINT gasto_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id) ON DELETE CASCADE,
+  -- FK compuesto (2026-11-03, reemplaza al simple gasto_categoria_id_fkey): un gasto
+  -- no puede referenciar una categoría de otro tenant. MATCH SIMPLE: no se chequea
+  -- si categoria_id es NULL (hoy no hay ninguno; el backend la exige).
+  CONSTRAINT gasto_categoria_tenant_fkey FOREIGN KEY (tenant_id, categoria_id) REFERENCES public.categoria_gasto(tenant_id, id)
 );
 CREATE TABLE public.cierre_caja (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   tenant_id uuid NOT NULL,
   fecha date NOT NULL,
-  efectivo_esperado numeric NOT NULL,
-  efectivo_real numeric NOT NULL,
-  diferencia numeric DEFAULT (efectivo_real - efectivo_esperado),
+  efectivo_esperado numeric(10,2) NOT NULL,
+  efectivo_real numeric(10,2) NOT NULL,
+  diferencia numeric(10,2) DEFAULT (efectivo_real - efectivo_esperado),
   comentario text,
   usuario_id uuid,
   timestamp timestamp with time zone DEFAULT now(),
   CONSTRAINT cierre_caja_pkey PRIMARY KEY (id),
-  CONSTRAINT cierre_caja_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  CONSTRAINT cierre_caja_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id) ON DELETE CASCADE,
   CONSTRAINT cierre_caja_usuario_id_fkey FOREIGN KEY (usuario_id) REFERENCES public.barbero(id)
 );
 CREATE TABLE public.cliente (
@@ -169,7 +211,14 @@ CREATE TABLE public.barbero_horario (
   hora_fin time without time zone NOT NULL,
   CONSTRAINT barbero_horario_pkey PRIMARY KEY (id),
   CONSTRAINT barbero_horario_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
-  CONSTRAINT barbero_horario_barbero_id_fkey FOREIGN KEY (barbero_id) REFERENCES public.barbero(id)
+  CONSTRAINT barbero_horario_barbero_id_fkey FOREIGN KEY (barbero_id) REFERENCES public.barbero(id) ON DELETE CASCADE,
+  CONSTRAINT barbero_horario_rango_valido CHECK (hora_fin > hora_inicio),
+  -- Un barbero puede tener varias franjas por día, pero no solapadas ([inicio, fin)).
+  -- Por ser un EXCLUDE (sin clave), reemplazarHorarios fuerza el DELETE antes del
+  -- INSERT en la misma sentencia (convenciones_tecnicas.md §6).
+  CONSTRAINT barbero_horario_no_solapamiento EXCLUDE USING gist (
+    barbero_id WITH =, dia_semana WITH =, timerange(hora_inicio, hora_fin, '[)'::text) WITH &&
+  )
 );
 CREATE TABLE public.barbero_suspension (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -180,9 +229,20 @@ CREATE TABLE public.barbero_suspension (
   motivo text,
   origen text NOT NULL DEFAULT 'admin'::text CHECK (origen = ANY (ARRAY['admin'::text, 'barbero'::text, 'whatsapp'::text])),
   created_at timestamp with time zone DEFAULT now(),
+  -- tipo, liberada_en y liberada_por: agregadas el 2026-10-15
+  -- (decisiones_descansos.md). Un descanso es una fila con tipo = 'descanso'. Las filas no se borran:
+  -- liberar (o terminar antes) completa liberada_en/liberada_por.
+  -- Rango efectivo: [desde, LEAST(hasta, COALESCE(liberada_en, hasta))); vacío si se
+  -- liberó antes de empezar. El backend lo calcula en un solo lugar
+  -- (suspensionesService, RANGO_EFECTIVO_SQL).
+  tipo text NOT NULL DEFAULT 'suspension'::text CHECK (tipo = ANY (ARRAY['suspension'::text, 'descanso'::text])),
+  liberada_en timestamp with time zone,
+  liberada_por text CHECK (liberada_por = ANY (ARRAY['admin'::text, 'barbero'::text])),
   CONSTRAINT barbero_suspension_pkey PRIMARY KEY (id),
   CONSTRAINT barbero_suspension_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
-  CONSTRAINT barbero_suspension_barbero_id_fkey FOREIGN KEY (barbero_id) REFERENCES public.barbero(id)
+  CONSTRAINT barbero_suspension_barbero_id_fkey FOREIGN KEY (barbero_id) REFERENCES public.barbero(id) ON DELETE CASCADE,
+  CONSTRAINT barbero_suspension_rango_valido CHECK (hasta > desde),
+  CONSTRAINT barbero_suspension_liberada_completa CHECK ((liberada_en IS NULL) = (liberada_por IS NULL))
 );
 CREATE TABLE public.turno (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -200,6 +260,10 @@ CREATE TABLE public.turno (
   cancelado_en timestamp with time zone,
   cancelado_por text CHECK (cancelado_por = ANY (ARRAY['cliente'::text, 'barbero'::text, 'admin'::text, 'suspension'::text])),
   recordatorio_enviado_en timestamp with time zone,
+  -- Por qué link llegó el cliente al turnero (el ?origen= de la URL, ej. 'instagram',
+  -- 'qr'). Solo lo graba el turnero público; null si no vino o no cumple el formato
+  -- (la reserva no se rechaza). Agregada el 2026-10-08. No confundir con origen_creacion.
+  origen_link text CONSTRAINT turno_origen_link_formato CHECK (origen_link ~ '^[a-z0-9_-]{1,30}$'),
   CONSTRAINT turno_pkey PRIMARY KEY (id),
   CONSTRAINT turno_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
   CONSTRAINT turno_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.cliente(id),
@@ -217,7 +281,10 @@ CREATE TABLE public.tenant_horario_atencion (
   hora_inicio time without time zone NOT NULL,
   hora_fin time without time zone NOT NULL,
   CONSTRAINT tenant_horario_atencion_pkey PRIMARY KEY (id),
-  CONSTRAINT tenant_horario_atencion_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
+  CONSTRAINT tenant_horario_atencion_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  -- Una franja por día. Es la clave del upsert de reemplazarHorario.
+  CONSTRAINT tenant_horario_atencion_dia_unico UNIQUE (tenant_id, dia_semana),
+  CONSTRAINT tenant_horario_atencion_horas_validas CHECK (hora_inicio < hora_fin)
 );
 CREATE TABLE public.tenant_feriado (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -286,3 +353,45 @@ CREATE TABLE public.movimiento_extra (
     tipo <> 'otro_ingreso' OR (descripcion IS NOT NULL AND btrim(descripcion) <> '')
   )
 );
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Web de Kingsai (sitio aparte, no es parte de este repo). Vive solo en la DB;
+-- documentado leyéndolo de la DB el 2026-11-03. No se modifica desde este proyecto.
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+-- Vistas que lee la web con la API de Supabase (rol anon, solo SELECT). Las tres
+-- filtran al tenant de Kingsai (a1b2c3d4-0000-0000-0000-000000000001) y exponen solo
+-- lo que ya es público. No tienen RLS: corren con los permisos de su dueño
+-- (postgres), así que pasan por encima del RLS de las tablas a propósito.
+CREATE VIEW public.web_barberos AS
+  SELECT nombre FROM barbero
+  WHERE tenant_id = 'a1b2c3d4-0000-0000-0000-000000000001' AND activo IS TRUE;
+CREATE VIEW public.web_servicios AS
+  SELECT nombre, precio FROM servicio
+  WHERE tenant_id = 'a1b2c3d4-0000-0000-0000-000000000001' AND activo IS TRUE;
+CREATE VIEW public.web_horarios AS
+  SELECT dia_semana, hora_inicio, hora_fin FROM tenant_horario_atencion
+  WHERE tenant_id = 'a1b2c3d4-0000-0000-0000-000000000001';
+--
+-- Triggers: 9, uno por sentencia (FOR EACH STATEMENT, AFTER), con tablas de
+-- transición (filas_viejas / filas_nuevas). Todos ejecutan web_deploy_kingsai():
+--   web_deploy_barbero_insert / _update / _delete   ON barbero
+--   web_deploy_servicio_insert / _update / _delete  ON servicio
+--   web_deploy_horario_insert / _update / _delete   ON tenant_horario_atencion
+--
+-- Función web_deploy_kingsai() (plpgsql, SECURITY DEFINER, search_path ''): decide
+-- si la sentencia cambió algo que se ve en la web de Kingsai y, si es así, encola un
+-- POST al deploy hook de Vercel con pg_net (net.http_post, timeout 30 s). La URL del
+-- hook está en Vault (secreto kingsai_deploy_hook), no en la función. El POST sale
+-- después, fuera de la transacción; si falla al encolar, queda un warning y la
+-- escritura de la app sigue. Cuenta como cambio:
+--   - tenant_horario_atencion: cualquier INSERT o DELETE de filas de Kingsai, o un
+--     UPDATE que cambie dia_semana, hora_inicio u hora_fin.
+--   - servicio y barbero, INSERT: una fila de Kingsai con activo = true.
+--   - servicio y barbero, DELETE: una fila de Kingsai que tenía activo = true.
+--   - servicio, UPDATE: fila de Kingsai activa antes o después, con cambio de
+--     nombre, precio o activo.
+--   - barbero, UPDATE: fila de Kingsai activa antes o después, con cambio de nombre
+--     o activo (no PIN, email, comisión ni token_version).
+-- Consecuencia: en demo o en otro tenant nunca se dispara. Antes de un UPDATE manual
+-- sobre esas tablas con filas de Kingsai, revisar si cambia algo de lo de arriba.
+-- Un ALTER TABLE no dispara estos triggers.

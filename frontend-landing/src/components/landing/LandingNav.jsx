@@ -5,11 +5,11 @@
 // `om-solo-desktop` (index.css) los oculta en mobile.
 
 import { useState, useEffect } from 'react';
-import { MessageCircle } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
 import { MARCA } from '../../config/landing.js';
 import { linkWhatsApp } from '../../utils/contacto.js';
 import Button from '../ui/Button.jsx';
+import IconoWhatsApp from '../ui/IconoWhatsApp.jsx';
 
 // Fondo del chip del logo: igual al fondo del emblema (indigo de marca) para que
 // el recuadro redondeado se vea seamless con la imagen y recorte sus esquinas.
@@ -160,7 +160,7 @@ function LandingNav() {
             full={false}
             style={{ padding: '8px 14px' }}
           >
-            <MessageCircle size={16} strokeWidth={2} aria-hidden="true" />
+            <IconoWhatsApp size={16} />
             Primer mes gratis
           </Button>
         </div>

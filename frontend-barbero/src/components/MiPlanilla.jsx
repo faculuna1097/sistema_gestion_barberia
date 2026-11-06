@@ -4,14 +4,23 @@
 //   - Hero con la comisión semanal (lo más importante).
 //   - Desglose de la semana (cortes, monto, propinas, total).
 //   - Detalle de cortes agrupados por día.
+// Color de los montos (sistema_de_disenio.md §3.1.1), desde la mirada del
+// barbero: lo que cobra en la semana es su resultado y va en verde
+// (colorResultado); el resto (la comisión de cada día, que es un subtotal, el
+// generado, las propinas, los precios) va en negro.
 
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, ChevronDown, ClipboardX, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 import { getPlanilla, getResumenPlanilla } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
-import { fmtPesos } from '../utils/formato.js';
-import { fmtFechaCorta, fmtFechaLarga } from '../utils/fecha.js';
+import { fmtPesos, capitalizar } from '../utils/formato.js';
+import { sumarComision, textoPorcentajeComision } from '../utils/comision.js';
+import { colorResultado } from '../utils/colorMonto.js';
+import { useHover } from '../hooks/useHover.js';
+import {
+  fmtFechaCorta, fmtFechaLarga, fechaLocalISO, fechaHoyISO, sumarDias,
+} from '../utils/fecha.js';
 
 import {
   Card,
@@ -24,16 +33,6 @@ import {
 // ─── Helpers locales de semana ─────────────────────────────────────────────
 
 /**
- * formatearFechaISO
- * Helper privado: convierte una instancia Date a YYYY-MM-DD (zona local).
- * @param {Date} d
- * @returns {string}
- */
-function formatearFechaISO(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/**
  * lunesDeEstaSemana
  * Devuelve el lunes de la semana actual en formato YYYY-MM-DD.
  * @returns {string}
@@ -44,7 +43,7 @@ function lunesDeEstaSemana() {
   const diff = dia === 0 ? -6 : 1 - dia; // domingo cuenta como fin de semana previa
   const lunes = new Date(hoy);
   lunes.setDate(hoy.getDate() + diff);
-  return formatearFechaISO(lunes);
+  return fechaLocalISO(lunes);
 }
 
 /**
@@ -55,9 +54,7 @@ function lunesDeEstaSemana() {
  * @returns {string}
  */
 function sumarSemanas(fecha, semanas) {
-  const d = new Date(fecha + 'T12:00:00');
-  d.setDate(d.getDate() + semanas * 7);
-  return formatearFechaISO(d);
+  return sumarDias(fecha, semanas * 7);
 }
 
 /**
@@ -67,9 +64,7 @@ function sumarSemanas(fecha, semanas) {
  * @returns {string}
  */
 function domingoDe(lunes) {
-  const d = new Date(lunes + 'T12:00:00');
-  d.setDate(d.getDate() + 6);
-  return formatearFechaISO(d);
+  return sumarDias(lunes, 6);
 }
 
 /**
@@ -92,23 +87,17 @@ function agruparPorDia(cortes) {
 }
 
 /**
- * calcularComisionDia
- * Comisión del barbero por los cortes de un día. Replica EXACTO el cálculo del
- * backend (resumenSemanal): porcentaje = % sobre servicios + propinas; fijo =
- * monto por corte (sin propinas). Así la suma de los días da la comisión
- * semanal del Hero y los números cierran. La rama `fijo` no se usa hoy: no hay
- * barberos con comisión fija, toda comisión es porcentaje (docs/estado_actual.md).
- * @param {Array} cortes - cortes del día
- * @param {'porcentaje'|'fijo'} tipo - comision_tipo del barbero
- * @param {number} valor - comision_valor del barbero
+ * cobroDelDia
+ * Lo que cobra el barbero por los cortes de un día: la comisión de cada corte
+ * (la manda el backend, con el % guardado en el corte) más las propinas. No
+ * repite la fórmula de la comisión: así la suma de los días da la comisión
+ * semanal del Hero, que también viene del backend.
+ * @param {Array<{comision: number, propina: number}>} cortes - cortes del día
  * @returns {number}
  */
-function calcularComisionDia(cortes, tipo, valor) {
-  const montoServicios = cortes.reduce((s, c) => s + Number(c.monto_servicios || 0), 0);
+function cobroDelDia(cortes) {
   const propinas = cortes.reduce((s, c) => s + Number(c.propina || 0), 0);
-  if (tipo === 'porcentaje' && valor != null) return montoServicios * Number(valor) / 100 + propinas;
-  if (tipo === 'fijo' && valor != null) return Number(valor) * cortes.length;
-  return 0;
+  return sumarComision(cortes) + propinas;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -209,11 +198,7 @@ export default function MiPlanilla() {
         <>
           <HeroComision resumen={miResumen} comisionPrev={comisionPrev} />
           <DesgloseSemanal resumen={miResumen} cantidadCortes={cortes.length} />
-          <DetalleCortes
-            diasConCortes={diasConCortes}
-            comisionTipo={miResumen?.comision_tipo}
-            comisionValor={miResumen?.comision_valor}
-          />
+          <DetalleCortes diasConCortes={diasConCortes} />
         </>
       )}
     </div>
@@ -291,16 +276,16 @@ function NavegadorSemana({ semana, esEstaSemana, puedeAvanzar, onAnterior, onSig
 /**
  * BotonFlecha
  * Botón discreto cuadrado de 36×36 px para las flechas del navegador.
- * Hover con useState (MD §4.2). Soporta disabled (visual + bloqueo de click).
+ * Hover solo con mouse (useHover, MD §4.2). Soporta disabled (visual + bloqueo
+ * de click).
  */
 function BotonFlecha({ children, onClick, aria, disabled = false }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
   return (
     <button
       type="button"
       onClick={disabled ? undefined : onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...eventosHover}
       disabled={disabled}
       aria-label={aria}
       style={{
@@ -325,24 +310,22 @@ function BotonFlecha({ children, onClick, aria, disabled = false }) {
 
 /**
  * HeroComision
- * Card grande con la comisión semanal — dato más importante.
+ * Card grande con la comisión semanal — dato más importante. Es el resultado
+ * de la semana para el barbero: va en verde, o en negro si da $ 0
+ * (colorResultado, §3.1.1).
  * Si resumen es null (sin cortes esta semana), igual se muestra con $0
  * para que el barbero entienda que cargó pero no facturó nada.
  */
 function HeroComision({ resumen, comisionPrev }) {
   // Si no hay resumen del backend, defaults a 0.
   const comision = Number(resumen?.comision ?? 0);
-  const tipo = resumen?.comision_tipo;
-  const valor = resumen?.comision_valor;
 
-  // Sub-label que explica cómo se calcula la comisión (porcentaje incluye
-  // propinas, igual que el backend; fijo es un monto por corte).
-  let detalleComision = '—';
-  if (tipo === 'porcentaje' && valor != null) {
-    detalleComision = `${valor}% de ${fmtPesos(Number(resumen?.monto_servicios ?? 0))} + propinas`;
-  } else if (tipo === 'fijo' && valor != null) {
-    detalleComision = `${fmtPesos(Number(valor))} fijo por corte`;
-  }
+  // Sub-label que explica cómo se calcula la comisión: el % de los cortes de la
+  // semana sobre los servicios, más las propinas. Si se le cambió el % en el
+  // medio de la semana, va el rango (ej. "45–50%").
+  const detalleComision = resumen
+    ? `${textoPorcentajeComision(resumen.comision_porcentajes, resumen.comision_valor)} de ${fmtPesos(Number(resumen.monto_servicios ?? 0))} + propinas`
+    : '—';
 
   // Tendencia vs. semana anterior — sólo si hay una base previa > 0.
   const hayComparacion = comisionPrev != null && comisionPrev > 0;
@@ -376,7 +359,7 @@ function HeroComision({ resumen, comisionPrev }) {
         fontSize: 36,
         letterSpacing: '-0.02em',
         lineHeight: 1.1,
-        color: theme.accent,
+        color: colorResultado(comision),
         marginTop: 4,
         fontVariantNumeric: 'tabular-nums',
       }}>
@@ -422,7 +405,7 @@ function DeltaSemanal({ pct }) {
         flexShrink: 0,
         color,
         fontFamily: theme.body,
-        fontSize: theme.sizeMicro + 1,
+        fontSize: theme.sizeBody,
         fontWeight: theme.weightMedium,
       }}
     >
@@ -445,7 +428,7 @@ function DesgloseSemanal({ resumen, cantidadCortes }) {
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
       <KPI label="Cortes"   value={cantidadCortes}    size="sm" />
       <KPI label="Generado" value={fmtPesos(totalGen)} size="sm" />
-      <KPI label="Propinas" value={fmtPesos(propinas)} size="sm" tone="success" />
+      <KPI label="Propinas" value={fmtPesos(propinas)} size="sm" />
     </div>
   );
 }
@@ -455,8 +438,8 @@ function DesgloseSemanal({ resumen, cantidadCortes }) {
  * Lista de cortes agrupados por día. Si no hay cortes, muestra EmptyState inline.
  * @param {Array<{ fecha: string, cortes: Array }>} props.diasConCortes
  */
-function DetalleCortes({ diasConCortes, comisionTipo, comisionValor }) {
-  const hoy = formatearFechaISO(new Date());
+function DetalleCortes({ diasConCortes }) {
+  const hoy = fechaHoyISO();
   // Sólo el día de hoy arranca desplegado (igual que el panel de gestión).
   // En semanas pasadas, hoy no está en la lista → arrancan todos contraídos.
   const [expandidos, setExpandidos] = useState(() => new Set([hoy]));
@@ -499,8 +482,6 @@ function DetalleCortes({ diasConCortes, comisionTipo, comisionValor }) {
               key={fecha}
               fecha={fecha}
               cortes={cortes}
-              comisionTipo={comisionTipo}
-              comisionValor={comisionValor}
               expandido={expandidos.has(fecha)}
               esHoy={fecha === hoy}
               onToggle={() => toggle(fecha)}
@@ -516,10 +497,11 @@ function DetalleCortes({ diasConCortes, comisionTipo, comisionValor }) {
  * DiaConCortes
  * Card colapsable de un día: header clickeable (fecha + pill "Hoy" + comisión
  * del día + chevron) y, al expandir, la lista de cortes. Sólo el día de hoy
- * arranca desplegado (lo controla DetalleCortes).
+ * arranca desplegado (lo controla DetalleCortes). La comisión del día va en
+ * negro: es un subtotal de la semanal, que es la que va en verde (§3.1.1).
  */
-function DiaConCortes({ fecha, cortes, comisionTipo, comisionValor, expandido, esHoy, onToggle }) {
-  const comisionDia = calcularComisionDia(cortes, comisionTipo, comisionValor);
+function DiaConCortes({ fecha, cortes, expandido, esHoy, onToggle }) {
+  const comisionDia = cobroDelDia(cortes);
   const Chevron = expandido ? ChevronDown : ChevronRight;
 
   return (
@@ -553,12 +535,11 @@ function DiaConCortes({ fecha, cortes, comisionTipo, comisionValor, expandido, e
             fontWeight: theme.weightMedium,
             fontSize: theme.sizeBody,
             color: theme.ink,
-            textTransform: 'capitalize',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           }}>
-            {fmtFechaLarga(fecha)}
+            {capitalizar(fmtFechaLarga(fecha))}
           </span>
           {esHoy && (
             <span style={{
@@ -581,7 +562,7 @@ function DiaConCortes({ fecha, cortes, comisionTipo, comisionValor, expandido, e
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <span style={{
             fontFamily: theme.body,
-            fontSize: theme.sizeMicro + 1,
+            fontSize: theme.sizeBody,
             color: theme.muted,
           }}>
             {cortes.length} corte{cortes.length === 1 ? '' : 's'}
@@ -590,7 +571,7 @@ function DiaConCortes({ fecha, cortes, comisionTipo, comisionValor, expandido, e
             fontFamily: theme.body,
             fontWeight: theme.weightHeading,
             fontSize: theme.sizeBody,
-            color: theme.accent,
+            color: theme.ink,
             fontVariantNumeric: 'tabular-nums',
           }}>
             {fmtPesos(comisionDia)}
@@ -619,35 +600,69 @@ const FORMA_PAGO_PILL = {
 };
 
 /**
+ * Pill
+ * Chip chico de la fila de un corte. Base común de PillFormaPago y PillSinTurno.
+ * @param {string} props.bg - Fondo (token de theme).
+ * @param {string} props.fg - Color del texto (token de theme).
+ * @param {string} [props.borde] - Color del borde; sin borde si no se pasa.
+ * @param {React.ReactNode} props.children - Texto del chip.
+ * @returns {JSX.Element}
+ */
+function Pill({ bg, fg, borde, children }) {
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '2px 8px',
+      borderRadius: theme.radiusSm,
+      // Sin borde, uno transparente: así las dos pills miden lo mismo de alto.
+      border: `1px solid ${borde ?? 'transparent'}`,
+      fontFamily: theme.body,
+      fontSize: theme.sizeMicro,
+      fontWeight: theme.weightMedium,
+      letterSpacing: '0.02em',
+      whiteSpace: 'nowrap',
+      background: bg,
+      color: fg,
+    }}>
+      {children}
+    </span>
+  );
+}
+
+/**
  * PillFormaPago
  * Chip chico de color con la forma de pago del corte.
  * @param {string} props.forma - 'efectivo' | 'mercado_pago' | otro
  */
 function PillFormaPago({ forma }) {
   const v = FORMA_PAGO_PILL[forma] || { bg: theme.surfaceAlt, fg: theme.muted, label: forma };
+  return <Pill bg={v.bg} fg={v.fg}>{v.label}</Pill>;
+}
+
+/**
+ * PillSinTurno
+ * Chip neutro "Sin turno" para los cortes de clientes que llegaron sin
+ * reservar. Los cortes con turno no llevan pill: los identifica el nombre del
+ * cliente. Va con contorno y sin relleno para no competir con la pill de forma
+ * de pago, que es la de color (`muted` sobre blanco pasa AA; sobre
+ * `surfaceAlt`, no).
+ */
+function PillSinTurno() {
   return (
-    <span style={{
-      display: 'inline-block',
-      padding: '2px 8px',
-      borderRadius: theme.radiusSm,
-      fontFamily: theme.body,
-      fontSize: theme.sizeMicro,
-      fontWeight: theme.weightMedium,
-      letterSpacing: '0.02em',
-      whiteSpace: 'nowrap',
-      background: v.bg,
-      color: v.fg,
-    }}>
-      {v.label}
-    </span>
+    <Pill bg={theme.surface} fg={theme.muted} borde={theme.hairline}>
+      Sin turno
+    </Pill>
   );
 }
 
 /**
  * CorteFila
  * Fila de un corte dentro de la card del día (sin borde propio; el separador
- * lo da la card). Hora + servicio + pill de pago a la izquierda; $monto y
- * $propina a la derecha. Si la propina es 0, no se muestra.
+ * lo da la card). Hora + servicio + pill de pago + cliente (o pill "Sin
+ * turno" si no vino de un turno) a la izquierda; $monto y
+ * $propina a la derecha. Si la propina es 0, no se muestra. La propina va en
+ * `muted`: es parte de la cuenta, no un resultado (§3.1.1), y no compite con
+ * el monto.
  * @param {boolean} props.ultimo - true en el último corte del día (sin separador)
  */
 function CorteFila({ corte, ultimo }) {
@@ -686,7 +701,7 @@ function CorteFila({ corte, ultimo }) {
         }}>
           {corte.servicio_nombre || 'Servicio'}
         </div>
-        {(corte.forma_pago || corte.cliente_nombre) && (
+        {(corte.forma_pago || corte.cliente_nombre || corte.con_turno === false) && (
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -695,10 +710,14 @@ function CorteFila({ corte, ultimo }) {
             flexWrap: 'wrap',
           }}>
             {corte.forma_pago && <PillFormaPago forma={corte.forma_pago} />}
+            {/* Comparación estricta: un backend sin `con_turno` (ej. el front
+                desplegado antes que el backend) no debe rotular todos los
+                cortes como "Sin turno". Los con turno ya muestran el cliente. */}
+            {corte.con_turno === false && <PillSinTurno />}
             {corte.cliente_nombre && (
               <span style={{
                 fontFamily: theme.body,
-                fontSize: theme.sizeMicro + 1,
+                fontSize: theme.sizeBody,
                 color: theme.inkSoft,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -725,8 +744,8 @@ function CorteFila({ corte, ultimo }) {
         {propina > 0 && (
           <div style={{
             fontFamily: theme.body,
-            fontSize: theme.sizeMicro + 1,
-            color: theme.success,
+            fontSize: theme.sizeBody,
+            color: theme.muted,
             marginTop: 2,
           }}>
             + {fmtPesos(propina)} prop.

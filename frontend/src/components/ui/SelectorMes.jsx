@@ -1,4 +1,4 @@
-// /frontend/src/components/SelectorMes.jsx
+// /frontend/src/components/ui/SelectorMes.jsx
 
 // Selector de mes. Envuelve a SelectorPeriodo con la lógica específica de meses:
 // formatea el label, calcula si el mes seleccionado es el actual y deshabilita

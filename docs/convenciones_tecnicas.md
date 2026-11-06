@@ -64,6 +64,42 @@ Nada más. **Sin trace de navegación, sin "paso N — X seleccionado", sin "com
 - En backend, loguear el `err` completo (preserva el stack trace). En frontend, alcanza con `err.message`.
 - En frontend: `setEliminando(true)` / `setCargando(true)` van **antes** del `try`, no dentro.
 
+### Forma de los errores de la API
+
+Todo error del backend responde `{ error, codigo? }`:
+
+- `error`: el texto para el usuario. Va siempre, y es lo que muestran los fronts.
+- `codigo`: opcional, para que un front distinga un caso sin comparar textos (`feriado_ya_existe`, `requiere_confirmacion`, `fuera_de_rango`).
+- Datos extra van al lado, nunca en lugar de `error`: `delta` en un `requiere_confirmacion`, `limite` en un 422 de horario.
+- Los 422 de horario y de feriado se arman con `cuerpoError422` (`backend/src/utils/errores422.js`).
+
+### Ids que llegan del cliente
+
+Todo id de una request se valida con `esUUID` (`backend/src/utils/validarUuid.js`) antes de tocar la DB. Sin eso, Postgres responde con el error `22P02` y el usuario ve un 500. No se atrapa el `22P02`: se valida antes.
+
+Qué se responde depende de dónde viene el id:
+
+| Origen | Respuesta | Mensaje |
+|---|---|---|
+| URL o body | **404** | El mismo que ese recurso usa cuando no existe (un id mal formado cuenta como "no existe"). |
+| Query param | **400** | `barbero_id debe ser un UUID válido` (`MENSAJE_BARBERO_ID_INVALIDO`, en el caso de `barbero_id`). |
+
+- Con rol barbero, el `barbero_id` del query o del body se ignora: se valida solo cuando se usa. Ese scoping vive en `backend/src/utils/scopingRol.js`, salvo en `horarios.js`, que responde 403.
+- Un id opcional se valida solo si vino. Por ejemplo, `createCorte` sin `turno_id` es un cliente sin turno.
+- Los helpers `barberoActivoEnTenant`, `socioActivoEnTenant` y `calcularDuracionServicio` ya validan el formato: un id mal formado devuelve "no encontrado" y el caller responde 404.
+- Un status dice la categoría del error, y el mensaje dice el detalle. No se inventan status ni se reusa uno con otro significado (405 es "método no permitido").
+
+### Montos y cantidades que llegan del cliente
+
+Se validan con `backend/src/utils/validarNumero.js` antes de tocar la DB. Sin tope, Postgres responde con el error `22003` y el usuario ve un 500.
+
+- `esMontoValido`: columnas `numeric(10,2)`, de 0 a `MONTO_MAXIMO` (99.999.999,99). Se compara el valor tal como llega: Postgres redondea antes de chequear, y 99999999.995 pasaría a 100000000.00. El 400 se arma con `mensajeMontoInvalido(campo)`, que nombra el rango ("monto es requerido y debe ser un número entre 0 y 99.999.999,99").
+- `esCantidadValida` y `esEnteroNoNegativo`: columnas `integer`, hasta `ENTERO_MAXIMO` (2.147.483.647).
+- `esMontoPositivo` no tiene tope, porque `movimiento_extra.monto` es `numeric` sin precisión. `esEnteroPositivo` tampoco: es para un valor que no va a una columna.
+- **Sumas:** que cada valor entre en su columna no alcanza.
+  - Si la suma se puede calcular antes de tocar la DB, se valida en el controller. Ej.: `sumaMontosValida(precio, propina ?? 0)` para `corte.monto_total`.
+  - Si depende de lo que hay en la DB, el tope va en el `WHERE` del `UPDATE`, y una lectura posterior solo decide qué error devolver. Ej.: `stock_actual + agregar_stock` en `editarProducto`.
+
 ---
 
 ## 3. Asincronía
@@ -83,9 +119,7 @@ use:
 ```js
 import { TZ } from '../utils/constantes.js';
 ```
-Nunca hardcodear el string en queries ni redeclararlo al tope del archivo
-en código nuevo. (Algunos archivos previos al refactor del turnero siguen
-con la declaración local; ver deudas técnicas en `estado_actual.md`.)
+Nunca hardcodear el string en queries ni redeclararlo al tope del archivo.
 
 ### Aritmética de fechas con TZ
 Para cualquier cómputo que requiera sumar minutos, comparar rangos, o
@@ -111,6 +145,21 @@ new Date(fecha).toISOString().slice(0, 10)
 Las fechas de calendario (`'YYYY-MM-DD'`) que llegan por query o body se validan con
 `esFechaISO` de `utils/validarFecha.js` (formato + fecha real: `2026-02-31` es inválida), y "hoy"
 en hora argentina sale de `hoyISO()`. No redeclarar un regex de fecha en cada controller.
+
+Las **horas del día** (columnas `time`) se validan con `esHoraValida` del mismo archivo: `'HH:MM'`
+o `'HH:MM:SS'`, hasta 23:59:59 (`24:00` no se acepta, aunque Postgres sí). Para compararlas como
+strings, primero se recortan a `'HH:MM'`: `'09:00'` y `'09:00:00'` son la misma hora, pero no el
+mismo string.
+
+Los **instantes** (fecha y hora, columnas `timestamptz`) que llegan del cliente se parsean con
+`parsearInstante` del mismo archivo, **nunca** se pasan crudos al SQL ni se comparan con `new Date()`:
+- sin zona (`'2026-10-20T10:00'`, lo que manda un `<input type="datetime-local">`) → **hora argentina**.
+  Si el string llega crudo a Postgres, la sesión (UTC) lo toma como UTC y el horario se corre 3 h;
+- con `Z` u offset (`'...-03:00'`) → se respeta;
+- inválido, sin hora o solo hora → `null` → el controller responde 400.
+
+Devuelve un `DateTime` en `TZ` (ver la excepción para instantes más abajo); a la DB se le pasa
+`.toISO()`, que lleva el offset.
 
 ### Normalización canónica vs presentación
 Son dos capas distintas; no mezclarlas:
@@ -157,8 +206,11 @@ aritmética de fechas (sumar minutos, comparar rangos).
 - **Nunca** `pool.connect()`.
 - **Nunca** `BEGIN` / `COMMIT` (incompatibilidad con PgBouncer free plan, IPv4-only).
 - Inserts secuenciales con cleanup manual si algo falla.
+- **Reemplazar un conjunto de filas va en una sola sentencia**, nunca un `DELETE` seguido de `INSERT`s: si algo falla en el medio, se pierden los datos. Si la tabla tiene un `UNIQUE` o un `EXCLUDE`, el `WITH ... DELETE` + `INSERT ... SELECT unnest(...)` simple falla: Postgres inserta primero y las filas nuevas chocan con las viejas. Hay dos salidas:
+  - Con una clave para el conflicto: upsert más `DELETE` de lo que sobra, que tocan filas distintas (`reemplazarHorario`).
+  - Sin clave (un `EXCLUDE`): el `INSERT` lee el resultado del `DELETE` con `WHERE (SELECT count(*) FROM borrados) >= 0`, así el borrado corre primero (`reemplazarHorarios`).
 - `db.js` exporta como named exports `query` (lo que usa todo el código), `cerrarPool` (cierre limpio del cron), `testConnection` e `iniciarKeepAlive` (arranque). El pool crudo no se exporta.
-- Pool con `max: 3`, `ssl: { ca: <config/supabase-ca.crt>, rejectUnauthorized: true }` y `statement_timeout` de 5s por conexión.
+- Pool con `max: 3`, `ssl: { ca: <config/supabase-ca.crt>, rejectUnauthorized: true }` y `statement_timeout` de 5s por conexión (un `SET` en el hook `onConnect`: el pooler descarta `options` y el parámetro `statement_timeout` del `Pool`).
 - Toda tabla nueva se crea con RLS activado y sin policies (`ALTER TABLE ... ENABLE ROW LEVEL SECURITY`): cierra la API automática de Supabase, y el backend entra igual porque se conecta como dueño de las tablas. El SQL editor no lo activa solo. Ver `estado_actual.md` → RLS.
 - `query()` reintenta **una vez** ante errores de conexión (no de SQL). Las escrituras no idempotentes que no deben reejecutarse (ajustes relativos de stock, `stock_actual = stock_actual ± $1`) van con `query(sql, params, { reintentar: false })` — ver `utils/stock.js`.
 
@@ -181,6 +233,15 @@ No se eliminan registros en ABMs. Se usa el campo `activo` (true/false) para pre
 ### Eventos táctiles
 - **Siempre `onClick`. Nunca `onPointerDown`.** (`onPointerDown` dispara al apretar, no se puede cancelar deslizando afuera, y rompe la accesibilidad por teclado.) El rediseño migró todo a `onClick`; ver `sistema_de_disenio.md` §4.3.
 
+### Después de una acción: la pantalla nunca queda vieja ni vacía
+Decidido el 2026-10-19, en la Agenda del barbero. Cuando el usuario confirma una acción que cambia datos (crear, liberar, cancelar…), entre que confirma y la recarga la pantalla no muestra un rato el estado anterior ni un hueco vacío:
+- **Mientras responde el servidor**, el diálogo (o el botón) queda en "Procesando…".
+- **Con la respuesta**, el cambio se dibuja al instante con los datos que devolvió el servidor, no con lo que el front supone que pasó. Recién ahí se cierra el diálogo. Después se recarga por detrás, sin skeleton, para confirmar. Ej.: `agregarDescanso` (`frontend-barbero/src/components/agenda/datosAgenda.js`) dibuja el descanso con la fila que devolvió `POST /admin/descansos`.
+- **Si la respuesta no alcanza para dibujar el cambio** (ej. liberar un descanso en curso, que lo acorta y vuelve a abrir slots), el diálogo sigue en "Procesando…" hasta que termina la recarga, y se cierra con la pantalla ya actualizada.
+- **Nada se dibuja antes de que responda el servidor** (sin UI optimista): si falla (409, 400), no hay nada que deshacer.
+
+Dónde está aplicada: en todas las acciones de la app del barbero. En la Agenda, marcar un descanso lo dibuja con `agregarDescanso` y liberarlo espera la recarga; no asistió y cancelar un turno lo dibujan con `aplicarEstadoDeTurno`, con el `{ id, estado }` que devuelve el servidor. En el Inicio (`Dashboard.jsx`), las mismas dos acciones cambian el estado del turno en la lista con esa respuesta (desde el 2026-10-19). Falta en el resto de los fronts, que no están relevados.
+
 ### Estructura del panel admin
 - Cada `SeccionXxx` es autónoma y carga sus datos en `useEffect([])`.
 - `PanelAdmin` solo maneja layout. No hay precarga global del panel.
@@ -193,6 +254,10 @@ No se eliminan registros en ABMs. Se usa el campo `activo` (true/false) para pre
 
 ### Posicionamiento de helpers
 - Las funciones helper (ej: `ExcelIcon`) van **arriba** del componente que las usa, nunca después del `default export`.
+
+### Lint
+- `npx eslint .` pasa sin errores ni warnings en los cuatro fronts.
+- **`react-hooks/set-state-in-effect` está apagada en los cuatro** (`eslint.config.js`). El patrón de carga de datos del proyecto (§3: `useEffect` con `async/await` y `setCargando(true)`) dispara falsos positivos: en el montaje `cargando` ya es `true`, así que React descarta el render. Decidido el 2026-10-30, en vez de reescribir ese patrón en todas las pantallas.
 
 ---
 

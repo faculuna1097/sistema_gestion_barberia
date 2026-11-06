@@ -3,7 +3,7 @@
 // Acepta roles admin y barbero — el scoping se resuelve en cada handler.
 
 import { Router } from 'express';
-import { getPlanilla, getResumen } from '../controllers/planilla.js';
+import { getPlanilla, getResumen, getDescansosSemana } from '../controllers/planilla.js';
 
 const router = Router();
 
@@ -12,5 +12,8 @@ router.get('/', getPlanilla);
 
 // GET /api/admin/planilla/resumen?semana=YYYY-MM-DD&barbero_id=X
 router.get('/resumen', getResumen);
+
+// GET /api/admin/planilla/descansos?semana=YYYY-MM-DD&barbero_id=X
+router.get('/descansos', getDescansosSemana);
 
 export default router;

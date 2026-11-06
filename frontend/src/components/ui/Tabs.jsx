@@ -28,8 +28,10 @@ import { theme } from '../../theme/tokens.js';
  * @param {string} props.value - Key del tab actualmente activo.
  * @param {(key: string) => void} props.onChange - Callback al cambiar de tab.
  * @param {object} [props.style] - Override puntual de estilos del tablist.
+ * @param {boolean} [props.mostrarIconos=true] - false dibuja solo el texto de
+ *   cada tab (ej. en pantalla angosta, donde los íconos no entran).
  */
-function Tabs({ items, value, onChange, style }) {
+function Tabs({ items, value, onChange, style, mostrarIconos = true }) {
   // Refs a cada botón para manejar foco con flechas.
   const botonesRef = useRef([]);
 
@@ -116,7 +118,7 @@ function Tabs({ items, value, onChange, style }) {
             }}
             style={tabStyle}
           >
-            {Icon && <Icon size={16} strokeWidth={1.75} />}
+            {Icon && mostrarIconos && <Icon size={16} strokeWidth={1.75} />}
             {item.label}
           </button>
         );

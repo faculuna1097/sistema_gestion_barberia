@@ -38,7 +38,7 @@ function ChromeBar({ label }) {
           textAlign: 'center',
           fontFamily: theme.mono,
           fontSize: theme.sizeMicro,
-          color: theme.mutedSoft,
+          color: theme.muted,
           background: theme.surface,
           border: `1px solid ${theme.hairline}`,
           borderRadius: 999,
@@ -71,7 +71,7 @@ function Placeholder({ label }) {
         justifyContent: 'center',
         gap: 10,
         background: theme.surfaceAlt,
-        color: theme.mutedSoft,
+        color: theme.muted,
       }}
     >
       <ImageIcon size={28} strokeWidth={1.5} aria-hidden="true" />

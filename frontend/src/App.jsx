@@ -4,7 +4,7 @@ import MainScreen from "./screens/MainScreen";
 import FlujoCorte from "./screens/flows/FlujoCorte";
 import FlujoVenta from "./screens/flows/FlujoVenta";
 import FlujoGasto from "./screens/flows/FlujoGasto";
-import PantallaLoginAdmin from "./screens/PantallaLoginAdmin";
+import PantallaLoginPanel from "./screens/PantallaLoginPanel";
 import PantallaLoginOperativo from "./screens/PantallaLoginOperativo";
 // PanelAdmin (panel admin/barbero) se carga con React.lazy: es el subárbol más
 // pesado y "frío" del front (solo el dueño/barbero, post-login). Así el login y
@@ -13,7 +13,8 @@ import PantallaLoginOperativo from "./screens/PantallaLoginOperativo";
 const PanelAdmin = lazy(() => import("./screens/admin/PanelAdmin"));
 import { Loader2 } from "lucide-react";
 import { theme } from "./theme/tokens.js";
-import { EmptyState, Button, IconoAlerta, ErrorBoundary } from "./components/ui";
+import { EmptyState, Button, IconoAlerta, ErrorBoundary, ContactoSoporte } from "./components/ui";
+import { problemaDeAcceso } from "./utils/errores";
 import FondoLocal from "./components/ui/FondoLocal.jsx";
 import {
   getBarberosOperativo,
@@ -97,15 +98,25 @@ const PantallaCargando = ({ imagenLocal } = {}) => {
 /**
  * PantallaError — pantalla full-screen cuando la precarga falla.
  * Usa el primitivo EmptyState con IconoAlerta + acción de reintentar.
+ * Si la falla es de acceso (subdominio que no existe, servidor caído; ver
+ * `problemaDeAcceso`), dice esa causa. Si no, asume que no hay red, que es lo
+ * único que el navegador no puede distinguir.
+ * @param {Object} props
+ * @param {Function} props.onReintentar - vuelve a correr la precarga
+ * @param {{ mensaje: string, conContacto: boolean }|null} [props.problema]
+ * @returns {JSX.Element}
  */
-const PantallaError = ({ onReintentar }) => (
+const PantallaError = ({ onReintentar, problema = null }) => (
   <ContenedorBoot>
-    <EmptyState
-      glyph={<IconoAlerta size={32} />}
-      title="Sin conexión"
-      body="Revisá el WiFi e intentá de nuevo."
-      action={<Button onClick={onReintentar} full={false}>Reintentar</Button>}
-    />
+    <div style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+      <EmptyState
+        glyph={<IconoAlerta size={32} />}
+        title={problema ? "No se pudo abrir el sistema" : "Sin conexión"}
+        body={problema ? problema.mensaje : "Revisá el WiFi e intentá de nuevo."}
+        action={<Button onClick={onReintentar} full={false}>Reintentar</Button>}
+      />
+      {problema?.conContacto && <ContactoSoporte />}
+    </div>
   </ContenedorBoot>
 );
 
@@ -133,7 +144,6 @@ export default function App() {
   // Cuando es null, la pantalla inicial es PantallaLoginOperativo en lugar de MainScreen.
   const [tokenOperativo, setTokenOperativo] = useState(leerTokenOperativoInicial);
   const [currentScreen, setCurrentScreen] = useState(tokenOperativo ? "main" : "loginOperativo");
-  const [token, setToken] = useState(null);
   // imagenLogo: URL del logo del tenant — viene de tenant_imagen tipo='logo'.
   // Nombre evita confusión con el campo legacy tenant.logo (que se elimina al
   // mergear feature/turnero a main).
@@ -146,6 +156,10 @@ export default function App() {
   // para evitar un segundo fetch de getNegocio en el sidebar (deuda #10).
   const [nombreNegocio, setNombreNegocio] = useState('');
   const [avisosPago, setAvisosPago] = useState(false);
+  // avisoAcceso: { mensaje, conContacto } si al abrir el sistema la carga del
+  // negocio falló por algo que impide usarlo entero (subdominio que no existe,
+  // servidor caído). Los dos logins lo muestran antes de que tipeen nada.
+  const [avisoAcceso, setAvisoAcceso] = useState(null);
   // rolPanel: rol con el que se entró al panel ('admin' | 'barbero'); lo resuelve
   // el backend en el login unificado por PIN. Default 'admin' (panel completo).
   // Se setea en el onAcceso del login y se limpia al cerrar sesión.
@@ -160,6 +174,9 @@ export default function App() {
     categorias: [],
     cargando: true,
     error: null,
+    // problema: { mensaje, conContacto } si la precarga falló por una falla de
+    // acceso (ver problemaDeAcceso); null si fue por otra cosa (ej. sin red).
+    problema: null,
   });
 
   // Registra el handler que api.js dispara cuando apiFetchOperativo recibe 401.
@@ -182,10 +199,9 @@ export default function App() {
   useEffect(() => {
     setOnUnauthorizedAdmin(() => {
       console.warn('[app] 401 del panel detectado — redirigiendo al login del panel');
-      setToken(null);
       setRolPanel('admin');
       setBarberoSesion(null);
-      setCurrentScreen("loginAdmin");
+      setCurrentScreen("loginPanel");
     });
     return () => setOnUnauthorizedAdmin(null);
   }, []);
@@ -222,8 +238,10 @@ export default function App() {
         .filter((i) => i.tipo === 'local')
         .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
       setImagenLocal(locales[0]?.url || null);
+      setAvisoAcceso(null);
     } catch (err) {
-      console.error('[app] Error en cargarDatosTenant:', err.message);
+      console.error('[app] Error en cargarDatosTenant:', err.message, '| status:', err.status);
+      setAvisoAcceso(problemaDeAcceso(err));
     }
   }, []);
 
@@ -247,7 +265,7 @@ export default function App() {
   }, [imagenLocal, imagenLogo]);
 
   const precargarDatos = useCallback(async () => {
-    setDatos(prev => ({ ...prev, cargando: true, error: null }));
+    setDatos(prev => ({ ...prev, cargando: true, error: null, problema: null }));
     try {
       const [barberos, servicios, productos, categorias] = await Promise.all([
         getBarberosOperativo(),
@@ -255,10 +273,10 @@ export default function App() {
         getProductos(),
         getCategorias(),
       ]);
-      setDatos({ barberos, servicios, productos, categorias, cargando: false, error: null });
+      setDatos({ barberos, servicios, productos, categorias, cargando: false, error: null, problema: null });
     } catch (err) {
-      console.error('[app] Error en precargarDatos:', err.message);
-      setDatos(prev => ({ ...prev, cargando: false, error: "Error al cargar datos" }));
+      console.error('[app] Error en precargarDatos:', err.message, '| status:', err.status);
+      setDatos(prev => ({ ...prev, cargando: false, error: "Error al cargar datos", problema: problemaDeAcceso(err) }));
     }
   }, []);
 
@@ -278,8 +296,7 @@ export default function App() {
     setCurrentScreen("main");
   };
 
-  const cerrarSesionAdmin = () => {
-    setToken(null);
+  const cerrarSesionPanel = () => {
     clearAuthToken();
     setRolPanel('admin');
     setBarberoSesion(null);
@@ -308,6 +325,7 @@ export default function App() {
       <PantallaLoginOperativo
         imagenLogo={imagenLogo}
         imagenLocal={imagenLocal}
+        avisoAcceso={avisoAcceso}
         onAcceso={(tokenRecibido) => {
           setTokenOperativo(tokenRecibido);
           setCurrentScreen("main");
@@ -319,7 +337,7 @@ export default function App() {
   if (datos.cargando && datos.barberos.length === 0) return <PantallaCargando imagenLocal={imagenLocal} />;
 
   if (datos.error && datos.barberos.length === 0) {
-    return <PantallaError onReintentar={reintentar} />;
+    return <PantallaError onReintentar={reintentar} problema={datos.problema} />;
   }
 
   if (currentScreen === "nuevoCorte") {
@@ -342,13 +360,13 @@ export default function App() {
     return <FlujoGasto onVolver={volverAlInicio} categorias={datos.categorias} imagenLocal={imagenLocal} />;
   }
 
-  if (currentScreen === "loginAdmin") {
+  if (currentScreen === "loginPanel") {
     return (
-      <PantallaLoginAdmin
+      <PantallaLoginPanel
         imagenLogo={imagenLogo}
         imagenLocal={imagenLocal}
+        avisoAcceso={avisoAcceso}
         onAcceso={(tokenRecibido, info) => {
-          setToken(tokenRecibido);
           setAuthToken(tokenRecibido);
           setRolPanel(info.rol);
           setBarberoSesion(info.barbero ?? null);
@@ -368,7 +386,7 @@ export default function App() {
     return (
       <ErrorBoundary>
         <Suspense fallback={<PantallaCargando />}>
-          <PanelAdmin rol={rolPanel} barberoSesion={barberoSesion} onCerrarSesion={cerrarSesionAdmin} avisosPago={avisosPago} nombreNegocio={nombreNegocio} />
+          <PanelAdmin rol={rolPanel} barberoSesion={barberoSesion} onCerrarSesion={cerrarSesionPanel} avisosPago={avisosPago} nombreNegocio={nombreNegocio} />
         </Suspense>
       </ErrorBoundary>
     );
@@ -386,7 +404,7 @@ export default function App() {
         setCurrentScreen("nuevoGasto");
       }}
       onAdminAccess={() => {
-        setCurrentScreen("loginAdmin");
+        setCurrentScreen("loginPanel");
       }}
       onSpotify={() => {
         window.open("https://open.spotify.com", "_blank");

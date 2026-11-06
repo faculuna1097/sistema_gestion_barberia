@@ -33,7 +33,7 @@ function SummaryRow({ label, value }) {
       <div style={{
         fontFamily: theme.body,
         fontWeight: theme.weightMedium,
-        fontSize: 13,
+        fontSize: theme.sizeBody,
         color: theme.ink,
         textAlign: 'right',
         minWidth: 0,

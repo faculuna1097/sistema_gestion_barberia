@@ -1,51 +1,47 @@
 // /frontend-turnero/src/screens/SeleccionServicio.jsx
-// Pantalla 2: el cliente elige un servicio de la lista.
+// Paso 1 del flujo, "Servicio": el cliente elige un servicio de la lista.
 
-import { useState, useEffect } from 'react';
-import { getServicios } from '../services/api.js';
+import { useState } from 'react';
 import { theme } from '../theme/tokens.js';
+import { estiloEyebrow } from '../components/ui/estilos.js';
 import { fmtPesos } from '../utils/formato.js';
+import { useEleccionConPausa } from '../hooks/useEleccionConPausa.js';
 import {
   PageContainer, TopBar, ScreenHeader, Progress,
-  Card, Skeleton, EmptyState,
+  Card, Skeleton, EmptyState, Button, IconoAlerta,
 } from '../components/ui';
 
 /**
  * SeleccionServicio
- * Carga y muestra los servicios activos del tenant.
+ * Muestra los servicios activos del tenant. La lista la carga App (una sola
+ * vez) y llega por props; el reintento ante un error también vive en App.
+ * @param {Array<Object>} props.servicios - Servicios activos [{ id, nombre, precio, duracion_minutos }]
+ * @param {boolean} props.cargando - True mientras App los está pidiendo
+ * @param {boolean} props.error - True si la carga falló
+ * @param {Function} props.onReintentar - Vuelve a pedir los servicios
  * @param {Object|null} props.seleccionado - Servicio previamente seleccionado (para volver)
- * @param {Function} props.onSeleccionar - Callback con el servicio elegido
+ * @param {Function} props.onSeleccionar - Callback con el servicio elegido (tras la pausa de confirmación)
  * @param {Function} props.onVolver - Callback para retroceder
  */
-function SeleccionServicio({ seleccionado, onSeleccionar, onVolver }) {
-  const [servicios, setServicios] = useState([]);
-  const [cargando, setCargando] = useState(true);
-  const [error, setError] = useState(null);
+function SeleccionServicio({
+  servicios, cargando, error, onReintentar, seleccionado, onSeleccionar, onVolver,
+}) {
+  // La opción tocada se marca ~150 ms antes de avanzar.
+  const [elegido, elegir] = useEleccionConPausa(onSeleccionar);
+  const marcado = elegido ?? seleccionado;
 
-  useEffect(() => {
-    async function cargar() {
-      try {
-        const data = await getServicios();
-        setServicios(data);
-      } catch (err) {
-        console.error('[SeleccionServicio] Error:', err.message);
-        setError('No pudimos cargar los servicios. Probá de nuevo en unos minutos.');
-      } finally {
-        setCargando(false);
-      }
-    }
-    cargar();
-  }, []);
+  // Si la lista no estaba visible al entrar (cargaba, o falló y se reintenta),
+  // aparece con un fundido cuando reemplaza al skeleton.
+  const [listaVisibleAlEntrar] = useState(!cargando && !error);
 
   return (
     <PageContainer>
       <TopBar onVolver={onVolver}/>
+      <Progress paso={1}/>
       <ScreenHeader
-        eyebrow="Paso 1 de 6"
         title="Elegí un servicio"
         subtitle="Cuánto demora y cuánto sale."
       />
-      <Progress step={1}/>
 
       <div style={{
         flex: 1,
@@ -60,7 +56,12 @@ function SeleccionServicio({ seleccionado, onSeleccionar, onVolver }) {
           <EmptyState
             glyph={<IconoAlerta/>}
             title="Algo no funcionó"
-            body={error}
+            body="No pudimos cargar los servicios. Revisá tu conexión e intentá de nuevo."
+            action={
+              <Button variant="secondary" onClick={onReintentar} full={false}>
+                Reintentar
+              </Button>
+            }
           />
         ) : servicios.length === 0 ? (
           <EmptyState
@@ -69,14 +70,19 @@ function SeleccionServicio({ seleccionado, onSeleccionar, onVolver }) {
             body="El negocio todavía no cargó servicios. Volvé a intentar más tarde."
           />
         ) : (
-          servicios.map(s => (
-            <ServicioCard
-              key={s.id}
-              servicio={s}
-              selected={seleccionado?.id === s.id}
-              onClick={() => onSeleccionar(s)}
-            />
-          ))
+          <div
+            className={listaVisibleAlEntrar ? undefined : 'tt-aparecer'}
+            style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+          >
+            {servicios.map(s => (
+              <ServicioCard
+                key={s.id}
+                servicio={s}
+                selected={marcado?.id === s.id}
+                onClick={() => elegir(s)}
+              />
+            ))}
+          </div>
         )}
       </div>
     </PageContainer>
@@ -112,12 +118,7 @@ function ServicioCard({ servicio, selected, onClick }) {
           }}>{servicio.nombre}</div>
 
           <div style={{
-            fontFamily: theme.mono,
-            fontWeight: theme.weightMedium,
-            fontSize: theme.sizeMicro,
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-            color: theme.muted,
+            ...estiloEyebrow,
             marginTop: 4,
           }}>
             {servicio.duracion_minutos} min
@@ -168,20 +169,6 @@ function ServicioSkeletons() {
         </div>
       ))}
     </>
-  );
-}
-
-/**
- * IconoAlerta
- * SVG para EmptyState de error.
- */
-function IconoAlerta() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5"/>
-      <path d="M12 8v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-      <circle cx="12" cy="15.5" r="0.75" fill="currentColor"/>
-    </svg>
   );
 }
 

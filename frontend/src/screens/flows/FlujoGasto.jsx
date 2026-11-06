@@ -12,22 +12,33 @@ import { Banknote, Package } from "lucide-react";
 import { registrarGasto } from "../../services/api";
 import { theme } from "../../theme/tokens.js";
 import { fmtPesos } from "../../utils/formato.js";
+import { mensajeErrorRegistro } from "../../utils/errores.js";
 import { Button, BadgeFormaPago } from "../../components/ui";
 import {
   PanelWizard,
   BotonOpcion,
   CampoTexto,
   CampoMonto,
+  TarjetaResumen,
   FilaResumen,
   FilaTotal,
   PantallaExito,
-  wizardStyles,
+  AvisoExito,
 } from "./wizard.jsx";
+import { wizardStyles } from "./wizardStyles.js";
+
+// Tiene que coincidir con MAX_DESCRIPCION_GASTO de backend/src/utils/constantes.js.
+const MAX_DESCRIPCION_GASTO = 200;
+
+// Categoría de la compra de mercadería para vender: al registrarla se recuerda
+// actualizar el stock. Tiene que coincidir con el nombre que siembra
+// backend/src/scripts/crearTenant.js (CATEGORIAS_GASTO_BASE).
+const CATEGORIA_PRODUCTOS_VENTA = "Productos para venta";
 
 /**
  * FlujoGasto
- * Wizard de 5 pasos para registrar un gasto. La lógica de negocio (envío,
- * recordatorio de stock para categoría "Productos") se mantiene intacta.
+ * Wizard de 5 pasos para registrar un gasto. Con la categoría
+ * CATEGORIA_PRODUCTOS_VENTA, el éxito recuerda actualizar el stock.
  *
  * @param {Object} props
  * @param {Function} props.onVolver — vuelve a MainScreen
@@ -54,11 +65,15 @@ export default function FlujoGasto({ onVolver, categorias, imagenLocal }) {
   const avanzar = () => setPaso((p) => p + 1);
   const retroceder = () => {
     if (paso === 1) { onVolver(); return; }
+    // El error de la confirmación es de ese intento: al volver no tiene que
+    // reaparecer cuando se llega de nuevo al resumen.
+    setError(null);
     setPaso((p) => p - 1);
   };
 
   // ── Envío ───────────────────────────────────────────────────────────────────
-  // Si la categoría es Productos se da más tiempo para leer el recordatorio de stock.
+  // Con la categoría de productos para venta se da más tiempo para leer el
+  // recordatorio de stock.
   const confirmarGasto = async () => {
     const payload = {
       categoria_id: categoriaSeleccionada.id,
@@ -71,13 +86,13 @@ export default function FlujoGasto({ onVolver, categorias, imagenLocal }) {
     try {
       await registrarGasto(payload);
       setExito(true);
-      const demora = categoriaSeleccionada?.nombre === "Productos" ? 4500 : 2500;
+      const demora = categoriaSeleccionada?.nombre === CATEGORIA_PRODUCTOS_VENTA ? 4500 : 2500;
       setTimeout(() => {
         onVolver();
       }, demora);
     } catch (err) {
       console.error('[flujoGasto] Error en confirmarGasto:', err.message);
-      setError("Error al guardar el gasto. Intentá de nuevo.");
+      setError(mensajeErrorRegistro(err, "Error al guardar el gasto. Intentá de nuevo."));
     } finally {
       setEnviando(false);
     }
@@ -92,14 +107,11 @@ export default function FlujoGasto({ onVolver, categorias, imagenLocal }) {
         monto={montoFinal}
         montoColor={theme.danger}
       >
-        {categoriaSeleccionada?.nombre === "Productos" && (
-          <div style={styles.recordatorio}>
-            <Package size={20} strokeWidth={1.75} color={theme.warning} style={{ flexShrink: 0, marginTop: 2 }} />
-            <p style={styles.recordatorioTexto}>
-              Si compraste productos para vender, recordá actualizar el stock en{" "}
-              <strong style={{ color: theme.ink }}>Gestión → Productos</strong>
-            </p>
-          </div>
+        {categoriaSeleccionada?.nombre === CATEGORIA_PRODUCTOS_VENTA && (
+          <AvisoExito Icon={Package}>
+            Si compraste productos para vender, recordá actualizar el stock en{" "}
+            <strong style={{ color: theme.ink }}>Gestión → Productos</strong>
+          </AvisoExito>
         )}
       </PantallaExito>
     );
@@ -144,6 +156,7 @@ export default function FlujoGasto({ onVolver, categorias, imagenLocal }) {
           onChange={setDescripcion}
           placeholder="Ej: Compra de shampoo y acondicionador..."
           autoFocus
+          maxLength={MAX_DESCRIPCION_GASTO}
         />
         <Button
           variant="primary"
@@ -209,42 +222,29 @@ export default function FlujoGasto({ onVolver, categorias, imagenLocal }) {
   // ─── PASO 5 — Resumen y confirmación ─────────────────────────────────────────
   if (paso === 5) {
     return (
-      <PanelWizard paso={5} total={5} titulo="Confirmá el gasto" onVolver={retroceder} imagenLocal={imagenLocal} maxAncho={560}>
-        <div style={wizardStyles.resumenCard}>
+      <PanelWizard
+        paso={5}
+        total={5}
+        titulo="Confirmá el gasto"
+        onVolver={retroceder}
+        imagenLocal={imagenLocal}
+        maxAncho={560}
+        pie={
+          <>
+            {error && <p style={wizardStyles.errorTexto}>{error}</p>}
+            <Button variant="primary" disabled={enviando} onClick={confirmarGasto} style={wizardStyles.btnGrande}>
+              {enviando ? "Guardando..." : "Confirmar gasto"}
+            </Button>
+          </>
+        }
+      >
+        <TarjetaResumen total={<FilaTotal label="Monto" value={fmtPesos(montoFinal)} color={theme.danger} />}>
           <FilaResumen label="Categoría" value={categoriaSeleccionada?.nombre} />
           <FilaResumen label="Descripción" value={descripcion} />
           <FilaResumen label="Pago" value={<BadgeFormaPago forma={formaPago} />} ultima />
-          <FilaTotal label="Monto" value={fmtPesos(montoFinal)} color={theme.danger} />
-        </div>
-
-        {error && <p style={wizardStyles.errorTexto}>{error}</p>}
-
-        <Button variant="primary" disabled={enviando} onClick={confirmarGasto} style={wizardStyles.btnGrande}>
-          {enviando ? "Guardando..." : "Confirmar gasto"}
-        </Button>
+        </TarjetaResumen>
       </PanelWizard>
     );
   }
 }
 
-// ─── Estilos específicos del flujo ────────────────────────────────────────────
-const styles = {
-  recordatorio: {
-    marginTop: 24,
-    display: "flex",
-    alignItems: "flex-start",
-    gap: 12,
-    background: theme.warningSoft,
-    border: `1px solid ${theme.hairline}`,
-    borderRadius: theme.radius,
-    padding: "14px 16px",
-    textAlign: "left",
-  },
-  recordatorioTexto: {
-    fontFamily: theme.body,
-    fontSize: theme.sizeBody,
-    color: theme.inkSoft,
-    margin: 0,
-    lineHeight: 1.5,
-  },
-};

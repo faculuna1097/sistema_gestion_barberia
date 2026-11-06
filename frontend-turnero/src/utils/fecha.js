@@ -2,6 +2,18 @@
 // Helpers de fecha/hora. Todo en zona local del navegador.
 // Convención del proyecto: el backend manda ISO y YYYY-MM-DD; el front muestra siempre en es-AR.
 
+import { capitalizar } from './formato.js';
+
+/**
+ * DIAS_RESERVABLES
+ * Cuántos días hacia adelante (contando hoy) puede elegir el cliente, tanto al
+ * reservar como al reprogramar. Un solo número para los dos flujos.
+ * Tiene que coincidir con DIAS_RESERVABLES de backend/src/utils/constantes.js,
+ * que rechaza (400) una reserva o reprogramación más allá de ese tope: si acá
+ * fuera mayor, la grilla ofrecería días que el backend no acepta.
+ */
+export const DIAS_RESERVABLES = 15;
+
 /**
  * fechaLocalISO
  * Devuelve el YYYY-MM-DD de un Date según la zona local del navegador.
@@ -47,28 +59,16 @@ export function generarProximosDias(cantidad) {
 }
 
 /**
- * fmtFechaCorta
- * Formato corto de fecha YYYY-MM-DD.
- * @param {string} fechaStr - 'YYYY-MM-DD'
- * @returns {string} Ej: "lun 19/05"
- */
-export function fmtFechaCorta(fechaStr) {
-  const [y, m, d] = fechaStr.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  const dia = date.toLocaleDateString('es-AR', { weekday: 'short' });
-  return `${dia.replace('.', '')} ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
-}
-
-/**
  * fmtFechaLarga
- * Formato largo de fecha YYYY-MM-DD con día de semana y mes completo.
+ * Formato largo de fecha YYYY-MM-DD con día de semana y mes completo. El día
+ * va sin cero adelante, como en la grilla de días ("8", no "08").
  * @param {string} fechaStr - 'YYYY-MM-DD'
- * @returns {string} Ej: "lunes, 19 de mayo"
+ * @returns {string} Ej: "jueves, 8 de octubre"
  */
 export function fmtFechaLarga(fechaStr) {
   const [y, m, d] = fechaStr.split('-').map(Number);
   const date = new Date(y, m - 1, d);
-  return date.toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: 'long' });
+  return date.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 /**
@@ -90,6 +90,17 @@ export function fmtHora(iso) {
  */
 export function fmtFechaHora(iso) {
   return `${fmtFechaLarga(fechaDeISO(iso))} · ${fmtHora(iso)} hs`;
+}
+
+/**
+ * sumarMinutos
+ * Suma minutos a un instante (ej. el fin de un turno: inicio + duración).
+ * @param {string} iso - ISO timestamp
+ * @param {number} minutos
+ * @returns {string} ISO en UTC (ej. '2026-10-08T19:00:00.000Z')
+ */
+export function sumarMinutos(iso, minutos) {
+  return new Date(new Date(iso).getTime() + minutos * 60000).toISOString();
 }
 
 /**
@@ -122,6 +133,34 @@ export function diaNumero(fechaStr) {
 export function nombreMes(fechaStr) {
   const [y, m] = fechaStr.split('-').map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'short' }).replace('.', '');
+}
+
+/**
+ * fmtMes
+ * Nombre completo del mes con mayúscula inicial, sin el año.
+ * @param {string} fechaStr - 'YYYY-MM-DD'
+ * @returns {string} Ej: "Octubre"
+ */
+export function fmtMes(fechaStr) {
+  const [y, m] = fechaStr.split('-').map(Number);
+  return capitalizar(new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long' }));
+}
+
+/**
+ * fmtDiaEnOracion
+ * Fecha para ir dentro de una oración, en pantalla ("Te esperamos el martes 6
+ * de octubre") o en un aria-label ("Horarios del martes 6 de octubre"): día de
+ * la semana, número y mes, en minúscula y sin la coma que agrega el formato de
+ * es-AR.
+ * @param {string} fechaStr - 'YYYY-MM-DD'
+ * @returns {string} Ej: "martes 6 de octubre"
+ */
+export function fmtDiaEnOracion(fechaStr) {
+  const [y, m, d] = fechaStr.split('-').map(Number);
+  const fecha = new Date(y, m - 1, d);
+  const diaSemana = fecha.toLocaleDateString('es-AR', { weekday: 'long' });
+  const mes = fecha.toLocaleDateString('es-AR', { month: 'long' });
+  return `${diaSemana} ${d} de ${mes}`;
 }
 
 /**

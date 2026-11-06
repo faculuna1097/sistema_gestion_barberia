@@ -18,6 +18,38 @@ const supabaseCA = fs.readFileSync(new URL('./supabase-ca.crt', import.meta.url)
 
 console.log(`[db] Inicializando pool — host: ${process.env.DB_HOST} | port: ${process.env.DB_PORT} | db: ${process.env.DB_NAME} | user: ${process.env.DB_USER}`);
 
+// statement_timeout [auditoría 4.1]: Postgres aborta cualquier sentencia que
+// supere este límite y libera la conexión. Sin esto, un puñado de queries lentas
+// (o mantenidas abiertas a propósito) retiene las 3 conexiones del pool y estanca
+// toda la API; además aprieta el default de Supabase (120s), demasiado holgado
+// para 3 conexiones. 5s sobra: las queries más pesadas (agregaciones mensuales de
+// planilla/balances) corren en cientos de ms.
+//
+// Se aplica por SQL en cada conexión nueva, NO como parámetro de arranque: el pooler
+// de Supabase (Supavisor) DESCARTA tanto `options` como `statement_timeout` en la
+// config del Pool (verificado en frío — la sesión quedaba en el default de 2min),
+// pero sí deja pasar un `SET`. En modo sesión cada conexión es dedicada, así que el
+// SET vale para toda su vida. El valor es una constante hardcodeada (no input de
+// usuario), seguro de interpolar.
+const STATEMENT_TIMEOUT_MS = 5000;
+
+/**
+ * aplicarStatementTimeout
+ * Hook onConnect del pool: pg-pool lo espera antes de entregar la conexión, así que
+ * el SET termina antes del primer query (con pool.on('connect') corrían a la vez y
+ * pg avisaba con un DeprecationWarning, que en pg@9 sería un error). Si el SET falla,
+ * se loguea y la conexión se usa igual.
+ * @param {pg.Client} client - La conexión recién creada.
+ * @returns {Promise<void>}
+ */
+const aplicarStatementTimeout = async (client) => {
+  try {
+    await client.query(`SET statement_timeout = ${STATEMENT_TIMEOUT_MS}`);
+  } catch (err) {
+    console.error('[db] no se pudo aplicar statement_timeout en una conexión nueva:', err.message);
+  }
+};
+
 const pool = new Pool({
   host:     process.env.DB_HOST,
   port:     Number(process.env.DB_PORT),
@@ -29,30 +61,10 @@ const pool = new Pool({
   idleTimeoutMillis: 30000,           // cierra conexiones inactivas después de 30s
   connectionTimeoutMillis: 5000,      // falla si no conecta en 5s (evita colgar el servidor)
   keepAlive: true,                    // TCP keep-alive a nivel socket: evita que un NAT/firewall corte la conexión ociosa (complementa el SELECT 1 periódico de iniciarKeepAlive)
+  onConnect: aplicarStatementTimeout, // corre antes de entregar cada conexión nueva
 });
 
 pool.on('error', (err) => console.error('[db] ❌ Error inesperado en pool:', err));
-
-// statement_timeout [auditoría 4.1]: Postgres aborta cualquier sentencia que
-// supere este límite y libera la conexión. Sin esto, un puñado de queries lentas
-// (o mantenidas abiertas a propósito) retiene las 3 conexiones del pool y estanca
-// toda la API; además aprieta el default de Supabase (120s), demasiado holgado
-// para 3 conexiones. 5s sobra: las queries más pesadas (agregaciones mensuales de
-// planilla/balances) corren en cientos de ms.
-//
-// Se aplica por SQL en cada conexión nueva, NO como parámetro de startup `options`:
-// el pooler de Supabase (Supavisor) DESCARTA `options` (verificado en frío — la
-// sesión quedaba en el default de 2min), pero sí deja pasar un `SET`. En modo
-// sesión cada conexión es dedicada, así que el SET vale para toda su vida. El
-// handler encola el SET antes de que el pool entregue la conexión al primer query
-// y node-postgres procesa la cola FIFO, así que el timeout ya está activo. El
-// valor es una constante hardcodeada (no input de usuario), seguro de interpolar.
-const STATEMENT_TIMEOUT_MS = 5000;
-pool.on('connect', (client) => {
-  client.query(`SET statement_timeout = ${STATEMENT_TIMEOUT_MS}`).catch((err) => {
-    console.error('[db] no se pudo aplicar statement_timeout en una conexión nueva:', err.message);
-  });
-});
 
 // Códigos de error de RED de Node (no son SQLSTATE de Postgres) ante los que
 // vale reintentar: el problema es el socket, no la query.
@@ -142,7 +154,8 @@ export const query = async (text, params, opciones = {}) => {
  * Cierra el pool drenando las conexiones abiertas. Lo usa el job del cron de
  * recordatorios para terminar limpio: el pool mantiene vivo el event loop, así
  * que sin cerrarlo el proceso no termina solo. No exponemos el pool crudo para
- * no habilitar pool.connect() (restricción del Session Pooler, plan §9).
+ * no habilitar pool.connect() (restricción del Session Pooler, ver
+ * docs/decisiones_mail_recordatorio.md).
  * @returns {Promise} resuelve cuando todas las conexiones quedaron cerradas
  */
 export const cerrarPool = () => pool.end();
@@ -169,7 +182,7 @@ export const testConnection = async () => {
  * conexión nunca llega a estar ociosa 30s y el pool no la cierra, evitando que
  * la próxima request pague el establecimiento completo (TCP + TLS + auth del
  * Session Pooler) contra Supabase en us-west-2 — ese cold connection es el
- * grueso de los ~2s fríos del bootstrap (ver docs/performance_frontends.md §5-bis).
+ * grueso de los ~2s fríos del bootstrap (ver docs/performance_frontends.md).
  *
  * El ping corre en background y es tolerante a fallos: si un tick falla (blip de
  * red a Oregon) se loguea como degradación recuperable y se reintenta en el

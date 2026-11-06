@@ -4,16 +4,21 @@
 // turnos del backoffice (turnosService → completarTurnoConCorte). Acá solo se
 // valida el body y se mapean los errores tipados del service a respuestas HTTP.
 
-import { registrarCorte } from '../services/cortesService.js';
+import { registrarCorte, MENSAJE_TURNO_INEXISTENTE, MENSAJE_TOTAL_EXCEDIDO } from '../services/cortesService.js';
 import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { calcularDuracionServicio } from '../services/turnosService.js';
-import { esMontoValido } from '../utils/validarNumero.js';
+import { esMontoValido, sumaMontosValida, mensajeMontoInvalido } from '../utils/validarNumero.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
+import { esUUID } from '../utils/validarUuid.js';
 
 /**
  * createCorte
  * POST /api/cortes — registra un corte desde el flujo operativo (iPad).
- * Si viene turno_id, el service lo vincula y marca el turno como 'completado'.
+ * Si viene turno_id, el service lo vincula y marca el turno como 'completado'
+ * (también uno marcado 'no_asistio' del día: elegirlo dice que el cliente vino). Si el
+ * turno se canceló mientras tanto, el corte entra igual, sin turno
+ * (turno_vinculado: false): el cobro existió y no se puede perder. Un turno ya
+ * completado → 409, para no cargar el cobro dos veces.
  * Sin turno_id es un walk-in (cliente sin reserva).
  * @param {string}   req.tenant_id        - Inyectado por tenantMiddleware
  * @param {string}   req.body.barbero_id  - UUID del barbero
@@ -22,7 +27,9 @@ import { esFormaPagoValida } from '../utils/validarPago.js';
  * @param {string}   req.body.forma_pago  - 'efectivo' | 'mercado_pago'
  * @param {number}   req.body.propina     - Monto de propina (default: 0)
  * @param {string}   [req.body.turno_id]  - UUID del turno asociado (opcional)
- * @returns {JSON} 201 { message, corte_id, monto_total }
+ * @returns {JSON} 201 { message, corte_id, monto_total, turno_vinculado } |
+ *   400 si falta un campo, no es válido o precio + propina no entra en monto_total |
+ *   404 barbero, servicio o turno que no existen (un id mal formado cuenta como no existe)
  */
 export const createCorte = async (req, res) => {
   const { barbero_id, servicio_id, precio, forma_pago, propina, turno_id } = req.body;
@@ -36,10 +43,17 @@ export const createCorte = async (req, res) => {
     return res.status(400).json({ error: "forma_pago debe ser 'efectivo' o 'mercado_pago'" });
   }
   if (!esMontoValido(precio)) {
-    return res.status(400).json({ error: 'precio es requerido y debe ser un número >= 0' });
+    return res.status(400).json({ error: mensajeMontoInvalido('precio') });
   }
   if (propina !== undefined && !esMontoValido(propina)) {
-    return res.status(400).json({ error: 'propina debe ser un número >= 0' });
+    return res.status(400).json({ error: mensajeMontoInvalido('propina', { requerido: false }) });
+  }
+  if (!sumaMontosValida(precio, propina ?? 0)) {
+    return res.status(400).json({ error: MENSAJE_TOTAL_EXCEDIDO });
+  }
+  // Sin turno_id es un walk-in: solo se valida si vino.
+  if (turno_id && !esUUID(turno_id)) {
+    return res.status(404).json({ error: MENSAJE_TURNO_INEXISTENTE });
   }
 
   try {
@@ -57,7 +71,7 @@ export const createCorte = async (req, res) => {
       return res.status(404).json({ error: 'Servicio no encontrado o inactivo' });
     }
 
-    const { corte_id, monto_total } = await registrarCorte({
+    const { corte_id, monto_total, turno_vinculado } = await registrarCorte({
       tenantId: req.tenant_id,
       barberoId: barbero_id,
       servicioId: servicio_id,
@@ -65,12 +79,15 @@ export const createCorte = async (req, res) => {
       formaPago: forma_pago,
       propina,
       turnoId: turno_id,
+      estadosCompletables: ['reservado', 'no_asistio'],
+      canceladoComoSinTurno: true,
     });
 
     res.status(201).json({
       message: 'Corte registrado correctamente',
       corte_id,
       monto_total,
+      turno_vinculado,
     });
 
   } catch (err) {
@@ -80,11 +97,11 @@ export const createCorte = async (req, res) => {
     if (err.code === 'BARBERO_INVALIDO' || err.code === 'SERVICIO_INVALIDO') {
       return res.status(404).json({ error: err.message });
     }
-    if (err.code === 'TURNO_YA_VINCULADO') {
+    if (err.code === 'TURNO_YA_VINCULADO' || err.code === 'TURNO_YA_COMPLETADO' || err.code === 'ESTADO_INVALIDO') {
       return res.status(409).json({ error: err.message });
     }
-    if (err.code === 'TURNO_INEXISTENTE' || err.code === 'UUID_INVALIDO') {
-      return res.status(400).json({ error: err.message });
+    if (err.code === 'TURNO_INEXISTENTE') {
+      return res.status(404).json({ error: err.message });
     }
     console.error('[cortes] Error en createCorte:', err);
     res.status(500).json({ error: 'Error al registrar el corte' });

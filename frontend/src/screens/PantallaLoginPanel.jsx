@@ -1,4 +1,4 @@
-// /frontend/src/screens/PantallaLoginAdmin.jsx
+// /frontend/src/screens/PantallaLoginPanel.jsx
 // Pantalla de ingreso de PIN para acceder al panel. El login es unificado: el
 // backend resuelve el rol (admin o barbero) según el PIN ingresado.
 // Tiene teclado numérico táctil + soporte de teclado físico.
@@ -16,13 +16,20 @@
 //   onCancelar   — función llamada al presionar "Cancelar"/"Volver".
 //   imagenLogo   — URL del logo del tenant (de tenant_imagen tipo='logo').
 //                  Si no hay, cae a un círculo con el icono Lock.
+//   avisoAcceso  — { mensaje, conContacto } | null. Falla de acceso detectada al
+//                  abrir el sistema (subdominio que no existe, servidor caído;
+//                  ver `problemaDeAcceso`). Se muestra antes de que tipeen nada,
+//                  hasta la primera respuesta del login.
 
 import { useState, useEffect, useCallback } from "react";
 import { Delete, ArrowLeft } from "lucide-react";
 import { theme } from "../theme/tokens.js";
-import { EmptyState, IconoAlerta, Card, LogoCirculo } from "../components/ui";
+import { EmptyState, IconoAlerta, LogoCirculo, ContactoSoporte } from "../components/ui";
 import FondoLocal from "../components/ui/FondoLocal.jsx";
 import { loginPanel } from "../services/api";
+import { fallaDeLogin } from "../utils/errores";
+
+const MENSAJE_PIN_INCORRECTO = "PIN incorrecto. Intentá de nuevo.";
 
 /**
  * BotonCancelarEsquina
@@ -64,7 +71,7 @@ function BotonCancelarEsquina({ label, onClick }) {
 }
 
 /**
- * ShellLoginAdmin
+ * ShellLoginPanel
  * Wrapper full-screen con la card de PIN centrada. El fondo es `FondoLocal` (la
  * foto del local con blur + velo, el mismo de MainScreen y los 3 flujos), así el
  * ambiente del local no se corta al entrar al login. Sin foto, FondoLocal cae a
@@ -74,7 +81,7 @@ function BotonCancelarEsquina({ label, onClick }) {
  * Lo comparten la pantalla normal de ingreso de PIN y la de acceso suspendido.
  * El cancel button va en la esquina superior izquierda de la card.
  */
-function ShellLoginAdmin({ children, onCancelar, labelCancelar = 'Cancelar', maxWidth = 480, imagenLocal }) {
+function ShellLoginPanel({ children, onCancelar, labelCancelar = 'Cancelar', maxWidth = 480, imagenLocal }) {
   return (
     <FondoLocal imagenLocal={imagenLocal}>
       <div style={{
@@ -168,49 +175,45 @@ function TeclaNum({ children, ariaLabel, onClick }) {
 }
 
 /**
- * ContactoCard
- * Card de contacto que aparece en la pantalla bloqueada.
- */
-function ContactoCard() {
-  return (
-    <Card style={{ width: '100%' }} padding={16}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <p style={{ margin: 0, fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.inkSoft }}>
-          WhatsApp: <strong style={{ color: theme.ink }}>11 3311-1686</strong>
-        </p>
-        <p style={{ margin: 0, fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.inkSoft }}>
-          facundolunagrebe@gmail.com
-        </p>
-      </div>
-    </Card>
-  );
-}
-
-/**
- * PantallaLoginAdmin
+ * PantallaLoginPanel
  * Componente principal. Maneja el flujo de ingreso de PIN, validación y
  * el estado bloqueado por suscripción vencida.
  */
-export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo, imagenLocal }) {
+export default function PantallaLoginPanel({ onAcceso, onCancelar, imagenLogo, imagenLocal, avisoAcceso = null }) {
   const [pin, setPin]             = useState("");
-  const [estado, setEstado]       = useState("idle"); // "idle" | "error" | "exito"
+  // "idle" | "error" (PIN incorrecto) | "exito"
+  const [estado, setEstado]       = useState("idle");
   const [shake, setShake]         = useState(false);
   const [bloqueado, setBloqueado] = useState(false);
+  // falla: { mensaje, conContacto } de un login que falló por algo que no es
+  // el PIN (subdominio, servidor, rate limit, sin red). Queda visible hasta el
+  // próximo dígito.
+  const [falla, setFalla]         = useState(null);
+  // huboRespuesta: ya se intentó un login, así que el aviso de la carga inicial
+  // (avisoAcceso) deja de aplicar: manda lo que respondió el login.
+  const [huboRespuesta, setHuboRespuesta] = useState(false);
 
   /**
    * validarPin — envía el PIN al backend. Si vuelve 402 (suscripción vencida)
-   * muestra la pantalla bloqueada. Si vuelve cualquier otro error, muestra
-   * el feedback de "PIN incorrecto" y resetea.
+   * muestra la pantalla bloqueada. Si vuelve 401, muestra el feedback de "PIN
+   * incorrecto" (shake) y resetea. Con cualquier otra falla, borra el PIN sin
+   * shake (no es culpa de lo que tipeó) y muestra la causa hasta el próximo dígito.
+   * @param {string} pinIngresado - PIN de 4 dígitos
    */
   const validarPin = useCallback(async (pinIngresado) => {
     try {
       const { token, rol, aviso_pago, barbero } = await loginPanel(pinIngresado);
+      setHuboRespuesta(true);
       setEstado("exito");
       setTimeout(() => onAcceso(token, { rol, aviso_pago, barbero }), 600);
     } catch (err) {
-      console.error('[pantallaLoginAdmin] Error en validarPin:', err.message);
+      console.error('[pantallaLoginPanel] Error en validarPin:', err.message, '| status:', err.status);
+      setHuboRespuesta(true);
       if (err.bloqueado) {
         setBloqueado(true);
+      } else if (err.status !== 401) {
+        setPin("");
+        setFalla(fallaDeLogin(err, MENSAJE_PIN_INCORRECTO, "No se pudo iniciar sesión. Intentá de nuevo."));
       } else {
         setEstado("error");
         setShake(true);
@@ -229,6 +232,7 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo, i
       if (prev.length >= 4 || estado === "exito") return prev;
       const nuevo = prev + digito;
       setEstado("idle");
+      setFalla(null);
       if (nuevo.length === 4) validarPin(nuevo);
       return nuevo;
     });
@@ -238,6 +242,7 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo, i
   const borrarDigito = useCallback(() => {
     if (estado === "exito") return;
     setEstado("idle");
+    setFalla(null);
     setPin((p) => p.slice(0, -1));
   }, [estado]);
 
@@ -254,29 +259,34 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo, i
   // ── Pantalla bloqueada (suscripción vencida) ──────────────────────────────
   if (bloqueado) {
     return (
-      <ShellLoginAdmin onCancelar={onCancelar} labelCancelar="Volver" imagenLocal={imagenLocal}>
+      <ShellLoginPanel onCancelar={onCancelar} labelCancelar="Volver" imagenLocal={imagenLocal}>
         <EmptyState
           tone="danger"
           glyph={<IconoAlerta size={32} />}
           title="Acceso suspendido"
           body="El acceso al panel está suspendido por falta de pago. Contactá al soporte para regularizar tu suscripción."
         />
-        <ContactoCard />
-      </ShellLoginAdmin>
+        <ContactoSoporte />
+      </ShellLoginPanel>
     );
   }
 
+  // Falla que se muestra ahora: la del último login, o si todavía no hubo
+  // ninguno, la que se detectó al abrir el sistema.
+  const fallaVisible = falla ?? (huboRespuesta ? null : avisoAcceso);
+  const hayError = estado === 'error' || Boolean(fallaVisible);
+
   // Color del icono fallback según estado (no se usa cuando hay logo).
-  const iconoColor = estado === 'error' ? theme.danger : theme.accent;
+  const iconoColor = hayError ? theme.danger : theme.accent;
 
   const subtituloTexto = estado === 'error'
-    ? "PIN incorrecto. Intentá de nuevo."
-    : "Ingresá tu PIN de 4 dígitos";
+    ? MENSAJE_PIN_INCORRECTO
+    : (fallaVisible?.mensaje ?? "Ingresá tu PIN de 4 dígitos");
 
-  const subtituloColor = estado === 'error' ? theme.danger : theme.muted;
+  const subtituloColor = hayError ? theme.danger : theme.muted;
 
   return (
-    <ShellLoginAdmin onCancelar={onCancelar} labelCancelar="Cancelar" imagenLocal={imagenLocal}>
+    <ShellLoginPanel onCancelar={onCancelar} labelCancelar="Cancelar" imagenLocal={imagenLocal}>
       <LogoCirculo imagenLogo={imagenLogo} fallbackColor={iconoColor} />
 
       <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -323,6 +333,8 @@ export default function PantallaLoginAdmin({ onAcceso, onCancelar, imagenLogo, i
           <Delete size={22} strokeWidth={1.75} />
         </TeclaNum>
       </div>
-    </ShellLoginAdmin>
+
+      {fallaVisible?.conContacto && <ContactoSoporte />}
+    </ShellLoginPanel>
   );
 }

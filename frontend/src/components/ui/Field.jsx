@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { theme } from '../../theme/tokens.js';
+import { estiloEtiquetaCampo } from './estilos.js';
 
 /**
  * Field
@@ -24,6 +25,7 @@ import { theme } from '../../theme/tokens.js';
  * @param {string} [props.inputMode] - Hint de teclado virtual: 'numeric'|'decimal'|'tel'|'email'|etc.
  *   Usar con type="text" para abrir teclados específicos (numpad en iPad) sin
  *   los efectos colaterales de type="number" (acepta 'e', botones spin).
+ * @param {number} [props.maxLength] - Tope de caracteres; sin él, no hay tope
  */
 function Field({
   label,
@@ -41,6 +43,7 @@ function Field({
   autoCorrect,
   spellCheck,
   inputMode,
+  maxLength,
 }) {
   const [focus, setFocus] = useState(false);
 
@@ -50,14 +53,7 @@ function Field({
 
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <span style={{
-        fontFamily: theme.mono,
-        fontWeight: theme.weightMedium,
-        fontSize: theme.sizeMicro,
-        letterSpacing: '0.04em',
-        textTransform: 'uppercase',
-        color: theme.muted,
-      }}>{label}</span>
+      <span style={estiloEtiquetaCampo}>{label}</span>
 
       <input
         type={type}
@@ -69,6 +65,7 @@ function Field({
         autoCorrect={autoCorrect}
         spellCheck={spellCheck}
         inputMode={inputMode}
+        maxLength={maxLength}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocus(true)}
         onBlur={() => { setFocus(false); if (onBlur) onBlur(); }}
@@ -79,7 +76,8 @@ function Field({
           border: `1px solid ${borderColor}`,
           borderRadius: theme.radius,
           fontFamily: theme.body,
-          fontSize: 15,
+          // sizeInput (16): con menos, Safari hace zoom al enfocar en el iPad.
+          fontSize: theme.sizeInput,
           color: disabled ? theme.muted : theme.ink,
           opacity: disabled ? 0.7 : 1,
           cursor: disabled ? 'not-allowed' : 'text',
@@ -91,13 +89,13 @@ function Field({
       {error ? (
         <span style={{
           fontFamily: theme.body,
-          fontSize: 12,
+          fontSize: theme.sizeBody,
           color: theme.danger,
         }}>{error}</span>
       ) : helper ? (
         <span style={{
           fontFamily: theme.body,
-          fontSize: 12,
+          fontSize: theme.sizeBody,
           color: theme.muted,
         }}>{helper}</span>
       ) : null}

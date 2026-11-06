@@ -1,6 +1,6 @@
 # Ruta del proyecto - Sistema de Gestion de Barberia
 
-Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y actualizado por última vez el 2026-10-01 (árbol de `frontend/` regenerado: color de montos).
+Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y comparado de nuevo contra `git ls-files` el 2026-11-04 (se sumaron `frontend/src/utils/pantalla.js` y `frontend-landing/src/components/ui/IconoWhatsApp.jsx`, que faltaban). Antes, el 2026-11-03 (en `frontend-turnero/src/`: `components/ui/estilos.js`, `hooks/useHover.js` y `utils/errores.js`; y `frontend/src/hooks/usePantallaAngosta.js`). Antes, el 2026-11-02 (en `frontend/src/`: `components/ui/GrupoOpciones.jsx`, `ToastProvider.jsx`, `tonosFormaPago.js`, `estilos.js`, `utils/errores.js` y `utils/toast.js`). Antes, el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
 
 Este documento lista las carpetas y archivos del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP. Para mantenerlo, regenerar los arboles desde `git ls-files` en vez de parchearlos a mano.
 
@@ -30,17 +30,21 @@ docs/
 |-- auditoria_2026-07.md
 |-- convenciones_tecnicas.md
 |-- decisiones_acceso_barberos.md
+|-- decisiones_descansos.md
 |-- decisiones_horario_atencion.md
+|-- decisiones_landing_ia.md
 |-- decisiones_login_operativo.md
 |-- decisiones_mail_entregabilidad.md
 |-- decisiones_mail_recordatorio.md
 |-- decisiones_movimientos_extra.md
 |-- decisiones_redisenio_panel_gestion.md
 |-- decisiones_turnero.md
+|-- decisiones_turnero_ux.md
 |-- deudas_tecnicas_frontend.md
 |-- estado_actual.md
 |-- onboarding.md
 |-- performance_frontends.md
+|-- plan_app_barbero.md
 |-- postmortem_golive_turnero.md
 |-- ruta_proyecto.md
 |-- sistema_de_disenio.md
@@ -64,6 +68,7 @@ backend/
     |   `-- supabase.js
     |-- controllers/
     |   |-- adminOperativo.js
+    |   |-- agenda.js
     |   |-- authBarbero.js
     |   |-- authOperativo.js
     |   |-- authPanel.js
@@ -73,6 +78,7 @@ backend/
     |   |-- categorias.js
     |   |-- clientes.js
     |   |-- cortes.js
+    |   |-- descansos.js
     |   |-- feriados.js
     |   |-- gastos.js
     |   |-- gestion.js
@@ -109,6 +115,7 @@ backend/
     |   |-- adminServicios.js
     |   |-- adminSocios.js
     |   |-- adminTurneroConfig.js
+    |   |-- agenda.js
     |   |-- authBarbero.js
     |   |-- authOperativo.js
     |   |-- authPanel.js
@@ -118,6 +125,7 @@ backend/
     |   |-- categorias.js
     |   |-- clientes.js
     |   |-- cortes.js
+    |   |-- descansos.js
     |   |-- gastos.js
     |   |-- horarios.js
     |   |-- inicio.js
@@ -140,15 +148,19 @@ backend/
     |   `-- probarRecordatorios.js
     |-- services/
     |   |-- barberosService.js
+    |   |-- categoriasService.js
     |   |-- cortesService.js
+    |   |-- descansosService.js
     |   |-- disponibilidadService.js
     |   |-- feriadosService.js
     |   |-- googleCalendar.js
     |   |-- horarioAtencionService.js
     |   |-- horariosService.js
+    |   |-- movimientosService.js
     |   |-- planillaService.js
     |   |-- recordatoriosService.js
     |   |-- sociosService.js
+    |   |-- sqlTurnoEnriquecido.js
     |   |-- storageService.js
     |   |-- suspensionesService.js
     |   |-- turnosService.js
@@ -157,16 +169,21 @@ backend/
     |       |-- mailProvider.js
     |       `-- resendProvider.js
     `-- utils/
+        |-- comision.js          fórmula de la comisión de un corte (única fuente)
         |-- constantes.js
+        |-- credencialesOperativas.js
+        |-- errores422.js
         |-- movimientos.js
         |-- pin.js
         |-- sanitizarLogs.js
+        |-- scopingRol.js
         |-- stock.js
         |-- suscripcion.js
         |-- validarFecha.js
         |-- validarNumero.js
         |-- validarPago.js
-        `-- validarTexto.js
+        |-- validarTexto.js
+        `-- validarUuid.js
 ```
 
 ### Rutas HTTP del backend
@@ -193,6 +210,8 @@ backend/src/routes/
 |-- turnos.js                 turnos admin/barbero
 |-- horarios.js               horarios admin/barbero
 |-- suspensiones.js           suspensiones admin/barbero
+|-- descansos.js              descansos admin/barbero
+|-- agenda.js                 agenda del dia admin/barbero
 |-- clientes.js               clientes admin/barbero
 |-- planilla.js               planilla admin/barbero
 |-- adminBarberos.js          gestion admin de barberos
@@ -222,6 +241,9 @@ frontend/
 |-- vite.config.js
 |-- public/
 |   |-- favicon.png
+|   |-- fonts/
+|   |   |-- geist-latin.woff2        Geist (variable), la declara src/index.css
+|   |   `-- geist-mono-latin.woff2   Geist Mono (variable)
 |   |-- manifest.json
 |   `-- mercadopago.png
 `-- src/
@@ -248,8 +270,10 @@ frontend/
     |       |-- DetalleRecurso.jsx
     |       |-- EmptyState.jsx
     |       |-- ErrorBoundary.jsx
+    |       |-- estilos.js           estiloEtiquetaCampo (rótulo de Field y GrupoOpciones)
     |       |-- Field.jsx
     |       |-- FondoLocal.jsx
+    |       |-- GrupoOpciones.jsx
     |       |-- IconoAlerta.jsx
     |       |-- index.js
     |       |-- InputTiempo.jsx
@@ -268,12 +292,16 @@ frontend/
     |       |-- SummaryRow.jsx
     |       |-- Tabs.jsx
     |       |-- Toast.jsx
+    |       |-- ToastProvider.jsx    avisos flotantes (se monta en main.jsx)
     |       |-- ToggleEstado.jsx
+    |       |-- tonosFormaPago.js    colores de cada forma de pago
     |       |-- TogglePill.jsx
     |       `-- TopBar.jsx
+    |-- hooks/
+    |   `-- usePantallaAngosta.js    ventana de menos de 1024 px (iPad vertical, Split View)
     |-- screens/
     |   |-- MainScreen.jsx
-    |   |-- PantallaLoginAdmin.jsx
+    |   |-- PantallaLoginPanel.jsx      login por PIN del panel (admin o barbero)
     |   |-- PantallaLoginOperativo.jsx
     |   |-- admin/
     |   |   |-- PanelAdmin.jsx
@@ -300,7 +328,8 @@ frontend/
     |       |-- FlujoCorte.jsx
     |       |-- FlujoGasto.jsx
     |       |-- FlujoVenta.jsx
-    |       `-- wizard.jsx
+    |       |-- wizard.jsx
+    |       `-- wizardStyles.js
     |-- services/
     |   `-- api.js
     |-- theme/
@@ -308,9 +337,14 @@ frontend/
     `-- utils/
         |-- cargarChunk.js
         |-- colorMonto.js
+        |-- comision.js          suma la comisión de los cortes y arma el texto del %
+        |-- descansos.js
+        |-- errores.js           mensaje de error para el usuario (servidor o genérico)
         |-- fecha.js
         |-- formato.js
-        `-- movimientos.js
+        |-- movimientos.js
+        |-- pantalla.js          alto visible de la pantalla (100dvh con respaldo)
+        `-- toast.js             API imperativa del toast (toast.show)
 ```
 
 ## Frontend barbero
@@ -340,6 +374,15 @@ frontend-barbero/
     |   |-- Login.jsx
     |   |-- Mas.jsx
     |   |-- MiPlanilla.jsx
+    |   |-- agenda/
+    |   |   |-- BloquesTimeline.jsx
+    |   |   |-- datosAgenda.js
+    |   |   |-- DetalleDescansoModal.jsx
+    |   |   |-- DetalleTurnoModal.jsx
+    |   |   |-- geometria.js
+    |   |   |-- ModalDetalle.jsx
+    |   |   |-- NavegadorDia.jsx
+    |   |   `-- Timeline.jsx
     |   `-- ui/
     |       |-- AvatarIniciales.jsx
     |       |-- BottomNav.jsx
@@ -359,13 +402,18 @@ frontend-barbero/
     |       |-- SummaryRow.jsx
     |       |-- TopBar.jsx
     |       `-- TurnoListItem.jsx
+    |-- hooks/
+    |   `-- useHover.js
     |-- services/
     |   `-- api.js
     |-- theme/
     |   `-- tokens.js
     `-- utils/
+        |-- colorMonto.js
+        |-- comision.js          suma la comisión de los cortes y arma el texto del %
         |-- fecha.js
-        `-- formato.js
+        |-- formato.js
+        `-- seleccionSlots.js
 ```
 
 ## Frontend turnero
@@ -380,53 +428,61 @@ frontend-turnero/
 |-- vercel.json
 |-- vite.config.js
 |-- public/
-|   |-- favicon.png
-|   `-- icons.svg
+|   `-- favicon.png
 `-- src/
-    |-- App.css
     |-- App.jsx
     |-- index.css
     |-- main.jsx
-    |-- assets/
-    |   |-- hero.png
-    |   |-- react.svg
-    |   `-- vite.svg
     |-- components/
     |   `-- ui/
+    |       |-- AgregarAlCalendario.jsx
     |       |-- AvatarIniciales.jsx
     |       |-- Button.jsx
     |       |-- Card.jsx
     |       |-- ConfirmDialog.jsx
     |       |-- EmptyState.jsx
+    |       |-- estilos.js           estiloEyebrow y MARGEN_SCROLL_CAMPO
     |       |-- Field.jsx
     |       |-- IconoAlerta.jsx
+    |       |-- IconoPin.jsx
     |       |-- index.js
-    |       |-- MiniCalendario.jsx
     |       |-- PageContainer.jsx
     |       |-- Progress.jsx
+    |       |-- ResumenTurno.jsx
     |       |-- ScreenHeader.jsx
+    |       |-- SelectorDiaHorario.jsx
     |       |-- Skeleton.jsx
     |       |-- SlotChip.jsx
     |       |-- StatusPill.jsx
     |       |-- StickyFooter.jsx
     |       |-- SummaryRow.jsx
     |       `-- TopBar.jsx
+    |-- hooks/
+    |   |-- useDisponibilidad.js
+    |   |-- useEleccionConPausa.js
+    |   |-- useHover.js          hover solo con mouse (copia del de frontend-barbero)
+    |   |-- useListaRemota.js
+    |   `-- useNavegacion.js
     |-- screens/
-    |   |-- Confirmacion.jsx
-    |   |-- DatosCliente.jsx
+    |   |-- ConfirmarTurno.jsx
     |   |-- GestionTurno.jsx
     |   |-- Landing.jsx
-    |   |-- SeleccionBarbero.jsx
-    |   |-- SeleccionFecha.jsx
-    |   |-- SeleccionHorario.jsx
-    |   `-- SeleccionServicio.jsx
+    |   |-- SeleccionCuando.jsx
+    |   |-- SeleccionServicio.jsx
+    |   `-- TurnoConfirmado.jsx
     |-- services/
     |   `-- api.js
     |-- theme/
     |   `-- tokens.js
     `-- utils/
+        |-- calendario.js
+        |-- errores.js           textos de error de la API (sin conexión, 429)
         |-- fecha.js
-        `-- formato.js
+        |-- formato.js
+        |-- mapa.js
+        |-- movimiento.js
+        |-- rutas.js
+        `-- telefono.js
 ```
 
 ## Frontend landing
@@ -498,7 +554,8 @@ frontend-landing/
     |   |   `-- Turnero.jsx
     |   `-- ui/
     |       |-- Button.jsx
-    |       `-- Card.jsx
+    |       |-- Card.jsx
+    |       `-- IconoWhatsApp.jsx
     |-- config/
     |   `-- landing.js        marca, contacto, precio, flags, capturas, videos
     |-- content/              datos puros que comparten la UI, el JSON-LD y el llms.txt

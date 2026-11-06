@@ -1,11 +1,12 @@
 // /frontend/src/screens/admin/sections/gestion/BloqueFeriados.jsx
 // Bloque de gestión de los feriados puntuales del negocio.
 // Se renderiza dentro de TabNegocio, debajo del horario de atención.
-// Cobertura: plan_horario_atencion.md §4.6.
+// Cobertura: decisiones_horario_atencion.md.
 //
 // Sistema de diseño: tokens + Geist + primitivos + onClick. El alta usa el
 // primitivo Modal; la confirmación de cascada 409 y el borrado usan
-// ConfirmDialog. Feedback efímero con Toast.
+// ConfirmDialog. Feedback efímero con toast flotante (utils/toast.js); el
+// error de carga y los del alta van inline con Toast.
 
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, RefreshCw } from 'lucide-react';
@@ -22,6 +23,8 @@ import {
   Toast,
   LoadingState,
 } from '../../../../components/ui';
+import { errorDeRespuesta, mensajeDeError } from '../../../../utils/errores';
+import { toast } from '../../../../utils/toast';
 import { theme } from '../../../../theme/tokens.js';
 
 // Nombres de mes para mostrar la fecha de forma legible.
@@ -117,7 +120,6 @@ export default function BloqueFeriados() {
   const [feriados, setFeriados]   = useState([]);
   const [cargando, setCargando]   = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
-  const [feedback, setFeedback]   = useState(null);    // { tone, texto } | null
   const [intento, setIntento]     = useState(0);
 
   // Modal de alta + sus campos. La fecha/descripción se conservan mientras dura
@@ -165,7 +167,6 @@ export default function BloqueFeriados() {
 
   // Abre el modal de alta limpio.
   const abrirModalAgregar = () => {
-    setFeedback(null);
     setNuevaFecha('');
     setNuevaDesc('');
     setErrorModal(null);
@@ -204,7 +205,7 @@ export default function BloqueFeriados() {
         const data = await res.json();
         if (!vivoRef.current) return;
         if (data.codigo === 'feriado_ya_existe') {
-          setErrorModal('Ya hay un feriado cargado en esa fecha.');
+          setErrorModal(data.error || 'Ya hay un feriado cargado en esa fecha.');
           return;
         }
         // requiere_confirmacion: cerrar el modal de alta y abrir el de cascada.
@@ -213,10 +214,7 @@ export default function BloqueFeriados() {
         return;
       }
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Error del servidor');
-      }
+      if (!res.ok) throw await errorDeRespuesta(res);
 
       const data = await res.json();
       if (!vivoRef.current) return;
@@ -227,16 +225,13 @@ export default function BloqueFeriados() {
       setNuevaDesc('');
 
       const canceladas = data.cascada.turnos_cancelados;
-      setFeedback({
-        tone: 'success',
-        texto: canceladas > 0
-          ? `Feriado agregado · ${canceladas} turno(s) cancelado(s).`
-          : 'Feriado agregado correctamente.',
-      });
+      toast.exito(canceladas > 0
+        ? `Feriado agregado · ${canceladas} turno(s) cancelado(s).`
+        : 'Feriado agregado correctamente.');
     } catch (err) {
       console.error('[bloqueFeriados] Error en ejecutarAlta:', err.message);
       // El error se muestra donde esté el usuario (modal de alta o de cascada).
-      if (vivoRef.current) setErrorModal(err.message || 'No se pudo agregar el feriado.');
+      if (vivoRef.current) setErrorModal(mensajeDeError(err, 'No se pudo agregar el feriado. Intentá de nuevo.'));
     } finally {
       if (vivoRef.current) setGuardando(false);
     }
@@ -270,7 +265,7 @@ export default function BloqueFeriados() {
       console.error('[bloqueFeriados] Error en ejecutarEliminar:', err.message);
       if (vivoRef.current) {
         setAEliminar(null);
-        setFeedback({ tone: 'danger', texto: 'No se pudo eliminar el feriado. Intentá de nuevo.' });
+        toast.error('No se pudo eliminar el feriado. Intentá de nuevo.');
       }
     } finally {
       if (vivoRef.current) setEliminando(false);
@@ -392,16 +387,6 @@ export default function BloqueFeriados() {
         </Button>
       </div>
 
-      {feedback && (
-        <Toast
-          tone={feedback.tone}
-          autoDismissMs={feedback.tone === 'success' ? 4000 : undefined}
-          dismissible={feedback.tone === 'danger'}
-          onDismiss={() => setFeedback(null)}
-        >
-          {feedback.texto}
-        </Toast>
-      )}
 
       {feriados.length === 0 ? (
         <span style={{ fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.muted }}>
@@ -455,7 +440,7 @@ export default function BloqueFeriados() {
                 tono="danger"
                 ariaLabel="Eliminar feriado"
                 icono={<Trash2 size={14} strokeWidth={1.75} />}
-                onClick={() => { setFeedback(null); setAEliminar(f); }}
+                onClick={() => { setAEliminar(f); }}
               />
             </div>
           ))}

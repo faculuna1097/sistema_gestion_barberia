@@ -1,7 +1,8 @@
 // /frontend/src/theme/tokens.js
 // Tokens del sistema de diseño — tema "Luz" (Stripe/Clerk look).
 // Single source of truth para colores, tipografía, spacing, radios.
-// Idéntico al de frontend-turnero — la fuente de verdad vive allá.
+// Fuente de verdad de Luz (sistema_de_disenio.md §1): frontend-barbero y
+// frontend-landing tienen copias; el turnero diverge a propósito (§3.8).
 // Se importa así:   import { theme } from '../theme/tokens';
 
 /**
@@ -17,10 +18,17 @@ export const theme = {
   surfaceAlt:   '#F4F4F5',  // hover suave, fondos de soporte
   ink:          '#09090B',  // texto principal
   inkSoft:      '#27272A',  // texto secundario fuerte
-  muted:        '#71717A',  // texto secundario
-  mutedSoft:    '#A1A1AA',  // texto deshabilitado / placeholder
+  // Texto secundario. Más oscuro que zinc-500 (#71717A, 4,40:1 sobre surfaceAlt)
+  // para llegar a WCAG AA: 5,28:1 sobre blanco, 5,05 sobre #FAFAFA y 4,80 sobre surfaceAlt.
+  muted:        '#6B6B74',
+  // Deshabilitado, bordes en hover y lo decorativo. No es para texto que se lee:
+  // da 2,56:1 sobre blanco.
+  mutedSoft:    '#A1A1AA',
   hairline:     '#E4E4E7',  // borders, separadores
   hairlineSoft: '#F4F4F5',  // separadores muy sutiles
+  // Fondo de pills y etiquetas neutras (zinc-200). No usa surfaceAlt porque
+  // ese es el hover de las filas: la etiqueta perdía el fondo al pasar el mouse.
+  neutralSoft:  '#E4E4E7',
 
   // Acento único — indigo.
   accent:       '#4F46E5',
@@ -45,6 +53,10 @@ export const theme = {
   sizeBody:    14,  // texto base
   sizeMicro:   11,  // eyebrows, micro-labels en mayúsculas
 
+  // Tamaño funcional (no de jerarquía): los inputs deben ser ≥16px para
+  // evitar el auto-zoom de iOS Safari al enfocar un campo de texto (iPad).
+  sizeInput:   16,
+
   weightRegular: 400,
   weightMedium:  500,
   weightHeading: 600,
@@ -63,6 +75,14 @@ export const theme = {
   // ── Sombras ───────────────────────────────────────────────────
   shadowSm: '0 1px 2px rgba(0,0,0,0.06)',
   shadowMd: '0 4px 12px rgba(0,0,0,0.06)',
+  // Sombra de una card que flota sobre un overlay (Modal).
+  shadowLg: '0 20px 40px rgba(0,0,0,0.15)',
+  // Sombra hacia arriba que marca "hay más contenido abajo" en una zona con
+  // scroll interno (ej. TarjetaResumen del wizard). Funcional, no decorativa.
+  shadowScroll: '0 -8px 8px -8px rgba(0,0,0,0.12)',
+
+  // Fondo oscuro detrás de un Modal (ink al 50 %).
+  overlay: 'rgba(9, 9, 11, 0.5)',
 
   // ── Transiciones ──────────────────────────────────────────────
   transitionFast:   '.12s ease-out',

@@ -2,6 +2,8 @@
 // Centraliza las llamadas HTTP a los endpoints públicos del turnero.
 // Sin auth — el turnero del cliente es anónimo.
 
+import { TEXTO_DEMASIADOS_INTENTOS, fetchConDiagnostico } from '../utils/errores.js';
+
 // Base de la API. `BASE_API` apunta a `/api` y `BASE_URL` al namespace
 // `/api/turnero`. La mayoría de los endpoints del turnero cuelgan de
 // `BASE_URL`; los de imágenes viven en `/api/negocio/*`, fuera de ese
@@ -11,6 +13,9 @@ const BASE_API = import.meta.env.VITE_API_URL
   : 'http://localhost:3001/api';
 
 const BASE_URL = `${BASE_API}/turnero`;
+
+// Para diagnosticar un pedido que no recibió respuesta (fetchConDiagnostico).
+const URL_HEALTH = `${BASE_API}/health`;
 
 // Extraer subdominio del hostname actual.
 // Solo se considera subdominio si estamos en el dominio de producción.
@@ -28,14 +33,39 @@ const publicHeaders = {
 };
 
 /**
+ * errorDeEscritura
+ * Arma el error de una escritura que falló (reservar, cancelar, reprogramar):
+ * el mensaje del backend (`error`) o `generico`, salvo un 429, que lleva
+ * siempre el texto propio del turnero (TEXTO_DEMASIADOS_INTENTOS).
+ * @param {Response} res - Respuesta con `ok` en false
+ * @param {string} generico - Texto si el backend no mandó `error`
+ * @returns {Promise<Error>} Con `status` (el HTTP)
+ */
+async function errorDeEscritura(res, generico) {
+  const body = await res.json().catch(() => ({}));
+  const err = new Error(res.status === 429 ? TEXTO_DEMASIADOS_INTENTOS : (body.error || generico));
+  err.status = res.status;
+  return err;
+}
+
+/**
  * getTenant
  * Obtiene datos públicos del tenant (nombre, contacto, horario, feriados).
  * El logo y demás imágenes se obtienen aparte con getImagenesNegocio().
+ * Es el primer pedido del turnero: si el subdominio no existe o el servidor no
+ * responde, falla acá. El error lleva `status` y `codigo` (ej.
+ * 'tenant_no_encontrado') para que App elija el texto con `mensajeDeCargaDelLocal`.
  * @returns {Promise<Object>} { id, nombre, telefono, direccion, horario_atencion, feriados }
  */
 export const getTenant = async () => {
-  const res = await fetch(`${BASE_URL}/tenant`, { headers: publicHeaders });
-  if (!res.ok) throw new Error('Error al obtener tenant');
+  const res = await fetchConDiagnostico(`${BASE_URL}/tenant`, { headers: publicHeaders }, URL_HEALTH);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(body.error || 'Error al obtener tenant');
+    err.status = res.status;
+    err.codigo = typeof body.codigo === 'string' ? body.codigo : null;
+    throw err;
+  }
   return res.json();
 };
 
@@ -75,18 +105,18 @@ export const getBarberos = async () => {
 
 /**
  * getDisponibilidad
- * Obtiene slots disponibles para un (barbero, servicio, fecha).
- * @param {string} barberoId
+ * Obtiene los slots disponibles de un día para un servicio, con un barbero o
+ * con "Cualquiera" (`barberoId` nulo: se omite el parámetro).
+ * @param {string|null} barberoId - null para "Cualquiera"
  * @param {string} servicioId
  * @param {string} fecha - 'YYYY-MM-DD'
- * @returns {Promise<Object>} { slots: [ISO,...] }
+ * @returns {Promise<Object>} Con barbero: { slots: [ISO,...] }.
+ *   Con "Cualquiera": { slots: [ISO,...], asignaciones: { [ISO]: barbero_id } },
+ *   donde cada clave de `asignaciones` es exactamente un string de `slots`
  */
 export const getDisponibilidad = async (barberoId, servicioId, fecha) => {
-  const params = new URLSearchParams({
-    barbero_id: barberoId,
-    servicio_id: servicioId,
-    fecha,
-  });
+  const params = new URLSearchParams({ servicio_id: servicioId, fecha });
+  if (barberoId) params.set('barbero_id', barberoId);
   const res = await fetch(`${BASE_URL}/disponibilidad?${params}`, { headers: publicHeaders });
   if (!res.ok) throw new Error('Error al obtener disponibilidad');
   return res.json();
@@ -95,20 +125,18 @@ export const getDisponibilidad = async (barberoId, servicioId, fecha) => {
 /**
  * getDiasDisponibles
  * Obtiene qué días de un rango tienen al menos un slot reservable para un
- * (barbero, servicio). El calendario lo usa para grisar los días sin turnos.
- * @param {string} barberoId
+ * servicio, con un barbero o con "Cualquiera" (`barberoId` nulo: se omite el
+ * parámetro y el backend devuelve la unión de los días de todos los barberos).
+ * La tira de días lo usa para grisar los días sin turnos. Tope del backend: 62 días.
+ * @param {string|null} barberoId - null para "Cualquiera"
  * @param {string} servicioId
  * @param {string} desde - 'YYYY-MM-DD' (inclusive)
  * @param {string} hasta - 'YYYY-MM-DD' (inclusive)
  * @returns {Promise<Object>} { dias: ['YYYY-MM-DD', ...] }
  */
 export const getDiasDisponibles = async (barberoId, servicioId, desde, hasta) => {
-  const params = new URLSearchParams({
-    barbero_id: barberoId,
-    servicio_id: servicioId,
-    desde,
-    hasta,
-  });
+  const params = new URLSearchParams({ servicio_id: servicioId, desde, hasta });
+  if (barberoId) params.set('barbero_id', barberoId);
   const res = await fetch(`${BASE_URL}/dias-disponibles?${params}`, { headers: publicHeaders });
   if (!res.ok) throw new Error('Error al obtener días disponibles');
   return res.json();
@@ -117,8 +145,11 @@ export const getDiasDisponibles = async (barberoId, servicioId, desde, hasta) =>
 /**
  * crearTurno
  * Crea un turno desde el turnero público.
- * @param {Object} datos - { servicio_id, barbero_id, inicio, nombre, telefono, email }
+ * @param {Object} datos - { servicio_id, barbero_id, inicio, nombre, telefono, email, origen? }.
+ *   `origen`: por qué link llegó el cliente (ej. 'instagram'); se omite si no hay
  * @returns {Promise<Object>} { turno_id, token_gestion }
+ * @throws {Error} Con `status` (el HTTP) y el mensaje del backend (ver
+ *   errorDeEscritura). Un error de red llega sin `status`.
  */
 export const crearTurno = async (datos) => {
   const res = await fetch(`${BASE_URL}/turnos`, {
@@ -126,12 +157,7 @@ export const crearTurno = async (datos) => {
     headers: publicHeaders,
     body: JSON.stringify(datos),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const err = new Error(body.error || 'Error al crear turno');
-    err.status = res.status;
-    throw err;
-  }
+  if (!res.ok) throw await errorDeEscritura(res, 'Error al crear turno');
   return res.json();
 };
 
@@ -152,16 +178,14 @@ export const getTurnoPorToken = async (token) => {
  * Cancela un turno por su token_gestion.
  * @param {string} token
  * @returns {Promise<Object>} { ok: true }
+ * @throws {Error} Con `status` y el mensaje del backend (ver errorDeEscritura)
  */
 export const cancelarTurno = async (token) => {
   const res = await fetch(`${BASE_URL}/turnos/${token}/cancelar`, {
     method: 'POST',
     headers: publicHeaders,
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Error al cancelar turno');
-  }
+  if (!res.ok) throw await errorDeEscritura(res, 'Error al cancelar turno');
   return res.json();
 };
 
@@ -171,6 +195,7 @@ export const cancelarTurno = async (token) => {
  * @param {string} token
  * @param {string} inicio - ISO timestamp del nuevo inicio
  * @returns {Promise<Object>} { ok: true, turno: { id, inicio, fin } }
+ * @throws {Error} Con `status` y el mensaje del backend (ver errorDeEscritura)
  */
 export const reprogramarTurno = async (token, inicio) => {
   const res = await fetch(`${BASE_URL}/turnos/${token}/reprogramar`, {
@@ -178,11 +203,6 @@ export const reprogramarTurno = async (token, inicio) => {
     headers: publicHeaders,
     body: JSON.stringify({ inicio }),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const err = new Error(body.error || 'Error al reprogramar turno');
-    err.status = res.status;
-    throw err;
-  }
+  if (!res.ok) throw await errorDeEscritura(res, 'Error al reprogramar turno');
   return res.json();
 };

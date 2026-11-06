@@ -13,7 +13,7 @@ router.get('/', getTurnos);
 // POST   /api/admin/turnos   — reserva manual
 router.post('/', crearTurnoAdmin);
 
-// PATCH  /api/admin/turnos/:id/estado  — completado | no_asistio (solo cambia estado)
+// PATCH  /api/admin/turnos/:id/estado  — no_asistio (solo cambia estado; completar va por /completar)
 router.patch('/:id/estado', patchEstado);
 
 // POST   /api/admin/turnos/:id/completar  — completa + registra el corte (forma_pago, precio, propina)

@@ -20,7 +20,7 @@
 // ganancia del mes. Se muestran aparte, cerrando en "Queda en el negocio"
 // (ganancia + aportes − retiros). Ver docs/decisiones_movimientos_extra.md.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useEffectEvent } from 'react';
 import {
   Banknote,
   Receipt,
@@ -34,6 +34,7 @@ import {
 
 import { apiFetch } from '../../../services/api';
 import { fmtPesos, formatPago } from '../../../utils/formato';
+import { textoPorcentajeComision } from '../../../utils/comision';
 import { getMesActual, mesALabel } from '../../../utils/fecha';
 import { labelTipoMovimiento } from '../../../utils/movimientos';
 import { cargarChunk } from '../../../utils/cargarChunk';
@@ -47,7 +48,6 @@ import {
   IconoAlerta,
   Button,
   LoadingState,
-  Toast,
   BadgeVariacion,
   BotonExportarExcel,
   TogglePill,
@@ -300,7 +300,6 @@ export default function SeccionBalances() {
   const [tabActivo, setTabActivo]                 = useState('mensual');
   const [mesSeleccionado, setMesSeleccionado]     = useState(getMesActual());
   const [mostrarComisiones, setMostrarComisiones] = useState(true);
-  const [errorExport, setErrorExport]             = useState(null);
 
   // Tab mensual.
   const [datosMensual, setDatosMensual]   = useState(null);
@@ -342,10 +341,15 @@ export default function SeccionBalances() {
   }, [mesSeleccionado, intentoMensual]);
 
   // ── Carga del histórico anual ──────────────────────────────────────────────
+  // useEffectEvent: el efecto lee datosHistorico sin depender de él. Como
+  // dependencia, cada carga volvería a disparar el efecto, y después de un
+  // reintento (intentoHistorico > 0) recargaría sin fin.
+  const yaHayHistorico = useEffectEvent(() => Boolean(datosHistorico));
+
   useEffect(() => {
     if (tabActivo !== 'historico') return;
     // Si ya hay datos y no es un reintento explícito, no recargamos.
-    if (datosHistorico && intentoHistorico === 0) return;
+    if (yaHayHistorico() && intentoHistorico === 0) return;
 
     let cancelado = false;
     const cargar = async () => {
@@ -376,19 +380,14 @@ export default function SeccionBalances() {
    * retiros" si el mes los tiene. Tab histórico: 1 hoja.
    * Los montos van siempre con comisiones, sin importar el toggle.
    * @returns {Promise<void>} Descarga el archivo; si falla la carga de xlsx,
-   *   deja el mensaje en `errorExport`.
+   *   cargarChunk ya avisó con un toast.
    */
   const exportarExcel = async () => {
     // El chunk de xlsx se baja recién acá (lazy, #3). Si la descarga falla,
-    // cargarChunk lo convierte en un error con mensaje al usuario en vez de
-    // un unhandled rejection silencioso.
-    let XLSX;
-    try {
-      XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
-    } catch (err) {
-      setErrorExport(err.message);
-      return;
-    }
+    // cargarChunk avisa con un toast y devuelve null, en vez de un unhandled
+    // rejection silencioso.
+    const XLSX = await cargarChunk(() => import('xlsx'), 'xlsx');
+    if (!XLSX) return;
     const wb = XLSX.utils.book_new();
 
     if (tabActivo === 'mensual' && datosMensual) {
@@ -396,7 +395,10 @@ export default function SeccionBalances() {
         Barbero:           b.nombre,
         Cortes:            b.cortes,
         'Monto servicios': b.monto_servicios,
-        'Comisión %':      b.comision_valor,
+        // Un número si tuvo un solo %; el rango como texto si se le cambió en el mes.
+        'Comisión %':      b.comision_porcentajes.length > 1
+          ? textoPorcentajeComision(b.comision_porcentajes, b.comision_valor)
+          : (b.comision_porcentajes[0] ?? b.comision_valor),
         'Monto comisión':  b.monto_comision,
         'Neto negocio':    b.neto_negocio,
       }));
@@ -558,11 +560,6 @@ export default function SeccionBalances() {
             </div>
           </div>
 
-          {errorExport && (
-            <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
-              {errorExport}
-            </Toast>
-          )}
 
           {cargandoMensual && <LoadingState />}
 
@@ -627,11 +624,6 @@ export default function SeccionBalances() {
             </div>
           </div>
 
-          {errorExport && (
-            <Toast tone="danger" dismissible onDismiss={() => setErrorExport(null)}>
-              {errorExport}
-            </Toast>
-          )}
 
           {cargandoHistorico && <LoadingState />}
 
@@ -808,7 +800,7 @@ function FilaIngresoSinComision({ label, monto, mostrarComisiones }) {
   return (
     <tr className="om-fila-hover">
       <td style={{ ...tdStyle, color: theme.muted }}>{label}</td>
-      <td style={{ ...tdStyle, textAlign: 'right', color: theme.mutedSoft }}>—</td>
+      <td style={{ ...tdStyle, textAlign: 'right', color: theme.muted }}>—</td>
       <td style={{
         ...tdStyle,
         textAlign: 'right',
@@ -819,8 +811,8 @@ function FilaIngresoSinComision({ label, monto, mostrarComisiones }) {
       </td>
       {mostrarComisiones && (
         <>
-          <td style={{ ...tdStyle, textAlign: 'right', color: theme.mutedSoft }}>—</td>
-          <td style={{ ...tdStyle, textAlign: 'right', color: theme.mutedSoft }}>—</td>
+          <td style={{ ...tdStyle, textAlign: 'right', color: theme.muted }}>—</td>
+          <td style={{ ...tdStyle, textAlign: 'right', color: theme.muted }}>—</td>
           <td style={{
             ...tdStyle,
             textAlign: 'right',
@@ -885,7 +877,7 @@ function TablaPorBarbero({ datos, mostrarComisiones }) {
                   color: theme.muted,
                   fontVariantNumeric: 'tabular-nums',
                 }}>
-                  {b.comision_valor}%
+                  {textoPorcentajeComision(b.comision_porcentajes, b.comision_valor)}
                 </td>
                 <td style={{
                   ...tdStyle,
@@ -1024,7 +1016,7 @@ function TablaPorCategoria({ categorias, totalEgresos }) {
  */
 function celdaMontoCapital(monto, color) {
   return monto === 0
-    ? { texto: '—', color: theme.mutedSoft }
+    ? { texto: '—', color: theme.muted }
     : { texto: fmtPesos(monto), color };
 }
 

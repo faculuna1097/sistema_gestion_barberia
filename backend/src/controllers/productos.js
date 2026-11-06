@@ -17,7 +17,8 @@ export const getProductos = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    res.json(result.rows);
+    // precio como número: pg entrega el NUMERIC como string (convenciones §4).
+    res.json(result.rows.map((p) => ({ ...p, precio: Number(p.precio) })));
   } catch (err) {
     console.error('[productos] Error en getProductos:', err);
     res.status(500).json({ error: 'Error al obtener productos' });

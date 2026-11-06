@@ -1,12 +1,13 @@
 // /frontend-barbero/src/components/ui/Button.jsx
 // Botón unificado con 4 variantes. Reemplaza todos los <button> ad-hoc del proyecto.
 
-import { useState } from 'react';
 import { theme } from '../../theme/tokens.js';
+import { useHover } from '../../hooks/useHover.js';
 
 /**
  * Button
  * Botón principal del sistema. Variantes: primary | ghost | secondary | danger.
+ * El hover solo se prende con mouse (useHover).
  * @param {ReactNode} props.children - Contenido del botón
  * @param {Function} props.onClick - Handler de click
  * @param {'primary'|'ghost'|'secondary'|'danger'} [props.variant='primary'] - Estilo visual
@@ -14,6 +15,8 @@ import { theme } from '../../theme/tokens.js';
  * @param {boolean} [props.full=true] - Si ocupa el 100% del ancho del padre
  * @param {string} [props.type='button'] - type del <button> nativo
  * @param {Object} [props.style] - Override de estilos puntuales
+ * @param {string} [props.ariaLabel] - Nombre accesible, cuando el texto visible
+ *   solo no alcanza (ej. "Liberar" en una lista: ¿liberar cuál?)
  */
 function Button({
   children,
@@ -23,8 +26,9 @@ function Button({
   full = true,
   type = 'button',
   style,
+  ariaLabel,
 }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
 
   // Estilos base comunes a todas las variantes.
   const base = {
@@ -32,7 +36,7 @@ function Button({
     padding: '12px 16px',
     fontFamily: theme.body,
     fontWeight: theme.weightMedium,
-    fontSize: 14,
+    fontSize: theme.sizeBody,
     letterSpacing: '-0.005em',
     border: '1px solid transparent',
     borderRadius: theme.radius,
@@ -75,9 +79,9 @@ function Button({
     <button
       type={type}
       onClick={disabled ? undefined : onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...eventosHover}
       disabled={disabled}
+      aria-label={ariaLabel}
       style={{ ...base, ...variants[variant], ...style }}
     >
       {children}

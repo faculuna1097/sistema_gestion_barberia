@@ -43,7 +43,7 @@ function Mas({ barbero, onIrClientes, onIrGestion, onCerrarSesion }) {
       <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{
           fontFamily: theme.body,
-          fontSize: theme.sizeMicro + 1,
+          fontSize: theme.sizeBody,
           color: theme.muted,
           textAlign: 'center',
         }}>
@@ -102,7 +102,7 @@ function ItemFila({ icon: Icon, label, descripcion, danger = false, onClick }) {
           {descripcion && (
             <div style={{
               fontFamily: theme.body,
-              fontSize: theme.sizeMicro + 1,
+              fontSize: theme.sizeBody,
               color: theme.muted,
               marginTop: 2,
               lineHeight: 1.4,

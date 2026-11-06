@@ -8,9 +8,9 @@
 > - clases `om-`: `src/index.css`;
 > - imagen de vista previa: `scripts/og-image.html` → `public/og-image.png`.
 >
-> **Pendiente:** deploy (sale con el próximo push a `main`), activar Vercel Analytics antes del
-> push, verificación en producción y acciones fuera del sitio (ver `estado_actual.md` →
-> Pendientes y la checklist al final).
+> **En producción desde el 2026-10-01.** Comprobados el 2026-11-04 los puntos 1 y 2 de la
+> checklist del final y que Vercel Analytics está activo. **Pendiente:** el resto de la
+> checklist y las acciones fuera del sitio (ver `estado_actual.md` → Pendientes).
 
 ## Problema que resolvió
 

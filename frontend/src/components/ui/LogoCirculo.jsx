@@ -3,7 +3,7 @@
 // muestra el icono Lock como fallback (afordancia de "acceso" en las pantallas
 // de login). El logo usa object-fit: cover para llenar el círculo.
 //
-// Promovido desde las copias locales de PantallaLoginAdmin y PantallaLoginOperativo
+// Promovido desde las copias locales de PantallaLoginPanel y PantallaLoginOperativo
 // (deuda #14). El color del fallback es configurable (`fallbackColor`) porque el
 // login admin lo usa para reflejar el estado del PIN (accent → danger al fallar);
 // el resto cae al accent por defecto.

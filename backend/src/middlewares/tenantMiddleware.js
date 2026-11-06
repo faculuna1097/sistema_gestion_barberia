@@ -133,7 +133,9 @@ export async function leerTokenVersionAdmin(req) {
  * e inyecta req.tenant_id. Corre global, antes de cualquier controller.
  *
  * @param {Request}  req  - Express request. Se le agrega req.tenant_id.
- * @param {Response} res  - Express response. 400 si no hay tenant, 404 si no existe, 500 si falla la DB.
+ * @param {Response} res  - Express response. 400 si no hay tenant (codigo
+ *                          'tenant_no_identificado'), 404 si no existe o está
+ *                          inactivo (codigo 'tenant_no_encontrado'), 500 si falla la DB.
  * @param {Function} next - pasa al siguiente middleware/controller si resuelve.
  */
 export const tenantMiddleware = async (req, res, next) => {
@@ -146,14 +148,24 @@ export const tenantMiddleware = async (req, res, next) => {
       req.tenant_id = fallback;
       return next();
     }
-    return res.status(400).json({ error: 'Tenant no identificado' });
+    // Sin log a propósito: es validación de input (convención de logs) y el
+    // log de acceso global ya deja constancia del request.
+    return res.status(400).json({ error: 'Tenant no identificado', codigo: 'tenant_no_identificado' });
   }
 
   try {
     const entrada = await resolverPorSubdominio(subdominio);
 
     if (!entrada) {
-      return res.status(404).json({ error: 'Tenant no encontrado' });
+      // Evento de seguridad/operación (convención de logs: "tenant no
+      // encontrado" va con console.warn). Es el único log de este middleware:
+      // no se loguea el flujo normal, solo el rechazo. Un subdominio que no
+      // resuelve es un tenant dado de baja, un subdominio mal escrito o un link
+      // viejo en circulación (ej. tras renombrar un subdominio), y el
+      // subdominio es justo el dato que lo identifica. Se recorta a 63
+      // caracteres (máximo de una etiqueta DNS): el header lo manda el cliente.
+      console.warn('[tenantMiddleware] tenantMiddleware — subdominio no resuelve a un tenant activo | subdominio:', String(subdominio).slice(0, 63));
+      return res.status(404).json({ error: 'Tenant no encontrado', codigo: 'tenant_no_encontrado' });
     }
 
     req.tenant_id = entrada.tenant_id;

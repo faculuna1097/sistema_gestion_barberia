@@ -1,12 +1,17 @@
 // /frontend-turnero/src/components/ui/Field.jsx
 // Input de formulario con label superior, helper opcional y estado invalid.
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { theme } from '../../theme/tokens.js';
+import { estiloEyebrow, MARGEN_SCROLL_CAMPO } from './estilos.js';
 
 /**
  * Field
  * Input de texto controlado con label + helper + invalid state.
+ * Accesibilidad (sistema de diseño §5.2): la label va asociada al input por
+ * `htmlFor`; con error, el input lleva `aria-invalid` y `aria-describedby`
+ * apunta al texto del error (si no, al del helper), así el lector de pantalla
+ * lo lee al entrar al campo.
  * @param {string} props.label - Texto de la label superior (eyebrow uppercase)
  * @param {string} props.value
  * @param {Function} props.onChange - Recibe el string nuevo (no el evento)
@@ -19,6 +24,7 @@ import { theme } from '../../theme/tokens.js';
  * @param {boolean} [props.invalid=false] - Marca el field con border de error
  * @param {string} [props.helper] - Texto auxiliar bajo el input
  * @param {string} [props.error] - Si está presente, reemplaza al helper en rojo
+ * @param {Object} [props.ref] - Ref al <input> (ej. para enfocarlo); React 19 lo pasa como prop
  */
 function Field({
   label,
@@ -33,27 +39,29 @@ function Field({
   invalid = false,
   helper,
   error,
+  ref,
 }) {
   const [focus, setFocus] = useState(false);
 
+  // Ids para asociar label, input y texto de abajo.
+  const inputId = useId();
+  const textoId = useId();
+  const conError = Boolean(invalid || error);
+  const texto = error || helper;
+
   // Color de border según prioridad: error/invalid > focus > default.
-  const borderColor = (invalid || error)
+  const borderColor = conError
     ? theme.danger
     : (focus ? theme.accent : theme.hairline);
 
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {/* Label superior en estilo "eyebrow" (uppercase + mono) */}
-      <span style={{
-        fontFamily: theme.mono,
-        fontWeight: theme.weightMedium,
-        fontSize: theme.sizeMicro,
-        letterSpacing: '0.04em',
-        textTransform: 'uppercase',
-        color: theme.muted,
-      }}>{label}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* Label superior en estilo "eyebrow" */}
+      <label htmlFor={inputId} style={estiloEyebrow}>{label}</label>
 
       <input
+        ref={ref}
+        id={inputId}
         type={type}
         name={name}
         autoComplete={autoComplete}
@@ -63,6 +71,8 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocus(true)}
         onBlur={() => { setFocus(false); if (onBlur) onBlur(); }}
+        aria-invalid={conError ? 'true' : undefined}
+        aria-describedby={texto ? textoId : undefined}
         style={{
           width: '100%',
           padding: '12px 14px',
@@ -74,24 +84,21 @@ function Field({
           color: theme.ink,
           transition: `border-color ${theme.transitionFast}, box-shadow ${theme.transitionFast}`,
           boxShadow: focus ? `0 0 0 3px ${theme.accent}26` : 'none',
+          // Al enfocarlo, que también se vea la ayuda o el error de abajo.
+          scrollMarginBottom: MARGEN_SCROLL_CAMPO,
         }}
       />
 
-      {/* Helper o error (uno u otro) */}
-      {error ? (
-        <span style={{
+      {/* Helper o error (uno u otro): el error es texto, no solo el borde rojo */}
+      {texto && (
+        <span id={textoId} style={{
           fontFamily: theme.body,
-          fontSize: 12,
-          color: theme.danger,
-        }}>{error}</span>
-      ) : helper ? (
-        <span style={{
-          fontFamily: theme.body,
-          fontSize: 12,
-          color: theme.muted,
-        }}>{helper}</span>
-      ) : null}
-    </label>
+          fontSize: theme.sizeBody,
+          lineHeight: 1.4,
+          color: error ? theme.danger : theme.muted,
+        }}>{texto}</span>
+      )}
+    </div>
   );
 }
 

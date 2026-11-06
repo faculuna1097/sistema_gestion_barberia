@@ -56,7 +56,7 @@ export async function loginOperativo(req, res) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
-    // Comparación de usuario case-sensitive (decisión del plan §2.8).
+    // Comparación de usuario case-sensitive (ver docs/decisiones_login_operativo.md).
     const usuarioCorrecto = usuario === operativo_usuario;
     const passwordCorrecta = await bcrypt.compare(password, operativo_password_hash);
 

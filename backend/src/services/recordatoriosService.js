@@ -3,9 +3,9 @@
 // El disparador (cron / script) es una cáscara fina que invoca a
 // procesarRecordatorios; toda la lógica del trabajo vive acá para que el
 // mecanismo de disparo se pueda cambiar sin reescribir esto (ver
-// docs/plan_recordatorio_turnos.md §5).
+// docs/decisiones_mail_recordatorio.md).
 //
-// Restricciones (plan §9): sin transacciones ni pool.connect() — el Pooler de
+// Restricciones (mismo doc): sin transacciones ni pool.connect() — el Pooler de
 // Supabase no las soporta; la idempotencia se resuelve con el claim atómico de
 // un solo UPDATE (reclamarTurno). La aritmética de fechas usa luxon y la TZ
 // canónica de utils/constantes.js.
@@ -15,12 +15,14 @@ import { query } from '../config/db.js';
 import { TZ, RECORDATORIO_DIAS_ANTES } from '../utils/constantes.js';
 import { enviarRecordatorio, construirContextoMail } from './mail/mailer.js';
 import { construirLinkGestion } from './turnosService.js';
+import { sqlTurnoEnriquecido } from './sqlTurnoEnriquecido.js';
 
 /**
  * Lee la sub-config de recordatorio de un tenant aplicando el default opt-in:
  * el feature está apagado salvo que el tenant lo prenda explícitamente con
  * configuracion.recordatorio.activo === true. Centraliza acá la lógica de
- * defaults (hoy solo `activo`; a futuro entra `hora_envio` per-tenant, plan §6.2).
+ * defaults (hoy solo `activo`; a futuro entra `hora_envio` per-tenant, ver
+ * docs/decisiones_mail_recordatorio.md).
  *
  * @param {Object|null} configuracion - el jsonb tenant.configuracion
  * @returns {{ activo: boolean }} config normalizada del recordatorio
@@ -55,7 +57,7 @@ export const obtenerTenantsActivos = async () => {
  * columnas con los alias estándar que consume construirContextoMail (mailer.js)
  * más tenant_subdominio y token_gestion para armar el link, y turno_id para el
  * claim. No filtra por inicio > now(): el día objetivo es futuro y el estado
- * 'reservado' ya excluye cancelados/completados (plan §7.2).
+ * 'reservado' ya excluye cancelados/completados (ver docs/decisiones_mail_recordatorio.md).
  *
  * @param {string} tenantId      - UUID del tenant
  * @param {string} fechaObjetivo - fecha local YYYY-MM-DD del día a recordar
@@ -63,34 +65,25 @@ export const obtenerTenantsActivos = async () => {
  */
 export const obtenerTurnosDelLote = async (tenantId, fechaObjetivo) => {
   const result = await query(
-    `SELECT t.inicio, t.fin, t.token_gestion,
-            b.nombre AS barbero_nombre, b.email AS barbero_email,
-            s.nombre AS servicio_nombre,
-            c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
-            tn.nombre_negocio AS tenant_nombre, tn.direccion AS tenant_direccion,
-            tn.subdominio AS tenant_subdominio,
-            t.id AS turno_id
-     FROM turno t
-     JOIN barbero  b  ON b.id  = t.barbero_id
-     JOIN servicio s  ON s.id  = t.servicio_id
-     JOIN cliente  c  ON c.id  = t.cliente_id
-     JOIN tenant   tn ON tn.id = t.tenant_id
-     WHERE t.tenant_id = $1
-       AND t.estado = 'reservado'
-       AND t.recordatorio_enviado_en IS NULL
-       AND DATE(t.inicio AT TIME ZONE $2) = $3::date
-     ORDER BY t.inicio ASC`,
+    sqlTurnoEnriquecido(
+      't.token_gestion, tn.subdominio AS tenant_subdominio, t.id AS turno_id',
+      `WHERE t.tenant_id = $1
+         AND t.estado = 'reservado'
+         AND t.recordatorio_enviado_en IS NULL
+         AND DATE(t.inicio AT TIME ZONE $2) = $3::date
+       ORDER BY t.inicio ASC`
+    ),
     [tenantId, TZ, fechaObjetivo]
   );
   return result.rows;
 };
 
 /**
- * Claim atómico de un turno para envío (idempotencia sin transacciones,
- * plan §7.3). Un único UPDATE marca recordatorio_enviado_en sólo si seguía en
- * NULL; el RETURNING dice si este runner ganó el envío. Marcar ANTES de enviar
- * es deliberado: un envío doble es peor que perder uno ocasional, y hace el
- * lote re-ejecutable sin duplicar mails.
+ * Claim atómico de un turno para envío (idempotencia sin transacciones, ver
+ * docs/decisiones_mail_recordatorio.md). Un único UPDATE marca
+ * recordatorio_enviado_en sólo si seguía en NULL; el RETURNING dice si este runner
+ * ganó el envío. Marcar ANTES de enviar es deliberado: un envío doble es peor que
+ * perder uno ocasional, y hace el lote re-ejecutable sin duplicar mails.
  *
  * @param {string} turnoId - UUID del turno a reclamar
  * @returns {Promise<boolean>} true si este runner reclamó el turno (debe enviar),
@@ -113,8 +106,8 @@ export const reclamarTurno = async (turnoId) => {
  * su propio try/catch (un fallo aislado no tira abajo el resto del lote) y, dentro,
  * cada turno también (un fallo puntual no tira el resto del tenant).
  *
- * Por cada turno con email: lo reclama con el claim atómico (§7.3, que marca
- * ANTES de enviar) y, si ganó el claim, manda el recordatorio (best-effort: el
+ * Por cada turno con email: lo reclama con el claim atómico (reclamarTurno, que
+ * marca ANTES de enviar) y, si ganó el claim, manda el recordatorio (best-effort: el
  * mailer no propaga). Si el cliente no tiene email se saltea ANTES del claim,
  * para no quemar el claim de algo que no se va a enviar. En dry-run sólo lista a
  * quién se le enviaría, sin reclamar ni mandar nada.
@@ -168,7 +161,7 @@ export const procesarRecordatorios = async ({ dryRun = false } = {}) => {
         // Envío real. Cada turno se aísla en su try/catch para que un fallo
         // puntual (p.ej. error de DB en el claim) no tire el resto del lote.
         try {
-          // Claim atómico (§7.3): marca recordatorio_enviado_en ANTES de enviar.
+          // Claim atómico: marca recordatorio_enviado_en ANTES de enviar.
           // Si lo perdió otro runner (deploy solapado / re-corrida), no se envía.
           const gano = await reclamarTurno(fila.turno_id);
           if (!gano) {
@@ -184,7 +177,7 @@ export const procesarRecordatorios = async ({ dryRun = false } = {}) => {
             enviados++;
           } else {
             // Best-effort: el envío falló pero el turno queda marcado (sin
-            // rollback ni reintento). Un envío doble es peor que perder uno (§7.3).
+            // rollback ni reintento). Un envío doble es peor que perder uno.
             console.warn(`[recordatorios] procesarRecordatorios — envío falló, turno queda marcado | tenant: ${tenant.subdominio} | turno_id: ${fila.turno_id}`);
             fallidos++;
           }

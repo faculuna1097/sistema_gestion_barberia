@@ -17,5 +17,11 @@ export default defineConfig([
       globals: globals.browser,
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
+    rules: {
+      // Apagada en los 4 fronts: el patrón de carga de datos del proyecto (fetch
+      // en useEffect con setCargando(true)) dispara falsos positivos. Ver
+      // convenciones_tecnicas.md §8.
+      'react-hooks/set-state-in-effect': 'off',
+    },
   },
 ])

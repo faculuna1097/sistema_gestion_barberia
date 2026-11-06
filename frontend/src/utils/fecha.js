@@ -2,10 +2,10 @@
 // Helpers de fecha/hora — versión consolidada del panel de gestión.
 //
 // Convención: este archivo es el sucesor consolidado de `utils/fechas.js`
-// (plural, legacy), ya eliminado (Fase 6 Etapa B, 2026-05-29). Las funciones
-// equivalentes de frontend-turnero (`fmtHora`, `fmtFechaCorta`) divergen a
-// propósito (TZ del navegador / weekday narrow): son otro repo y per D9 del
-// plan de rediseño la consistencia entre fronts es estética, no de API.
+// (plural, legacy), ya eliminado (Fase 6 Etapa B, 2026-05-29). `fmtHora`
+// (frontend-turnero) y `fmtFechaCorta` (frontend-barbero) divergen a propósito
+// (TZ del navegador / weekday corto): son otro repo y per D9 del plan de
+// rediseño la consistencia entre fronts es estética, no de API.
 //
 // Formatos canónicos del proyecto:
 //   - Mes:    'YYYY-MM'      (ej: '2026-03')
@@ -155,7 +155,7 @@ export const fechaADiaMes = (fechaStr) => {
  * formatFechaCorta
  * Convierte un día 'YYYY-MM-DD' a un label corto con día de la semana entero.
  * Usado en el detalle semanal de Planillas.
- * NOTA: el equivalente de frontend-turnero (`fmtFechaCorta`) usa weekday narrow
+ * NOTA: el equivalente de frontend-barbero (`fmtFechaCorta`) usa weekday corto
  * ("lun" en vez de "Lunes"). Divergen a propósito (otro repo, D9).
  * @example formatFechaCorta('2026-03-15') → 'Domingo 15/03'
  */
@@ -163,6 +163,56 @@ export const formatFechaCorta = (fechaStr) => {
   const [anio, mes, dia] = fechaStr.split('-').map(Number);
   const fecha = new Date(anio, mes - 1, dia);
   return `${DIAS[fecha.getDay()]} ${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}`;
+};
+
+// ─── Instantes y duraciones ───────────────────────────────────────────────────
+
+/**
+ * fechaDeInstante
+ * Día 'YYYY-MM-DD' de un timestamp ISO, en timezone Argentina (no el del ISO en
+ * UTC: un instante de las 21:00 o más tarde es del mismo día, no del siguiente).
+ * @param {string} iso - Timestamp ISO
+ * @returns {string} 'YYYY-MM-DD'
+ */
+export const fechaDeInstante = (iso) =>
+  new Date(iso).toLocaleDateString('sv-SE', { timeZone: TZ });
+
+/**
+ * formatInstante
+ * Día y hora de un timestamp ISO, en timezone Argentina.
+ * @param {string} iso - Timestamp ISO
+ * @returns {string} Ej: 'Lunes 19/10 · 13:05'
+ */
+export const formatInstante = (iso) =>
+  `${formatFechaCorta(fechaDeInstante(iso))} · ${formatHora(iso)}`;
+
+/**
+ * formatDuracion
+ * Una cantidad de minutos como duración legible.
+ * @param {number} mins - Minutos (≥ 0)
+ * @returns {string} Ej: '30 min', '1 h', '1 h 30 min'
+ */
+export const formatDuracion = (mins) => {
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (m === 0) return `${h} h`;
+  return `${h} h ${m} min`;
+};
+
+/**
+ * formatAntelacion
+ * Cuánto antes de empezar se marcó algo (un descanso, una ausencia). Desde un
+ * día, en días y horas (los minutos ya no aportan).
+ * @param {number} mins - Minutos entre que se creó y que empieza
+ * @returns {string} Ej: '15 min', '2 h 10 min', '1 día 3 h', '4 días'
+ */
+export const formatAntelacion = (mins) => {
+  if (mins < 24 * 60) return formatDuracion(Math.max(mins, 0));
+  const dias = Math.floor(mins / (24 * 60));
+  const horas = Math.floor((mins % (24 * 60)) / 60);
+  const textoDias = `${dias} ${dias === 1 ? 'día' : 'días'}`;
+  return horas ? `${textoDias} ${horas} h` : textoDias;
 };
 
 // ─── Conversión semana ISO → fecha ────────────────────────────────────────────

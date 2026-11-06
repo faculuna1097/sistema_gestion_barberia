@@ -1,4 +1,4 @@
-// /frontend/src/components/BadgeFormaPago.jsx
+// /frontend/src/components/ui/BadgeFormaPago.jsx
 // Pill que indica la forma de pago de un movimiento (efectivo / mercado pago).
 //
 // Variante de diseño: solo texto, sin íconos. El contexto en la tabla
@@ -10,8 +10,13 @@
 // Forma desconocida: en vez de caer silenciosamente a "Mercado Pago" como
 // antes (bug que ocultaba datos malformados), se renderiza el valor crudo
 // con estilos neutros — el dueño ve que algo está raro.
+//
+// El nombre sale de formatPago (utils/formato.js) y el color de
+// tonosFormaPago.js: este archivo solo arma la pill.
 
 import { theme } from '../../theme/tokens.js';
+import { formatPago } from '../../utils/formato.js';
+import { TONOS_FORMA_PAGO } from './tonosFormaPago.js';
 
 const estiloBase = {
   display: 'inline-block',
@@ -24,25 +29,17 @@ const estiloBase = {
   whiteSpace: 'nowrap',
 };
 
-const variantes = {
-  efectivo:     { background: theme.successSoft, color: theme.success, label: 'Efectivo' },
-  mercado_pago: { background: theme.accentSoft,  color: theme.accent,  label: 'Mercado Pago' },
-};
-
 /**
  * BadgeFormaPago
  * @param {object} props
  * @param {'efectivo'|'mercado_pago'|string} props.forma - Código de forma de pago.
  */
 export default function BadgeFormaPago({ forma }) {
-  const variante = variantes[forma] ?? {
-    background: theme.surfaceAlt,
-    color: theme.muted,
-    label: forma || '—',
-  };
+  // Neutra con neutralSoft (no surfaceAlt, que es el hover de las filas).
+  const tono = TONOS_FORMA_PAGO[forma] ?? { bg: theme.neutralSoft, fg: theme.inkSoft };
   return (
-    <span style={{ ...estiloBase, background: variante.background, color: variante.color }}>
-      {variante.label}
+    <span style={{ ...estiloBase, background: tono.bg, color: tono.fg }}>
+      {formatPago(forma)}
     </span>
   );
 }

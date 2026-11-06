@@ -4,7 +4,9 @@
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
 import { TZ } from '../utils/constantes.js';
+import { esEnteroPositivo } from '../utils/validarNumero.js';
 import { TIPOS_MOVIMIENTO_EXTRA, resumirMovimientosExtra } from '../utils/movimientos.js';
+import { comisionCorteSql, porcentajeComisionSql, porcentajesDistintos } from '../utils/comision.js';
 
 /**
  * redondear2
@@ -83,6 +85,10 @@ const agruparCapitalPorSocio = (detalle) => {
  * getBalanceMensual
  * Devuelve el balance completo de un mes dado. `serviciosPorBarbero` incluye a
  * los barberos activos que no cortaron en el mes, con sus montos en 0.
+ * La comisión de cada barbero es la suma de la de sus cortes, con el % guardado
+ * en cada corte (utils/comision.js): la misma que el histórico y las Planillas.
+ * `comision_porcentajes` son los % distintos de sus cortes del mes ([] si no
+ * cortó); `comision_valor` es su % actual y queda para los fronts anteriores.
  * Los movimientos extra del mes se separan según TIPOS_MOVIMIENTO_EXTRA: los que
  * afectan el resultado van a `otrosIngresos` y suman a `ingresos_brutos` (y por
  * lo tanto al `balance_neto`); los de capital (aportes y retiros) van a
@@ -90,7 +96,9 @@ const agruparCapitalPorSocio = (detalle) => {
  * @param {string} req.query.mes - Mes en formato YYYY-MM (default: mes actual)
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
  * @returns {JSON} {
- *   mes, serviciosPorBarbero, productos, gastos, propinas,
+ *   mes, serviciosPorBarbero: [{ barbero_id, nombre, cortes, monto_servicios, comision_tipo,
+ *     comision_valor, comision_porcentajes, monto_comision, neto_negocio }],
+ *   productos, gastos, propinas,
  *   otrosIngresos: { total, detalle: [{ id, fecha, descripcion, monto, forma_pago, sentido }] },
  *   capital: {
  *     aportes, retiros,
@@ -129,7 +137,10 @@ export const getBalanceMensual = async (req, res) => {
         b.comision_tipo               AS comision_tipo,
         b.comision_valor              AS comision_valor,
         COUNT(c.id)::int              AS cortes,
-        COALESCE(SUM(c.precio), 0)    AS monto_servicios
+        COALESCE(SUM(c.precio), 0)    AS monto_servicios,
+        COALESCE(SUM(${comisionCorteSql('c', 'b')}), 0) AS monto_comision,
+        array_agg(DISTINCT ${porcentajeComisionSql('c', 'b')}) FILTER (WHERE c.id IS NOT NULL)
+                                      AS comision_porcentajes
       FROM barbero b
       LEFT JOIN corte c
              ON c.barbero_id = b.id
@@ -164,10 +175,10 @@ export const getBalanceMensual = async (req, res) => {
 
     const queryGastos = `
       SELECT
-        cg.nombre                   AS categoria,
-        COALESCE(SUM(g.monto), 0)   AS total
+        COALESCE(cg.nombre, 'Sin categoría') AS categoria,
+        COALESCE(SUM(g.monto), 0)            AS total
       FROM gasto g
-      JOIN categoria_gasto cg ON cg.id = g.categoria_id
+      LEFT JOIN categoria_gasto cg ON cg.id = g.categoria_id
       WHERE g.tenant_id = $1
         AND TO_CHAR(g.timestamp AT TIME ZONE $3, 'YYYY-MM') = $2
       GROUP BY cg.nombre
@@ -203,8 +214,7 @@ export const getBalanceMensual = async (req, res) => {
 
     const serviciosPorBarbero = resServicios.rows.map((b) => {
       const montoServicios = Number(b.monto_servicios);
-      const comisionValor  = Number(b.comision_valor);
-      const montoComision  = montoServicios * (comisionValor / 100);
+      const montoComision  = Number(b.monto_comision);
       const netoNegocio    = montoServicios - montoComision;
       return {
         barbero_id:      b.barbero_id,
@@ -212,8 +222,9 @@ export const getBalanceMensual = async (req, res) => {
         cortes:          b.cortes,
         monto_servicios: montoServicios,
         comision_tipo:   b.comision_tipo,
-        comision_valor:  comisionValor,
-        monto_comision:  redondear2(montoComision),
+        comision_valor:  Number(b.comision_valor),
+        comision_porcentajes: porcentajesDistintos(b.comision_porcentajes),
+        monto_comision:  montoComision,
         neto_negocio:    redondear2(netoNegocio),
       };
     });
@@ -318,9 +329,12 @@ export const getBalanceMensual = async (req, res) => {
  * Devuelve el resumen de los últimos N meses para la tabla de histórico anual:
  * el mes en curso + los N-1 anteriores completos, con los meses en hora argentina.
  * Un mes aparece si tuvo al menos un corte, venta, gasto o movimiento extra.
+ * `total_comisiones` suma la comisión de cada corte con el mismo criterio que el
+ * mensual (utils/comision.js), así los dos dan igual.
  * `ingresos_brutos` incluye los otros ingresos; `balance_neto` y las variaciones
  * no incluyen aportes ni retiros (son capital, no resultado).
- * @param {number} req.query.cantidad - Cantidad de meses (default: 12, máx: 24)
+ * @param {number} [req.query.cantidad] - Cantidad de meses, entero >= 1 (default: 12).
+ *   Lo que pase de 24 se recorta a 24.
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @returns {JSON} [{ mes, label, ingresos_brutos, total_comisiones, ingresos_netos, egresos,
  *   balance_neto, otros_ingresos, aportes, retiros, variacion_vs_anterior,
@@ -329,10 +343,13 @@ export const getBalanceMensual = async (req, res) => {
  *   null si ese mes no tuvo movimientos (no está en la lista) o su balance es 0:
  *   `variacion_vs_anterior` compara `balance_neto` (con comisiones) y
  *   `variacion_vs_anterior_sin_comisiones` compara ingresos brutos − egresos, para el
- *   botón "Sin comisiones" del panel.
+ *   botón "Sin comisiones" del panel. 400 si `cantidad` viene y no es un entero >= 1.
  */
 export const getBalanceHistorico = async (req, res) => {
-  const cantidad = Math.min(parseInt(req.query.cantidad) || 12, 24);
+  if (req.query.cantidad !== undefined && !esEnteroPositivo(req.query.cantidad)) {
+    return res.status(400).json({ error: 'cantidad debe ser un entero mayor o igual a 1' });
+  }
+  const cantidad = Math.min(Number(req.query.cantidad ?? 12), 24);
 
   // Borde inferior de la ventana: día 1 a las 00:00 (hora argentina) del mes
   // más viejo, así entran exactamente `cantidad` meses. Antes restaba N meses a
@@ -344,7 +361,7 @@ export const getBalanceHistorico = async (req, res) => {
       SELECT
         TO_CHAR(DATE_TRUNC('month', c.timestamp AT TIME ZONE '${TZ}'), 'YYYY-MM') AS mes,
         COALESCE(SUM(c.precio), 0)                                                 AS ingresos_brutos_servicios,
-        COALESCE(SUM(c.precio * b.comision_valor / 100.0), 0)                      AS total_comisiones
+        COALESCE(SUM(${comisionCorteSql('c', 'b')}), 0)                           AS total_comisiones
       FROM corte c
       JOIN barbero b ON b.id = c.barbero_id
       WHERE c.tenant_id = $1

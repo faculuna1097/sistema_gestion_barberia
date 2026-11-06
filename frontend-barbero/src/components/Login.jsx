@@ -5,12 +5,16 @@
 //   2. Teclado de PIN de 4 dígitos.
 // Props:
 //   onAcceso(token, barbero) — callback cuando el login es exitoso.
+//   logoUrl, nombreNegocio — marca del tenant; los carga App (una sola vez,
+//     también para el título y el favicon del tab).
 
 import { useState, useEffect, useCallback } from 'react';
 import { Delete, AlertCircle, ChevronRight } from 'lucide-react';
 
-import { getBarberos, loginBarbero, getImagenesNegocio, getTenant } from '../services/api.js';
+import { getBarberos, loginBarbero } from '../services/api.js';
+import { problemaDeAcceso, fallaDeLogin } from '../utils/errores.js';
 import { theme } from '../theme/tokens.js';
+import { useHover } from '../hooks/useHover.js';
 import {
   PageContainer,
   TopBar,
@@ -23,6 +27,8 @@ import {
 
 // Estados de la fase PIN. Renombramos para evitar shadowing con `estado` local.
 const PIN_ESTADO = { IDLE: 'idle', ERROR: 'error', EXITO: 'exito' };
+
+const MENSAJE_PIN_INCORRECTO = 'PIN incorrecto. Intentá de nuevo.';
 
 // Distribución del teclado de PIN. `null` = celda vacía (esquina inferior izquierda).
 const TECLAS_PIN = [
@@ -37,19 +43,18 @@ const TECLAS_PIN = [
  * Maneja la autenticación del barbero. Internamente alterna entre dos sub-pantallas:
  * SelectorBarbero (elegir nombre) y PinKeyboard (ingresar PIN).
  * @param {(token: string, barbero: {id, nombre}) => void} props.onAcceso
+ * @param {string|null} props.logoUrl - Logo del tenant (null mientras carga o si
+ *   no hay): la pantalla funciona igual sin él
+ * @param {string|null} props.nombreNegocio - Nombre del local (null mientras
+ *   carga o si falló)
  */
-export default function Login({ onAcceso }) {
+export default function Login({ onAcceso, logoUrl, nombreNegocio }) {
   const [barberos, setBarberos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
 
   const [fase, setFase] = useState('selector'); // 'selector' | 'pin'
   const [barberoSel, setBarberoSel] = useState(null);
-
-  // Logo y nombre del tenant para brandear la pantalla de login. Cargan
-  // best-effort: si fallan, la pantalla funciona igual sin esos datos.
-  const [logoUrl, setLogoUrl] = useState(null);
-  const [nombreNegocio, setNombreNegocio] = useState(null);
 
   /**
    * cargarBarberos
@@ -62,37 +67,16 @@ export default function Login({ onAcceso }) {
       const data = await getBarberos();
       setBarberos(data);
     } catch (err) {
-      console.error('[Login] Error cargando barberos:', err.message);
-      setErrorCarga('No se pudo cargar la lista de barberos.');
+      console.error('[Login] Error cargando barberos:', err.message, '| status:', err.status);
+      // Subdominio que no existe o servidor caído: se dice la causa. Sin red,
+      // el mensaje de siempre.
+      setErrorCarga(problemaDeAcceso(err) ?? 'No se pudo cargar la lista de barberos.');
     } finally {
       setCargando(false);
     }
   }, []);
 
   useEffect(() => { cargarBarberos(); }, [cargarBarberos]);
-
-  // Carga del branding del tenant (logo + nombre) — independiente de los
-  // barberos y best-effort: si algo falla, el login funciona igual.
-  useEffect(() => {
-    let activo = true;
-    getImagenesNegocio()
-      .then((imagenes) => {
-        if (!activo) return;
-        const logo = imagenes.find((img) => img.tipo === 'logo' && img.orden === 1);
-        if (logo) setLogoUrl(logo.url);
-      })
-      .catch((err) => {
-        console.warn('[Login] getImagenesNegocio — falló, login sin logo:', err.message);
-      });
-    getTenant()
-      .then((tenant) => {
-        if (activo && tenant?.nombre) setNombreNegocio(tenant.nombre);
-      })
-      .catch((err) => {
-        console.warn('[Login] getTenant — falló, login sin nombre:', err.message);
-      });
-    return () => { activo = false; };
-  }, []);
 
   /**
    * seleccionarBarbero
@@ -350,11 +334,16 @@ function PantallaPin({ barbero, onVolver, onAcceso }) {
   const [pin, setPin] = useState('');
   const [estado, setEstado] = useState(PIN_ESTADO.IDLE);
   const [shake, setShake] = useState(false);
+  // falla: mensaje de un login que falló por algo que no es el PIN
+  // (subdominio, servidor, rate limit, sin red). Queda hasta el próximo dígito.
+  const [falla, setFalla] = useState(null);
 
   /**
    * validarPin
-   * Llama al backend con el PIN ingresado. Maneja éxito (timeout + onAcceso)
-   * y error (shake + reset).
+   * Llama al backend con el PIN ingresado. Maneja éxito (timeout + onAcceso),
+   * PIN incorrecto (401: shake + reset) y cualquier otra falla (borra el PIN
+   * sin shake, porque no es culpa de lo que tipeó, y muestra la causa).
+   * @param {string} pinIngresado - PIN de 4 dígitos
    */
   const validarPin = useCallback(async (pinIngresado) => {
     try {
@@ -362,7 +351,12 @@ function PantallaPin({ barbero, onVolver, onAcceso }) {
       setEstado(PIN_ESTADO.EXITO);
       setTimeout(() => onAcceso(token, bDevuelto), 600);
     } catch (err) {
-      console.error('[Login] Error en validarPin:', err.message);
+      console.error('[Login] Error en validarPin:', err.message, '| status:', err.status);
+      if (err.status !== 401) {
+        setPin('');
+        setFalla(fallaDeLogin(err, MENSAJE_PIN_INCORRECTO, 'No se pudo iniciar sesión. Intentá de nuevo.'));
+        return;
+      }
       setEstado(PIN_ESTADO.ERROR);
       setShake(true);
       setTimeout(() => {
@@ -382,6 +376,7 @@ function PantallaPin({ barbero, onVolver, onAcceso }) {
       if (actual.length >= 4 || estado === PIN_ESTADO.EXITO) return actual;
       const nuevo = actual + digito;
       setEstado(PIN_ESTADO.IDLE);
+      setFalla(null);
       if (nuevo.length === 4) validarPin(nuevo);
       return nuevo;
     });
@@ -394,6 +389,7 @@ function PantallaPin({ barbero, onVolver, onAcceso }) {
   const borrarDigito = useCallback(() => {
     if (estado === PIN_ESTADO.EXITO) return;
     setEstado(PIN_ESTADO.IDLE);
+    setFalla(null);
     setPin((p) => p.slice(0, -1));
   }, [estado]);
 
@@ -408,10 +404,10 @@ function PantallaPin({ barbero, onVolver, onAcceso }) {
   }, [agregarDigito, borrarDigito]);
 
   // Color contextual del mensaje de subtítulo.
-  const mensajeColor = estado === PIN_ESTADO.ERROR ? theme.danger : theme.muted;
+  const mensajeColor = estado === PIN_ESTADO.ERROR || falla ? theme.danger : theme.muted;
   const mensaje = estado === PIN_ESTADO.ERROR
-    ? 'PIN incorrecto. Intentá de nuevo.'
-    : 'Ingresá tu PIN de 4 dígitos';
+    ? MENSAJE_PIN_INCORRECTO
+    : (falla ?? 'Ingresá tu PIN de 4 dígitos');
 
   return (
     <>
@@ -556,22 +552,24 @@ function DotIndicador({ llenoYActivo, estado }) {
 
 /**
  * TeclaPin
- * Botón individual del teclado. Hover con useState (MD §4.2).
+ * Botón individual del teclado. Hover solo con mouse (useHover, MD §4.2). El
+ * "apretado" (press) sí va también en pantallas táctiles: es el feedback del
+ * toque y se apaga solo al soltar.
  * Touch target ≥ 64px en alto para uso mobile cómodo.
  * @param {Function} props.onClick
  * @param {string} props.aria - aria-label del botón
  * @param {ReactNode} props.children
  */
 function TeclaPin({ onClick, aria, children }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
   const [press, setPress] = useState(false);
 
   return (
     <button
       type="button"
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => { setHover(false); setPress(false); }}
+      {...eventosHover}
+      onMouseLeave={() => { eventosHover.onMouseLeave?.(); setPress(false); }}
       onMouseDown={() => setPress(true)}
       onMouseUp={() => setPress(false)}
       aria-label={aria}

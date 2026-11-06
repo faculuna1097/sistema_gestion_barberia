@@ -1,4 +1,4 @@
-// /frontend/src/components/SelectorDia.jsx
+// /frontend/src/components/ui/SelectorDia.jsx
 
 // Selector de día. Envuelve a SelectorPeriodo con la lógica específica de días:
 // formatea el label como "Lunes 15 de Marzo de 2026", calcula si el día

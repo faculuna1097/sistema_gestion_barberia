@@ -3,8 +3,8 @@
 // fuente de un dato, "números de ejemplo" o la línea "Sin instalaciones ·
 // Cancelás cuando quieras" del Plan.
 // 14 px en `muted`: es texto que se lee, así que respeta el mínimo de 14 px del
-// sistema y el contraste AA (4.6:1 sobre `bg`, 4.8:1 sobre blanco). `mutedSoft`
-// no llega (≈2.6:1).
+// sistema y el contraste AA (5,05:1 sobre `bg`, 5,28:1 sobre blanco). `mutedSoft`
+// no llega (2,56:1).
 
 import { theme } from '../../theme/tokens.js';
 

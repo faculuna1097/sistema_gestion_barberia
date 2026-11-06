@@ -1,7 +1,7 @@
 // /backend/src/controllers/horarioAtencion.js
 // Controller del backoffice para el horario semanal de atención del tenant.
 // Thin wrapper: delega la lógica de negocio a horarioAtencionService.js.
-// Cobertura: plan_horario_atencion.md sección 3.3.
+// Cobertura: decisiones_horario_atencion.md.
 
 import {
   obtenerHorarioCompleto,
@@ -10,6 +10,7 @@ import {
   reemplazarHorario,
 } from '../services/horarioAtencionService.js';
 import { armarLinkTurnero } from '../services/turnosService.js';
+import { esHoraValida } from '../utils/validarFecha.js';
 
 /**
  * GET /api/admin/horario-atencion
@@ -40,7 +41,7 @@ export const getHorarioAtencion = async (req, res) => {
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
  * @param {Array}  req.body.horarios - días abiertos [{ dia_semana, hora_inicio, hora_fin }]
  * @param {boolean} [req.body.confirmar_cascada] - autoriza ejecutar la cascada
- * @returns {JSON} 200 { horarios, cascada } | 409 { codigo, delta } | 400
+ * @returns {JSON} 200 { horarios, cascada } | 409 { error, codigo, delta } | 400
  */
 export const putHorarioAtencion = async (req, res) => {
   const { horarios, confirmar_cascada } = req.body;
@@ -54,7 +55,7 @@ export const putHorarioAtencion = async (req, res) => {
   const horariosNorm = [];
   for (let i = 0; i < horarios.length; i++) {
     const h = horarios[i];
-    if (h.dia_semana === undefined || h.dia_semana === null || !h.hora_inicio || !h.hora_fin) {
+    if (h?.dia_semana === undefined || h.dia_semana === null || !h.hora_inicio || !h.hora_fin) {
       return res.status(400).json({ error: `Día ${i}: dia_semana, hora_inicio y hora_fin son requeridos` });
     }
     if (!Number.isInteger(h.dia_semana) || h.dia_semana < 0 || h.dia_semana > 6) {
@@ -64,6 +65,9 @@ export const putHorarioAtencion = async (req, res) => {
       return res.status(400).json({ error: `dia_semana ${h.dia_semana} aparece más de una vez` });
     }
     diasVistos.add(h.dia_semana);
+    if (!esHoraValida(h.hora_inicio) || !esHoraValida(h.hora_fin)) {
+      return res.status(400).json({ error: `Día ${h.dia_semana}: hora_inicio y hora_fin deben ser horas válidas con formato HH:MM` });
+    }
 
     // Normalizamos a 'HH:MM' para comparar de forma consistente.
     const horaInicio = h.hora_inicio.slice(0, 5);
@@ -88,6 +92,7 @@ export const putHorarioAtencion = async (req, res) => {
         'bloques:', delta.bloquesAEliminar.length + delta.bloquesATruncar.length,
         '| turnos:', delta.turnosACancelar.length);
       return res.status(409).json({
+        error: 'El cambio afecta bloques de barberos o turnos reservados. Reenviar con confirmar_cascada: true para aplicarlo.',
         codigo: 'requiere_confirmacion',
         delta: {
           bloques_truncados: delta.bloquesATruncar.length,
@@ -101,7 +106,7 @@ export const putHorarioAtencion = async (req, res) => {
     let cascada = { bloques_truncados: 0, bloques_eliminados: 0, turnos_cancelados: 0 };
     if (hayImpacto) {
       const linkTurnero = armarLinkTurnero(req);
-      cascada = await ejecutarCascada(delta, linkTurnero);
+      cascada = await ejecutarCascada(req.tenant_id, delta, linkTurnero);
     }
     await reemplazarHorario(req.tenant_id, horariosNorm);
 

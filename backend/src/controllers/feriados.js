@@ -1,10 +1,10 @@
 // /backend/src/controllers/feriados.js
 // Controller del backoffice para los feriados puntuales del tenant.
 // Thin wrapper: delega la lógica de negocio a feriadosService.js.
-// Cobertura: plan_horario_atencion.md sección 4.2.
+// Cobertura: decisiones_horario_atencion.md.
 
-import { DateTime } from 'luxon';
-import { TZ } from '../utils/constantes.js';
+import { esFechaISO, hoyISO } from '../utils/validarFecha.js';
+import { esUUID } from '../utils/validarUuid.js';
 import {
   obtenerFeriados,
   existeFeriado,
@@ -15,9 +15,6 @@ import {
 } from '../services/feriadosService.js';
 import { armarLinkTurnero } from '../services/turnosService.js';
 
-// Formato esperado de una fecha de feriado: 'YYYY-MM-DD'.
-const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
-
 /**
  * GET /api/admin/feriados
  * Lista los feriados del tenant. Query param opcional ?desde=YYYY-MM-DD
@@ -27,9 +24,8 @@ const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
  * @returns {JSON} array de feriados [{ id, fecha, descripcion }]
  */
 export const getFeriados = async (req, res) => {
-  const hoy = DateTime.now().setZone(TZ).toISODate();
-  const desde = req.query.desde || hoy;
-  if (!REGEX_FECHA.test(desde)) {
+  const desde = req.query.desde || hoyISO();
+  if (!esFechaISO(desde)) {
     return res.status(400).json({ error: 'El parámetro "desde" debe tener formato YYYY-MM-DD' });
   }
 
@@ -52,17 +48,16 @@ export const getFeriados = async (req, res) => {
  * @param {string} req.body.fecha - fecha del feriado 'YYYY-MM-DD' (hoy o futura)
  * @param {string} [req.body.descripcion] - descripción opcional
  * @param {boolean} [req.body.confirmar_cascada] - autoriza ejecutar la cascada
- * @returns {JSON} 201 { feriado, cascada } | 409 { codigo, delta? } | 400
+ * @returns {JSON} 201 { feriado, cascada } | 409 { error, codigo, delta? } | 400
  */
 export const postFeriado = async (req, res) => {
   const { fecha, descripcion, confirmar_cascada } = req.body;
 
   // --- Validación del shape ---
-  if (!fecha || !REGEX_FECHA.test(fecha)) {
+  if (!esFechaISO(fecha)) {
     return res.status(400).json({ error: 'fecha es requerida y debe tener formato YYYY-MM-DD' });
   }
-  const hoy = DateTime.now().setZone(TZ).toISODate();
-  if (fecha < hoy) {
+  if (fecha < hoyISO()) {
     return res.status(400).json({ error: 'No se puede declarar feriado una fecha pasada' });
   }
   // Normalizamos la descripción: '' o sólo espacios → null.
@@ -75,7 +70,7 @@ export const postFeriado = async (req, res) => {
     // --- Fecha ya cargada → 409 ---
     if (await existeFeriado(req.tenant_id, fecha)) {
       console.log('[feriados] postFeriado — feriado ya existe | fecha:', fecha);
-      return res.status(409).json({ codigo: 'feriado_ya_existe' });
+      return res.status(409).json({ error: 'Ya hay un feriado cargado en esa fecha', codigo: 'feriado_ya_existe' });
     }
 
     // --- Calcular el impacto ---
@@ -87,6 +82,7 @@ export const postFeriado = async (req, res) => {
       console.log('[feriados] postFeriado — requiere confirmación | turnos:',
         delta.turnosACancelar.length);
       return res.status(409).json({
+        error: 'La fecha tiene turnos reservados. Reenviar con confirmar_cascada: true para cancelarlos.',
         codigo: 'requiere_confirmacion',
         delta: { turnos_cancelados: delta.turnosACancelar.length },
       });
@@ -96,7 +92,7 @@ export const postFeriado = async (req, res) => {
     let cascada = { turnos_cancelados: 0 };
     if (hayImpacto) {
       const linkTurnero = armarLinkTurnero(req);
-      cascada = await ejecutarCascadaFeriado(delta.turnosACancelar, linkTurnero, descripcionNorm);
+      cascada = await ejecutarCascadaFeriado(req.tenant_id, delta.turnosACancelar, linkTurnero, descripcionNorm);
     }
     const feriado = await insertarFeriado(req.tenant_id, fecha, descripcionNorm);
 
@@ -116,6 +112,10 @@ export const postFeriado = async (req, res) => {
  * @returns {JSON} 200 { ok: true } | 404
  */
 export const deleteFeriado = async (req, res) => {
+  if (!esUUID(req.params.id)) {
+    return res.status(404).json({ error: 'Feriado no encontrado' });
+  }
+
   try {
     const eliminado = await eliminarFeriado(req.tenant_id, req.params.id);
     if (!eliminado) {

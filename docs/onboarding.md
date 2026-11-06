@@ -21,12 +21,11 @@ Antes de arrancar, tener:
 ## Flujo completo
 
 1. El cliente acuerda contratar el sistema y te pasa: nombre del negocio, subdominio deseado, PIN inicial y las credenciales operativas que quiere.
-2. Corrés `crearTenant.js` para dar de alta el tenant en la DB.
-3. Corrés `generarHashOperativo.js` para cargarle las credenciales del modo operativo.
-4. Cargás los dueños del negocio (tabla `socio`) y las categorías de gasto, por SQL.
-5. Verificás que el subdominio responde, el login operativo entra y el PIN funciona.
-6. Le entregás al cliente la URL, las credenciales operativas y el PIN. Le mandás el manual por separado.
-7. (Opcional, cuando llegue) Cargás el logo y las imágenes del cliente desde el panel (Gestión → Negocio).
+2. Corrés `crearTenant.js` para dar de alta el tenant en la DB, con sus credenciales del modo operativo.
+3. Cargás los dueños del negocio (tabla `socio`) por SQL. Las categorías de gasto ya las creó el script.
+4. Verificás que el subdominio responde, el login operativo entra y el PIN funciona.
+5. Le entregás al cliente la URL, las credenciales operativas y el PIN. Le mandás el manual por separado.
+6. (Opcional, cuando llegue) Cargás el logo y las imágenes del cliente desde el panel (Gestión → Negocio).
 
 ---
 
@@ -35,25 +34,29 @@ Antes de arrancar, tener:
 Desde la raíz de `/backend`:
 
 ```bash
-node src/scripts/crearTenant.js "Nombre Barbería" subdominio 1234
+node src/scripts/crearTenant.js "Nombre Barbería" subdominio 1234 usuario password
 ```
 
-**Argumentos:**
+**Argumentos (todos obligatorios):**
 - Nombre del negocio (entre comillas si tiene espacios).
 - Subdominio (sin puntos ni espacios, en minúscula).
 - PIN inicial de 4 dígitos.
+- Usuario del modo operativo (3+ caracteres).
+- Password del modo operativo (8+ caracteres).
+
+> La password queda en el historial de la terminal. Usá una inicial y que el cliente la cambie desde el panel (Gestión → Seguridad).
 
 **El script hace:**
-- Valida que el PIN sea de 4 dígitos numéricos.
+- Valida que el PIN sea de 4 dígitos numéricos y las credenciales operativas, con las mismas reglas que el panel.
 - Verifica que el subdominio no exista ya en la DB.
-- Hashea el PIN con bcrypt.
+- Hashea el PIN y la password operativa con bcrypt.
 - Setea `suscripcion_vigente_hasta` al último día del mes actual.
-- Setea `configuracion` con el default `{ "ciudad": "Buenos Aires", "moneda": "ARS" }`.
 - Inserta el tenant con `activo = true`.
 - Seedea el horario de atención default en `tenant_horario_atencion`: **Lunes a Sábado 10:00-19:00** (domingo cerrado). El dueño lo ajusta desde el panel admin (Gestión → Negocio) al activar la cuenta.
-- Imprime el UUID, nombre, subdominio, fecha de suscripción, horario y URL.
+- Crea las 9 categorías de gasto predeterminadas (ver Paso 2c).
+- Imprime el UUID, nombre, subdominio, usuario operativo, fecha de suscripción, horario, categorías y URL.
 
-> Si el seed del horario falla (caso raro), el script igual termina con éxito: el tenant queda creado y se avisa por consola para cargar el horario manualmente desde el admin.
+> Si el seed del horario o el de las categorías falla (caso raro), el script igual termina con éxito: el tenant queda creado y se avisa por consola. El horario se carga desde el admin; las categorías, con el SQL del Paso 2c.
 
 **Output esperado:**
 
@@ -62,8 +65,10 @@ node src/scripts/crearTenant.js "Nombre Barbería" subdominio 1234
   ID:           <uuid>
   Nombre:       Nombre Barbería
   Subdominio:   subdominio
+  Operativo:    usuario
   Suscripción:  vigente hasta YYYY-MM-DD
   Horario:      L-S 10:00-19:00 (default, ajustable desde el admin)
+  Categorías:   9 de gasto predeterminadas
   URL:          subdominio.barbermanager.app
 ```
 
@@ -71,19 +76,28 @@ node src/scripts/crearTenant.js "Nombre Barbería" subdominio 1234
 
 ## Paso 2 — Credenciales del modo operativo
 
-`crearTenant.js` **no** crea las credenciales operativas, y sin ellas el front se queda en la
-pantalla de login operativo (es lo primero que muestra si no hay sesión). Se cargan con
-`generarHashOperativo.js`, que hoy no recibe argumentos: antes de correrlo, editá las
-constantes del tope del archivo (`TENANT_ID` = el UUID que imprimió el Paso 1, `USUARIO_PLANO`,
-`PASSWORD_PLANO`). **No commitees ese cambio.**
+`crearTenant.js` ya deja cargadas las credenciales operativas, así que en el alta no hace falta
+nada más: el cliente las cambia desde el panel (Gestión → Seguridad).
+
+Solo si hay que reemplazarlas por fuera del panel (por ejemplo, el cliente perdió el PIN admin
+y no puede entrar a Seguridad), usá `generarHashOperativo.js` con el UUID que imprimió el Paso 1:
 
 ```bash
-node src/scripts/generarHashOperativo.js
+node src/scripts/generarHashOperativo.js <tenant_uuid> usuario password
 ```
 
-Hashea la password con bcrypt y hace el `UPDATE` de `operativo_usuario` + `operativo_password_hash`
-en la fila del tenant (si ya había credenciales, las pisa). Después el cliente las puede cambiar
-desde el panel (Gestión → Seguridad).
+Valida los argumentos con las mismas reglas que el Paso 1, hashea la password con bcrypt y hace el
+`UPDATE` de `operativo_usuario` + `operativo_password_hash` en la fila del tenant, pisando las que
+hubiera. En el mismo `UPDATE` sube `operativo_token_version`, igual que el panel: las sesiones
+abiertas del iPad dejan de servir. Si el tenant no existe, termina con error.
+
+**Después de correrlo, invalidá el caché.** El script corre en un proceso aparte y no puede tocar
+el caché del `tenantMiddleware`. Hasta invalidarlo, el backend sigue con la versión vieja y rechaza
+los logins nuevos del iPad. Llamá a `POST /api/plataforma/cache/invalidate` con el subdominio del
+tenant, como se explica en [Baja de un tenant](#baja-de-un-tenant-o-cambio-de-subdominio--invalidar-el-caché)
+(el paso 2 de ese ejemplo). El script imprime el subdominio. Sin `PLATFORM_ADMIN_KEY` en Railway, el
+endpoint responde 503: el prerequisito está en esa misma sección. Reiniciar el server también
+limpia el caché.
 
 ---
 
@@ -116,20 +130,38 @@ WHERE id = '<socio_id>' AND tenant_id = '<tenant_uuid>';
 
 ## Paso 2c — Categorías de gasto
 
-`crearTenant.js` no crea categorías de gasto, y sin ellas el flujo de gasto del iPad queda
-vacío. Hoy se cargan a mano por SQL, con la misma lista base que usa Kingsai:
+`crearTenant.js` crea las categorías de gasto: no hay que hacer nada. Todos los tenants tienen
+las mismas 9 y no se agregan propias (decidido el 2026-11-03). Si un gasto no entra en ninguna,
+va a "Otros".
+
+| Categoría | Qué va ahí |
+|---|---|
+| Alquiler | El alquiler del local |
+| Comida y/o bebidas | Café, bebidas, bidones de agua y comida para los clientes |
+| Impuestos | Monotributo, ingresos brutos, tasas |
+| Insumos | Lo que se gasta al cortar: filos, cuellitos, productos de uso |
+| Limpieza | Papel, rollo de cocina, desodorante, bolsas |
+| Mantenimiento | Arreglos, herramientas, recarga de matafuegos |
+| Otros | Lo que no entra en ninguna |
+| Productos para venta | Mercadería para vender: el iPad recuerda actualizar el stock |
+| Servicios | Luz, agua, gas, internet, teléfono, apps |
+
+- No hay "Sueldos" a propósito: las comisiones de los barberos ya se descuentan en Balances, y
+  cargarlas como gasto las restaría dos veces.
+- El nombre "Productos para venta" tiene que coincidir con `CATEGORIA_PRODUCTOS_VENTA` de
+  `frontend/src/screens/flows/FlujoGasto.jsx`: es lo que dispara el recordatorio de stock. La
+  lista vive en `CATEGORIAS_GASTO_BASE` (`crearTenant.js`). Si cambia, actualizar esta tabla y
+  sumarla a los tenants existentes.
+- Una categoría no se borra: se oculta con `activo = false`. Sus gastos la siguen referenciando.
+
+**Solo si el script avisó que falló el seed de las categorías**, cargalas por SQL:
 
 ```sql
-INSERT INTO categoria_gasto (tenant_id, nombre) VALUES
-  ('<tenant_uuid>', 'Alquiler'),
-  ('<tenant_uuid>', 'Impuestos'),
-  ('<tenant_uuid>', 'Otros'),
-  ('<tenant_uuid>', 'Productos'),
-  ('<tenant_uuid>', 'Servicios');
+INSERT INTO categoria_gasto (tenant_id, nombre)
+SELECT '<tenant_uuid>', nombre
+FROM unnest(ARRAY['Alquiler', 'Comida y/o bebidas', 'Impuestos', 'Insumos', 'Limpieza',
+                  'Mantenimiento', 'Otros', 'Productos para venta', 'Servicios']) AS nombre;
 ```
-
-La categoría "Productos" dispara en el iPad el recordatorio de actualizar el stock. Hay una
-deuda abierta para automatizar esta carga (ver `estado_actual.md`).
 
 ---
 
@@ -167,6 +199,9 @@ Debe entrar al panel de admin sin errores. Si rebota con 401 o 402, algo está m
 Pasarle al cliente:
 
 - URL de acceso: `https://<subdominio>.barbermanager.app`
+- Link del turnero para la bio de Instagram: `https://<subdominio>.barbermanager.app/turnos?origen=instagram`
+  (el `?origen=` queda guardado en cada turno, en `turno.origen_link`; para otro canal, otro valor:
+  minúsculas, dígitos, `-` o `_`, hasta 30)
 - Usuario y password operativos (para el iPad del local)
 - PIN inicial (recordarle que lo cambie desde Gestión → Seguridad apenas entre)
 - El manual del cliente (ver `manual_cliente.md` cuando exista)
@@ -176,7 +211,7 @@ Pasarle al cliente:
 - [ ] Tenant creado en DB con UUID conocido.
 - [ ] Credenciales operativas cargadas y probadas.
 - [ ] Dueños cargados en `socio` (vinculados a su barbero si cortan).
-- [ ] Categorías de gasto cargadas.
+- [ ] Las 9 categorías de gasto creadas (el script lo imprime).
 - [ ] Subdominio responde correctamente.
 - [ ] PIN entra al panel admin.
 - [ ] Suscripción vigente hasta fin del mes actual (default automático del script).
@@ -217,7 +252,7 @@ Para alta de clientes nuevos esto no es problema — el subdominio es nuevo y el
 
 ### Baja de un tenant (o cambio de subdominio) — invalidar el caché
 
-Cuando editás a mano un tenant que el server de prod ya tiene cacheado (darlo de baja, cambiarle el subdominio, o tocar `operativo_token_version`/`activo` por SQL), el cambio **no pega hasta invalidar el caché**. Se hace con un endpoint de plataforma que disparás manualmente desde Bruno (no hay UI — es una herramienta de ops).
+Cuando editás a mano un tenant que el server de prod ya tiene cacheado (darlo de baja, cambiarle el subdominio, tocar `operativo_token_version`/`activo` por SQL, o correr `generarHashOperativo.js`), el cambio **no pega hasta invalidar el caché**. Se hace con un endpoint de plataforma que disparás manualmente desde Bruno (no hay UI — es una herramienta de ops).
 
 **Prerequisito (una sola vez):** la env var `PLATFORM_ADMIN_KEY` debe estar seteada en Railway. Por defecto **no** lo está (el endpoint queda deshabilitado → responde 503). Setearla dispara un autodeploy, así que hacelo en un momento de poco tráfico, la primera vez que vayas a usar el endpoint.
 
@@ -251,7 +286,7 @@ prende a propósito, recién cuando los mails transaccionales del tenant ya se v
 -- Ver estado actual
 SELECT subdominio, configuracion FROM tenant WHERE subdominio = '<subdominio>';
 
--- PRENDER (merge superficial: crea recordatorio si no existe, preserva ciudad/moneda)
+-- PRENDER (merge superficial: crea recordatorio si no existe, preserva las demás claves)
 UPDATE tenant
 SET configuracion = COALESCE(configuracion, '{}'::jsonb) || '{"recordatorio": {"activo": true}}'::jsonb
 WHERE subdominio = '<subdominio>';
@@ -266,6 +301,39 @@ WHERE subdominio = '<subdominio>';
 > todavía no existe. Si en el futuro hay claves anidadas a preservar (ej. `hora_envio`), cambiar a `jsonb_set`.
 > Ojo: si los barberos del tenant tienen `email = NULL`, sus turnos no sincronizan con Calendar,
 > pero los **clientes** igual reciben el recordatorio → flip deliberado.
+
+### Cargar el WhatsApp y el link de reseñas de Google del local
+
+El turnero muestra el botón de WhatsApp y el link "Dejanos tu reseña en Google" **solo si el dato
+está cargado** en `tenant.configuracion`. Sin dato, no aparecen. Se ven en la próxima carga del
+turnero, sin invalidar el caché (el caché del middleware no guarda `configuracion`).
+
+```sql
+-- Ver estado actual
+SELECT subdominio, configuracion FROM tenant WHERE subdominio = '<subdominio>';
+
+-- WhatsApp: en E.164, y un celular argentino CON el 9 (+549 + característica sin 0 + número sin 15)
+UPDATE tenant
+SET configuracion = COALESCE(configuracion, '{}'::jsonb) || '{"whatsapp": "+5491133111686"}'::jsonb
+WHERE subdominio = '<subdominio>';
+
+-- Link de reseñas: el que da el dueño desde "Pedir reseñas" de su Perfil de Empresa de Google
+UPDATE tenant
+SET configuracion = COALESCE(configuracion, '{}'::jsonb) || '{"resena_url": "https://g.page/r/XXXX/review"}'::jsonb
+WHERE subdominio = '<subdominio>';
+
+-- SACAR una clave (deja de mostrarse)
+UPDATE tenant SET configuracion = configuracion - 'whatsapp' WHERE subdominio = '<subdominio>';
+```
+
+- `getTenant` valida los dos: `whatsapp` tiene que ser E.164 (`+` y de 8 a 15 dígitos) y
+  `resena_url` una URL `https://`. Si no cumplen, el turnero los recibe en `null` y no los muestra
+  (no da error): si después de cargarlos no aparecen, revisar el formato.
+- **QR de la puerta:** apunta a `https://<subdominio>.barbermanager.app/turnos/resena?origen=qr`, no
+  al link de Google. Esa ruta redirige a `resena_url`: si Google cambia el link, se actualiza el dato
+  y el cartel impreso sigue andando. Sin `resena_url`, la ruta lleva a la landing del turnero.
+- **Reglas de Google:** no ofrecer nada a cambio de la reseña y no pedírsela solo a los clientes
+  contentos (el link es para todos).
 
 ### Cargar el email de un barbero (activa la sync con Google Calendar)
 

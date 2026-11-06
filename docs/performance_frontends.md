@@ -35,13 +35,19 @@ La sospecha inicial era el bundle/JS. **Estaba al revés:**
 
 (El detalle de implementación de cada uno vive en el código y en los commits del 2026-06-10.)
 
+**2026-11-02 (antes #9):**
+- **Fuentes desde el propio dominio:** los 2 woff2 latin de Geist y Geist Mono (29 + 23 kB) en
+  `frontend/public/fonts`. No hay pedidos a Google y la de texto va con `preload`. Los anchos
+  medidos en los seis pesos dan igual que con Google Fonts.
+- **Logo a 300 px:** `BloqueImagenes` comprime los logos a 300 px como máximo (antes 512). Vale
+  para las subidas nuevas: el de Kingsai pasa de 63,9 a 30,4 kB cuando se vuelva a subir
+  (Pendientes en `estado_actual.md`).
+
 ## Trabajo de fondo pendiente
 
 - **#10 (estratégico) — Migrar Supabase a una región cercana (`sa-east-1`, São Paulo).** Baja el
   **piso de latencia de TODA query**, no solo el bootstrap. Es la palanca de fondo. Alto esfuerzo
   en free tier (recrear el proyecto + migrar datos) → decisión de infraestructura aparte.
-- **#9 (marginal) — Logo achicado** (~486→300 px, ~38 kB) + **self-host de las 2 fuentes woff2**
-  (~30 kB; mata el 3er dominio + la cadena en serie de Google Fonts). Bajo impacto.
 - **Validar en prod** el impacto real de las optimizaciones de backend ya implementadas (keep-alive
   del pool, `getTenant` paralelizado) — registrado en `estado_actual.md`.
 

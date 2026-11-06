@@ -1,7 +1,7 @@
 // /backend/src/routes/turnero.js
 // Rutas públicas del turnero. Sin verificarToken — solo tenantMiddleware
 // (que ya corre globalmente desde index.js).
-// Cobertura: plan_turnero_v2.md sección 4.
+// Cobertura: decisiones_turnero.md.
 
 import { Router } from 'express';
 import {

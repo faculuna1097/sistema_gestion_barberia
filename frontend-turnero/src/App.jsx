@@ -1,49 +1,95 @@
 // /frontend-turnero/src/App.jsx
 // Router principal del turnero del cliente.
-// Si la URL contiene /turnos/gestionar/:token → muestra GestionTurno.
-// Si no → muestra el wizard de reserva (pasos 1-7).
+// Si la URL es la de gestión (/turnos/gestionar/:token) → muestra GestionTurno.
+// Si es la de reseñas (/turnos/resena) → redirige al link de Google del local.
+// Si no → muestra el flujo de reserva: una pila de pantallas integrada con el
+// historial del navegador (useNavegacion), así el "atrás" del celular vuelve
+// un paso en vez de sacar al cliente del turnero.
+// Lee una sola vez el `?origen=` con el que llegó el cliente y lo manda con la
+// reserva (turno.origen_link).
 
-import { useState, useEffect } from 'react';
-import { getTenant, getImagenesNegocio } from './services/api.js';
-import { theme } from './theme/tokens.js';
-import { PageContainer, Skeleton, EmptyState, Button, IconoAlerta } from './components/ui';
-import Landing from './screens/Landing.jsx';
+import { Fragment, useState, useEffect } from 'react';
+import { getTenant, getImagenesNegocio, getServicios, getBarberos } from './services/api.js';
+import { RUTA_TURNERO, extraerTokenGestion, esRutaResena, leerOrigen } from './utils/rutas.js';
+import { mensajeDeCargaDelLocal } from './utils/errores.js';
+import { useNavegacion } from './hooks/useNavegacion.js';
+import { useListaRemota } from './hooks/useListaRemota.js';
+import { PageContainer, EmptyState, Button, IconoAlerta } from './components/ui';
+import Landing, { LandingSkeleton } from './screens/Landing.jsx';
 import SeleccionServicio from './screens/SeleccionServicio.jsx';
-import SeleccionBarbero from './screens/SeleccionBarbero.jsx';
-import SeleccionFecha from './screens/SeleccionFecha.jsx';
-import SeleccionHorario from './screens/SeleccionHorario.jsx';
-import DatosCliente from './screens/DatosCliente.jsx';
-import Confirmacion from './screens/Confirmacion.jsx';
+import SeleccionCuando from './screens/SeleccionCuando.jsx';
+import ConfirmarTurno from './screens/ConfirmarTurno.jsx';
+import TurnoConfirmado from './screens/TurnoConfirmado.jsx';
 import GestionTurno from './screens/GestionTurno.jsx';
 
 /**
- * extraerTokenDeURL
- * Busca el patrón /turnos/gestionar/:token en el pathname.
- * @returns {string|null} El token si existe, null si no
+ * SELECCION_VACIA
+ * La reserva que se elige en el flujo (sin los datos del cliente, que viven
+ * aparte: ver CLIENTE_VACIO). Cada entrada desde la landing arranca de acá.
+ * - `barbero`: antes de elegir horario, el barbero que se marca al entrar a
+ *   "¿Cuándo?" (null = "Cualquiera"; viene de la landing si se tocó un
+ *   barbero). Después, el barbero que atiende el turno.
+ * - `barberoAsignado`: true si el barbero lo asignó "Cualquiera" (el resumen
+ *   dice "te atiende X").
+ * - `horario`: ISO del turno elegido. El día sale de acá (fechaDeISO).
  */
-function extraerTokenDeURL() {
-  const path = window.location.pathname;
-  const match = path.match(/\/turnos\/gestionar\/([^/]+)/);
-  return match ? match[1] : null;
+const SELECCION_VACIA = {
+  servicio: null,
+  barbero: null,
+  barberoAsignado: false,
+  horario: null,
+};
+
+/**
+ * CLIENTE_VACIO
+ * Datos del cliente tal como los escribe en "Confirmá tu turno": nombre, país
+ * del selector, teléfono nacional (formateado, como se ve en el campo) y email.
+ * El E.164 se arma recién al confirmar.
+ */
+const CLIENTE_VACIO = {
+  nombre: '',
+  pais: 'AR',
+  telefono: '',
+  email: '',
+};
+
+/**
+ * esUrlHttps
+ * True si `url` es una dirección https. Red defensiva antes de redirigir a un
+ * dato del tenant (el backend ya lo valida): `location.replace` con un
+ * `javascript:` ejecutaría código.
+ * @param {string|null} url
+ * @returns {boolean}
+ */
+function esUrlHttps(url) {
+  return typeof url === 'string' && /^https:\/\//i.test(url);
 }
 
 /**
  * actualizarFavicon — apunta el <link rel="icon"> del documento al logo del
- * tenant. Si el link no existe, lo crea. Reusa la imagen del logo que ya se
- * descarga para la UI (cache hit, sin pedido extra). Reemplaza el favicon
- * placeholder de index.html. Si no hay logo, deja el placeholder (marca BarberManager).
+ * tenant, recién cuando la imagen carga: si el link no existe, lo crea. Reusa
+ * la imagen del logo que ya se descarga para la UI (cache hit, sin pedido
+ * extra). Si no hay logo, o si no carga (URL rota, sin red), queda el favicon
+ * de marca de index.html (BarberManager), en vez de un ícono roto.
  * @param {string|null} url — URL del logo (tenant_imagen tipo='logo').
  * @returns {void}
  */
 function actualizarFavicon(url) {
   if (!url) return;
-  let link = document.querySelector("link[rel='icon']");
-  if (!link) {
-    link = document.createElement('link');
-    link.rel = 'icon';
-    document.head.appendChild(link);
-  }
-  link.href = url;
+  const prueba = new Image();
+  prueba.onload = () => {
+    let link = document.querySelector("link[rel='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = url;
+  };
+  prueba.onerror = () => {
+    console.warn('[App] actualizarFavicon — el logo no cargó, queda el favicon de marca');
+  };
+  prueba.src = url;
 }
 
 function App() {
@@ -52,34 +98,62 @@ function App() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
 
-  // Token de gestión si la URL es /turnos/gestionar/:token
-  const [tokenGestion] = useState(() => extraerTokenDeURL());
+  // Token de gestión si la URL es la de gestión de un turno (link del mail).
+  const [tokenGestion] = useState(() => extraerTokenGestion(window.location.pathname));
+  // Ruta de reseñas (link de la landing o QR de la puerta): solo redirige.
+  const [esResena] = useState(() => esRutaResena(window.location.pathname));
+  // Ni la gestión ni la reseña usan el flujo: sin historial propio ni listas.
+  const enFlujoReserva = !tokenGestion && !esResena;
 
-  // Estado del wizard de reserva
-  const [paso, setPaso] = useState(0);
-  const [reserva, setReserva] = useState({
-    servicio: null,
-    barbero: null,
-    fecha: null,
-    horario: null,
-    nombre: '',
-    telefono: '',
-    email: '',
-  });
+  // Por qué link llegó el cliente (`?origen=instagram`): se lee una sola vez,
+  // al cargar. Vive fuera de la reserva para que "Reservar otro turno" no lo
+  // borre: sigue siendo la misma visita. La navegación del flujo no cambia la
+  // URL (pushState sin URL), y una recarga la vuelve a leer.
+  const [origen] = useState(() => leerOrigen(window.location.search));
 
-  // Resultado post-confirmación
+  // Servicios y barberos: se piden una sola vez, en paralelo con el tenant y
+  // las imágenes, y bajan por props. Si fallan, cada lista expone su
+  // `reintentar` y la pantalla que la muestra ofrece el botón.
+  const servicios = useListaRemota(getServicios, { nombre: 'servicios', activa: enFlujoReserva });
+  const barberos = useListaRemota(getBarberos, { nombre: 'barberos', activa: enFlujoReserva });
+
+  // Estado de la reserva en curso (solo en memoria).
+  const [reserva, setReserva] = useState(SELECCION_VACIA);
+
+  // Datos del cliente: en memoria de la pestaña durante toda la visita (sin
+  // localStorage). Una reserva nueva no los borra: al volver desde "Confirmá
+  // tu turno", al "atrás" desde el éxito o con "Reservar otro turno", el
+  // formulario aparece prellenado y editable. Una recarga los pierde (el
+  // "Reservar otro turno" de la gestión del turno es una carga nueva).
+  const [cliente, setCliente] = useState(CLIENTE_VACIO);
+
+  // Resultado post-confirmación ({ turno_id, token_gestion }).
   const [resultado, setResultado] = useState(null);
+
+  /**
+   * reiniciarReserva
+   * Descarta la reserva en memoria (no los datos del cliente): arranca un
+   * flujo nuevo desde la landing.
+   */
+  const reiniciarReserva = () => {
+    setReserva(SELECCION_VACIA);
+    setResultado(null);
+  };
+
+  const nav = useNavegacion({ activa: enFlujoReserva, alReiniciar: reiniciarReserva });
 
   useEffect(() => {
     async function cargar() {
       try {
         // El tenant es obligatorio: si falla, se muestra el error de carga.
         // Las imágenes son best-effort: si fallan, la Landing cae a sus
-        // placeholders en vez de tumbar toda la app.
+        // variantes sin imagen en vez de tumbar toda la app. La ruta de
+        // reseñas no las pide: no las usa y no tiene que esperarlas para
+        // redirigir.
         const [tenantData, imagenesData] = await Promise.all([
           getTenant(),
-          getImagenesNegocio().catch((err) => {
-            console.warn('[App] getImagenesNegocio — falló, se usan placeholders:', err.message);
+          esResena ? [] : getImagenesNegocio().catch((err) => {
+            console.warn('[App] getImagenesNegocio — falló, se muestra la landing sin imágenes:', err.message);
             return [];
           }),
         ]);
@@ -94,51 +168,32 @@ function App() {
           .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))[0]?.url || null;
         actualizarFavicon(logoUrl);
       } catch (err) {
-        console.error('[App] Error cargando tenant:', err.message);
-        setError('No se pudo cargar la información del negocio');
+        console.error('[App] Error cargando tenant:', err.message, '| status:', err.status);
+        // Link a un local que no existe, servidor caído o sin conexión: se dice
+        // la causa, así el cliente sabe si reintentar o pedir el link correcto.
+        setError(mensajeDeCargaDelLocal(err, 'No se pudo cargar la información del negocio'));
       } finally {
         setCargando(false);
       }
     }
     cargar();
-  }, []);
+  }, [esResena]);
+
+  // Ruta de reseñas: apenas llega el tenant, redirige al link de Google del
+  // local, o a la landing si no tiene. `replace` para que el "atrás" desde
+  // Google no vuelva a caer en esta ruta (y redirija de nuevo).
+  // El ?origen= queda en la URL; registrarlo es de la feature "Base de clientes".
+  useEffect(() => {
+    if (!esResena || !tenant) return;
+    window.location.replace(esUrlHttps(tenant.resena_url) ? tenant.resena_url : RUTA_TURNERO);
+  }, [esResena, tenant]);
 
   // ── Render: loading ───────────────────────────────────────
-  // Silueta del Landing (hero + avatar + nombre + meta) para evitar
-  // layout shift cuando llega la data del tenant.
+  // En la landing, su silueta (mismos bloques que la real: no salta al llegar
+  // los datos). En la gestión y en la reseña, la columna vacía: mostrar la
+  // landing ahí sería anunciar una pantalla que no viene.
   if (cargando) {
-    return (
-      <PageContainer>
-        <div style={{ flex: 1, padding: '16px 16px 24px' }}>
-          {/* Hero 16:9 */}
-          <Skeleton
-            height="auto"
-            radius={theme.radiusLg}
-            style={{ aspectRatio: '16 / 9', width: '100%' }}
-          />
-          {/* Avatar circular superpuesto */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            marginTop: -40,
-            marginBottom: 16,
-          }}>
-            <Skeleton height={80} width={80} radius={999} />
-          </div>
-          {/* Nombre + meta */}
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 8,
-          }}>
-            <Skeleton height={24} width={180} />
-            <Skeleton height={14} width={140} />
-            <Skeleton height={14} width={120} />
-          </div>
-        </div>
-      </PageContainer>
-    );
+    return enFlujoReserva ? <LandingSkeleton /> : <PageContainer />;
   }
 
   // ── Render: error de carga ────────────────────────────────
@@ -166,6 +221,11 @@ function App() {
     return <GestionTurno token={tokenGestion} tenant={tenant} />;
   }
 
+  // Ruta de reseñas: el efecto de arriba ya está redirigiendo.
+  if (esResena) {
+    return <PageContainer />;
+  }
+
   /**
    * actualizarReserva
    * Merge parcial sobre el estado de reserva.
@@ -176,80 +236,134 @@ function App() {
   };
 
   /**
-   * siguiente
-   * Avanza al próximo paso del wizard.
+   * actualizarCliente
+   * Merge parcial sobre los datos del cliente.
+   * @param {Object} datos - Campos a actualizar (de CLIENTE_VACIO)
    */
-  const siguiente = () => setPaso(prev => prev + 1);
+  const actualizarCliente = (datos) => {
+    setCliente(prev => ({ ...prev, ...datos }));
+  };
 
   /**
-   * volver
-   * Retrocede al paso anterior del wizard.
+   * entrarDesdeLanding
+   * Arranca una elección desde la landing (el CTA, un servicio o un barbero).
+   * Descarta lo elegido antes —si el cliente volvió a la landing, empieza de
+   * nuevo—; sus datos (nombre, teléfono, email) viven aparte y siguen. Va a la
+   * primera pantalla a la que le falta su dato:
+   * - con un servicio → "¿Cuándo?", con "Cualquiera";
+   * - con un barbero → servicio, y después "¿Cuándo?" con ese barbero marcado;
+   * - desde el CTA → servicio, y después "¿Cuándo?" con "Cualquiera".
+   * "Volver" desde ahí regresa a la landing (es la entrada anterior del historial).
+   * @param {Object} [preeleccion] - { servicio } o { barbero }; vacío para el CTA
    */
-  const volver = () => setPaso(prev => prev - 1);
+  const entrarDesdeLanding = (preeleccion = {}) => {
+    actualizarReserva({ ...SELECCION_VACIA, ...preeleccion });
+    nav.irA(preeleccion.servicio ? 'cuando' : 'servicio');
+  };
 
-  // Wizard de reserva — paso 0 a 6 (7 pantallas)
-  switch (paso) {
-    case 0:
-      return <Landing tenant={tenant} imagenes={imagenes} onReservar={siguiente} />;
-    case 1:
-      return (
-        <SeleccionServicio
-          seleccionado={reserva.servicio}
-          onSeleccionar={(s) => { actualizarReserva({ servicio: s }); siguiente(); }}
-          onVolver={volver}
-        />
-      );
-    case 2:
-      return (
-        <SeleccionBarbero
-          seleccionado={reserva.barbero}
-          onSeleccionar={(b) => { actualizarReserva({ barbero: b }); siguiente(); }}
-          onVolver={volver}
-        />
-      );
-    case 3:
-      return (
-        <SeleccionFecha
-          barbero={reserva.barbero}
-          servicio={reserva.servicio}
-          seleccionada={reserva.fecha}
-          onSeleccionar={(f) => { actualizarReserva({ fecha: f, horario: null }); siguiente(); }}
-          onVolver={volver}
-        />
-      );
-    case 4:
-      return (
-        <SeleccionHorario
-          barbero={reserva.barbero}
-          servicio={reserva.servicio}
-          fecha={reserva.fecha}
-          seleccionado={reserva.horario}
-          onSeleccionar={(h) => { actualizarReserva({ horario: h }); siguiente(); }}
-          onVolver={volver}
-        />
-      );
-    case 5:
-      return (
-        <DatosCliente
-          datos={{ nombre: reserva.nombre, telefono: reserva.telefono, email: reserva.email }}
-          onConfirmar={(d) => { actualizarReserva(d); siguiente(); }}
-          onVolver={volver}
-        />
-      );
-    case 6:
-      return (
-        <Confirmacion
-          reserva={reserva}
-          tenant={tenant}
-          onExito={(res) => setResultado(res)}
-          onVolver={volver}
-          resultado={resultado}
-          onNuevaReserva={() => { setReserva({ servicio: null, barbero: null, fecha: null, horario: null, nombre: '', telefono: '', email: '' }); setResultado(null); setPaso(0); }}
-        />
-      );
-    default:
-      return <p>Paso desconocido</p>;
-  }
+  /**
+   * renderPantalla
+   * Elige qué pantalla mostrar según la que está arriba de la pila.
+   * El orden del flujo: landing → servicio → cuando → datos → exito. "datos"
+   * (ConfirmarTurno) junta el resumen, los datos del cliente y la
+   * confirmación. Desde la landing se puede entrar con el servicio ya elegido,
+   * y su pantalla se saltea (ver entrarDesdeLanding).
+   * @returns {JSX.Element}
+   */
+  const renderPantalla = () => {
+    const landing = (
+      <Landing
+        tenant={tenant}
+        imagenes={imagenes}
+        servicios={servicios}
+        barberos={barberos}
+        // Sin dirección todavía: es la primera pantalla de la visita.
+        entradaInicial={nav.direccion === null}
+        onReservar={() => entrarDesdeLanding()}
+        onElegirServicio={(s) => entrarDesdeLanding({ servicio: s })}
+        onElegirBarbero={(b) => entrarDesdeLanding({ barbero: b })}
+      />
+    );
+
+    switch (nav.pantalla) {
+      case 'servicio':
+        return (
+          <SeleccionServicio
+            servicios={servicios.datos}
+            cargando={servicios.cargando}
+            error={servicios.error}
+            onReintentar={servicios.reintentar}
+            seleccionado={reserva.servicio}
+            // Si cambia el servicio, el horario elegido antes (con otra duración)
+            // deja de valer: "¿Cuándo?" no lo marca ni abre su día.
+            onSeleccionar={(s) => {
+              actualizarReserva(s.id === reserva.servicio?.id ? { servicio: s } : { servicio: s, horario: null });
+              nav.irA('cuando');
+            }}
+            onVolver={nav.volver}
+          />
+        );
+      case 'cuando':
+        // El barbero que se marca al entrar: el de la reserva, salvo que
+        // lo haya asignado "Cualquiera" (al volver de Datos, sigue "Cualquiera").
+        // La reserva se escribe recién al tocar un horario: barbero y horario
+        // juntos, así nunca queda un barbero con el horario de otro.
+        return (
+          <SeleccionCuando
+            servicio={reserva.servicio}
+            barberos={barberos}
+            barberoInicial={reserva.barberoAsignado ? null : reserva.barbero}
+            horarioInicial={reserva.horario}
+            onElegir={({ horario, barbero, barberoAsignado }) => {
+              actualizarReserva({ horario, barbero, barberoAsignado });
+              nav.irA('datos');
+            }}
+            onVolver={nav.volver}
+          />
+        );
+      case 'datos':
+        // Al confirmar, la pantalla se reemplaza por 'exito' y se cierra el
+        // flujo: el "atrás" ya no vuelve acá ni puede reenviar la reserva.
+        return (
+          <ConfirmarTurno
+            reserva={reserva}
+            cliente={cliente}
+            tenant={tenant}
+            barberos={barberos.datos}
+            origen={origen}
+            onCambiarCliente={actualizarCliente}
+            onCambiarBarbero={(barbero) => actualizarReserva({ barbero })}
+            onExito={(res) => { setResultado(res); nav.cerrarFlujo('exito'); }}
+            onVolver={nav.volver}
+          />
+        );
+      case 'exito':
+        // Nunca se renderiza el éxito sin un turno creado.
+        if (!resultado) return landing;
+        return (
+          <TurnoConfirmado
+            reserva={reserva}
+            cliente={cliente}
+            tenant={tenant}
+            resultado={resultado}
+            onNuevaReserva={() => { reiniciarReserva(); nav.volverAlInicio(); }}
+          />
+        );
+      default:
+        return landing;
+    }
+  };
+
+  return (
+    // data-tt-direccion: index.css elige con él la animación de entrada de la
+    // pantalla (desde la derecha al avanzar, desde la izquierda al volver).
+    <div data-tt-direccion={nav.direccion}>
+      {/* key: cada pantalla nueva se monta de cero y corre su transición */}
+      <Fragment key={`${nav.profundidad}-${nav.pantalla}`}>
+        {renderPantalla()}
+      </Fragment>
+    </div>
+  );
 }
 
 export default App;

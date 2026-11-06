@@ -16,8 +16,10 @@ function TopBar({ onVolver, label = 'Volver', right }) {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      padding: '12px 16px 4px',
-      minHeight: 44,
+      // 8 arriba + el botón de 44: el texto queda donde estaba con el botón de
+      // ~37. El minHeight mantiene ese alto aunque no haya botón.
+      padding: '8px 16px 0',
+      minHeight: 52,
     }}>
       {onVolver ? (
         <button
@@ -28,7 +30,9 @@ function TopBar({ onVolver, label = 'Volver', right }) {
             display: 'flex',
             alignItems: 'center',
             gap: 6,
-            padding: '8px 12px 8px 8px',
+            // Touch target mínimo de 44 px de alto (sistema de diseño §5.4).
+            minHeight: 44,
+            padding: '0 12px 0 8px',
             background: 'transparent',
             border: 'none',
             color: theme.inkSoft,

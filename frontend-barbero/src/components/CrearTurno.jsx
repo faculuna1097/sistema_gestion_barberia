@@ -18,8 +18,9 @@ import {
   buscarClientes,
 } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
-import { fmtPesos } from '../utils/formato.js';
-import { fmtHora, fmtFechaLarga } from '../utils/fecha.js';
+import { fmtPesos, capitalizar } from '../utils/formato.js';
+import { fmtHora, fmtFechaLarga, fechaHoyISO } from '../utils/fecha.js';
+import { useHover } from '../hooks/useHover.js';
 
 import {
   TopBar,
@@ -35,15 +36,6 @@ import {
 
 const TOTAL_PASOS = 4;
 const TITULOS_PASO = ['Elegí el servicio', 'Elegí la fecha', 'Elegí el horario', 'Datos del cliente'];
-
-/**
- * fechaHoyISO
- * @returns {string} 'YYYY-MM-DD' de hoy en zona local.
- */
-function fechaHoyISO() {
-  const a = new Date();
-  return `${a.getFullYear()}-${String(a.getMonth() + 1).padStart(2, '0')}-${String(a.getDate()).padStart(2, '0')}`;
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Componente principal
@@ -321,7 +313,7 @@ function PasoServicio({ servicios, cargando, error, onReintentar, onElegir }) {
               </div>
               <div style={{
                 fontFamily: theme.body,
-                fontSize: theme.sizeMicro + 1,
+                fontSize: theme.sizeBody,
                 color: theme.muted,
                 marginTop: 2,
               }}>
@@ -362,9 +354,8 @@ function PasoFecha({ fecha, onCambiarFecha, onContinuar }) {
             fontFamily: theme.body,
             fontSize: theme.sizeBody,
             color: theme.inkSoft,
-            textTransform: 'capitalize',
           }}>
-            {fmtFechaLarga(fecha)}
+            {capitalizar(fmtFechaLarga(fecha))}
           </div>
         </Card>
       )}
@@ -431,16 +422,16 @@ function PasoHorario({ fecha, slots, cargando, error, onReintentar, onElegir }) 
 
 /**
  * ChipHora
- * Chip clickable con una hora. Hover con useState. Touch target ≥ 44px.
+ * Chip clickable con una hora. Hover solo con mouse (useHover). Touch target
+ * ≥ 44px.
  */
 function ChipHora({ hora, onClick }) {
-  const [hover, setHover] = useState(false);
+  const [hover, eventosHover] = useHover();
   return (
     <button
       type="button"
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...eventosHover}
       style={{
         minWidth: 80,
         height: 44,
@@ -523,7 +514,7 @@ function PasoDatos({ reserva, actualizar, enviando, errorConfirm, onConfirmar })
           ariaLabel="Buscar cliente existente"
         />
         {buscando && (
-          <div style={{ fontSize: theme.sizeMicro + 1, color: theme.muted }}>
+          <div style={{ fontSize: theme.sizeBody, color: theme.muted }}>
             Buscando…
           </div>
         )}
@@ -548,7 +539,7 @@ function PasoDatos({ reserva, actualizar, enviando, errorConfirm, onConfirmar })
                 {(c.telefono || c.email) && (
                   <div style={{
                     fontFamily: theme.body,
-                    fontSize: theme.sizeMicro + 1,
+                    fontSize: theme.sizeBody,
                     color: theme.muted,
                     marginTop: 2,
                   }}>

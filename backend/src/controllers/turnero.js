@@ -4,26 +4,31 @@
 // y filtran todas las queries por ese tenant_id. Sin token: no hay req.rol
 // ni req.barbero_id acá.
 //
-// Cobertura: ver plan_turnero_v2.md sección 4.
+// Cobertura: ver decisiones_turnero.md.
 
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
-import { calcularSlotsDisponibles, calcularDiasConDisponibilidad, DisponibilidadError } from '../services/disponibilidadService.js';
+import {
+  calcularSlotsDisponibles, calcularDiasConDisponibilidad,
+  calcularSlotsCualquiera, calcularDiasCualquiera, DisponibilidadError,
+} from '../services/disponibilidadService.js';
 import { actualizarEvento, cancelarEvento } from '../services/googleCalendar.js';
 import { enviarCancelacion, enviarReprogramacion, construirContextoMail } from '../services/mail/mailer.js';
 import {
   calcularDuracionServicio, upsertCliente, insertarTurno, enriquecerTurno,
   armarLinkGestion, sincronizarCalendarCreacion, notificarConfirmacion,
-  inicioPosteriorAhora,
+  inicioPosteriorAhora, inicioDentroDeVentana, MENSAJE_SLOT_OCUPADO, MENSAJE_FUERA_DE_VENTANA,
 } from '../services/turnosService.js';
-import { barberoActivoEnTenant } from '../services/barberosService.js';
+import { sqlTurnoEnriquecido } from '../services/sqlTurnoEnriquecido.js';
+import { suspensionSolapaSql } from '../services/suspensionesService.js';
+import { barberoActivoEnTenant, listarBarberosActivos } from '../services/barberosService.js';
 import { obtenerHorarioCrudo, validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { obtenerFeriados, existeFeriado } from '../services/feriadosService.js';
 import { TZ } from '../utils/constantes.js';
-import { validarContacto } from '../utils/validarTexto.js';
-
-// Regex YYYY-MM-DD para validar el query param ?fecha.
-const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+import { esFechaISO, hoyISO, parsearInstante } from '../utils/validarFecha.js';
+import { esUUID } from '../utils/validarUuid.js';
+import { validarContacto, esTelefonoE164, esUrlHttps, normalizarOrigen } from '../utils/validarTexto.js';
+import { cuerpoError422, CUERPO_422_FERIADO } from '../utils/errores422.js';
 
 /**
  * getTenant
@@ -33,13 +38,20 @@ const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
  * El logo y demás imágenes del tenant ya no viajan acá: se sirven por
  * GET /api/negocio/imagenes (los frontends los consumen desde ese endpoint).
  *
+ * `whatsapp` sale de `tenant.configuracion.whatsapp` (se carga por SQL, ver
+ * onboarding.md). Solo viaja si es un teléfono E.164 válido; si falta o tiene
+ * otro formato, va `null` y el turnero no muestra el botón de WhatsApp.
+ * `resena_url` sale de `tenant.configuracion.resena_url` (el link "Pedir
+ * reseñas" del Perfil de Empresa de Google, también por SQL): solo viaja si es
+ * una URL https; si no, `null` y el turnero no muestra el link de reseñas.
+ *
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
- * @returns {JSON} { id, nombre, telefono, direccion, horario_atencion, feriados }
+ * @returns {JSON} { id, nombre, telefono, whatsapp, resena_url, direccion, horario_atencion, feriados }
  */
 export const getTenant = async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, nombre_negocio, telefono, direccion
+      `SELECT id, nombre_negocio, telefono, direccion, configuracion
        FROM tenant
        WHERE id = $1 AND activo = true`,
       [req.tenant_id]
@@ -54,15 +66,18 @@ export const getTenant = async (req, res) => {
     // Son independientes entre sí (solo dependen de tenant_id) → se piden en
     // paralelo: 2 RTTs a la DB en vez de 3 en serie. El tenant va antes y solo
     // para poder cortar con 404 sin disparar estas dos.
-    const hoy = DateTime.now().setZone(TZ).toISODate();
     const [horarioAtencion, feriados] = await Promise.all([
       obtenerHorarioCrudo(req.tenant_id),
-      obtenerFeriados(req.tenant_id, hoy),
+      obtenerFeriados(req.tenant_id, hoyISO()),
     ]);
+    const whatsapp = row.configuracion?.whatsapp;
+    const resenaUrl = row.configuracion?.resena_url;
     res.json({
       id: row.id,
       nombre: row.nombre_negocio,
       telefono: row.telefono,
+      whatsapp: esTelefonoE164(whatsapp) ? whatsapp.trim() : null,
+      resena_url: esUrlHttps(resenaUrl) ? resenaUrl.trim() : null,
       direccion: row.direccion,
       horario_atencion: horarioAtencion,
       feriados,
@@ -77,9 +92,10 @@ export const getTenant = async (req, res) => {
  * getServicios
  * Lista los servicios activos del tenant con precio y duración real en minutos.
  * La duración se calcula como tenant.duracion_slot_minutos * servicio.cantidad_slots.
+ * El precio sale como número (pg entrega el NUMERIC como string; convención §4).
  *
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
- * @returns {JSON} [{ id, nombre, precio, duracion_minutos }]
+ * @returns {JSON} [{ id, nombre, precio: number, duracion_minutos }]
  */
 export const getServicios = async (req, res) => {
   try {
@@ -94,7 +110,7 @@ export const getServicios = async (req, res) => {
        ORDER BY s.precio ASC`,
       [req.tenant_id]
     );
-    res.json(result.rows);
+    res.json(result.rows.map(s => ({ ...s, precio: Number(s.precio) })));
   } catch (err) {
     console.error('[turnero] Error en getServicios:', err);
     res.status(500).json({ error: 'Error al obtener servicios' });
@@ -106,7 +122,11 @@ export const getServicios = async (req, res) => {
  * Lista los barberos activos del tenant. Acepta query param ?servicio_id
  * pero lo ignora por ahora: todos los barberos atienden todos los servicios.
  * El param queda preparado para reglas futuras de "qué barbero atiende qué"
- * (ver plan_turnero_v2.md sección 12).
+ * (ver decisiones_turnero.md).
+ *
+ * El listado sale de `listarBarberosActivos`, el mismo que usa "Cualquier
+ * barbero" en la disponibilidad: los barberos que ve el cliente son los que
+ * se le pueden asignar.
  *
  * @param {string} req.tenant_id      - Inyectado por tenantMiddleware
  * @param {string} req.query.servicio_id - (ignorado) filtro futuro
@@ -114,14 +134,7 @@ export const getServicios = async (req, res) => {
  */
 export const getBarberos = async (req, res) => {
   try {
-    const result = await query(
-      `SELECT id, nombre
-       FROM barbero
-       WHERE tenant_id = $1 AND activo = true
-       ORDER BY nombre ASC`,
-      [req.tenant_id]
-    );
-    res.json(result.rows);
+    res.json(await listarBarberosActivos(req.tenant_id));
   } catch (err) {
     console.error('[turnero] Error en getBarberos:', err);
     res.status(500).json({ error: 'Error al obtener barberos' });
@@ -130,26 +143,50 @@ export const getBarberos = async (req, res) => {
 
 /**
  * getDisponibilidad
- * Calcula los slots de inicio disponibles para un (barbero, servicio, fecha).
+ * Calcula los slots de inicio disponibles para un (servicio, fecha) y un
+ * barbero, o para "Cualquier barbero" si no llega `barbero_id`.
  * Delega la lógica al disponibilidadService.
  *
+ * - Con `barbero_id` (app del barbero y turnero con barbero elegido):
+ *   `{ slots }` con los horarios de ese barbero.
+ * - Sin `barbero_id` ("Cualquiera"): `{ slots, asignaciones }`, con la unión
+ *   de los horarios de los barberos activos y, por cada horario, el barbero
+ *   que se asigna (menos turnos ese día; empate → alfabético). El front manda
+ *   ese `barbero_id` en POST /turnos.
+ *
  * @param {string} req.tenant_id            - Inyectado por tenantMiddleware
- * @param {string} req.query.barbero_id
+ * @param {string} [req.query.barbero_id]   - Opcional; sin él, "Cualquier barbero"
  * @param {string} req.query.servicio_id
  * @param {string} req.query.fecha          - 'YYYY-MM-DD'
- * @returns {JSON} { slots: [ISO,...] }
+ * @returns {JSON} { slots: [ISO,...] } con barbero_id;
+ *   { slots: [ISO,...], asignaciones: { [ISO]: barbero_id } } sin barbero_id;
+ *   400 si falta un parámetro o alguno es inválido
  */
 export const getDisponibilidad = async (req, res) => {
   const { barbero_id, servicio_id, fecha } = req.query;
 
-  if (!barbero_id || !servicio_id || !fecha) {
-    return res.status(400).json({ error: 'barbero_id, servicio_id y fecha son requeridos' });
+  if (!servicio_id || !fecha) {
+    return res.status(400).json({ error: 'servicio_id y fecha son requeridos' });
   }
-  if (!REGEX_FECHA.test(fecha)) {
-    return res.status(400).json({ error: 'fecha debe tener formato YYYY-MM-DD' });
+  if (!esFechaISO(fecha)) {
+    return res.status(400).json({ error: 'fecha debe ser una fecha válida con formato YYYY-MM-DD' });
+  }
+  if (!esUUID(servicio_id)) {
+    return res.status(400).json({ error: 'servicio_id debe ser un UUID válido' });
+  }
+  if (barbero_id && !esUUID(barbero_id)) {
+    return res.status(400).json({ error: 'barbero_id debe ser un UUID válido' });
   }
 
   try {
+    if (!barbero_id) {
+      const { slots, asignaciones } = await calcularSlotsCualquiera({
+        tenantId: req.tenant_id,
+        servicioId: servicio_id,
+        fecha,
+      });
+      return res.json({ slots, asignaciones });
+    }
     const slots = await calcularSlotsDisponibles({
       tenantId: req.tenant_id,
       barberoId: barbero_id,
@@ -170,34 +207,53 @@ export const getDisponibilidad = async (req, res) => {
 /**
  * getDiasDisponibles
  * Devuelve qué días de un rango tienen al menos un slot reservable para un
- * (barbero, servicio). El calendario del turnero lo usa para grisar los días
- * sin disponibilidad. Delega la lógica al disponibilidadService.
+ * (barbero, servicio), o para "Cualquier barbero" si no llega `barbero_id`
+ * (la unión de los días de los barberos activos). El calendario del turnero
+ * lo usa para grisar los días sin disponibilidad. Delega la lógica al
+ * disponibilidadService.
+ *
+ * El rango tiene un tope de DIAS_MAXIMOS_RANGO_DISPONIBILIDAD días
+ * (utils/constantes.js): uno más largo responde 400 (lo valida el servicio con
+ * un error 'fecha_invalida').
  *
  * @param {string} req.tenant_id          - Inyectado por tenantMiddleware
- * @param {string} req.query.barbero_id
+ * @param {string} [req.query.barbero_id] - Opcional; sin él, "Cualquier barbero"
  * @param {string} req.query.servicio_id
  * @param {string} req.query.desde         - 'YYYY-MM-DD' (inclusive)
  * @param {string} req.query.hasta         - 'YYYY-MM-DD' (inclusive)
- * @returns {JSON} { dias: ['YYYY-MM-DD', ...] }
+ * @returns {JSON} { dias: ['YYYY-MM-DD', ...] }; 400 si falta un parámetro o alguno es inválido
  */
 export const getDiasDisponibles = async (req, res) => {
   const { barbero_id, servicio_id, desde, hasta } = req.query;
 
-  if (!barbero_id || !servicio_id || !desde || !hasta) {
-    return res.status(400).json({ error: 'barbero_id, servicio_id, desde y hasta son requeridos' });
+  if (!servicio_id || !desde || !hasta) {
+    return res.status(400).json({ error: 'servicio_id, desde y hasta son requeridos' });
   }
-  if (!REGEX_FECHA.test(desde) || !REGEX_FECHA.test(hasta)) {
-    return res.status(400).json({ error: 'desde y hasta deben tener formato YYYY-MM-DD' });
+  if (!esFechaISO(desde) || !esFechaISO(hasta)) {
+    return res.status(400).json({ error: 'desde y hasta deben ser fechas válidas con formato YYYY-MM-DD' });
+  }
+  if (!esUUID(servicio_id)) {
+    return res.status(400).json({ error: 'servicio_id debe ser un UUID válido' });
+  }
+  if (barbero_id && !esUUID(barbero_id)) {
+    return res.status(400).json({ error: 'barbero_id debe ser un UUID válido' });
   }
 
   try {
-    const dias = await calcularDiasConDisponibilidad({
-      tenantId: req.tenant_id,
-      barberoId: barbero_id,
-      servicioId: servicio_id,
-      desde,
-      hasta,
-    });
+    const dias = barbero_id
+      ? await calcularDiasConDisponibilidad({
+        tenantId: req.tenant_id,
+        barberoId: barbero_id,
+        servicioId: servicio_id,
+        desde,
+        hasta,
+      })
+      : await calcularDiasCualquiera({
+        tenantId: req.tenant_id,
+        servicioId: servicio_id,
+        desde,
+        hasta,
+      });
     res.json({ dias });
   } catch (err) {
     if (err instanceof DisponibilidadError) {
@@ -227,7 +283,11 @@ export const getDiasDisponibles = async (req, res) => {
  * @param {string} req.body.nombre
  * @param {string} req.body.telefono  - obligatorio en este controller
  * @param {string} req.body.email     - obligatorio en este controller
- * @returns {JSON} 201 { turno_id, token_gestion }
+ * @param {string} [req.body.origen]  - por qué link llegó el cliente (ej. 'instagram'),
+ *   se guarda en turno.origen_link. Opcional: si no cumple el formato
+ *   (normalizarOrigen), se guarda null y la reserva sigue
+ * @returns {JSON} 201 { turno_id, token_gestion }; 400 si `inicio` no es futuro o
+ *   queda fuera de los próximos DIAS_RESERVABLES días
  */
 export const crearTurno = async (req, res) => {
   const { servicio_id, barbero_id, inicio } = req.body;
@@ -245,13 +305,20 @@ export const crearTurno = async (req, res) => {
   if (contacto.error) {
     return res.status(400).json({ error: contacto.error });
   }
+  // Origen del cliente: dato de marketing, nunca rechaza la reserva.
+  const origenLink = normalizarOrigen(req.body.origen);
 
-  const inicioDT = DateTime.fromISO(inicio, { zone: TZ });
-  if (!inicioDT.isValid) {
-    return res.status(400).json({ error: 'inicio debe ser un ISO timestamp válido' });
+  // El turnero manda el inicio que le dio /disponibilidad (ISO con offset). Fecha
+  // y hora obligatorias: un '10:00' o una fecha sola no son un instante (→ 400).
+  const inicioDT = parsearInstante(inicio);
+  if (!inicioDT) {
+    return res.status(400).json({ error: 'inicio debe ser una fecha y hora válidas (ISO)' });
   }
   if (!inicioPosteriorAhora(inicioDT)) {
     return res.status(400).json({ error: 'inicio debe ser futuro' });
+  }
+  if (!inicioDentroDeVentana(inicioDT)) {
+    return res.status(400).json({ error: MENSAJE_FUERA_DE_VENTANA });
   }
 
   try {
@@ -276,17 +343,13 @@ export const crearTurno = async (req, res) => {
     const valHorario = await validarTurnoEnHorario(req.tenant_id, inicioDT, finDT);
     if (!valHorario.valido) {
       console.warn('[turnero] crearTurno — turno fuera del horario del negocio | codigo:', valHorario.codigo);
-      return res.status(422).json({
-        codigo: valHorario.codigo,
-        mensaje: valHorario.mensaje,
-        ...(valHorario.limite && { limite: valHorario.limite }),
-      });
+      return res.status(422).json(cuerpoError422(valHorario));
     }
 
     // ── Validar que el turno no caiga en un feriado ─────────────────────────
     if (await existeFeriado(req.tenant_id, inicioDT.toISODate())) {
       console.warn('[turnero] crearTurno — turno en día feriado');
-      return res.status(422).json({ codigo: 'feriado', mensaje: 'El negocio está cerrado por feriado ese día' });
+      return res.status(422).json(CUERPO_422_FERIADO);
     }
 
     // ── Upsert cliente (datos ya normalizados por validarContacto) ──────────
@@ -297,11 +360,11 @@ export const crearTurno = async (req, res) => {
     try {
       resultado = await insertarTurno({
         tenantId: req.tenant_id, clienteId: cliente_id, barberoId: barbero_id,
-        servicioId: servicio_id, inicioDT, finDT, origenCreacion: 'turnero',
+        servicioId: servicio_id, inicioDT, finDT, origenCreacion: 'turnero', origenLink,
       });
     } catch (err) {
       if (err.code === 'SLOT_OCUPADO') {
-        console.warn('[turnero] crearTurno — slot ya reservado (constraint 23P01)');
+        console.warn('[turnero] crearTurno — slot ocupado (turno o suspensión)');
         return res.status(409).json({ error: err.message });
       }
       if (err.code === 'REFERENCIA_INVALIDA') {
@@ -338,11 +401,13 @@ export const crearTurno = async (req, res) => {
  * Devuelve datos del turno por token_gestion. Sirve a la página de gestión
  * del turno linkeada desde el mail.
  * Filtra por tenant_id además del token (defensa multi-tenant aunque el
- * token sea UNIQUE global).
+ * token sea UNIQUE global). Del cliente devuelve solo el nombre: el link del mail
+ * se puede reenviar, y el email y el teléfono no se editan en esa página.
  *
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @param {string} req.params.token
- * @returns {JSON} { turno, barbero, servicio, cliente }
+ * @returns {JSON} { turno: { id, inicio, fin, estado }, barbero: { id, nombre },
+ *   servicio: { id, nombre, precio: number, duracion_minutos }, cliente: { nombre } }
  */
 export const getTurnoPorToken = async (req, res) => {
   try {
@@ -351,7 +416,7 @@ export const getTurnoPorToken = async (req, res) => {
               b.id AS barbero_id, b.nombre AS barbero_nombre,
               s.id AS servicio_id, s.nombre AS servicio_nombre, s.precio AS servicio_precio,
               (tn.duracion_slot_minutos * s.cantidad_slots) AS servicio_duracion_minutos,
-              c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono
+              c.nombre AS cliente_nombre
        FROM turno t
        JOIN barbero  b  ON b.id  = t.barbero_id
        JOIN servicio s  ON s.id  = t.servicio_id
@@ -375,8 +440,9 @@ export const getTurnoPorToken = async (req, res) => {
         estado: r.estado,
       },
       barbero:  { id: r.barbero_id, nombre: r.barbero_nombre },
-      servicio: { id: r.servicio_id, nombre: r.servicio_nombre, precio: r.servicio_precio, duracion_minutos: r.servicio_duracion_minutos },
-      cliente:  { nombre: r.cliente_nombre, email: r.cliente_email, telefono: r.cliente_telefono },
+      // precio como número: pg entrega el NUMERIC como string (convención §4).
+      servicio: { id: r.servicio_id, nombre: r.servicio_nombre, precio: Number(r.servicio_precio), duracion_minutos: r.servicio_duracion_minutos },
+      cliente:  { nombre: r.cliente_nombre },
     });
   } catch (err) {
     console.error('[turnero] Error en getTurnoPorToken:', err);
@@ -392,23 +458,13 @@ export const getTurnoPorToken = async (req, res) => {
  *
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @param {string} req.params.token
- * @returns {JSON} { ok: true }
+ * @returns {JSON} { ok: true }; 409 si el turno ya no está reservado
  */
 export const cancelarTurno = async (req, res) => {
   try {
     // ── Buscar turno + datos enriquecidos en una sola query ────────────────
     const lookupRes = await query(
-      `SELECT t.id, t.estado, t.google_event_id, t.inicio, t.fin,
-              b.nombre AS barbero_nombre, b.email AS barbero_email,
-              s.nombre AS servicio_nombre,
-              c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
-              tn.nombre_negocio AS tenant_nombre
-       FROM turno t
-       JOIN barbero  b ON b.id = t.barbero_id
-       JOIN servicio s ON s.id = t.servicio_id
-       JOIN cliente  c ON c.id = t.cliente_id
-       JOIN tenant   tn ON tn.id = t.tenant_id
-       WHERE t.token_gestion = $1 AND t.tenant_id = $2`,
+      sqlTurnoEnriquecido('t.id, t.estado, t.google_event_id', 'WHERE t.token_gestion = $1 AND t.tenant_id = $2'),
       [req.params.token, req.tenant_id]
     );
     if (lookupRes.rows.length === 0) {
@@ -421,14 +477,27 @@ export const cancelarTurno = async (req, res) => {
     }
 
     // ── UPDATE estado ──────────────────────────────────────────────────────
-    await query(
+    // El estado también va en el WHERE: si cambió entre la lectura de arriba y
+    // acá (ej. el turno se cobró), no se cancela.
+    const updateRes = await query(
       `UPDATE turno
          SET estado = 'cancelado',
              cancelado_en = now(),
              cancelado_por = 'cliente'
-       WHERE id = $1 AND tenant_id = $2`,
+       WHERE id = $1 AND tenant_id = $2 AND estado = 'reservado'`,
       [r.id, req.tenant_id]
     );
+    // Sin filas actualizadas: el turno cambió de estado. Una lectura solo decide
+    // qué estado nombrar en el 409; no se toca Calendar ni se manda el mail.
+    if (updateRes.rowCount === 0) {
+      const estadoRes = await query(
+        `SELECT estado FROM turno WHERE id = $1 AND tenant_id = $2`,
+        [r.id, req.tenant_id]
+      );
+      const estadoActual = estadoRes.rows[0]?.estado;
+      console.warn('[turnero] cancelarTurno — el turno cambió de estado antes del UPDATE | turno_id:', r.id, '| estado:', estadoActual);
+      return res.status(409).json({ error: `El turno está en estado "${estadoActual}" y no se puede cancelar` });
+    }
     console.log('[turnero] cancelarTurno — turno cancelado | turno_id:', r.id);
 
     // ── Best-effort: Google Calendar + mail ────────────────────────────────
@@ -450,41 +519,41 @@ export const cancelarTurno = async (req, res) => {
  * reprogramarTurno
  * Cambia inicio/fin del turno. El constraint EXCLUDE GIST también aplica
  * al UPDATE: si el nuevo rango choca con otro turno reservado del mismo
- * barbero, devuelve 409.
+ * barbero, devuelve 409. Lo mismo si choca con una suspensión vigente del
+ * barbero: el UPDATE lleva un NOT EXISTS y no escribe nada.
  *
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @param {string} req.params.token
  * @param {string} req.body.inicio   - ISO con offset
- * @returns {JSON} { ok: true, turno: { id, inicio, fin } }
+ * @returns {JSON} { ok: true, turno: { id, inicio, fin } }; 400 si `inicio` no es
+ *   futuro o queda fuera de los próximos DIAS_RESERVABLES días
  */
 export const reprogramarTurno = async (req, res) => {
   const { inicio } = req.body;
   if (!inicio) {
     return res.status(400).json({ error: 'inicio es requerido' });
   }
-  const inicioDT = DateTime.fromISO(inicio, { zone: TZ });
-  if (!inicioDT.isValid) {
-    return res.status(400).json({ error: 'inicio debe ser un ISO timestamp válido' });
+  // El turnero manda el inicio que le dio /disponibilidad (ISO con offset). Fecha
+  // y hora obligatorias: un '10:00' o una fecha sola no son un instante (→ 400).
+  const inicioDT = parsearInstante(inicio);
+  if (!inicioDT) {
+    return res.status(400).json({ error: 'inicio debe ser una fecha y hora válidas (ISO)' });
   }
   if (!inicioPosteriorAhora(inicioDT)) {
     return res.status(400).json({ error: 'inicio debe ser futuro' });
+  }
+  if (!inicioDentroDeVentana(inicioDT)) {
+    return res.status(400).json({ error: MENSAJE_FUERA_DE_VENTANA });
   }
 
   try {
     // ── Lookup turno + duración del servicio + datos para services ─────────
     const lookupRes = await query(
-      `SELECT t.id, t.estado, t.google_event_id,
-              (tn.duracion_slot_minutos * s.cantidad_slots) AS duracion_minutos,
-              b.nombre AS barbero_nombre, b.email AS barbero_email,
-              s.nombre AS servicio_nombre,
-              c.nombre AS cliente_nombre, c.email AS cliente_email, c.telefono AS cliente_telefono,
-              tn.nombre_negocio AS tenant_nombre, tn.direccion AS tenant_direccion
-       FROM turno t
-       JOIN tenant   tn ON tn.id = t.tenant_id
-       JOIN barbero  b  ON b.id  = t.barbero_id
-       JOIN servicio s  ON s.id  = t.servicio_id
-       JOIN cliente  c  ON c.id  = t.cliente_id
-       WHERE t.token_gestion = $1 AND t.tenant_id = $2`,
+      sqlTurnoEnriquecido(
+        `t.id, t.estado, t.google_event_id,
+         (tn.duracion_slot_minutos * s.cantidad_slots) AS duracion_minutos`,
+        'WHERE t.token_gestion = $1 AND t.tenant_id = $2'
+      ),
       [req.params.token, req.tenant_id]
     );
     if (lookupRes.rows.length === 0) {
@@ -502,31 +571,52 @@ export const reprogramarTurno = async (req, res) => {
     const valHorario = await validarTurnoEnHorario(req.tenant_id, inicioDT, finDT);
     if (!valHorario.valido) {
       console.warn('[turnero] reprogramarTurno — turno fuera del horario del negocio | codigo:', valHorario.codigo);
-      return res.status(422).json({
-        codigo: valHorario.codigo,
-        mensaje: valHorario.mensaje,
-        ...(valHorario.limite && { limite: valHorario.limite }),
-      });
+      return res.status(422).json(cuerpoError422(valHorario));
     }
 
     // ── Validar que el nuevo horario no caiga en un feriado ─────────────────
     if (await existeFeriado(req.tenant_id, inicioDT.toISODate())) {
       console.warn('[turnero] reprogramarTurno — turno en día feriado');
-      return res.status(422).json({ codigo: 'feriado', mensaje: 'El negocio está cerrado por feriado ese día' });
+      return res.status(422).json(CUERPO_422_FERIADO);
     }
 
-    // ── UPDATE con captura de 23P01 ────────────────────────────────────────
+    // ── UPDATE con captura de 23P01 y sin pisar suspensiones ───────────────
+    // El chequeo de suspensión va en la misma sentencia (NOT EXISTS) y compara
+    // contra el barbero del propio turno. El estado también va en el WHERE: si
+    // lo cancelaron entre la lectura de arriba y acá, no se reprograma.
+    let updateRes;
     try {
-      await query(
-        `UPDATE turno SET inicio = $1, fin = $2 WHERE id = $3 AND tenant_id = $4`,
+      updateRes = await query(
+        `UPDATE turno SET inicio = $1, fin = $2
+         WHERE id = $3 AND tenant_id = $4 AND estado = 'reservado'
+           AND NOT EXISTS (
+             SELECT 1 FROM barbero_suspension bs
+             WHERE bs.tenant_id = turno.tenant_id AND bs.barbero_id = turno.barbero_id
+               AND ${suspensionSolapaSql('bs', '$1::timestamptz', '$2::timestamptz')}
+           )`,
         [inicioDT.toISO(), finDT.toISO(), r.id, req.tenant_id]
       );
     } catch (err) {
       if (err.code === '23P01') {
         console.warn('[turnero] reprogramarTurno — slot ya reservado (constraint 23P01)');
-        return res.status(409).json({ error: 'El slot elegido ya no está disponible' });
+        return res.status(409).json({ error: MENSAJE_SLOT_OCUPADO });
       }
       throw err;
+    }
+    // Sin filas actualizadas: o cambió el estado, o el nuevo horario pisa una
+    // suspensión. Una lectura solo decide qué 409 devolver.
+    if (updateRes.rowCount === 0) {
+      const estadoRes = await query(
+        `SELECT estado FROM turno WHERE id = $1 AND tenant_id = $2`,
+        [r.id, req.tenant_id]
+      );
+      const estadoActual = estadoRes.rows[0]?.estado;
+      if (estadoActual !== 'reservado') {
+        console.warn('[turnero] reprogramarTurno — el turno cambió de estado antes del UPDATE | turno_id:', r.id, '| estado:', estadoActual);
+        return res.status(409).json({ error: `El turno está en estado "${estadoActual}" y no se puede reprogramar` });
+      }
+      console.warn('[turnero] reprogramarTurno — el nuevo horario pisa una suspensión | turno_id:', r.id);
+      return res.status(409).json({ error: MENSAJE_SLOT_OCUPADO });
     }
     console.log('[turnero] reprogramarTurno — turno actualizado | turno_id:', r.id);
 

@@ -29,7 +29,7 @@ function StatusPill({ estado }) {
       color: c.fg,
       fontFamily: theme.mono,
       fontWeight: theme.weightMedium,
-      fontSize: 10,
+      fontSize: theme.sizeMicro,
       letterSpacing: '0.04em',
       textTransform: 'uppercase',
     }}>

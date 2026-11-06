@@ -7,9 +7,53 @@
 import { query } from '../config/db.js';
 import bcrypt from 'bcrypt';
 import { pinColisiona } from '../utils/pin.js';
+import { esUUID } from '../utils/validarUuid.js';
+import { esMontoValido, esEnteroNoNegativo, ENTERO_MAXIMO, mensajeMontoInvalido } from '../utils/validarNumero.js';
 import { invalidar } from '../middlewares/tenantMiddleware.js';
 
 const SALT_ROUNDS = 10;
+const MENSAJE_PRECIO_INVALIDO = mensajeMontoInvalido('precio');
+
+/**
+ * errorStockProducto
+ * Valida los dos campos de stock que llegan al crear o editar un producto. Los dos
+ * son opcionales: sin valor, cuentan como 0.
+ * @param {*} stockMinimo  - req.body.stock_minimo
+ * @param {*} agregarStock - req.body.agregar_stock
+ * @returns {string|null} El mensaje de error, o null si son válidos.
+ */
+const errorStockProducto = (stockMinimo, agregarStock) => {
+  if (!esEnteroNoNegativo(stockMinimo ?? 0)) {
+    return 'stock_minimo debe ser un entero mayor o igual a 0';
+  }
+  if (!esEnteroNoNegativo(agregarStock ?? 0)) {
+    return 'agregar_stock debe ser un entero mayor o igual a 0';
+  }
+  return null;
+};
+
+// pg entrega los NUMERIC como string; la API los expone como número
+// (convenciones_tecnicas.md §4). Los dos helpers arman la fila que se responde.
+
+/**
+ * conPrecioNumero
+ * Fila de servicio o producto con `precio` como número.
+ * @param {object} fila - Fila de pg con `precio` (string)
+ * @returns {object} La misma fila, con `precio` numérico
+ */
+const conPrecioNumero = (fila) => ({ ...fila, precio: Number(fila.precio) });
+
+/**
+ * barberoConNumeros
+ * Fila de barbero con `comision_valor` como número. La columna admite NULL
+ * (tiene default 0, pero no NOT NULL): un NULL sigue siendo null, no 0.
+ * @param {object} fila - Fila de pg con `comision_valor` (string o null)
+ * @returns {object} La misma fila, con `comision_valor` numérico o null
+ */
+const barberoConNumeros = (fila) => ({
+  ...fila,
+  comision_valor: fila.comision_valor === null ? null : Number(fila.comision_valor),
+});
 
 // ─── BARBEROS ────────────────────────────────────────────────────────────────
 
@@ -28,7 +72,7 @@ export const getBarberos = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    res.json(result.rows);
+    res.json(result.rows.map(barberoConNumeros));
   } catch (err) {
     console.error('[gestion] Error en getBarberos:', err);
     res.status(500).json({ error: 'Error al obtener barberos' });
@@ -73,7 +117,7 @@ export const crearBarbero = async (req, res) => {
       [req.tenant_id, nombre.trim(), pinHash, comision]
     );
     console.log('[gestion] crearBarbero completado | barbero_id:', result.rows[0].id);
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(barberoConNumeros(result.rows[0]));
   } catch (err) {
     console.error('[gestion] Error en crearBarbero:', err);
     res.status(500).json({ error: 'Error al crear barbero' });
@@ -101,6 +145,9 @@ export const editarBarbero = async (req, res) => {
   const { id } = req.params;
   const { nombre, comision_valor, activo, pin } = req.body;
 
+  if (!esUUID(id)) {
+    return res.status(404).json({ error: 'Barbero no encontrado' });
+  }
   if (!nombre || comision_valor === undefined || activo === undefined) {
     return res.status(400).json({ error: 'nombre, comision_valor y activo son requeridos' });
   }
@@ -148,7 +195,7 @@ export const editarBarbero = async (req, res) => {
       return res.status(404).json({ error: 'Barbero no encontrado' });
     }
     console.log('[gestion] editarBarbero completado | barbero_id:', result.rows[0].id);
-    res.json(result.rows[0]);
+    res.json(barberoConNumeros(result.rows[0]));
   } catch (err) {
     console.error('[gestion] Error en editarBarbero:', err);
     res.status(500).json({ error: 'Error al editar barbero' });
@@ -172,7 +219,7 @@ export const getServicios = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    res.json(result.rows);
+    res.json(result.rows.map(conPrecioNumero));
   } catch (err) {
     console.error('[gestion] Error en getServicios:', err);
     res.status(500).json({ error: 'Error al obtener servicios' });
@@ -184,14 +231,17 @@ export const getServicios = async (req, res) => {
  * Crea un nuevo servicio para el tenant.
  * @param {string} req.tenant_id    - Inyectado por verificarToken
  * @param {string} req.body.nombre  - Nombre del servicio
- * @param {number} req.body.precio  - Precio del servicio
- * @returns {JSON} Servicio creado
+ * @param {number} req.body.precio  - Precio del servicio, >= 0
+ * @returns {JSON} Servicio creado; 400 si falta un campo o el precio no es válido
  */
 export const crearServicio = async (req, res) => {
   const { nombre, precio } = req.body;
 
   if (!nombre || precio === undefined) {
     return res.status(400).json({ error: 'nombre y precio son requeridos' });
+  }
+  if (!esMontoValido(precio)) {
+    return res.status(400).json({ error: MENSAJE_PRECIO_INVALIDO });
   }
 
   try {
@@ -202,7 +252,7 @@ export const crearServicio = async (req, res) => {
       [req.tenant_id, nombre.trim(), Number(precio)]
     );
     console.log('[gestion] crearServicio completado | servicio_id:', result.rows[0].id);
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(conPrecioNumero(result.rows[0]));
   } catch (err) {
     console.error('[gestion] Error en crearServicio:', err);
     res.status(500).json({ error: 'Error al crear servicio' });
@@ -215,16 +265,22 @@ export const crearServicio = async (req, res) => {
  * @param {string}  req.params.id    - UUID del servicio
  * @param {string}  req.tenant_id    - Inyectado por verificarToken
  * @param {string}  req.body.nombre  - Nombre del servicio
- * @param {number}  req.body.precio  - Precio del servicio
+ * @param {number}  req.body.precio  - Precio del servicio, >= 0
  * @param {boolean} req.body.activo  - Estado activo/inactivo
- * @returns {JSON} Servicio actualizado
+ * @returns {JSON} Servicio actualizado; 400 si falta un campo o el precio no es válido
  */
 export const editarServicio = async (req, res) => {
   const { id } = req.params;
   const { nombre, precio, activo } = req.body;
 
+  if (!esUUID(id)) {
+    return res.status(404).json({ error: 'Servicio no encontrado' });
+  }
   if (!nombre || precio === undefined || activo === undefined) {
     return res.status(400).json({ error: 'nombre, precio y activo son requeridos' });
+  }
+  if (!esMontoValido(precio)) {
+    return res.status(400).json({ error: MENSAJE_PRECIO_INVALIDO });
   }
 
   try {
@@ -239,7 +295,7 @@ export const editarServicio = async (req, res) => {
       return res.status(404).json({ error: 'Servicio no encontrado' });
     }
     console.log('[gestion] editarServicio completado | servicio_id:', result.rows[0].id);
-    res.json(result.rows[0]);
+    res.json(conPrecioNumero(result.rows[0]));
   } catch (err) {
     console.error('[gestion] Error en editarServicio:', err);
     res.status(500).json({ error: 'Error al editar servicio' });
@@ -263,7 +319,7 @@ export const getProductos = async (req, res) => {
        ORDER BY nombre ASC`,
       [req.tenant_id]
     );
-    res.json(result.rows);
+    res.json(result.rows.map(conPrecioNumero));
   } catch (err) {
     console.error('[gestion] Error en getProductos:', err);
     res.status(500).json({ error: 'Error al obtener productos' });
@@ -277,10 +333,10 @@ export const getProductos = async (req, res) => {
  * INSERT (atómica por definición — ver convención §6: sin BEGIN/COMMIT).
  * @param {string} req.tenant_id          - Inyectado por verificarToken
  * @param {string} req.body.nombre        - Nombre del producto
- * @param {number} req.body.precio        - Precio del producto
- * @param {number} req.body.stock_minimo  - Stock mínimo para alertas (default: 0)
- * @param {number} req.body.agregar_stock - Stock inicial con el que ingresa (default 0, >= 0)
- * @returns {JSON} Producto creado
+ * @param {number} req.body.precio        - Precio del producto, >= 0
+ * @param {number} req.body.stock_minimo  - Stock mínimo para alertas (default 0, entero >= 0)
+ * @param {number} req.body.agregar_stock - Stock inicial con el que ingresa (default 0, entero >= 0)
+ * @returns {JSON} Producto creado; 400 si falta un campo o el precio o el stock no son válidos
  */
 export const crearProducto = async (req, res) => {
   const { nombre, precio, stock_minimo, agregar_stock } = req.body;
@@ -288,12 +344,15 @@ export const crearProducto = async (req, res) => {
   if (!nombre || precio === undefined) {
     return res.status(400).json({ error: 'nombre y precio son requeridos' });
   }
-
-  // agregar_stock es el stock inicial (opcional). Si viene, debe ser un número >= 0.
-  const delta = Number(agregar_stock ?? 0);
-  if (!Number.isFinite(delta) || delta < 0) {
-    return res.status(400).json({ error: 'agregar_stock debe ser un número mayor o igual a 0' });
+  if (!esMontoValido(precio)) {
+    return res.status(400).json({ error: MENSAJE_PRECIO_INVALIDO });
   }
+
+  const errorStock = errorStockProducto(stock_minimo, agregar_stock);
+  if (errorStock) {
+    return res.status(400).json({ error: errorStock });
+  }
+  const delta = Number(agregar_stock ?? 0);
 
   try {
     const result = await query(
@@ -303,7 +362,7 @@ export const crearProducto = async (req, res) => {
       [req.tenant_id, nombre.trim(), Number(precio), delta, Number(stock_minimo ?? 0)]
     );
     console.log('[gestion] crearProducto completado | producto_id:', result.rows[0].id);
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(conPrecioNumero(result.rows[0]));
   } catch (err) {
     console.error('[gestion] Error en crearProducto:', err);
     res.status(500).json({ error: 'Error al crear producto' });
@@ -315,29 +374,38 @@ export const crearProducto = async (req, res) => {
  * Edita nombre, precio, stock_minimo y/o activo, y opcionalmente suma unidades
  * al stock con `agregar_stock` (delta aditivo). Datos y delta de stock se aplican
  * en una sola sentencia UPDATE (atómica por definición — convención §6: sin
- * BEGIN/COMMIT). stock_actual nunca se setea directo, solo se incrementa.
+ * BEGIN/COMMIT). stock_actual nunca se setea directo, solo se incrementa. Si la suma
+ * se pasa de ENTERO_MAXIMO, no se aplica nada: el tope va en el WHERE, porque depende
+ * del stock que haya en ese momento.
  * @param {string}  req.params.id          - UUID del producto
  * @param {string}  req.tenant_id          - Inyectado por verificarToken
  * @param {string}  req.body.nombre        - Nombre del producto
- * @param {number}  req.body.precio        - Precio del producto
- * @param {number}  req.body.stock_minimo  - Stock mínimo para alertas
+ * @param {number}  req.body.precio        - Precio del producto, >= 0
+ * @param {number}  req.body.stock_minimo  - Stock mínimo para alertas (default 0, entero >= 0)
  * @param {boolean} req.body.activo        - Estado activo/inactivo
- * @param {number}  req.body.agregar_stock - Unidades a sumar al stock actual (default 0, >= 0)
- * @returns {JSON} Producto actualizado
+ * @param {number}  req.body.agregar_stock - Unidades a sumar al stock actual (default 0, entero >= 0)
+ * @returns {JSON} Producto actualizado; 400 si falta un campo, el precio o el stock no
+ *   son válidos o el stock resultante se pasa del máximo; 404 si el producto no existe
  */
 export const editarProducto = async (req, res) => {
   const { id } = req.params;
   const { nombre, precio, stock_minimo, activo, agregar_stock } = req.body;
 
+  if (!esUUID(id)) {
+    return res.status(404).json({ error: 'Producto no encontrado' });
+  }
   if (!nombre || precio === undefined || activo === undefined) {
     return res.status(400).json({ error: 'nombre, precio y activo son requeridos' });
   }
-
-  // agregar_stock es opcional (delta a sumar al stock actual). Si viene, debe ser >= 0.
-  const delta = Number(agregar_stock ?? 0);
-  if (!Number.isFinite(delta) || delta < 0) {
-    return res.status(400).json({ error: 'agregar_stock debe ser un número mayor o igual a 0' });
+  if (!esMontoValido(precio)) {
+    return res.status(400).json({ error: MENSAJE_PRECIO_INVALIDO });
   }
+
+  const errorStock = errorStockProducto(stock_minimo, agregar_stock);
+  if (errorStock) {
+    return res.status(400).json({ error: errorStock });
+  }
+  const delta = Number(agregar_stock ?? 0);
 
   try {
     const result = await query(
@@ -345,18 +413,29 @@ export const editarProducto = async (req, res) => {
        SET nombre = $1, precio = $2, stock_minimo = $3, activo = $4,
            stock_actual = stock_actual + $5
        WHERE id = $6 AND tenant_id = $7
+         AND COALESCE(stock_actual, 0)::bigint + $5 <= $8
        RETURNING id, nombre, precio, stock_actual, stock_minimo, activo`,
-      [nombre.trim(), Number(precio), Number(stock_minimo ?? 0), activo, delta, id, req.tenant_id],
+      [nombre.trim(), Number(precio), Number(stock_minimo ?? 0), activo, delta, id, req.tenant_id, ENTERO_MAXIMO],
       // Escritura relativa de stock (stock_actual + agregar_stock): no idempotente,
       // no reintentar (auditoría 4.2) — un retry doble-sumaría el restock. Es un
       // único UPDATE, sin compensación multi-paso (6.2 no aplica).
       { reintentar: false }
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Producto no encontrado' });
+      // Sin filas: o el producto no existe, o la suma se pasaba del tope. Una lectura
+      // solo decide qué error devolver.
+      const existe = await query(
+        `SELECT 1 FROM producto WHERE id = $1 AND tenant_id = $2`,
+        [id, req.tenant_id]
+      );
+      if (existe.rows.length === 0) {
+        return res.status(404).json({ error: 'Producto no encontrado' });
+      }
+      console.warn('[gestion] editarProducto — el stock resultante supera el máximo | producto_id:', id);
+      return res.status(400).json({ error: 'El stock resultante supera el máximo permitido' });
     }
     console.log('[gestion] editarProducto completado | producto_id:', result.rows[0].id);
-    res.json(result.rows[0]);
+    res.json(conPrecioNumero(result.rows[0]));
   } catch (err) {
     console.error('[gestion] Error en editarProducto:', err);
     res.status(500).json({ error: 'Error al editar producto' });

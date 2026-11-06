@@ -270,14 +270,13 @@ const debeSaltarseEnvio = (nombreFuncion, cliente) => {
 };
 
 /**
- * Mapea una fila enriquecida de turno (resultado de un SELECT con JOINs a
- * barbero, servicio y cliente que usa los alias estándar del proyecto:
- * inicio, fin, barbero_nombre, barbero_email, servicio_nombre, cliente_nombre,
- * cliente_email, cliente_telefono) a los objetos de dominio que consumen el
- * mailer y Google Calendar. Centraliza el desempaquetado que antes estaba
- * duplicado en cada caller. El bloque `tenant` queda con campos undefined si
- * la query no trae tenant_nombre / tenant_direccion (hoy solo lo consume el
- * mail de confirmación, que se alimenta de enriquecerTurno con el JOIN).
+ * Mapea una fila enriquecida de turno (el SELECT de sqlTurnoEnriquecido, con los
+ * alias estándar del proyecto: inicio, fin, barbero_nombre, barbero_email,
+ * servicio_nombre, cliente_nombre, cliente_email, cliente_telefono, tenant_nombre,
+ * tenant_direccion) a los objetos de dominio que consumen el mailer y Google
+ * Calendar. Centraliza el desempaquetado que antes estaba duplicado en cada caller.
+ * El nombre del tenant es el remitente de todos los mails; la dirección la usan los
+ * de confirmación, reprogramación y recordatorio.
  *
  * @param {Object} fila - fila cruda de la query, con los alias estándar
  * @returns {{turno: {inicio, fin}, barbero: {nombre, email}, servicio: {nombre}, cliente: {nombre, email, telefono}, tenant: {nombre, direccion}}}
@@ -339,7 +338,8 @@ export const enviarConfirmacion = async (turno, barbero, servicio, cliente, link
 
 /**
  * Mail de cancelación de turno hecha por cliente/barbero/admin.
- * Para cancelaciones por suspensión usar enviarCancelacionPorSuspension.
+ * Para las que dispara el sistema (suspensión, horario, feriado) usar
+ * enviarCancelacionAutomatica.
  *
  * @param {Object} turno - { inicio }
  * @param {Object} barbero - { nombre }

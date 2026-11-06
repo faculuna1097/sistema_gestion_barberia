@@ -5,7 +5,8 @@
 // gastar la cuota de Supabase Storage con archivos pesados.
 //
 // Sistema de diseño: tokens + Geist + Lucide + primitivos. El borrado usa
-// ConfirmDialog; los errores se muestran con Toast.
+// ConfirmDialog; los errores de subida y borrado van en un toast flotante
+// (utils/toast.js) y el de carga, inline con Toast.
 
 import { useState, useEffect, useRef } from 'react';
 import { ImagePlus, X } from 'lucide-react';
@@ -16,6 +17,8 @@ import {
   Toast,
   LoadingState,
 } from '../../../../components/ui';
+import { toast } from '../../../../utils/toast';
+import { mensajeDeError } from '../../../../utils/errores';
 import { theme } from '../../../../theme/tokens.js';
 
 // Definición de los tres grupos de imágenes: cuántos slots tiene cada uno y el
@@ -30,11 +33,13 @@ const GRUPOS = [
 ];
 
 // Parámetros de compresión por tipo. Los logos no necesitan tanta resolución
-// como una foto, así que se redimensionan y comprimen más agresivamente.
+// como una foto, así que se redimensionan y comprimen más agresivamente. El logo
+// se ve a ~96 px en el panel y a ~91 px en el turnero: 300 px alcanzan para una
+// pantalla de densidad 3 (iPhone) sin verse borroso (performance_frontends.md).
 const OPCIONES_COMPRESION = {
   local: { maxWidthOrHeight: 1280, maxSizeMB: 0.25 },
   corte: { maxWidthOrHeight: 1280, maxSizeMB: 0.25 },
-  logo:  { maxWidthOrHeight: 512,  maxSizeMB: 0.1 },
+  logo:  { maxWidthOrHeight: 300,  maxSizeMB: 0.1 },
 };
 
 // Lado de las miniaturas / tiles (px).
@@ -88,7 +93,6 @@ export default function BloqueImagenes() {
   const [imagenes, setImagenes]     = useState([]);
   const [cargando, setCargando]     = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
-  const [feedback, setFeedback]     = useState(null);  // { tone, texto } | null
 
   // Slot que está subiendo en este momento, identificado como 'tipo-orden'.
   // Solo uno a la vez: la subida es rápida y evita estados ambiguos.
@@ -174,7 +178,6 @@ export default function BloqueImagenes() {
 
     const { tipo, orden } = slot;
     setSubiendo(`${tipo}-${orden}`);
-    setFeedback(null);
     try {
       // Compresión + conversión a WebP en el navegador. La librería se carga
       // on-demand (lazy) recién al subir, no en el arranque del panel; si la
@@ -195,7 +198,9 @@ export default function BloqueImagenes() {
       ]);
     } catch (err) {
       console.error('[bloqueImagenes] Error en handleArchivo:', err.message);
-      if (vivoRef.current) setFeedback({ tone: 'danger', texto: err.message || 'No se pudo subir la imagen.' });
+      // Sin red, un chunk que no bajó o una imagen que no se pudo comprimir caen
+      // en el genérico; un rechazo del backend (ej. cupo lleno) trae su mensaje.
+      if (vivoRef.current) toast.error(mensajeDeError(err, 'No se pudo subir la imagen. Intentá de nuevo.'));
     } finally {
       if (vivoRef.current) setSubiendo(null);
     }
@@ -216,7 +221,7 @@ export default function BloqueImagenes() {
       console.error('[bloqueImagenes] Error en ejecutarEliminar:', err.message);
       if (vivoRef.current) {
         setAEliminar(null);
-        setFeedback({ tone: 'danger', texto: 'No se pudo eliminar la imagen. Intentá de nuevo.' });
+        toast.error('No se pudo eliminar la imagen. Intentá de nuevo.');
       }
     } finally {
       if (vivoRef.current) setEliminando(false);
@@ -266,15 +271,6 @@ export default function BloqueImagenes() {
 
       <EncabezadoImagenes />
 
-      {feedback && (
-        <Toast
-          tone={feedback.tone}
-          dismissible
-          onDismiss={() => setFeedback(null)}
-        >
-          {feedback.texto}
-        </Toast>
-      )}
 
       {GRUPOS.map((grupo) => {
         const imgs       = imagenesDe(grupo.tipo);
@@ -347,7 +343,7 @@ export default function BloqueImagenes() {
                         <button
                           type="button"
                           aria-label="Eliminar imagen"
-                          onClick={(e) => { e.stopPropagation(); setFeedback(null); setAEliminar(imagen); }}
+                          onClick={(e) => { e.stopPropagation(); setAEliminar(imagen); }}
                           style={{
                             position: 'absolute',
                             top: 4,
@@ -412,7 +408,8 @@ export default function BloqueImagenes() {
                     transition: `border-color ${theme.transitionFast}`,
                   }}
                 >
-                  <ImagePlus size={22} strokeWidth={1.5} color={theme.mutedSoft} />
+                  {/* muted y no mutedSoft: es un ícono sin texto, y WCAG pide 3:1 (da 4,80:1 sobre surfaceAlt). */}
+                  <ImagePlus size={22} strokeWidth={1.5} color={theme.muted} />
                 </button>
               )}
             </div>

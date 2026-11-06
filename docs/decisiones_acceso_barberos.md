@@ -3,7 +3,7 @@
 > ✅ **Completado (2026-06-04); en producción.** Documento **archivado**: solo el "por qué".
 > El login unificado vigente (`/api/auth/panel/login`) está en [`estado_actual.md`](estado_actual.md)
 > §Sistema. Implementación: `controllers/authPanel.js`, `utils/pin.js`, `utils/suscripcion.js`;
-> frontend en `PantallaLoginAdmin.jsx` + `PanelAdmin.jsx` + `SeccionPlanillas`/`SeccionTurnero`.
+> frontend en `PantallaLoginPanel.jsx` (antes `PantallaLoginAdmin.jsx`) + `PanelAdmin.jsx` + `SeccionPlanillas`/`SeccionTurnero`.
 
 ## Objetivo
 

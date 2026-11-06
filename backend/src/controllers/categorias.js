@@ -4,13 +4,17 @@ import { query } from '../config/db.js';
 /**
  * getCategorias
  * Devuelve las categorías de gasto activas del tenant, ordenadas alfabéticamente.
+ * Son las predeterminadas que siembra crearTenant.js; no hay categorías propias.
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
  * @returns {JSON} Array de categorías con id y nombre
  */
 export const getCategorias = async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, nombre FROM categoria_gasto WHERE tenant_id = $1 ORDER BY nombre ASC`,
+      `SELECT id, nombre
+       FROM categoria_gasto
+       WHERE tenant_id = $1 AND activo = true
+       ORDER BY nombre ASC`,
       [req.tenant_id]
     );
     res.json(result.rows);

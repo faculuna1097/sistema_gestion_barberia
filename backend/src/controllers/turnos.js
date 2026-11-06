@@ -1,9 +1,8 @@
 // /backend/src/controllers/turnos.js
 // Controller del backoffice para gestión de turnos (admin y barbero).
 // Thin wrapper: arma filtros según req.rol y req.barbero_id, delega al
-// turnosService. Cobertura: plan_turnero_v2.md sección 5 (/api/admin/turnos).
+// turnosService. Cobertura: decisiones_turnero.md.
 
-import { DateTime } from 'luxon';
 import {
   listarTurnos, calcularDuracionServicio, upsertCliente, insertarTurno,
   enriquecerTurno, armarLinkGestion, sincronizarCalendarCreacion,
@@ -13,38 +12,50 @@ import {
 import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { validarTurnoEnHorario } from '../services/horarioAtencionService.js';
 import { existeFeriado } from '../services/feriadosService.js';
-import { TZ } from '../utils/constantes.js';
 import { validarContacto } from '../utils/validarTexto.js';
+import { esFechaISO, parsearInstante } from '../utils/validarFecha.js';
+import { esMontoValido, sumaMontosValida, mensajeMontoInvalido } from '../utils/validarNumero.js';
+import { MENSAJE_TOTAL_EXCEDIDO } from '../services/cortesService.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
+import { esUUID } from '../utils/validarUuid.js';
+import { barberoSegunRol, filtroBarberoSegunRol, origenSegunRol } from '../utils/scopingRol.js';
+import { cuerpoError422, CUERPO_422_FERIADO } from '../utils/errores422.js';
 
-const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+// Mensaje del 404 de un turno, el mismo que usa turnosService.
+const MENSAJE_TURNO_NO_ENCONTRADO = 'Turno no encontrado';
 
 /**
  * GET /api/admin/turnos
- * Query params: fecha (YYYY-MM-DD) o desde+hasta (ISO). barbero_id opcional
- * (ignorado si rol=barbero).
- * @returns {JSON} array de turnos con datos de barbero, servicio y cliente
+ * Query params: fecha (YYYY-MM-DD) o desde+hasta (instantes con fecha y hora; sin
+ * zona se toman en hora argentina). barbero_id opcional (ignorado si rol=barbero).
+ * @returns {JSON} array de turnos con datos de barbero, servicio y cliente;
+ *   400 si fecha, desde, hasta o barbero_id son inválidos, o si llega uno solo de
+ *   desde y hasta
  */
 export const getTurnos = async (req, res) => {
   try {
-    const filtros = { tenantId: req.tenant_id };
-
     // Scoping por rol
-    if (req.rol === 'barbero') {
-      filtros.barberoId = req.barbero_id;
-    } else if (req.query.barbero_id) {
-      filtros.barberoId = req.query.barbero_id;
+    const { barberoId, error } = filtroBarberoSegunRol(req);
+    if (error) {
+      return res.status(400).json({ error });
     }
+    const filtros = { tenantId: req.tenant_id, barberoId };
 
     // Filtro por fecha o rango
     if (req.query.fecha) {
-      if (!REGEX_FECHA.test(req.query.fecha)) {
+      if (!esFechaISO(req.query.fecha)) {
         return res.status(400).json({ error: 'fecha debe tener formato YYYY-MM-DD' });
       }
       filtros.fecha = req.query.fecha;
-    } else if (req.query.desde && req.query.hasta) {
-      filtros.desde = req.query.desde;
-      filtros.hasta = req.query.hasta;
+    } else if (req.query.desde || req.query.hasta) {
+      // Si falta uno, parsearInstante da null y responde el mismo 400.
+      const desde = parsearInstante(req.query.desde);
+      const hasta = parsearInstante(req.query.hasta);
+      if (!desde || !hasta) {
+        return res.status(400).json({ error: 'desde y hasta deben ser fecha y hora válidas (YYYY-MM-DDTHH:MM)' });
+      }
+      filtros.desde = desde.toISO();
+      filtros.hasta = hasta.toISO();
     }
 
     const turnos = await listarTurnos(filtros);
@@ -67,8 +78,8 @@ export const crearTurnoAdmin = async (req, res) => {
   const { servicio_id, inicio } = req.body;
 
   // barbero_id: si es barbero, forzar el propio (anti escalada horizontal)
-  const barbero_id = req.rol === 'barbero' ? req.barbero_id : req.body.barbero_id;
-  const origen_creacion = req.rol === 'barbero' ? 'barbero' : 'admin';
+  const barbero_id = barberoSegunRol(req, req.body.barbero_id);
+  const origen_creacion = origenSegunRol(req);
 
   // ── Validaciones de presencia (ids + inicio) ──────────────────────────────
   if (!servicio_id || !barbero_id || !inicio) {
@@ -84,9 +95,11 @@ export const crearTurnoAdmin = async (req, res) => {
     return res.status(400).json({ error: contacto.error });
   }
 
-  const inicioDT = DateTime.fromISO(inicio, { zone: TZ });
-  if (!inicioDT.isValid) {
-    return res.status(400).json({ error: 'inicio debe ser un ISO timestamp válido' });
+  // Fecha y hora obligatorias: sin zona se toma en hora argentina; un '10:00' o
+  // una fecha sola no son un instante (→ 400). Ver parsearInstante.
+  const inicioDT = parsearInstante(inicio);
+  if (!inicioDT) {
+    return res.status(400).json({ error: 'inicio debe ser una fecha y hora válidas (ISO)' });
   }
   if (!inicioPosteriorAhora(inicioDT)) {
     return res.status(400).json({ error: 'inicio debe ser futuro' });
@@ -113,17 +126,13 @@ export const crearTurnoAdmin = async (req, res) => {
     const valHorario = await validarTurnoEnHorario(req.tenant_id, inicioDT, finDT);
     if (!valHorario.valido) {
       console.warn('[turnos] crearTurnoAdmin — turno fuera del horario del negocio | codigo:', valHorario.codigo);
-      return res.status(422).json({
-        codigo: valHorario.codigo,
-        mensaje: valHorario.mensaje,
-        ...(valHorario.limite && { limite: valHorario.limite }),
-      });
+      return res.status(422).json(cuerpoError422(valHorario));
     }
 
     // ── Validar que el turno no caiga en un feriado ─────────────────────────
     if (await existeFeriado(req.tenant_id, inicioDT.toISODate())) {
       console.warn('[turnos] crearTurnoAdmin — turno en día feriado');
-      return res.status(422).json({ codigo: 'feriado', mensaje: 'El negocio está cerrado por feriado ese día' });
+      return res.status(422).json(CUERPO_422_FERIADO);
     }
 
     // ── Upsert cliente (datos ya normalizados por validarContacto) ──────────
@@ -138,7 +147,7 @@ export const crearTurnoAdmin = async (req, res) => {
       });
     } catch (err) {
       if (err.code === 'SLOT_OCUPADO') {
-        console.warn('[turnos] crearTurnoAdmin — slot ya reservado');
+        console.warn('[turnos] crearTurnoAdmin — slot ocupado (turno o suspensión)');
         return res.status(409).json({ error: err.message });
       }
       if (err.code === 'REFERENCIA_INVALIDA') {
@@ -175,25 +184,35 @@ export const crearTurnoAdmin = async (req, res) => {
 
 /**
  * PATCH /api/admin/turnos/:id/estado
- * Cambia estado a 'completado' o 'no_asistio'.
- * Si rol=barbero, solo puede afectar turnos propios.
- * @param {Object} req.body - { estado: 'completado' | 'no_asistio' }
+ * Marca un turno reservado que ya empezó como 'no_asistio', el único estado
+ * que se cambia a mano. 'completado' → 400: un turno se completa registrando
+ * su corte (POST /:id/completar o el iPad). Un turno que no empezó → 400; uno
+ * que no está reservado → 409.
+ * Si rol=barbero, solo puede afectar turnos propios (uno ajeno → 404).
+ * @param {Object} req.body - { estado: 'no_asistio' }
  * @returns {JSON} { id, estado }
  */
 export const patchEstado = async (req, res) => {
+  if (!esUUID(req.params.id)) {
+    return res.status(404).json({ error: MENSAJE_TURNO_NO_ENCONTRADO });
+  }
+
   const { estado } = req.body;
   if (!estado) {
     return res.status(400).json({ error: 'estado es requerido' });
   }
 
   // Scoping: barbero solo cambia los suyos
-  const barberoId = req.rol === 'barbero' ? req.barbero_id : null;
+  const barberoId = barberoSegunRol(req, null);
 
   try {
     const resultado = await cambiarEstado(req.params.id, estado, req.tenant_id, barberoId);
     console.log('[turnos] patchEstado completado | turno_id:', resultado.id, '| estado:', resultado.estado);
     res.json(resultado);
   } catch (err) {
+    if (err.code === 'ESTADO_NO_PERMITIDO' || err.code === 'TURNO_NO_EMPEZO') {
+      return res.status(400).json({ error: err.message });
+    }
     if (err.code === 'NO_ENCONTRADO') {
       return res.status(404).json({ error: err.message });
     }
@@ -207,31 +226,40 @@ export const patchEstado = async (req, res) => {
 
 /**
  * POST /api/admin/turnos/:id/completar
- * Completa un turno registrando su corte (forma_pago + precio + propina). A
- * diferencia de patchEstado (que solo cambia el estado a 'completado'), esta vía
- * deja el registro financiero del turno — es el equivalente backoffice del flujo
- * operativo del iPad. Acepta servicio_id opcional para cambiar el servicio al
+ * Completa un turno registrando su corte (forma_pago + precio + propina). Es la
+ * única vía del backoffice para completar un turno (patchEstado rechaza
+ * 'completado'), y deja el registro financiero del turno — es el equivalente
+ * backoffice del flujo operativo del iPad. Acepta servicio_id opcional para cambiar el servicio al
  * completar (default: el del turno); si se cambia, el corte Y el turno quedan con
- * ese servicio. Si rol=barbero, solo puede completar turnos propios.
+ * ese servicio. Si rol=barbero, solo puede completar turnos propios y reservados;
+ * el admin también uno marcado 'no_asistio' (el cliente vino). Si el turno cambió
+ * mientras tanto → 409 y no se registra nada.
  * @param {Object} req.body - { forma_pago, precio, propina?, servicio_id? }
  * @returns {JSON} 201 { id, estado: 'completado', servicio_id, corte_id, monto_total }
  */
 export const completarTurno = async (req, res) => {
+  if (!esUUID(req.params.id)) {
+    return res.status(404).json({ error: MENSAJE_TURNO_NO_ENCONTRADO });
+  }
+
   const { forma_pago, precio, propina, servicio_id } = req.body;
 
   // ── Validaciones de input ──────────────────────────────────────────────────
   if (!esFormaPagoValida(forma_pago)) {
     return res.status(400).json({ error: "forma_pago es requerida y debe ser 'efectivo' o 'mercado_pago'" });
   }
-  if (precio === undefined || Number.isNaN(Number(precio)) || Number(precio) < 0) {
-    return res.status(400).json({ error: 'precio es requerido y debe ser un número >= 0' });
+  if (!esMontoValido(precio)) {
+    return res.status(400).json({ error: mensajeMontoInvalido('precio') });
   }
-  if (propina !== undefined && (Number.isNaN(Number(propina)) || Number(propina) < 0)) {
-    return res.status(400).json({ error: 'propina debe ser un número >= 0' });
+  if (propina !== undefined && !esMontoValido(propina)) {
+    return res.status(400).json({ error: mensajeMontoInvalido('propina', { requerido: false }) });
+  }
+  if (!sumaMontosValida(precio, propina ?? 0)) {
+    return res.status(400).json({ error: MENSAJE_TOTAL_EXCEDIDO });
   }
 
   // Scoping: barbero solo completa los suyos
-  const barberoId = req.rol === 'barbero' ? req.barbero_id : null;
+  const barberoId = barberoSegunRol(req, null);
 
   try {
     const resultado = await completarTurnoConCorte({
@@ -246,13 +274,10 @@ export const completarTurno = async (req, res) => {
     console.log('[turnos] completarTurno completado | turno_id:', resultado.id, '| corte_id:', resultado.corte_id);
     res.status(201).json(resultado);
   } catch (err) {
-    if (err.code === 'NO_ENCONTRADO') {
+    if (err.code === 'NO_ENCONTRADO' || err.code === 'SERVICIO_INVALIDO' || err.code === 'TURNO_INEXISTENTE') {
       return res.status(404).json({ error: err.message });
     }
-    if (err.code === 'SERVICIO_INVALIDO') {
-      return res.status(400).json({ error: err.message });
-    }
-    if (err.code === 'ESTADO_INVALIDO' || err.code === 'TURNO_YA_VINCULADO') {
+    if (err.code === 'ESTADO_INVALIDO' || err.code === 'TURNO_YA_VINCULADO' || err.code === 'TURNO_YA_COMPLETADO') {
       return res.status(409).json({ error: err.message });
     }
     console.error('[turnos] Error en completarTurno:', err);
@@ -262,19 +287,28 @@ export const completarTurno = async (req, res) => {
 
 /**
  * DELETE /api/admin/turnos/:id
- * Cancela el turno. Si rol=barbero, solo puede cancelar los propios.
+ * Cancela el turno. Si rol=barbero, solo puede cancelar los propios. Solo un
+ * turno reservado que no empezó: uno que ya empezó → 400 (se marca "no asistió");
+ * uno que no está reservado → 409.
  * Dispara best-effort Calendar + mail.
  * @returns {JSON} { id, estado: 'cancelado' }
  */
 export const deleteTurno = async (req, res) => {
-  const canceladoPor = req.rol === 'barbero' ? 'barbero' : 'admin';
-  const barberoId = req.rol === 'barbero' ? req.barbero_id : null;
+  if (!esUUID(req.params.id)) {
+    return res.status(404).json({ error: MENSAJE_TURNO_NO_ENCONTRADO });
+  }
+
+  const canceladoPor = origenSegunRol(req);
+  const barberoId = barberoSegunRol(req, null);
 
   try {
     const resultado = await cancelarTurnoPorId(req.params.id, canceladoPor, req.tenant_id, barberoId);
     console.log('[turnos] deleteTurno completado | turno_id:', resultado.id);
     res.json(resultado);
   } catch (err) {
+    if (err.code === 'TURNO_YA_EMPEZO') {
+      return res.status(400).json({ error: err.message });
+    }
     if (err.code === 'NO_ENCONTRADO') {
       return res.status(404).json({ error: err.message });
     }

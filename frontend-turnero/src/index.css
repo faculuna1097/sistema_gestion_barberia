@@ -1,6 +1,9 @@
 /* /frontend-turnero/src/index.css
    Reset global + carga de fuentes + animaciones reutilizables.
-   No define estilos de componentes — eso vive en los .jsx de /components/ui/. */
+   No define estilos de componentes — eso vive en los .jsx de /components/ui/.
+   Excepción: el bloque "Movimiento del turnero" (clases tt-), al final.
+   Los colores de acá replican tokens de theme/tokens.js (el CSS no puede
+   importarlos): si cambia un token, actualizarlo también acá. */
 
 /* ── Geist + Geist Mono via Google Fonts ─────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
@@ -30,8 +33,8 @@ body {
   font-family: 'Geist', 'DM Sans', system-ui, -apple-system, sans-serif;
   font-size: 14px;
   line-height: 1.5;
-  color: #09090B;
-  background: #FAFAFA;
+  color: #09090B;        /* theme.ink */
+  background: #FFFFFF;   /* theme.bg */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -54,12 +57,12 @@ a {
 
 /* Quita outline default — cada componente define su focus ring vía boxShadow */
 *:focus { outline: none; }
-*:focus-visible { outline: 2px solid #4F46E5; outline-offset: 2px; }
+*:focus-visible { outline: 2px solid #18181B; outline-offset: 2px; }  /* theme.accent */
 
 /* Scrollbar discreto en navegadores webkit */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #E4E4E7; border-radius: 999px; border: 2px solid #FAFAFA; }
+::-webkit-scrollbar-thumb { background: #E4E4E7; border-radius: 999px; border: 2px solid #FFFFFF; }
 ::-webkit-scrollbar-thumb:hover { background: #A1A1AA; }
 
 /* ── Animaciones reutilizables ───────────────────────────────── */
@@ -67,14 +70,10 @@ a {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
-@keyframes om-fade {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
+/* Entrada del tilde del éxito: crece hasta su tamaño sin pasarse (sin rebote). */
 @keyframes om-pop {
-  0%   { opacity: 0; transform: scale(0.6); }
-  60%  { opacity: 1; transform: scale(1.08); }
-  100% { opacity: 1; transform: scale(1); }
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
 }
 @keyframes om-stroke {
   to { stroke-dashoffset: 0; }
@@ -86,4 +85,95 @@ a {
 @keyframes om-dialog-in {
   from { opacity: 0; transform: scale(0.96) translateY(8px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Con "reducir movimiento", el tilde del éxito y el diálogo solo aparecen con
+   un fundido, la tilde ya está dibujada y el skeleton queda quieto (sin el
+   brillo que lo recorre). Estas animaciones se aplican con `animation` inline
+   (no con una clase), así que no se pueden pisar desde una regla: se
+   redefinen los keyframes, y gana la última definición que aplica. */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes om-pop {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes om-dialog-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes om-stroke {
+    from, to { stroke-dashoffset: 0; }
+  }
+  @keyframes om-shimmer {
+    from, to { background-position: 0 0; }
+  }
+}
+
+/* ── Movimiento del turnero (clases tt-) ─────────────────────────
+   Excepción a "sin clases globales" (sistema_de_disenio.md §4.1), igual que
+   los `om-` de la landing de marketing: los keyframes y los pseudo-estados
+   (`:active`) no se pueden escribir inline. El resto sigue inline.
+
+   - tt-pantalla: entrada de cada pantalla (la pone PageContainer). La
+     dirección la decide el atributo data-tt-direccion de un ancestro (App):
+     "adelante" → entra desde la derecha; "atras" → desde la izquierda;
+     sin atributo (primera carga, gestión del turno) → fundido.
+   - tt-presionable: se achica apenas mientras se toca. La transición de
+     `transform` la declara cada componente en su `transition` inline,
+     porque un `transition` inline pisa al de cualquier clase.
+   - tt-aparecer: fundido corto del contenido que reemplaza a un skeleton.
+   - tt-escalonado: aparición escalonada de listas. Cada ítem lleva
+     style={{ '--tt-indice': i }}; el retraso crece 20 ms por ítem y se corta
+     en 200 ms, así una lista larga no tarda más que una corta.
+
+   Las entradas usan fill-mode `backwards` (no `both`): al terminar, la
+   animación suelta el `transform`. Si lo retuviera, pisaría el :active de
+   tt-presionable y dejaría al contenedor como bloque contenedor de los
+   `position: fixed` (el overlay de ConfirmDialog quedaría atado a la columna).
+
+   Con prefers-reduced-motion: reduce, todo queda en un fundido corto o nada;
+   la pausa de ~150 ms de la elección la pone en 0 utils/movimiento.js. */
+
+@keyframes tt-fundido {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes tt-entra-derecha {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes tt-entra-izquierda {
+  from { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes tt-sube {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.tt-pantalla {
+  animation: tt-fundido 240ms cubic-bezier(0.25, 1, 0.5, 1) backwards;
+}
+[data-tt-direccion="adelante"] .tt-pantalla { animation-name: tt-entra-derecha; }
+[data-tt-direccion="atras"] .tt-pantalla { animation-name: tt-entra-izquierda; }
+
+/* Sin el recuadro gris que iOS pinta al tocar: el feedback es el achique. */
+.tt-presionable { -webkit-tap-highlight-color: transparent; }
+.tt-presionable:active:not(:disabled) { transform: scale(0.98); }
+
+.tt-aparecer {
+  animation: tt-fundido 180ms ease-out backwards;
+}
+
+.tt-escalonado {
+  animation: tt-sube 180ms cubic-bezier(0.25, 1, 0.5, 1) backwards;
+  animation-delay: min(var(--tt-indice, 0) * 20ms, 200ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tt-pantalla,
+  [data-tt-direccion] .tt-pantalla { animation-name: tt-fundido; animation-duration: 120ms; }
+  .tt-presionable:active:not(:disabled) { transform: none; }
+  .tt-aparecer { animation-duration: 120ms; }
+  .tt-escalonado { animation-name: tt-fundido; animation-duration: 120ms; animation-delay: 0ms; }
 }

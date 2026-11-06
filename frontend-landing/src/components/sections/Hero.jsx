@@ -3,12 +3,12 @@
 // oferta + h1 + subtítulo + doble CTA + reaseguro, y debajo el mockup del
 // panel dentro de un ScreenshotFrame.
 
-import { MessageCircle } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
 import { linkWhatsApp } from '../../utils/contacto.js';
 import { CAPTURAS } from '../../config/landing.js';
 import Container from '../landing/Container.jsx';
 import Button from '../ui/Button.jsx';
+import IconoWhatsApp from '../ui/IconoWhatsApp.jsx';
 import FreeMonthBadge from '../landing/FreeMonthBadge.jsx';
 import ScreenshotFrame from '../landing/ScreenshotFrame.jsx';
 
@@ -79,7 +79,7 @@ function Hero() {
           {/* Doble CTA */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginTop: 4 }}>
             <Button href={linkWhatsApp()} external variant="primary" full={false}>
-              <MessageCircle size={18} strokeWidth={2} aria-hidden="true" />
+              <IconoWhatsApp size={18} />
               Probá tu primer mes gratis
             </Button>
             <Button href="#como-funciona" variant="secondary" full={false}>
@@ -128,7 +128,7 @@ function Hero() {
               fontSize: theme.sizeMicro,
               textTransform: 'uppercase',
               letterSpacing: '0.06em',
-              color: theme.mutedSoft,
+              color: theme.muted,
             }}
           >
             Planilla semanal — sin cuaderno ni Excel

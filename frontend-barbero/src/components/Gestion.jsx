@@ -1,7 +1,8 @@
 // /frontend-barbero/src/components/Gestion.jsx
 // Pantalla drilldown desde "Más" con dos sub-secciones:
 //   - Mis Horarios: ver y editar el horario semanal habitual.
-//   - Mis Suspensiones: listar, crear y eliminar suspensiones.
+//   - Mis Suspensiones: listar, crear y liberar suspensiones (ausencias). Los
+//     descansos no se listan acá: se marcan y se liberan desde la Agenda.
 // Maneja el flujo de conflicto 409 (turnos afectados) con ConfirmDialog extendido.
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -13,10 +14,10 @@ import {
   getTenant,
   getSuspensiones,
   crearSuspension,
-  eliminarSuspension,
+  liberarSuspension,
 } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
-import { fmtFechaHora } from '../utils/fecha.js';
+import { fmtFechaHora, fmtHora, fechaDeISO } from '../utils/fecha.js';
 
 import {
   TopBar,
@@ -367,7 +368,7 @@ function FilaDia({ dia, bloques, horarioTenant, onAgregar, onActualizar, onElimi
       {diaCerrado ? (
         <div style={{
           fontFamily: theme.body,
-          fontSize: theme.sizeMicro + 1,
+          fontSize: theme.sizeBody,
           color: theme.muted,
         }}>
           El negocio no abre este día
@@ -531,7 +532,9 @@ function InputHora({ value, onChange, min, max, invalido, aria }) {
 
 /**
  * TabSuspensiones
- * Lista futuras + form alta + manejo de conflicto 409 + eliminación con confirm.
+ * Lista las suspensiones que no terminaron + form alta + manejo de conflicto 409
+ * + liberación con confirm. Solo `tipo = 'suspension'`: los descansos viven en
+ * la Agenda.
  */
 function TabSuspensiones({ barbero }) {
   const [suspensiones, setSuspensiones] = useState([]);
@@ -548,22 +551,23 @@ function TabSuspensiones({ barbero }) {
   // ConfirmDialog para conflicto 409.
   const [conflicto, setConflicto] = useState(null); // { turnos_afectados }
 
-  // ConfirmDialog para eliminación.
-  const [confirmEliminar, setConfirmEliminar] = useState(null); // { id, desde, hasta }
-  const [eliminando, setEliminando] = useState(false);
+  // ConfirmDialog para liberar (o terminar, si está en curso).
+  const [confirmLiberar, setConfirmLiberar] = useState(null); // la suspensión a liberar
+  const [liberando, setLiberando] = useState(false);
 
   // Banner de feedback efímero.
   const [feedback, setFeedback] = useState(null);
 
   /**
    * cargar
-   * Trae suspensiones futuras del barbero autenticado.
+   * Trae las suspensiones del barbero autenticado que todavía no terminaron
+   * (sin los descansos).
    */
   const cargar = useCallback(async () => {
     setCargando(true);
     setErrorCarga(null);
     try {
-      const data = await getSuspensiones();
+      const data = await getSuspensiones({ tipo: 'suspension' });
       setSuspensiones(data);
     } catch (err) {
       console.error('[Gestion/Suspensiones] Error cargando:', err.message);
@@ -597,8 +601,9 @@ function TabSuspensiones({ barbero }) {
 
   /**
    * crear
-   * POST a /api/admin/suspensiones. Si devuelve conflicto (409), abre el modal
-   * con los turnos afectados y queda esperando confirmación.
+   * POST a /api/admin/suspensiones. Si pisa turnos reservados (409 con
+   * `turnos_afectados`), abre el modal con esos turnos y queda esperando
+   * confirmación.
    * @param {boolean} confirmarCancelacion - true tras pasar por el modal de conflicto.
    */
   const crear = async (confirmarCancelacion = false) => {
@@ -622,16 +627,16 @@ function TabSuspensiones({ barbero }) {
       };
       const res = await crearSuspension(datos);
 
-      if (res.conflicto) {
-        setConflicto(res);
-        return;
-      }
-
       mostrarFeedback('ok', `Suspensión creada. ${res.turnos_cancelados || 0} turnos cancelados.`);
       setConflicto(null);
       limpiarForm();
       await cargar();
     } catch (err) {
+      // Pisa turnos reservados: no es un error, es la pregunta de si cancelarlos.
+      if (err.status === 409 && err.turnos_afectados) {
+        setConflicto({ turnos_afectados: err.turnos_afectados });
+        return;
+      }
       console.error('[Gestion/Suspensiones] Error creando:', err.message);
       mostrarFeedback('error', `Error al crear: ${err.message}`);
     } finally {
@@ -640,25 +645,30 @@ function TabSuspensiones({ barbero }) {
   };
 
   /**
-   * eliminar
-   * DELETE /api/admin/suspensiones/:id tras confirmar.
+   * liberar
+   * Libera la suspensión tras confirmar (POST /api/admin/suspensiones/:id/liberar): si
+   * no empezó deja de bloquear entera; si está en curso, termina ahora. La fila
+   * queda como registro. Los turnos que se cancelaron al crearla no vuelven.
    */
-  const eliminar = async () => {
-    if (!confirmEliminar) return;
-    setEliminando(true);
+  const liberar = async () => {
+    if (!confirmLiberar) return;
+    const enCurso = suspensionEnCurso(confirmLiberar);
+    setLiberando(true);
     try {
-      await eliminarSuspension(confirmEliminar.id);
-      setConfirmEliminar(null);
-      mostrarFeedback('ok', 'Suspensión eliminada.');
+      await liberarSuspension(confirmLiberar.id);
+      setConfirmLiberar(null);
+      mostrarFeedback('ok', enCurso ? 'Suspensión terminada.' : 'Suspensión liberada.');
       await cargar();
     } catch (err) {
-      console.error('[Gestion/Suspensiones] Error eliminando:', err.message);
-      mostrarFeedback('error', `Error al eliminar: ${err.message}`);
-      setConfirmEliminar(null);
+      console.error('[Gestion/Suspensiones] Error liberando:', err.message);
+      mostrarFeedback('error', `No se pudo liberar: ${err.message}`);
+      setConfirmLiberar(null);
     } finally {
-      setEliminando(false);
+      setLiberando(false);
     }
   };
+
+  const confirmLiberarEnCurso = confirmLiberar ? suspensionEnCurso(confirmLiberar) : false;
 
   return (
     <>
@@ -759,7 +769,7 @@ function TabSuspensiones({ barbero }) {
             <FilaSuspension
               key={s.id}
               suspension={s}
-              onEliminar={() => setConfirmEliminar(s)}
+              onLiberar={() => setConfirmLiberar(s)}
             />
           ))}
         </div>
@@ -809,31 +819,53 @@ function TabSuspensiones({ barbero }) {
         onCancel={() => setConflicto(null)}
       />
 
-      {/* Modal: confirmar eliminación */}
+      {/* Modal: confirmar liberación (o terminar, si está en curso) */}
       <ConfirmDialog
-        open={!!confirmEliminar}
-        title="Eliminar suspensión"
+        open={!!confirmLiberar}
+        title={confirmLiberarEnCurso ? 'Terminar suspensión' : 'Liberar suspensión'}
         message={
-          confirmEliminar
-            ? `La suspensión del ${fmtFechaHora(confirmEliminar.desde)} al ${fmtFechaHora(confirmEliminar.hasta)} se va a eliminar. Esta acción no se puede deshacer.`
+          confirmLiberar
+            ? `${confirmLiberarEnCurso
+              ? 'La suspensión termina ahora y los horarios que quedan'
+              : `La suspensión del ${fmtFechaHora(confirmLiberar.desde)} al ${fmtFechaHora(confirmLiberar.hasta)} se libera y esos horarios`
+            } vuelven a estar disponibles para reservar. Los turnos que se cancelaron al crearla no se recuperan.`
             : ''
         }
-        confirmLabel="Sí, eliminar"
+        confirmLabel={confirmLiberarEnCurso ? 'Sí, terminar' : 'Sí, liberar'}
         cancelLabel="Volver"
-        confirmVariant="danger"
-        loading={eliminando}
-        onConfirm={eliminar}
-        onCancel={() => setConfirmEliminar(null)}
+        confirmVariant="primary"
+        loading={liberando}
+        onConfirm={liberar}
+        onCancel={() => setConfirmLiberar(null)}
       />
     </>
   );
 }
 
 /**
- * FilaSuspension
- * Card de una suspensión: rango de fechas + motivo opcional + botón eliminar.
+ * suspensionEnCurso
+ * True si la suspensión ya empezó (liberarla la termina en este momento).
+ * @param {{ desde: string }} suspension
+ * @returns {boolean}
  */
-function FilaSuspension({ suspension, onEliminar }) {
+function suspensionEnCurso(suspension) {
+  return new Date(suspension.desde) <= new Date();
+}
+
+/**
+ * FilaSuspension
+ * Card de una suspensión: rango de fechas + motivo opcional + botón "Liberar"
+ * ("Terminar" si está en curso). Las que cargó el administrador (origen 'admin')
+ * no muestran el botón: el barbero no las puede liberar (el backend responde 403 igual).
+ * Si termina el mismo día que empieza, el "hasta" lleva solo la hora: con la
+ * fecha completa, a 375 px ocupaba dos renglones al lado del botón.
+ * @param {Object} props.suspension
+ * @param {() => void} props.onLiberar
+ */
+function FilaSuspension({ suspension, onLiberar }) {
+  const puedeLiberar = suspension.origen !== 'admin';
+  const accion = suspensionEnCurso(suspension) ? 'Terminar' : 'Liberar';
+  const mismoDia = fechaDeISO(suspension.desde) === fechaDeISO(suspension.hasta);
   return (
     <Card padding={12}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -848,16 +880,16 @@ function FilaSuspension({ suspension, onEliminar }) {
           </div>
           <div style={{
             fontFamily: theme.body,
-            fontSize: theme.sizeMicro + 1,
+            fontSize: theme.sizeBody,
             color: theme.muted,
             marginTop: 2,
           }}>
-            hasta {fmtFechaHora(suspension.hasta)}
+            hasta {mismoDia ? `${fmtHora(suspension.hasta)} hs` : fmtFechaHora(suspension.hasta)}
           </div>
           {suspension.motivo && (
             <div style={{
               fontFamily: theme.body,
-              fontSize: theme.sizeMicro + 1,
+              fontSize: theme.sizeBody,
               color: theme.inkSoft,
               marginTop: 6,
               fontStyle: 'italic',
@@ -867,26 +899,18 @@ function FilaSuspension({ suspension, onEliminar }) {
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={onEliminar}
-          aria-label="Eliminar suspensión"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 44,
-            height: 44,
-            background: 'transparent',
-            border: 'none',
-            borderRadius: theme.radiusSm,
-            cursor: 'pointer',
-            color: theme.muted,
-            flexShrink: 0,
-          }}
-        >
-          <Trash2 size={16} strokeWidth={1.75} aria-hidden="true" />
-        </button>
+        {puedeLiberar && (
+          <div style={{ flexShrink: 0 }}>
+            <Button
+              variant="secondary"
+              full={false}
+              onClick={onLiberar}
+              ariaLabel={`${accion} la suspensión del ${fmtFechaHora(suspension.desde)}`}
+            >
+              {accion}
+            </Button>
+          </div>
+        )}
       </div>
     </Card>
   );

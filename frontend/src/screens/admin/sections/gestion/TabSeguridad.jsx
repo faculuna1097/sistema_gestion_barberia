@@ -8,7 +8,8 @@
 // un modal específico con el form propio del cambio.
 //
 // Sistema de diseño: tokens + Geist + Lucide + onClick. Loading inline para
-// el usuario operativo. Feedback de éxito vía primitivo Toast (auto-dismiss).
+// el usuario operativo. Feedback de éxito con toast flotante (utils/toast.js);
+// los errores de cada modal van inline con Toast.
 //
 // Deudas detectadas y anotadas en el plan:
 // - Cambiar contraseña / usuario operativo no pide la contraseña actual.
@@ -30,6 +31,8 @@ import {
   Toast,
   BotonIconoFila,
 } from '../../../../components/ui';
+import { errorDeRespuesta, mensajeDeError } from '../../../../utils/errores';
+import { toast } from '../../../../utils/toast';
 import { theme } from '../../../../theme/tokens.js';
 
 // ─── Sub-componentes locales ──────────────────────────────────────────────────
@@ -199,7 +202,6 @@ export default function TabSeguridad() {
   const [cargandoUsuario, setCargandoUsuario]   = useState(true);
   const [errorCarga, setErrorCarga]             = useState(false); // true si el fetch falló (distinto de "sin configurar")
   const [modalAbierto, setModalAbierto]         = useState(null); // 'pin'|'usuario'|'password'|null
-  const [toast, setToast]                       = useState(null); // { tone, texto }
 
   // ── Carga del usuario operativo (reutilizable: pre-carga + reintento) ──────
   // Distingue "no se pudo cargar" (errorCarga) de "no hay usuario configurado"
@@ -222,7 +224,7 @@ export default function TabSeguridad() {
 
   const cerrarModal = () => setModalAbierto(null);
 
-  const mostrarExito = (texto) => setToast({ tone: 'success', texto });
+  const mostrarExito = (texto) => toast.exito(texto);
 
   const trasCambioUsuario = (nuevoUsuario) => {
     setUsuarioOperativo(nuevoUsuario);
@@ -261,14 +263,6 @@ export default function TabSeguridad() {
       gap: 16,
       maxWidth: 600,
     }}>
-      {toast && (
-        <Toast
-          key={toast.texto}
-          tone={toast.tone}
-          autoDismissMs={4000}
-          onDismiss={() => setToast(null)}
-        >{toast.texto}</Toast>
-      )}
 
       <CardConfig
         titulo="PIN de administrador"
@@ -371,14 +365,11 @@ function ModalCambiarPin({ open, onClose, onSuccess }) {
         method: 'PUT',
         body: JSON.stringify({ pin_actual: pinActual, pin_nuevo: pinNuevo }),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Error del servidor');
-      }
+      if (!res.ok) throw await errorDeRespuesta(res);
       onSuccess();
     } catch (err) {
       console.error('[modalCambiarPin] Error:', err.message);
-      setError(err.message || 'No se pudo cambiar el PIN.');
+      setError(mensajeDeError(err, 'No se pudo cambiar el PIN. Intentá de nuevo.'));
     } finally {
       setGuardando(false);
     }
@@ -480,7 +471,7 @@ function ModalCambiarUsuario({ open, onClose, usuarioActual, onSuccess }) {
       onSuccess(usuarioLimpio);
     } catch (err) {
       console.error('[modalCambiarUsuario] Error:', err.message);
-      setError(err.message || 'No se pudo cambiar el usuario.');
+      setError(mensajeDeError(err, 'No se pudo cambiar el usuario. Intentá de nuevo.'));
     } finally {
       setGuardando(false);
     }
@@ -575,7 +566,7 @@ function ModalCambiarPassword({ open, onClose, onSuccess }) {
       onSuccess();
     } catch (err) {
       console.error('[modalCambiarPassword] Error:', err.message);
-      setError(err.message || 'No se pudo cambiar la contraseña.');
+      setError(mensajeDeError(err, 'No se pudo cambiar la contraseña. Intentá de nuevo.'));
     } finally {
       setGuardando(false);
     }

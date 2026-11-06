@@ -2,8 +2,7 @@
 // Endpoints para la SeccionInicio del panel de administrador.
 
 import { query } from '../config/db.js';
-
-const TZ = 'America/Argentina/Buenos_Aires';
+import { TZ } from '../utils/constantes.js';
 
 // ─── GET /api/inicio/resumen-dia ──────────────────────────────────────────────
 /**

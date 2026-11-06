@@ -7,9 +7,14 @@
 // Las funciones de rutas protegidas lo leen automáticamente vía apiFetch().
 // Las funciones de rutas públicas usan fetch() directamente con publicHeaders.
 
+import { errorDeRespuesta, fetchConDiagnostico } from '../utils/errores';
+
 const BASE_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
   : 'http://localhost:3001/api';
+
+// Para diagnosticar un pedido que no recibió respuesta (fetchConDiagnostico).
+const URL_HEALTH = `${BASE_URL}/health`;
 
 // Extraer subdominio del hostname actual.
 // Solo se considera subdominio si estamos en el dominio de producción. En
@@ -192,7 +197,9 @@ export const apiFetchOperativo = async (path, options = {}) => {
     ...(subdominio ? { 'X-Tenant-Subdomain': subdominio } : {}),
     ...(options.headers || {}),
   };
-  const response = await fetch(url, { ...options, headers });
+  // Con diagnóstico: la precarga del arranque necesita saber si, sin
+  // respuesta, el servidor está caído o no hay red (PantallaError).
+  const response = await fetchConDiagnostico(url, { ...options, headers }, URL_HEALTH);
   if (response.status === 401) {
     console.warn('[api] apiFetchOperativo — 401 | path:', path, '| limpiando token y notificando a la app');
     clearAuthTokenOperativo();
@@ -221,7 +228,7 @@ export const apiFetchOperativo = async (path, options = {}) => {
  */
 export const getBarberosOperativo = async () => {
   const response = await apiFetchOperativo(`/barberos`);
-  if (!response.ok) throw new Error('Error al obtener barberos');
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 
@@ -233,7 +240,7 @@ export const getBarberosOperativo = async () => {
  */
 export const getServicios = async () => {
   const response = await apiFetchOperativo(`/servicios`);
-  if (!response.ok) throw new Error('Error al obtener servicios');
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 
@@ -245,7 +252,7 @@ export const getServicios = async () => {
  */
 export const getProductos = async () => {
   const response = await apiFetchOperativo(`/productos`);
-  if (!response.ok) throw new Error('Error al obtener productos');
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 
@@ -257,7 +264,7 @@ export const getProductos = async () => {
  */
 export const getCategorias = async () => {
   const response = await apiFetchOperativo(`/categorias`);
-  if (!response.ok) throw new Error('Error al obtener categorías');
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 
@@ -282,7 +289,11 @@ export const getTurnosDelDia = async (barberoId, fecha) => {
  * Si datos incluye turno_id, el backend vincula el corte al turno y lo marca
  * como completado.
  * @param {Object} datos - { barbero_id, servicio_id, precio, forma_pago, propina, turno_id? }
- * @returns {Promise<Object>} { message, corte_id, monto_total }
+ * @returns {Promise<Object>} { message, corte_id, monto_total, turno_vinculado }
+ *   turno_vinculado es false si vino turno_id pero el turno se había cancelado y
+ *   el corte quedó sin turno.
+ * @throws {Error} con `status` (409: el turno ya está completado o cambió; 404: el
+ *   turno, el barbero o el servicio ya no existen) y el mensaje del servidor.
  */
 export const registrarCorte = async (datos) => {
   const response = await apiFetchOperativo('/cortes', {
@@ -291,7 +302,9 @@ export const registrarCorte = async (datos) => {
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al registrar el corte');
+    const err = new Error(data.error || 'Error al registrar el corte');
+    err.status = response.status;
+    throw err;
   }
   return response.json();
 };
@@ -301,13 +314,15 @@ export const registrarCorte = async (datos) => {
  * Envía una nueva venta al backend.
  * @param {Object} datos - { producto_id, cantidad, precio_unitario, forma_pago }
  * @returns {Promise<Object>} { message, venta_id, monto_total }
+ * @throws {ErrorServidor} con el mensaje del servidor (ej. 400 "Stock
+ *   insuficiente. Disponible: N"; para `mensajeErrorRegistro`)
  */
 export const registrarVenta = async (datos) => {
   const response = await apiFetchOperativo('/ventas', {
     method: 'POST',
     body: JSON.stringify(datos),
   });
-  if (!response.ok) throw new Error('Error al registrar la venta');
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 
@@ -316,13 +331,14 @@ export const registrarVenta = async (datos) => {
  * Envía un nuevo gasto al backend.
  * @param {Object} datos - { categoria_id, descripcion, monto, forma_pago }
  * @returns {Promise<Object>} { message, gasto_id }
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeErrorRegistro`)
  */
 export const registrarGasto = async (datos) => {
   const response = await apiFetchOperativo('/gastos', {
     method: 'POST',
     body: JSON.stringify(datos),
   });
-  if (!response.ok) throw new Error('Error al registrar el gasto');
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 
@@ -335,8 +351,8 @@ export const registrarGasto = async (datos) => {
  * (tenant_imagen tipo='logo').
  */
 export const getNegocio = async () => {
-  const response = await fetch(`${BASE_URL}/negocio`, { headers: publicHeaders });
-  if (!response.ok) throw new Error('Error al obtener datos del negocio');
+  const response = await fetchConDiagnostico(`${BASE_URL}/negocio`, { headers: publicHeaders }, URL_HEALTH);
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 
@@ -347,8 +363,8 @@ export const getNegocio = async () => {
  * @returns {Promise<Array>} [{ id, tipo: 'local'|'corte'|'logo', orden, url }]
  */
 export const getImagenesNegocio = async () => {
-  const response = await fetch(`${BASE_URL}/negocio/imagenes`, { headers: publicHeaders });
-  if (!response.ok) throw new Error('Error al obtener imágenes del negocio');
+  const response = await fetchConDiagnostico(`${BASE_URL}/negocio/imagenes`, { headers: publicHeaders }, URL_HEALTH);
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json();
 };
 
@@ -361,16 +377,17 @@ export const getImagenesNegocio = async () => {
  *   - 200: PIN correcto → { token, rol: 'admin'|'barbero', aviso_pago?, barbero? }
  *           (barbero: { id, nombre } solo cuando rol='barbero')
  *   - 402: suscripción vencida (solo path admin) → lanza error con bloqueado: true
- *   - otros: PIN incorrecto u otro error → lanza error con bloqueado: false
+ *   - otros: lanza un ErrorServidor (401 PIN incorrecto, 404 subdominio que no
+ *     existe, 429, 5xx…); la pantalla elige el mensaje con `fallaDeLogin`
  * @param {string} pin - PIN de 4 dígitos ingresado por el usuario
  * @returns {Promise<Object>} { token, rol, aviso_pago, barbero }
  */
 export const loginPanel = async (pin) => {
-  const response = await fetch(`${BASE_URL}/auth/panel/login`, {
+  const response = await fetchConDiagnostico(`${BASE_URL}/auth/panel/login`, {
     method: 'POST',
     headers: publicHeaders,
     body: JSON.stringify({ pin }),
-  });
+  }, URL_HEALTH);
 
   if (response.status === 402) {
     const err = new Error('Suscripción vencida');
@@ -378,7 +395,7 @@ export const loginPanel = async (pin) => {
     throw err;
   }
 
-  if (!response.ok) throw new Error('PIN incorrecto');
+  if (!response.ok) throw await errorDeRespuesta(response);
   return response.json(); // { token, rol, aviso_pago, barbero }
 };
 
@@ -387,22 +404,21 @@ export const loginPanel = async (pin) => {
  * Autentica al modo operativo con usuario + password contra el endpoint
  * /api/auth/operativo/login. Si las credenciales son correctas, guarda el
  * JWT en memoria y en localStorage (vía setAuthTokenOperativo) y devuelve
- * el token. Si son incorrectas, lanza un Error.
+ * el token.
  *
  * @param {string} usuario
  * @param {string} password
  * @returns {Promise<string>} el JWT recibido
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`);
+ *   con credenciales incorrectas, "Credenciales inválidas"
  */
 export const loginOperativo = async (usuario, password) => {
-  const response = await fetch(`${BASE_URL}/auth/operativo/login`, {
+  const response = await fetchConDiagnostico(`${BASE_URL}/auth/operativo/login`, {
     method: 'POST',
     headers: publicHeaders,
     body: JSON.stringify({ usuario, password }),
-  });
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(data.error || 'Credenciales inválidas');
-  }
+  }, URL_HEALTH);
+  if (!response.ok) throw await errorDeRespuesta(response);
   const { token } = await response.json();
   setAuthTokenOperativo(token);
   return token;
@@ -456,26 +472,27 @@ export const getAdminTurnos = async (fecha, barberoId = null) => {
 
 /**
  * patchAdminTurnoEstado
- * Cambia el estado de un turno (completado / no_asistio).
+ * Cambia el estado de un turno a mano. El único permitido es 'no_asistio', en
+ * un turno que ya empezó (el servidor rechaza 'completado' con un 400: se
+ * completa con completarAdminTurno, que registra el corte).
  * @param {string} turnoId
- * @param {string} estado - 'completado' | 'no_asistio'
- * @returns {Promise<Object>} turno actualizado
+ * @param {'no_asistio'} estado
+ * @returns {Promise<Object>} { id, estado }
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const patchAdminTurnoEstado = async (turnoId, estado) => {
   const res = await apiFetch(`/admin/turnos/${turnoId}/estado`, {
     method: 'PATCH',
     body: JSON.stringify({ estado }),
   });
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error || 'Error al cambiar estado del turno');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
 /**
  * completarAdminTurno
- * Completa un turno reservado desde el backoffice REGISTRANDO el corte
+ * Completa un turno reservado (o, el admin, uno marcado "no asistió") desde el
+ * backoffice REGISTRANDO el corte
  * (forma de pago + monto). Reemplaza a patchAdminTurnoEstado(id, 'completado')
  * para este caso: aquel solo cambiaba el estado y NO dejaba registro financiero
  * (el turno quedaba completado sin corte → sin forma_pago ni impacto en Caja).
@@ -486,16 +503,14 @@ export const patchAdminTurnoEstado = async (turnoId, estado) => {
  *   servicio_id es opcional: si se manda, el corte se registra con ese servicio y
  *   el turno se sincroniza a él; si se omite, el backend deriva el servicio del turno.
  * @returns {Promise<Object>} { id, estado: 'completado', servicio_id, corte_id, monto_total }
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const completarAdminTurno = async (turnoId, datos) => {
   const res = await apiFetch(`/admin/turnos/${turnoId}/completar`, {
     method: 'POST',
     body: JSON.stringify(datos),
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al completar el turno');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
@@ -504,15 +519,13 @@ export const completarAdminTurno = async (turnoId, datos) => {
  * Cancela un turno (DELETE lógico → estado 'cancelado').
  * @param {string} turnoId
  * @returns {Promise<Object>} turno cancelado
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const cancelarAdminTurno = async (turnoId) => {
   const res = await apiFetch(`/admin/turnos/${turnoId}`, {
     method: 'DELETE',
   });
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error || 'Error al cancelar turno');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
@@ -538,16 +551,14 @@ export const getAdminHorarios = async (barberoId) => {
  * @param {string} barberoId
  * @param {Array} bloques - [{ dia_semana, hora_inicio, hora_fin }]
  * @returns {Promise<Array>} bloques insertados con id
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const putAdminHorarios = async (barberoId, bloques) => {
   const res = await apiFetch(`/admin/horarios/${barberoId}`, {
     method: 'PUT',
     body: JSON.stringify(bloques),
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al guardar horarios');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
@@ -577,13 +588,47 @@ export const getAdminHorarioAtencion = async () => {
 
 /**
  * getAdminSuspensiones
- * Obtiene suspensiones futuras de un barbero.
- * @param {string} barberoId
- * @returns {Promise<Array>} suspensiones con id, desde, hasta, motivo, origen
+ * Obtiene las suspensiones (y descansos) cuyo rango efectivo se superpone con el
+ * rango pedido. Sin `desde` arranca ahora (las que no terminaron); las liberadas
+ * antes de empezar no vienen.
+ * @param {string|null} barberoId - el barbero; null = todos (solo admin)
+ * @param {Object} [filtros]
+ * @param {string} [filtros.desde] - 'YYYY-MM-DD' (inclusive)
+ * @param {string} [filtros.hasta] - 'YYYY-MM-DD' (inclusive)
+ * @param {'suspension'|'descanso'} [filtros.tipo] - sin él, los dos
+ * @returns {Promise<Array>} con id, barbero_id, desde, hasta (efectivo), hasta_programada,
+ *   motivo, origen, tipo, liberada_en, liberada_por, created_at, barbero_nombre
  */
-export const getAdminSuspensiones = async (barberoId) => {
-  const res = await apiFetch(`/admin/suspensiones?barbero_id=${barberoId}`);
+export const getAdminSuspensiones = async (barberoId, { desde, hasta, tipo } = {}) => {
+  const params = new URLSearchParams();
+  if (barberoId) params.set('barbero_id', barberoId);
+  if (desde) params.set('desde', desde);
+  if (hasta) params.set('hasta', hasta);
+  if (tipo) params.set('tipo', tipo);
+  const res = await apiFetch(`/admin/suspensiones?${params}`);
   if (!res.ok) throw new Error('Error al obtener suspensiones');
+  return res.json();
+};
+
+/**
+ * getAdminDescansos
+ * Descansos de un rango de días como bloques: los pegados vienen unidos en uno
+ * (la regla vive en el backend, descansosService → unirDescansos). Incluye los
+ * liberados antes de empezar (estado 'liberado'), que una agenda no dibuja.
+ * @param {Object} filtros
+ * @param {string} filtros.desde - 'YYYY-MM-DD' (inclusive)
+ * @param {string} filtros.hasta - 'YYYY-MM-DD' (inclusive)
+ * @param {string|null} [filtros.barberoId] - el barbero; null = todos (solo admin)
+ * @returns {Promise<Array>} bloques { id, barbero_id, barbero_nombre, origen, desde,
+ *   hasta (efectivo), hasta_programada, estado, liberado_en, liberado_por, minutos,
+ *   creado_en, antelacion_minutos, partes }; estado: 'pendiente' | 'en_curso' |
+ *   'cumplido' | 'terminado_antes' | 'liberado'
+ */
+export const getAdminDescansos = async ({ desde, hasta, barberoId }) => {
+  const params = new URLSearchParams({ desde, hasta });
+  if (barberoId) params.set('barbero_id', barberoId);
+  const res = await apiFetch(`/admin/descansos?${params}`);
+  if (!res.ok) throw new Error('Error al obtener los descansos');
   return res.json();
 };
 
@@ -594,6 +639,7 @@ export const getAdminSuspensiones = async (barberoId) => {
  * Reenviar con confirmar_cancelacion: true para forzar.
  * @param {Object} datos - { barbero_id, desde, hasta, motivo?, confirmar_cancelacion? }
  * @returns {Promise<Object>} { suspension, turnos_cancelados } o { conflicto: true, turnos_afectados }
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const crearAdminSuspension = async (datos) => {
   const res = await apiFetch('/admin/suspensiones', {
@@ -604,27 +650,24 @@ export const crearAdminSuspension = async (datos) => {
     const body = await res.json();
     return { conflicto: true, ...body };
   }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Error al crear suspensión');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
 /**
- * eliminarAdminSuspension
- * Elimina una suspensión por su id.
+ * liberarAdminSuspension
+ * Libera una suspensión (o un descanso): la fila no se borra, queda como
+ * registro. Si no empezó, deja de bloquear entera; si está en curso, termina en
+ * este momento. Los turnos que se cancelaron al crearla no se recuperan.
  * @param {string} suspensionId
- * @returns {Promise<Object>} confirmación
+ * @returns {Promise<Object>} { ok, suspension: { id, tipo, desde, hasta, liberada_en, liberada_por } }
+ * @throws {ErrorServidor} con el mensaje del servidor (404 no existe, 409 ya terminó o ya se liberó)
  */
-export const eliminarAdminSuspension = async (suspensionId) => {
-  const res = await apiFetch(`/admin/suspensiones/${suspensionId}`, {
-    method: 'DELETE',
+export const liberarAdminSuspension = async (suspensionId) => {
+  const res = await apiFetch(`/admin/suspensiones/${suspensionId}/liberar`, {
+    method: 'POST',
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al eliminar suspensión');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
@@ -650,16 +693,14 @@ export const getCredencialesOperativas = async () => {
  * campos es opcional; enviar solo lo que se quiere cambiar.
  * @param {Object} datos - { usuario?: string, password?: string }
  * @returns {Promise<void>}
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const actualizarCredencialesOperativas = async (datos) => {
   const res = await apiFetch('/admin/operativo/credenciales', {
     method: 'PUT',
     body: JSON.stringify(datos),
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al actualizar credenciales operativas');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -682,16 +723,14 @@ export const getAdminTurneroConfig = async () => {
  * Actualiza la configuración del turnero.
  * @param {Object} datos - { duracion_slot_minutos }
  * @returns {Promise<Object>} { duracion_slot_minutos }
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const putAdminTurneroConfig = async (datos) => {
   const res = await apiFetch('/admin/turnero/config', {
     method: 'PUT',
     body: JSON.stringify(datos),
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al guardar configuración del turnero');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
@@ -718,6 +757,7 @@ export const getImagenesAdmin = async () => {
  * @param {number} orden - slot dentro del tipo
  * @param {Blob} blob - imagen WebP ya comprimida
  * @returns {Promise<Object>} { id, tipo, orden, url }
+ * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
 export const subirImagen = async (tipo, orden, blob) => {
   const res = await apiFetch(`/admin/imagenes?tipo=${tipo}&orden=${orden}`, {
@@ -725,10 +765,7 @@ export const subirImagen = async (tipo, orden, blob) => {
     headers: { 'Content-Type': 'image/webp' },
     body: blob,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Error al subir la imagen');
-  }
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 

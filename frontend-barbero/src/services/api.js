@@ -3,9 +3,14 @@
 // Rutas públicas (login, disponibilidad, servicios) usan fetch directo.
 // Rutas protegidas (/api/admin/*) usan apiFetch con JWT.
 
+import { errorDeRespuesta, fetchConDiagnostico } from '../utils/errores.js';
+
 const BASE_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
   : 'http://localhost:3001/api';
+
+// Para diagnosticar un pedido que no recibió respuesta (fetchConDiagnostico).
+const URL_HEALTH = `${BASE_URL}/health`;
 
 // Extraer subdominio del hostname actual.
 // Solo se considera subdominio si estamos en el dominio de producción.
@@ -92,11 +97,14 @@ export const apiFetch = async (path, options = {}) => {
  * Lista barberos activos del tenant (para el selector de login).
  * Usa /api/turnero/barberos porque es el único endpoint público de listado
  * tras la privatización de /api/barberos.
+ * Es el primer pedido de la app: si el subdominio no existe o el servidor no
+ * responde, falla acá, antes del PIN.
  * @returns {Promise<Array>} [{ id, nombre }]
+ * @throws {ErrorServidor} con status y codigo (para `problemaDeAcceso`)
  */
 export const getBarberos = async () => {
-  const res = await fetch(`${BASE_URL}/turnero/barberos`, { headers: publicHeaders });
-  if (!res.ok) throw new Error('Error al obtener barberos');
+  const res = await fetchConDiagnostico(`${BASE_URL}/turnero/barberos`, { headers: publicHeaders }, URL_HEALTH);
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
@@ -118,17 +126,16 @@ export const getImagenesNegocio = async () => {
  * @param {string} barberoId
  * @param {string} pin - PIN de 4 dígitos
  * @returns {Promise<Object>} { token, barbero: { id, nombre } }
+ * @throws {ErrorServidor} (401 PIN incorrecto, 404 subdominio que no existe,
+ *   429, 5xx…); la pantalla elige el mensaje con `fallaDeLogin`
  */
 export const loginBarbero = async (barberoId, pin) => {
-  const res = await fetch(`${BASE_URL}/auth/barbero/login`, {
+  const res = await fetchConDiagnostico(`${BASE_URL}/auth/barbero/login`, {
     method: 'POST',
     headers: publicHeaders,
     body: JSON.stringify({ barbero_id: barberoId, pin }),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Error al iniciar sesión');
-  }
+  }, URL_HEALTH);
+  if (!res.ok) throw await errorDeRespuesta(res);
   return res.json();
 };
 
@@ -194,6 +201,31 @@ export const getTurnos = async (filtros = {}) => {
 };
 
 /**
+ * getAgenda
+ * Agenda de un día del barbero autenticado, en una sola llamada: turnos,
+ * descansos y ausencias, y la grilla de slots (decisiones_descansos.md).
+ * Los instantes de `grilla` llegan con offset '-03:00'; los de `turnos`,
+ * `suspensiones` y `descansos`, en UTC ('...Z'): compararlos siempre como fechas,
+ * nunca como texto.
+ * @param {string} fecha - 'YYYY-MM-DD'
+ * @returns {Promise<Object>} {
+ *   fecha, barbero_id, duracion_slot_minutos,
+ *   horario_atencion: { hora_inicio, hora_fin } | null — horario del local ese día ('HH:MM'),
+ *   turnos: [...] — misma forma que getTurnos (todos los estados),
+ *   suspensiones: [{ id, desde, hasta, tipo: 'suspension', origen, motivo, ... }] — solo las ausencias,
+ *   descansos: [{ id, desde, hasta, origen, estado, partes: [{ id, desde, hasta }], ... }] —
+ *     bloques: los descansos pegados vienen unidos en uno; estado 'liberado' = liberado
+ *     antes de empezar (no se dibuja),
+ *   grilla: [{ inicio, fin, estado: 'libre'|'turno'|'descanso'|'suspension' }]
+ * }
+ */
+export const getAgenda = async (fecha) => {
+  const res = await apiFetch(`/admin/agenda?fecha=${fecha}`);
+  if (!res.ok) throw new Error('Error al obtener la agenda');
+  return res.json();
+};
+
+/**
  * crearTurnoAdmin
  * Crea un turno manual desde la app del barbero.
  * @param {Object} datos - { servicio_id, barbero_id, inicio, nombre, telefono?, email? }
@@ -215,9 +247,11 @@ export const crearTurnoAdmin = async (datos) => {
 
 /**
  * patchEstadoTurno
- * Cambia el estado de un turno a 'completado' o 'no_asistio'.
+ * Cambia el estado de un turno a mano. El único permitido es 'no_asistio', en
+ * un turno que ya empezó: un turno se completa al registrar su corte (iPad o
+ * panel), y el servidor rechaza 'completado' con un 400.
  * @param {string} turnoId
- * @param {string} estado - 'completado' | 'no_asistio'
+ * @param {'no_asistio'} estado
  * @returns {Promise<Object>} { id, estado }
  */
 export const patchEstadoTurno = async (turnoId, estado) => {
@@ -282,53 +316,91 @@ export const putHorarios = async (barberoId, bloques) => {
 
 /**
  * getSuspensiones
- * Obtiene suspensiones futuras del barbero autenticado.
+ * Obtiene las suspensiones y descansos del barbero autenticado que todavía no
+ * terminaron.
+ * @param {Object} [filtros]
+ * @param {'suspension'|'descanso'} [filtros.tipo] - si se omite, los dos
  * @returns {Promise<Array>} suspensiones
  */
-export const getSuspensiones = async () => {
-  const res = await apiFetch('/admin/suspensiones');
+export const getSuspensiones = async ({ tipo } = {}) => {
+  const params = new URLSearchParams();
+  if (tipo) params.set('tipo', tipo);
+  const res = await apiFetch(`/admin/suspensiones?${params}`);
   if (!res.ok) throw new Error('Error al obtener suspensiones');
   return res.json();
 };
 
 /**
  * crearSuspension
- * Crea una nueva suspensión.
+ * Crea una nueva suspensión. Si pisa turnos reservados y no viene
+ * `confirmar_cancelacion`, el servidor no la crea y responde 409 con la lista
+ * de turnos afectados.
  * @param {Object} datos - { barbero_id, desde, hasta, motivo?, confirmar_cancelacion? }
- * @returns {Promise<Object>} { suspension, turnos_cancelados } o error 409 con turnos_afectados
+ * @returns {Promise<Object>} { suspension, turnos_cancelados } (turnos_cancelados: cantidad)
+ * @throws {Error} con el mensaje del servidor y `status`; el 409 de turnos
+ *   afectados suma `turnos_afectados` ([{ inicio, cliente_nombre, ... }])
  */
 export const crearSuspension = async (datos) => {
   const res = await apiFetch('/admin/suspensiones', {
     method: 'POST',
     body: JSON.stringify(datos),
   });
-  if (res.status === 409) {
-    const body = await res.json();
-    const err = new Error(body.error || 'Hay turnos afectados');
-    err.status = 409;
-    err.turnos_afectados = body.turnos_afectados;
-    return { conflicto: true, ...body };
-  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Error al crear suspensión');
+    const err = new Error(body.error || 'Error al crear suspensión');
+    err.status = res.status;
+    if (body.turnos_afectados) err.turnos_afectados = body.turnos_afectados;
+    throw err;
   }
   return res.json();
 };
 
 /**
- * eliminarSuspension
- * Elimina una suspensión por su id.
+ * liberarSuspension
+ * Libera una suspensión o un descanso: si no empezó, deja de bloquear entero;
+ * si está en curso, termina en este momento. La fila no se borra (queda como
+ * registro para el dueño).
  * @param {string} suspensionId
- * @returns {Promise<Object>} { ok: true }
+ * @returns {Promise<Object>} { ok: true, suspension: { id, tipo, desde, hasta, liberada_en, liberada_por } }
+ * @throws {Error} con el mensaje del servidor y `status` (403 del admin, 404, 409 ya liberada/terminada)
  */
-export const eliminarSuspension = async (suspensionId) => {
-  const res = await apiFetch(`/admin/suspensiones/${suspensionId}`, {
-    method: 'DELETE',
+export const liberarSuspension = async (suspensionId) => {
+  const res = await apiFetch(`/admin/suspensiones/${suspensionId}/liberar`, {
+    method: 'POST',
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Error al eliminar suspensión');
+    const err = new Error(body.error || 'Error al liberar');
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+};
+
+/**
+ * crearDescanso
+ * Marca un descanso propio sobre slots libres y futuros de un día
+ * (decisiones_descansos.md). El rango tiene que coincidir con slots
+ * seguidos de la grilla: se mandan el inicio del primero y el fin del último tal
+ * como los dio GET /admin/agenda.
+ * @param {Object} rango
+ * @param {string} rango.desde - ISO con offset (inicio del primer slot)
+ * @param {string} rango.hasta - ISO con offset (fin del último slot)
+ * @returns {Promise<Object>} { descanso, bloque }: la fila creada y el bloque que
+ *   la contiene, ya unido con los descansos pegados (null si el servidor no lo pudo leer)
+ * @throws {Error} con el mensaje del servidor y `status` (400 rango inválido o
+ *   no futuro, 409 algún slot se ocupó)
+ */
+export const crearDescanso = async ({ desde, hasta }) => {
+  const res = await apiFetch('/admin/descansos', {
+    method: 'POST',
+    body: JSON.stringify({ desde, hasta }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(body.error || 'Error al marcar el descanso');
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 };
