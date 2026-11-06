@@ -92,7 +92,7 @@ prompt y por qué. 4. Cosas vistas de paso (posibles bugs o fallas, con archivo 
 
 ### F8 — Aviso de barberos sin horario (Gestión → Barberos)
 - Motivo: un barbero activo sin `barbero_horario` aparece en el "Equipo" del turnero pero no tiene horarios para
-  reservar, "Cualquier barbero" no lo asigna y su Agenda queda gris (`estado_actual.md` → Pendientes, paso 5).
+  reservar, "Cualquier barbero" no lo asigna y su Agenda queda gris (`estado_actual.md` → Pendientes, primer ítem, paso 2).
 - Backend: el listado de barberos de Gestión (`controllers/gestion.js`, el `SELECT` de la línea ~69) suma
   `tiene_horario` (`EXISTS` sobre `barbero_horario`). Sin cambios de DB.
 - `TabBarberos.jsx`: cartel de alerta arriba de la tabla si hay barberos **activos** sin horario ("Lucas y Tomi no
