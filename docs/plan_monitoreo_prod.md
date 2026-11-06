@@ -2,7 +2,7 @@
 
 > **Para el chat orquestador.** Este documento es autocontenido: lo escribió un chat de planificación que no va a orquestar. Todas las decisiones (1–12) están cerradas con el usuario; no hace falta volver a discutirlas. Lo que dice "a verificar" son datos técnicos que se confirman al implementar, no decisiones abiertas. Aprobar este plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
-> **Estado (2026-11-05): planificado, sin arrancar.** El branch `feature/monitoreo-prod` sale de `feature/descansos-agenda` (commit `0c0bc13`, el del health; ese branch todavía no está mergeado a `main`). Antes de este plan el usuario va a sumar otras features, en un branch que sale de `feature/monitoreo-prod`. Al retomar, el orquestador confirma con el usuario sobre qué branch se trabaja (el de las features ya integrado, o `feature/monitoreo-prod` actualizado) y que los datos de §3 sigan vigentes: las líneas y conteos pueden haber cambiado con esas features.
+> **Estado (2026-11-05): planificado, sin arrancar.** El branch `feature/monitoreo-prod` sale de `main`, con el merge de `feature/descansos-agenda` (que trae el fix del health, `0c0bc13`) ya desplegado (`a1b5ed7`). Antes de este plan va la tanda de mejoras operativas, en `feature/mejoras-operativas`, otro hijo de `main` (`docs/plan_mejoras_operativas.md`). Al retomar: rebasar este branch sobre el `main` que ya tenga esas mejoras, y confirmar que los datos de §3 sigan vigentes, porque las líneas y conteos pueden haber cambiado con ellas.
 
 ---
 
@@ -178,7 +178,7 @@
 
 | # | Fase | Quién | Requisito previo (lo hace el usuario) |
 |---|---|---|---|
-| 0 | ✅ **Hecha (2026-11-05).** Branch `feature/monitoreo-prod` creado desde `feature/descansos-agenda` y este plan volcado a `docs/plan_monitoreo_prod.md` (commiteado) | Chat de planificación | — |
+| 0 | ✅ **Hecha (2026-11-05).** Branch `feature/monitoreo-prod` creado desde `feature/descansos-agenda` (rebasado sobre `main` después del merge) y este plan volcado a `docs/plan_monitoreo_prod.md` (commiteado) | Chat de planificación | — |
 | 1 | **Sentry en el backend** (§4.1, puntos 3 y 4): `instrument.js`, `config/sentry.js`, scripts de arranque, tags de tenant y rol, aviso del 429, tenant en el job de recordatorios, handler de errores de Express | Chat ejecutor | Crear cuenta en Sentry y un **proyecto de prueba** (no el de prod); dejar su DSN en `backend/.env` local como `SENTRY_DSN`, sin pasarlo por el chat |
 | 2 | **Skill `salud-prod` + allowlist** (§4.2, puntos 5 y 6) | Chat ejecutor | `railway login` en la PC (y `railway link` al proyecto si hace falta) |
 | 3 | **Configuración externa**, guiada paso a paso: server y canal de Discord con webhook; webhook de proyecto en Railway; monitor de uptime; proyecto de prod en Sentry con las alertas de §2 (10 y 10b); `SENTRY_DSN` de prod en las variables del servicio en Railway (directo en el servicio, no como shared variable sin referenciar). Deploy y prueba de cada aviso | Orquestador + usuario | Push y deploy de las fases 1 y 2 |
