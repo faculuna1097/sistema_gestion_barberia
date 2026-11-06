@@ -23,6 +23,8 @@
 //     barbero: ve su propio registro.
 //   - El Excel del Resumen suma las columnas de descansos y una segunda hoja
 //     "Descansos" con un renglón por descanso.
+//   - El registro de descansos es opcional: si no se puede cargar, la planilla
+//     se ve igual, con un aviso en su lugar (cargarDescansos).
 //
 // Origen de un corte (`con_turno` del backend): si vino de un turno o fue un
 // cliente que llegó sin reservar. En la tabla del Detalle y su Excel, la
@@ -80,6 +82,7 @@ import {
   BotonIconoFila,
   DesgloseMontos,
   BarraProporcional,
+  Toast,
 } from '../../../components/ui';
 import { theme } from '../../../theme/tokens.js';
 
@@ -191,6 +194,28 @@ function textoAntelacionDescanso(bloque) {
   return `marcado ${formatAntelacion(bloque.antelacion_minutos)} antes`;
 }
 
+/**
+ * Pide el registro de descansos de la semana (/admin/planilla/descansos). Es un
+ * dato secundario: si falla, Planillas se muestra igual sin él (con un aviso),
+ * en vez de caerse entera. Pasa, por ejemplo, con un backend anterior que no
+ * tiene el endpoint, mientras se despliega. Por eso no lanza.
+ * @param {string} fechaLunes - Lunes de la semana, YYYY-MM-DD.
+ * @returns {Promise<Array|null>} El registro por barbero, o null si no se pudo cargar.
+ */
+async function cargarDescansos(fechaLunes) {
+  try {
+    const res = await apiFetch(`/admin/planilla/descansos?semana=${fechaLunes}`);
+    if (!res.ok) throw new Error(`respuesta ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.warn('[seccionPlanillas] Registro de descansos no disponible:', err.message);
+    return null;
+  }
+}
+
+// Aviso que reemplaza al registro de descansos cuando no se pudo cargar.
+const AVISO_DESCANSOS_NO_CARGADOS = 'No se pudo cargar el registro de descansos.';
+
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const TABS_PRINCIPALES = [
   { key: 'detalle', label: 'Detalle por barbero' },
@@ -215,6 +240,9 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
   const [resumenData, setResumenData]             = useState(null);
   // Registro de descansos por barbero_id (/admin/planilla/descansos).
   const [descansosData, setDescansosData]         = useState(new Map());
+  // true si el registro de descansos no se pudo cargar (el resto sí): se avisa
+  // en el Resumen y en el modal, y el Excel sale sin las columnas de descansos.
+  const [descansosNoCargaron, setDescansosNoCargaron] = useState(false);
   const [barberoActivo, setBarberoActivo]         = useState(null);
   const [mostrarComisiones, setMostrarComisiones] = useState(true);
   const [cargando, setCargando]                   = useState(false);
@@ -236,26 +264,27 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
       setError(null);
       try {
         const fechaLunes = semanaAFechaLunes(semana);
-        const [resDetalle, resResumen, resDescansos] = await Promise.all([
+        // El detalle y el resumen son la planilla: sin ellos no hay nada que
+        // mostrar. Los descansos son opcionales (cargarDescansos no lanza).
+        const [resDetalle, resResumen, descansos] = await Promise.all([
           apiFetch(`/admin/planilla?semana=${fechaLunes}`),
           apiFetch(`/admin/planilla/resumen?semana=${fechaLunes}`),
-          apiFetch(`/admin/planilla/descansos?semana=${fechaLunes}`),
+          cargarDescansos(fechaLunes),
         ]);
-        if (!resDetalle.ok || !resResumen.ok || !resDescansos.ok) {
+        if (!resDetalle.ok || !resResumen.ok) {
           throw new Error('Error en la respuesta del servidor');
         }
-        const [detalle, resumen, descansos] = await Promise.all([
-          resDetalle.json(), resResumen.json(), resDescansos.json(),
-        ]);
+        const [detalle, resumen] = await Promise.all([resDetalle.json(), resResumen.json()]);
         if (cancelado) return;
         setDetalleData(detalle);
         setResumenData(resumen);
-        setDescansosData(new Map(descansos.map((d) => [d.barbero_id, d])));
+        setDescansosData(new Map((descansos ?? []).map((d) => [d.barbero_id, d])));
+        setDescansosNoCargaron(descansos === null);
         setBarberoActivo((prev) => elegirBarberoInicial(detalle, prev));
         setDiasExpandidos(new Set([getFechaHoy()]));
       } catch (err) {
         console.error('[seccionPlanillas] Error en cargarDatos:', err.message);
-        if (!cancelado) setError('No se pudieron cargar los datos. Revisá la conexión.');
+        if (!cancelado) setError('No se pudieron cargar las planillas. Intentá de nuevo.');
       } finally {
         if (!cancelado) setCargando(false);
       }
@@ -330,8 +359,9 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
     if (!XLSX) return;
     // En el Excel, con y sin turno van en dos columnas (en pantalla es una sola,
     // "N de M"): así se pueden sumar y filtrar como números. Lo mismo los
-    // descansos: cantidad, minutos y % de la jornada, en columnas numéricas.
-    const columnasDescansos = (d) => ({
+    // descansos: cantidad, minutos y % de la jornada, en columnas numéricas. Si
+    // el registro no se pudo cargar, esas columnas no van (un 0 sería falso).
+    const columnasDescansos = (d) => (descansosNoCargaron ? {} : {
       Descansos: d?.cantidad ?? 0,
       'Descanso (min)': d?.minutos ?? 0,
       '% jornada': d?.porcentaje ?? '',
@@ -530,12 +560,15 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
             body="No hay cortes registrados en la semana seleccionada."
           />
         ) : (
-          <TablaResumen
-            resumenData={resumenData}
-            descansos={descansosData}
-            mostrarComisiones={mostrarComisiones}
-            onVerDetalle={setBarberoDetalle}
-          />
+          <>
+            {descansosNoCargaron && <Toast tone="warning">{AVISO_DESCANSOS_NO_CARGADOS}</Toast>}
+            <TablaResumen
+              resumenData={resumenData}
+              descansos={descansosData}
+              mostrarComisiones={mostrarComisiones}
+              onVerDetalle={setBarberoDetalle}
+            />
+          </>
         )
       )}
 
@@ -543,6 +576,7 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
         resumen={resumenDetalle}
         cortes={cortesDetalle}
         descansos={descansosDetalle}
+        descansosNoCargaron={descansosNoCargaron}
         semana={semana}
         mostrarComisiones={mostrarComisiones}
         onClose={() => setBarberoDetalle(null)}
@@ -1205,13 +1239,17 @@ function RegistroDescansos({ registro }) {
  * @param {Array}   props.cortes            - Cortes del barbero en la semana (/admin/planilla).
  * @param {object|null} props.descansos     - Su registro en /admin/planilla/descansos;
  *   null si no llegó (no se muestra la sección).
+ * @param {boolean} props.descansosNoCargaron - El registro de descansos no se pudo
+ *   cargar: en lugar de la sección va un aviso.
  * @param {string}  props.semana            - Semana 'YYYY-WNN'.
  * @param {boolean} props.mostrarComisiones - Estado del toggle de comisiones.
  * @param {() => void} props.onClose        - Cierra el modal.
  * @param {(barberoId: string) => void} props.onVerCortes - Pasa al tab Detalle con ese barbero.
  * @returns {JSX.Element|null}
  */
-function ModalDetalleBarbero({ resumen, cortes, descansos, semana, mostrarComisiones, onClose, onVerCortes }) {
+function ModalDetalleBarbero({
+  resumen, cortes, descansos, descansosNoCargaron, semana, mostrarComisiones, onClose, onVerCortes,
+}) {
   if (!resumen) return null;
 
   const sinCortes = resumen.cantidad_cortes === 0;
@@ -1267,7 +1305,9 @@ function ModalDetalleBarbero({ resumen, cortes, descansos, semana, mostrarComisi
           />
         </>
       )}
-      {descansos && <RegistroDescansos registro={descansos} />}
+      {descansosNoCargaron
+        ? <Toast tone="warning">{AVISO_DESCANSOS_NO_CARGADOS}</Toast>
+        : descansos && <RegistroDescansos registro={descansos} />}
       </div>
     </Modal>
   );
