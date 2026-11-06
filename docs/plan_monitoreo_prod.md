@@ -2,9 +2,9 @@
 
 > **Para el chat orquestador.** Este documento es autocontenido: lo escribió un chat de planificación que no va a orquestar. Todas las decisiones (1–12) están cerradas con el usuario; no hace falta volver a discutirlas. Lo que dice "a verificar" son datos técnicos que se confirman al implementar, no decisiones abiertas. Aprobar este plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
-> **Estado (2026-11-05): planificado, sin arrancar.** El branch `feature/monitoreo-prod` sale de `main`, con el merge de `feature/descansos-agenda` (que trae el fix del health, `0c0bc13`) ya desplegado (`a1b5ed7`). Antes de este plan va la tanda de mejoras operativas, en `feature/mejoras-operativas`, otro hijo de `main` (`docs/plan_mejoras_operativas.md`). Al retomar: rebasar este branch sobre el `main` que ya tenga esas mejoras, y confirmar que los datos de §3 sigan vigentes, porque las líneas y conteos pueden haber cambiado con ellas.
+> **Estado (2026-11-05): próximo a ejecutar, antes de las mejoras operativas** (el usuario cambió el orden). El branch `feature/monitoreo-prod` sale de `main` (`6010166`, con el merge de `feature/descansos-agenda` y el fix del health `0c0bc13` ya desplegados). Mientras `main` no cambie, no hace falta rebasar: el orquestador lo confirma con `git merge-base` antes de la fase 1. `feature/mejoras-operativas` (otro hijo de `main`, hoy solo con su plan) va **después**: se rebasa sobre el `main` que ya tenga este monitoreo.
 >
-> **Revisión (2026-11-05, después del merge):** §3 re-verificado contra `main` (`6010166`): conteos, líneas, middlewares y `package.json` siguen iguales. Aparecieron tres hechos que cambian la implementación, ya incorporados abajo: `.claude/` está entero en `.gitignore` (la skill y la allowlist no llegarían al repo ni a la sesión en la nube), Railway usa un start command explícito (cambiar `npm start` no alcanza) y los jobs de cron terminan con `process.exit` (Sentry pierde los eventos si no se vacía antes). También se anotó lo que suma `feature/mejoras-operativas` (§3, "Lo que trae la tanda de mejoras").
+> **Revisión (2026-11-05, después del merge):** §3 re-verificado contra `main` (`6010166`): conteos, líneas, middlewares y `package.json` siguen iguales. Aparecieron tres hechos que cambian la implementación, ya incorporados abajo: `.claude/` está entero en `.gitignore` (la skill y la allowlist no llegarían al repo ni a la sesión en la nube), Railway usa un start command explícito (cambiar `npm start` no alcanza) y los jobs de cron terminan con `process.exit` (Sentry pierde los eventos si no se vacía antes). También se anotó lo que la tanda de mejoras, que va después, tiene que respetar (§3, "La tanda de mejoras que viene después").
 
 ---
 
@@ -74,10 +74,9 @@
 ### `.gitignore` y `.claude/`
 - `.gitignore` (línea ~28) ignora **todo** `.claude/` ("Configuración local de Claude Code"). En la carpeta local hay `launch.json` y `settings.local.json`, ninguno trackeado. Tal como está, `.claude/skills/salud-prod/SKILL.md` y `.claude/settings.json` no se podrían commitear, y la sesión en la nube (que clona el repo de GitHub) no los tendría. Git no permite re-incluir un archivo si su carpeta padre está ignorada: hay que cambiar `.claude/` por `.claude/*` y agregar `!.claude/settings.json` y `!.claude/skills/`. `launch.json` y `settings.local.json` siguen ignorados.
 
-### Lo que trae la tanda de mejoras (`feature/mejoras-operativas`, a confirmar después del rebase)
-- Un **segundo job de cron**, `backend/src/jobs/cierreDiario.js` (cierre diario de turnos sin cobrar), con su propio servicio en Railway. Va igual que recordatorios: import de Sentry primero, tag de tenant por tenant, `flush` antes del `exit` y `SENTRY_DSN` referenciada en ese servicio.
-- Endpoints públicos nuevos de recuperación de PIN/contraseña bajo `/api/auth/…` con `limiterLogin`: sus cortes ya entran por el aviso del 429; sus `console.error` entran por la captura automática.
-- Puede mover líneas y conteos de este §3: el orquestador los vuelve a confirmar antes de escribir el prompt de la fase 1.
+### La tanda de mejoras que viene después (`feature/mejoras-operativas`)
+- Va a crear un **segundo job de cron**, `backend/src/jobs/cierreDiario.js` (cierre diario de turnos sin cobrar), con su propio servicio en Railway. **No existe todavía**: este plan no lo toca. Tiene que seguir el mismo patrón que recordatorios (import de `instrument.js` primero, tag de tenant por tenant, `vaciarEventos` antes del `exit`, `SENTRY_DSN` referenciada en su servicio); por eso la fase 5 deja ese patrón escrito en `convenciones_tecnicas.md` §1, y `docs/plan_mejoras_operativas.md` ya lo referencia.
+- Sus endpoints públicos nuevos de recuperación de PIN/contraseña bajo `/api/auth/…` con `limiterLogin` quedan cubiertos solos: los cortes por el aviso del 429 y los `console.error` por la captura automática.
 
 ### Railway
 - CLI instalada en la PC: v5.49.3 (hay v5.71.0). **Login vencido**: el usuario tiene que correr `railway login`.
@@ -201,7 +200,7 @@
 | 2 | **Skill `salud-prod` + allowlist** (§4.2, puntos 5 y 6) y el cambio de `.gitignore` para que `.claude/settings.json` y `.claude/skills/` se commiteen (§3) | Chat ejecutor | `railway login` en la PC (y `railway link` al proyecto si hace falta) |
 | 3 | **Configuración externa**, guiada paso a paso: server y canal de Discord con webhook; webhook de proyecto en Railway; monitor de uptime; proyecto de prod en Sentry con las alertas de §2 (10 y 10b); `SENTRY_DSN` de prod como shared variable **referenciada** en el web service y en cada servicio cron (`${{shared.SENTRY_DSN}}`; crearla a nivel proyecto sola no la inyecta); **start command del web service** → `node --import ./src/instrument.js src/index.js`. Deploy y prueba de cada aviso | Orquestador + usuario | Push y deploy de las fases 1 y 2 |
 | 4 | **Entorno de claude.ai/code** (§4.2, punto 7) y prueba "¿cómo está prod?" desde el celular | Orquestador + usuario | — |
-| 5 | **Docs de cierre**: `convenciones_tecnicas.md` §1 (todo `console.error` llega a Sentry: no usarlo para cosas que no rompen el flujo; el 429 también avisa), `estado_actual.md` (monitoreo hecho y dónde vive; pendiente "migrar Node 22 → 24/26 antes del 2027-04-30"), `ruta_proyecto.md`, `decisiones_monitoreo_prod.md`, mapa del `CLAUDE.md`; commit final y resumen | Orquestador | — |
+| 5 | **Docs de cierre**: `convenciones_tecnicas.md` §1 (todo `console.error` llega a Sentry: no usarlo para cosas que no rompen el flujo; el 429 también avisa; **patrón para jobs de cron nuevos**: import de `instrument.js` primero, tag de tenant por iteración, `vaciarEventos` antes del `exit`, `SENTRY_DSN` referenciada en su servicio), `estado_actual.md` (monitoreo hecho y dónde vive; pendiente "migrar Node 22 → 24/26 antes del 2027-04-30"), `ruta_proyecto.md`, `decisiones_monitoreo_prod.md`, mapa del `CLAUDE.md`; commit final y resumen | Orquestador | — |
 
 ---
 
