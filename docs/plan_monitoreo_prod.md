@@ -3,6 +3,8 @@
 > **Para el chat orquestador.** Este documento es autocontenido: lo escribió un chat de planificación que no va a orquestar. Todas las decisiones (1–12) están cerradas con el usuario; no hace falta volver a discutirlas. Lo que dice "a verificar" son datos técnicos que se confirman al implementar, no decisiones abiertas. Aprobar este plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
 > **Estado (2026-11-05): planificado, sin arrancar.** El branch `feature/monitoreo-prod` sale de `main`, con el merge de `feature/descansos-agenda` (que trae el fix del health, `0c0bc13`) ya desplegado (`a1b5ed7`). Antes de este plan va la tanda de mejoras operativas, en `feature/mejoras-operativas`, otro hijo de `main` (`docs/plan_mejoras_operativas.md`). Al retomar: rebasar este branch sobre el `main` que ya tenga esas mejoras, y confirmar que los datos de §3 sigan vigentes, porque las líneas y conteos pueden haber cambiado con ellas.
+>
+> **Revisión (2026-11-05, después del merge):** §3 re-verificado contra `main` (`6010166`): conteos, líneas, middlewares y `package.json` siguen iguales. Aparecieron tres hechos que cambian la implementación, ya incorporados abajo: `.claude/` está entero en `.gitignore` (la skill y la allowlist no llegarían al repo ni a la sesión en la nube), Railway usa un start command explícito (cambiar `npm start` no alcanza) y los jobs de cron terminan con `process.exit` (Sentry pierde los eventos si no se vacía antes). También se anotó lo que suma `feature/mejoras-operativas` (§3, "Lo que trae la tanda de mejoras").
 
 ---
 
@@ -64,7 +66,18 @@
 - `tenantMiddleware.js` setea `req.tenant_id` (línea ~171; en dev, el fallback `TENANT_ID` en la línea ~148). Tiene el subdominio a mano.
 - `authMiddleware.js` setea `req.tenant_id` y `req.rol` (líneas 58–59).
 - `rateLimitMiddleware.js`: `crearHandler429(nombre)` (línea ~44) hace `console.warn('[rateLimit] límite '<nombre>' excedido | ip: ... | ruta: ...')`. Límites: `login` (línea 65), `reserva` (83), `reserva-rafaga` (97), `global` (113). `limiterGlobal` corre **antes** de `tenantMiddleware` (sin tenant); `limiterLogin` y los de reserva, después.
-- `backend/package.json`: `"type": "module"` (ESM), `"start": "node src/index.js"`, `"engines": { "node": "22.x" }`. Railway (Nixpacks) arranca con `npm start`.
+- `backend/package.json`: `"type": "module"` (ESM), `"start": "node src/index.js"`, `"engines": { "node": "22.x" }`.
+- **Railway usa un start command explícito**, no `npm start`: `estado_actual.md` → Deploy → Backend documenta `Start command: node src/index.js` para el web service. Cambiar el script `start` de `package.json` **no** cambia lo que corre en prod: el usuario tiene que editar el start command en el dashboard (fase 3).
+- **Dos servicios en Railway** que deployan de `main`: el web service y un **servicio cron** de recordatorios (`node src/jobs/recordatorios.js`). `RESEND_API_KEY` y `MAIL_FROM` son shared variables referenciadas en los dos: `SENTRY_DSN` va igual.
+- **Los jobs de cron terminan a mano:** `jobs/recordatorios.js` drena el pool (`cerrarPool`) y hace `process.exit(code)` en el `finally` (líneas ~25–36). Sentry manda los eventos en segundo plano: sin un `flush` antes del `exit`, se pierden.
+
+### `.gitignore` y `.claude/`
+- `.gitignore` (línea ~28) ignora **todo** `.claude/` ("Configuración local de Claude Code"). En la carpeta local hay `launch.json` y `settings.local.json`, ninguno trackeado. Tal como está, `.claude/skills/salud-prod/SKILL.md` y `.claude/settings.json` no se podrían commitear, y la sesión en la nube (que clona el repo de GitHub) no los tendría. Git no permite re-incluir un archivo si su carpeta padre está ignorada: hay que cambiar `.claude/` por `.claude/*` y agregar `!.claude/settings.json` y `!.claude/skills/`. `launch.json` y `settings.local.json` siguen ignorados.
+
+### Lo que trae la tanda de mejoras (`feature/mejoras-operativas`, a confirmar después del rebase)
+- Un **segundo job de cron**, `backend/src/jobs/cierreDiario.js` (cierre diario de turnos sin cobrar), con su propio servicio en Railway. Va igual que recordatorios: import de Sentry primero, tag de tenant por tenant, `flush` antes del `exit` y `SENTRY_DSN` referenciada en ese servicio.
+- Endpoints públicos nuevos de recuperación de PIN/contraseña bajo `/api/auth/…` con `limiterLogin`: sus cortes ya entran por el aviso del 429; sus `console.error` entran por la captura automática.
+- Puede mover líneas y conteos de este §3: el orquestador los vuelve a confirmar antes de escribir el prompt de la fase 1.
 
 ### Railway
 - CLI instalada en la PC: v5.49.3 (hay v5.71.0). **Login vencido**: el usuario tiene que correr `railway login`.
@@ -94,15 +107,19 @@
      - `tracesSampleRate: 0` (sin performance: más liviano y dentro del plan gratis).
      - `integrations`: `captureConsoleIntegration({ levels: ['error'] })`. **A verificar:** que cuando uno de los argumentos es un `Error`, el evento salga como excepción con stack (no solo como mensaje de texto). Si no, en el init se ajusta (por ejemplo, un `beforeSend` o un wrapper de `console.error` dentro de `instrument.js`), sin tocar los controllers.
      - Captura automática de excepciones no atrapadas y promesas rechazadas (integraciones por defecto del SDK).
-   - **`backend/package.json`**: `"start": "node --import ./src/instrument.js src/index.js"`. En ESM, Sentry necesita cargarse antes que el resto para separar el contexto de cada request (isolation scope). Mismo cambio en `dev` si existe.
+   - **Carga del web service**: `node --import ./src/instrument.js src/index.js`. En ESM, Sentry necesita cargarse antes que el resto para separar el contexto de cada request (isolation scope). Va en el script `start` (y `dev` si existe) de `backend/package.json` para local, y **el usuario cambia el start command del web service en Railway** a ese mismo comando (fase 3). Si Railway arrancara sin el `--import`, el backend funciona igual pero sin Sentry: el orquestador lo verifica después del deploy.
    - **`backend/src/config/sentry.js`** (nuevo, helper central; ningún otro archivo importa `@sentry/node` directo):
      - `etiquetarRequest(tags)`: pone tags en el scope del request actual (no-op sin DSN).
      - `reportarAviso(mensaje, { tags, fingerprint })`: `captureMessage` con nivel warning (no-op sin DSN).
+     - `vaciarEventos(ms)`: `await Sentry.flush(ms)` antes de que un job termine con `process.exit` (no-op sin DSN).
      - Comentado según `CLAUDE.md` (qué hace, parámetros, retorno).
    - **`tenantMiddleware.js`**: al resolver el tenant, `etiquetarRequest({ tenant: subdominio, tenant_id })`.
    - **`authMiddleware.js`**: `etiquetarRequest({ rol })`.
    - **`index.js`**: `Sentry.setupExpressErrorHandler(app)` (vía el helper) al final de las rutas, para lo que escape de un controller (Express 5 pasa al handler los errores de handlers async).
-   - **`jobs/recordatorios.js`**: el job recorre tenants fuera de un request; poner el tag `tenant` por tenant dentro del loop (por ejemplo con un scope por iteración, a través del helper) para que sus errores también digan de qué local son.
+   - **Jobs de cron** (`jobs/recordatorios.js`, y `jobs/cierreDiario.js` si ya existe):
+     - el **primer import** del archivo es `../instrument.js` (en un job no hace falta el `--import`: no hay requests que separar, y así no se toca el start command del servicio cron);
+     - el tag `tenant` se pone por tenant dentro del loop (scope por iteración, a través del helper) para que sus errores digan de qué local son;
+     - antes del `process.exit`, `await` de un `vaciarEventos(ms)` del helper (envuelve `Sentry.flush`, no-op sin DSN) para no perder los eventos.
    - **Alertas de Sentry** (las configura el usuario en la fase 3): issue nuevo, issue que vuelve tras resuelto, pico (> 50 eventos en 1 h). Acción: Discord (o mail).
 4. **Tráfico inusual** — en `crearHandler429` de `rateLimitMiddleware.js`, además del `console.warn` existente, `reportarAviso('rateLimit: <nombre>', { tags: { limite, ruta }, fingerprint: ['rateLimit', nombre] })` (más `tenant` cuando ya está resuelto, que pasa solo por el scope). Un issue por tipo de límite. Alerta: la primera vez y, si sigue, máximo una por hora (intervalo de acción de la regla de Sentry). La IP queda solo en el log de Railway, no en Sentry.
 
@@ -116,7 +133,7 @@
      3. Warns que importan: rate limit (por límite), picos de logins fallidos, `tenant no encontrado` con su subdominio (ahí se ve si alguien entra por el subdominio viejo `kingsai`, pendiente en `estado_actual.md`).
      4. El resto, solo contado.
    - **Solo lectura:** nunca `railway up`, `redeploy`, `variables`, `down`, ni nada que cambie prod. Si algo pide acción, la propone y la hace el usuario.
-6. **Allowlist en `.claude/settings.json`** (proyecto, commiteado): `Bash(railway logs:*)`, `Bash(railway status:*)` y el `curl` al health. Revisar el formato vigente de permisos de Claude Code al implementarlo, y que no pise un `.claude/settings.json` existente (hoy solo existe `.claude/launch.json`, que está en `.gitignore`; confirmar que `settings.json` no lo esté).
+6. **Allowlist en `.claude/settings.json`** (proyecto, commiteado): `Bash(railway logs:*)`, `Bash(railway status:*)` y el `curl` al health. Revisar el formato vigente de permisos de Claude Code al implementarlo. Requiere el cambio de `.gitignore` de §3: sin él, ni la skill ni este archivo llegan al repo. No tocar `settings.local.json` (local del usuario, sigue ignorado).
 7. **Entorno de claude.ai/code** (lo configura el usuario, con instrucciones del orquestador): variable `RAILWAY_TOKEN` (token de proyecto, entorno production), script de arranque `npm i -g @railway/cli`, acceso de red a los dominios de Railway, repo de GitHub del proyecto.
 
 ---
@@ -125,7 +142,8 @@
 
 - `backend/package.json` (+ `package-lock.json`): dependencia `@sentry/node`; scripts `start` (y `dev`) con `--import ./src/instrument.js`.
 - `backend/src/instrument.js` (nuevo), `backend/src/config/sentry.js` (nuevo).
-- `backend/src/index.js`, `backend/src/middlewares/tenantMiddleware.js`, `backend/src/middlewares/authMiddleware.js`, `backend/src/middlewares/rateLimitMiddleware.js`, `backend/src/jobs/recordatorios.js`.
+- `backend/src/index.js`, `backend/src/middlewares/tenantMiddleware.js`, `backend/src/middlewares/authMiddleware.js`, `backend/src/middlewares/rateLimitMiddleware.js`, `backend/src/jobs/recordatorios.js` (y `backend/src/jobs/cierreDiario.js` si ya existe).
+- `.gitignore`: `.claude/` → `.claude/*` + `!.claude/settings.json` + `!.claude/skills/`.
 - `.claude/skills/salud-prod/SKILL.md` (nuevo), `.claude/settings.json` (nuevo o editado).
 - Docs: `docs/plan_monitoreo_prod.md` (este documento), `docs/convenciones_tecnicas.md` §1, `docs/estado_actual.md`, `docs/ruta_proyecto.md`, `docs/decisiones_monitoreo_prod.md` (cierre), mapa de documentos del `CLAUDE.md`.
 - **Sin cambios en la DB ni en los fronts.**
@@ -180,8 +198,8 @@
 |---|---|---|---|
 | 0 | ✅ **Hecha (2026-11-05).** Branch `feature/monitoreo-prod` creado desde `feature/descansos-agenda` (rebasado sobre `main` después del merge) y este plan volcado a `docs/plan_monitoreo_prod.md` (commiteado) | Chat de planificación | — |
 | 1 | **Sentry en el backend** (§4.1, puntos 3 y 4): `instrument.js`, `config/sentry.js`, scripts de arranque, tags de tenant y rol, aviso del 429, tenant en el job de recordatorios, handler de errores de Express | Chat ejecutor | Crear cuenta en Sentry y un **proyecto de prueba** (no el de prod); dejar su DSN en `backend/.env` local como `SENTRY_DSN`, sin pasarlo por el chat |
-| 2 | **Skill `salud-prod` + allowlist** (§4.2, puntos 5 y 6) | Chat ejecutor | `railway login` en la PC (y `railway link` al proyecto si hace falta) |
-| 3 | **Configuración externa**, guiada paso a paso: server y canal de Discord con webhook; webhook de proyecto en Railway; monitor de uptime; proyecto de prod en Sentry con las alertas de §2 (10 y 10b); `SENTRY_DSN` de prod en las variables del servicio en Railway (directo en el servicio, no como shared variable sin referenciar). Deploy y prueba de cada aviso | Orquestador + usuario | Push y deploy de las fases 1 y 2 |
+| 2 | **Skill `salud-prod` + allowlist** (§4.2, puntos 5 y 6) y el cambio de `.gitignore` para que `.claude/settings.json` y `.claude/skills/` se commiteen (§3) | Chat ejecutor | `railway login` en la PC (y `railway link` al proyecto si hace falta) |
+| 3 | **Configuración externa**, guiada paso a paso: server y canal de Discord con webhook; webhook de proyecto en Railway; monitor de uptime; proyecto de prod en Sentry con las alertas de §2 (10 y 10b); `SENTRY_DSN` de prod como shared variable **referenciada** en el web service y en cada servicio cron (`${{shared.SENTRY_DSN}}`; crearla a nivel proyecto sola no la inyecta); **start command del web service** → `node --import ./src/instrument.js src/index.js`. Deploy y prueba de cada aviso | Orquestador + usuario | Push y deploy de las fases 1 y 2 |
 | 4 | **Entorno de claude.ai/code** (§4.2, punto 7) y prueba "¿cómo está prod?" desde el celular | Orquestador + usuario | — |
 | 5 | **Docs de cierre**: `convenciones_tecnicas.md` §1 (todo `console.error` llega a Sentry: no usarlo para cosas que no rompen el flujo; el 429 también avisa), `estado_actual.md` (monitoreo hecho y dónde vive; pendiente "migrar Node 22 → 24/26 antes del 2027-04-30"), `ruta_proyecto.md`, `decisiones_monitoreo_prod.md`, mapa del `CLAUDE.md`; commit final y resumen | Orquestador | — |
 
@@ -192,7 +210,7 @@
 - **Fase 1 (local, contra demo, con el DSN del proyecto de prueba):**
   - Error forzado en un controller con el tenant demo → aparece en Sentry como excepción con stack, tags `tenant: demo`, `tenant_id` y `rol`; sin body, sin `Authorization`, sin IP.
   - 429 del limiter de login (por ejemplo, 11 logins operativos fallidos con curl) → issue de warning `rateLimit: login`, agrupado.
-  - Error en el job de recordatorios (simulado) → evento con su tenant.
+  - Error en el job de recordatorios (simulado) → evento con su tenant, que llega a Sentry aunque el job termine con `process.exit` (prueba del `flush`).
   - Sin `SENTRY_DSN`: el backend arranca igual y no manda nada. `node --check` OK en los archivos tocados.
   - El comando de arranque nuevo funciona con `npm start`.
 - **Fase 2:** correr la skill contra prod; el reporte coincide con el dashboard de Railway en la misma ventana. La allowlist deja correr `railway logs` sin pedir permiso y no habilita otros comandos de Railway.
