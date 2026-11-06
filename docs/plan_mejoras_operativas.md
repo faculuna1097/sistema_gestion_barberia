@@ -6,7 +6,9 @@
 > anteriores los mueven. Aprobar el plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
 > **Estado (2026-11-05):** fase 0 hecha (branch `feature/mejoras-operativas` desde `main`, con el merge de
-> `feature/descansos-agenda` ya desplegado, y este doc commiteado). Próxima: fase 1.
+> `feature/descansos-agenda` ya desplegado, y este doc commiteado). **En espera:** el usuario decidió ejecutar antes
+> el plan de monitoreo (`feature/monitoreo-prod`). Al retomar: rebasar este branch sobre el `main` que ya tenga el
+> monitoreo, reconfirmar los hechos de §3 y seguir con la fase 1.
 
 ## 1. Contexto
 
@@ -15,9 +17,10 @@ El rediseño del turnero, los descansos en la Agenda y las deudas técnicas (`fe
 eso, el usuario quiere sumar 7 features para la app del barbero, el iPad y el panel (más una chica, F8: aviso de
 barberos sin horario), en este branch, hijo de `main`.
 
-**Orden general:** estas features → merge a `main` y deploy (los hace el usuario) → plan de monitoreo
-(`docs/plan_monitoreo_prod.md`, en `feature/monitoreo-prod`, otro hijo de `main` que solo trae el plan: se rebasa
-sobre `main` cuando termine esta tanda).
+**Orden general:** primero el plan de monitoreo (`docs/plan_monitoreo_prod.md`, en `feature/monitoreo-prod`, otro
+hijo de `main`) → su merge a `main` y deploy (los hace el usuario) → rebase de este branch sobre `main` → estas
+features. Con el monitoreo ya en `main`, todo `console.error` llega a Sentry con el tenant como tag
+(`convenciones_tecnicas.md` §1).
 
 **Kingsai sigue reservando por Setmore** y nadie usa todavía la app del barbero ni el turnero propio. Lo que usan
 los dos tenants todos los días es el iPad y el panel: los cambios a esas pantallas son los que van a notar.
@@ -152,7 +155,10 @@ prompt y por qué. 4. Cosas vistas de paso (posibles bugs o fallas, con archivo 
 - **Cierre diario automático:** `backend/src/jobs/cierreDiario.js`, servicio cron nuevo en Railway (lo configura el
   usuario con instrucciones), 03:00 AR (06:00 UTC). Pasa a `no_asistio` los `reservado` que terminaron antes de
   las 00:00 AR del día, en todos los tenants activos; idempotente; loguea cuántos por tenant. **La primera corrida
-  cierra también los históricos:** antes del deploy, SQL para contarlos.
+  cierra también los históricos:** antes del deploy, SQL para contarlos. **Sentry:** sigue el patrón para jobs de
+  cron de `convenciones_tecnicas.md` §1 que deja el monitoreo (como `jobs/recordatorios.js`): import de
+  `../instrument.js` primero, tag de tenant por iteración, `vaciarEventos` antes del `process.exit`, y `SENTRY_DSN`
+  referenciada en el servicio cron nuevo (shared variable).
 - **DB:** `turno.no_asistio_por` (`barbero`/`admin`/`sistema`, nullable). El backend nuevo lo completa al marcar
   "no asistió" (barbero o admin) y el cron con `sistema`.
 
@@ -199,9 +205,8 @@ prompt y por qué. 4. Cosas vistas de paso (posibles bugs o fallas, con archivo 
 | 10 | F2b traspasos: app del barbero | Ejecutor | — |
 | 11 | Cierre: `decisiones_mejoras_operativas.md`, `estado_actual.md` (estado, pendientes resueltos, pasos de deploy y post-deploy: drop de `telefono`, cron nuevo, conteo de históricos), `SQL_Schema.md`, `onboarding.md`, `ruta_proyecto.md`, `plan_app_barbero.md`, mapa del `CLAUDE.md`; resumen | Orquestador | — |
 
-Después: merge de este branch a `main` + deploy siguiendo `estado_actual.md`; recién ahí, rebase de
-`feature/monitoreo-prod` sobre `main` y ejecución de `docs/plan_monitoreo_prod.md` (confirmar que sus datos de §3
-sigan vigentes).
+Después: merge de este branch a `main` + deploy siguiendo `estado_actual.md` (el monitoreo ya está en `main` desde
+antes de esta tanda).
 
 ## 6. Orden de deploy (para el cierre)
 
