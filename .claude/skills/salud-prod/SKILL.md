@@ -1,6 +1,6 @@
 ---
 name: salud-prod
-description: Diagnóstico de solo lectura de la salud de producción (backend en Railway). Usala cuando el usuario pregunte "¿cómo está prod?", "¿qué pasó?", "¿anduvo todo bien hoy?", "¿se cayó algo?", "¿hubo errores?", "¿corrió el recordatorio?", o cuando llegue o pegue un aviso de Discord (uptime, crash o deploy fallido de Railway, Sentry, rate limit). Lee el health, los deployments y los logs de Railway de una ventana (24 h por defecto, o la que pida: "la última hora") y devuelve un reporte corto para leer en el celular.
+description: Diagnóstico de solo lectura de la salud de producción (backend en Railway). Usala cuando el usuario pregunte "¿cómo está prod?", "¿qué pasó?", "¿anduvo todo bien hoy?", "¿se cayó algo?", "¿hubo errores?", "¿corrió el recordatorio?", o cuando llegue o pegue un aviso de Discord (uptime, crash o deploy fallido de Railway, Sentry, rate limit). Lee el health, los deployments y los logs de Railway de una ventana (24 h por defecto, u otra que pida, como "la última hora") y devuelve un reporte corto para leer en el celular.
 ---
 
 # salud-prod — ¿cómo está producción?
@@ -198,3 +198,5 @@ salteando las vacías salvo Caídas y Cron:
 Si está todo bien, alcanza con una línea: "Todo bien en las últimas 24 h:
 health OK, sin 5xx ni errores, el recordatorio corrió (X enviados)."
 Si proponés una acción, cerrá con "Para hacer (vos): ..." — nunca la ejecutes.
+
+Si el usuario quiere resolver lo que encontraste, seguí con la skill `arreglo-prod`.
