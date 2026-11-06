@@ -45,6 +45,7 @@ docs/
 |-- onboarding.md
 |-- performance_frontends.md
 |-- plan_app_barbero.md
+|-- plan_monitoreo_prod.md
 |-- postmortem_golive_turnero.md
 |-- ruta_proyecto.md
 |-- sistema_de_disenio.md

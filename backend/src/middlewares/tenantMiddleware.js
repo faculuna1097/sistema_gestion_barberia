@@ -17,6 +17,7 @@
 // así que es overkill. Ver docs/estado_actual.md.
 
 import { query } from '../config/db.js';
+import { etiquetarRequest } from '../config/sentry.js';
 
 // Caché en memoria: { [subdominio]: { tenant_id, operativo_token_version, admin_token_version } }
 const tenantCache = {};
@@ -146,6 +147,8 @@ export const tenantMiddleware = async (req, res, next) => {
     const fallback = process.env.TENANT_ID;
     if (fallback) {
       req.tenant_id = fallback;
+      // Sin subdominio a mano: a Sentry va solo el id del tenant.
+      etiquetarRequest({ tenant_id: fallback });
       return next();
     }
     // Sin log a propósito: es validación de input (convención de logs) y el
@@ -169,6 +172,8 @@ export const tenantMiddleware = async (req, res, next) => {
     }
 
     req.tenant_id = entrada.tenant_id;
+    // Todo evento de Sentry de este request lleva el tenant (subdominio e id).
+    etiquetarRequest({ tenant: subdominio, tenant_id: entrada.tenant_id });
     next();
 
   } catch (err) {

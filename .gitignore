@@ -24,7 +24,14 @@ Thumbs.db
 # Scripts operativos one-off (no se commitean)
 backend/scripts/
 
-# Configuración local de Claude Code
-.claude/
+# Configuración de Claude Code
+# Se ignora todo .claude/ salvo lo compartido: settings.json (permisos de solo
+# lectura para la skill de diagnóstico) y skills/ (salud-prod). Van al repo para
+# que la sesión en la nube, que clona GitHub, los tenga. Es .claude/* y no
+# .claude/ porque git no deja re-incluir nada dentro de una carpeta ignorada.
+# launch.json y settings.local.json siguen ignorados (son locales).
+.claude/*
+!.claude/settings.json
+!.claude/skills/
 
 

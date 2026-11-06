@@ -16,7 +16,9 @@
  */
 export const requiereRol = (...rolesPermitidos) => (req, res, next) => {
   if (!rolesPermitidos.includes(req.rol)) {
-    console.error('[requiereRol] Acceso denegado | rol:', req.rol, '| requeridos:', rolesPermitidos);
+    // console.warn (convención de logs §1): un acceso denegado por rol es un
+    // rechazo esperado, no una falla del flujo; no tiene que llegar a Sentry.
+    console.warn('[requiereRol] Acceso denegado | rol:', req.rol, '| requeridos:', rolesPermitidos.join(', '));
     return res.status(403).json({ error: 'No tenés permiso para esta acción' });
   }
   next();

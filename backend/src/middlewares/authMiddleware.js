@@ -8,6 +8,7 @@
 import { verificarFirmaToken } from '../config/jwt.js';
 import { leerTokenVersionOperativo, leerTokenVersionAdmin } from './tenantMiddleware.js';
 import { query } from '../config/db.js';
+import { etiquetarRequest } from '../config/sentry.js';
 
 /**
  * verificarToken
@@ -44,7 +45,10 @@ export const verificarToken = async (req, res, next) => {
     // Algoritmo fijado en HS256; ver config/jwt.js.
     payload = verificarFirmaToken(token);
   } catch (err) {
-    console.error('[authMiddleware] verificarToken — firma inválida o token expirado:', err);
+    // console.warn y no console.error (convención de logs §1): un token vencido o
+    // manipulado es un rechazo esperado, no una falla del flujo. Con error, cada
+    // sesión vencida llegaría a Sentry como bug.
+    console.warn('[authMiddleware] verificarToken — firma inválida o token expirado:', err?.message);
     return res.status(401).json({ error: 'Token inválido o expirado' });
   }
 
@@ -58,6 +62,8 @@ export const verificarToken = async (req, res, next) => {
   req.tenant_id  = payload.tenant_id;
   req.rol        = payload.rol;
   req.barbero_id = payload.barbero_id; // solo presente si rol === 'barbero'
+  // El rol va como tag a los eventos de Sentry de este request.
+  etiquetarRequest({ rol: payload.rol });
 
   // ── Paso 2: revocación por token_version (consulta la DB). Se separa del
   // paso 1 a propósito: acá un error de la query es un fallo de SERVIDOR (blip
