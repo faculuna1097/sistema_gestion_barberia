@@ -1,5 +1,7 @@
 # Plan: monitoreo de la salud de producción (avisos al celular + diagnóstico con Claude)
 
+> ✅ **Completado y archivado (2026-11-06).** Las cinco fases están hechas y el monitoreo está en producción. El núcleo de decisiones vive en [`decisiones_monitoreo_prod.md`](decisiones_monitoreo_prod.md) y lo que queda pendiente, en [`estado_actual.md`](estado_actual.md). Este documento queda como registro de cómo se hizo.
+>
 > **Para el chat orquestador.** Este documento es autocontenido: lo escribió un chat de planificación que no va a orquestar. Todas las decisiones (1–12) están cerradas con el usuario; no hace falta volver a discutirlas. Lo que dice "a verificar" son datos técnicos que se confirman al implementar, no decisiones abiertas. Aprobar este plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
 > **Estado (2026-11-05): próximo a ejecutar, antes de las mejoras operativas** (el usuario cambió el orden). El branch `feature/monitoreo-prod` sale de `main` (`6010166`, con el merge de `feature/descansos-agenda` y el fix del health `0c0bc13` ya desplegados). Mientras `main` no cambie, no hace falta rebasar: el orquestador lo confirma con `git merge-base` antes de la fase 1. `feature/mejoras-operativas` (otro hijo de `main`, hoy solo con su plan) va **después**: se rebasa sobre el `main` que ya tenga este monitoreo.
