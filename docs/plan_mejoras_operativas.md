@@ -96,11 +96,22 @@ prompt y por qué. 4. Cosas vistas de paso (posibles bugs o fallas, con archivo 
 ### F8 — Aviso de barberos sin horario (Gestión → Barberos)
 - Motivo: un barbero activo sin `barbero_horario` aparece en el "Equipo" del turnero pero no tiene horarios para
   reservar, "Cualquier barbero" no lo asigna y su Agenda queda gris (`estado_actual.md` → Pendientes, primer ítem, paso 2).
-- Backend: el listado de barberos de Gestión (`controllers/gestion.js`, el `SELECT` de la línea ~69) suma
-  `tiene_horario` (`EXISTS` sobre `barbero_horario`). Sin cambios de DB.
-- `TabBarberos.jsx`: cartel de alerta arriba de la tabla si hay barberos **activos** sin horario ("Lucas y Tomi no
-  tienen horario cargado: no se les pueden reservar turnos"), y una marca "Sin horario" en su fila. Desaparece
-  sola al cargarles el horario. Va en la fase 1, junto con F7 (mismo archivo).
+- **Solo front, sin backend ni DB** (decidido el 2026-11-06). `TabBarberos.jsx` ya precarga en el mount los
+  horarios de todos los barberos (`horariosPorBarbero`, con `getAdminHorarios` en un `Promise.allSettled`) y el
+  horario del local (`horarioLocal`, `{ [dia]: { inicio, fin } }`, `null` si no se pudo leer). Hoy los usa la
+  columna "Horarios", que muestra un check si el barbero tiene algún bloque (`tieneHorarios`, ~línea 1138).
+- **La columna "Horarios" se reemplaza** por "días con horario / días que abre el local", por ejemplo `3/5`:
+  - numerador: días distintos en los que el barbero tiene al menos un bloque, contando solo los días en que el
+    local abre;
+  - denominador: días abiertos del local (`horarioLocal`);
+  - signo de alerta solo en `0/x`; el resto, en neutro;
+  - si `horarioLocal` no se pudo leer, o el horario del barbero falló al cargar, `—`;
+  - ordena por el numerador;
+  - se actualiza al guardar el horario desde el modal (como hoy el check).
+- **Cartel de alerta** arriba de la tabla si hay barberos **activos** en `0/x` ("Lucas y Tomi no tienen horario
+  cargado: no se les pueden reservar turnos"). Desaparece solo al cargarles el horario.
+- La función que cuenta los días va comentada y aparte del render (pura, reusable si otra pantalla la necesita).
+- Va en la fase 1, junto con F7 (mismo archivo).
 
 ### F6 — Login del iPad, datos del dueño y recuperación
 - **Ver contraseña:** botón ojo en el campo de contraseña de `PantallaLoginOperativo` (accesible, ≥ 44 px).
@@ -193,7 +204,7 @@ prompt y por qué. 4. Cosas vistas de paso (posibles bugs o fallas, con archivo 
 | # | Fase | Quién | Requisito previo (usuario) |
 |---|---|---|---|
 | 0 | ✅ **Hecha (2026-11-05).** Branch `feature/mejoras-operativas` desde `main` + este plan a `docs/plan_mejoras_operativas.md` (commit) | Chat de planificación | — |
-| 1 | F7 comisión con barra + F8 aviso de barberos sin horario (backend + `TabBarberos`) | Ejecutor | SQL de % no múltiplos de 5 |
+| 1 | F7 comisión con barra (backend + `TabBarberos`) + F8 días con horario y aviso (solo `TabBarberos`) | Ejecutor | SQL de % no múltiplos de 5 |
 | 2 | F6a DB + backend: columnas del dueño y `telefono_local`, tabla de tokens, endpoints y mails de recuperación, Gestión → Negocio (backend), `crearTenant.js` | Ejecutor | SQL de columnas + datos de los 3 tenants + tabla de tokens |
 | 3 | F6b fronts: ver contraseña, "¿Olvidaste…?" en los dos logins, pantallas de recuperación, Gestión → Negocio; `telefono_local` en el turnero | Ejecutor | — |
 | 4 | F5 login de la app del barbero (diseño con el usuario → implementación) | Ejecutor | — |
