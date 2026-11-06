@@ -8,7 +8,7 @@
 > **Estado (2026-11-05):** fase 0 hecha (branch `feature/mejoras-operativas` desde `main`, con el merge de
 > `feature/descansos-agenda` ya desplegado, y este doc commiteado). **En espera:** el usuario decidió ejecutar antes
 > el plan de monitoreo (`feature/monitoreo-prod`). Al retomar: rebasar este branch sobre el `main` que ya tenga el
-> monitoreo, reconfirmar los hechos de §3 y seguir con la fase 1.
+> monitoreo, reconfirmar los hechos de §3 y seguir con la fase 1a (F9, agregada el 2026-11-06).
 
 ## 1. Contexto
 
@@ -199,11 +199,48 @@ prompt y por qué. 4. Cosas vistas de paso (posibles bugs o fallas, con archivo 
   "Traspaso pendiente a B" (con "Retirar") o el resultado. B ve las solicitudes al abrir la app y en el refresco
   de 30 s (contador visible + lista con Aceptar / Rechazar). Sin notificaciones nativas.
 
+### F9 — Arreglo: el cliente puede cancelar o reprogramar un turno que ya pasó (agregado el 2026-11-06)
+- **Bug (encontrado por el usuario, verificado en el código el 2026-11-06):** desde el link del mail
+  (`/turnos/gestionar/<token>`), el cliente puede cancelar un turno aunque ya haya pasado su hora. Lo mismo pasa con
+  reprogramar.
+  - `cancelarTurno` (`backend/src/controllers/turnero.js:463`) solo exige `estado = 'reservado'` (lectura en la
+    línea ~474 y `WHERE` del `UPDATE` en la ~487).
+  - `reprogramarTurno` (~línea 531) también: valida que el horario **nuevo** sea futuro, pero no que el turno actual
+    no haya empezado (estado en la ~563, `UPDATE` en la ~590).
+  - El front (`frontend-turnero/src/screens/GestionTurno.jsx:155`, `esReservado`) muestra las dos acciones solo
+    según el estado.
+  - Como un turno se completa recién al registrar su corte, uno al que el cliente vino y que todavía no se cobró
+    sigue `reservado`. El cliente puede cancelarlo después de cortarse, o "reprogramar" una falta a otro día.
+- **Regla:** el cliente cancela o reprograma solo si el turno **todavía no empezó** (`inicio > now()`). Es la misma
+  regla que ya usa la app del barbero para "Cancelar" (`DetalleTurnoModal.jsx`).
+- **Backend:**
+  - En los dos, la condición va **en el `WHERE` del `UPDATE`** (`AND inicio > now()`), no solo en la lectura
+    previa. Así es atómico, como el estado.
+  - Un turno que ya empezó responde **409** con un mensaje para el cliente: "Este turno ya pasó, así que no se puede
+    cancelar ni reprogramar. Si necesitás algo, comunicate con el local."
+  - La lectura que decide qué contestar cuando el `UPDATE` no actualiza ninguna fila distingue "ya empezó" de
+    "cambió de estado".
+  - Reusar o centralizar el chequeo en `turnosService.js` (ya existe `inicioPosteriorAhora`) en vez de repetirlo.
+- **Turnero (`GestionTurno`):**
+  - Si el turno ya empezó, no ofrece Cancelar ni Reprogramar. Muestra el texto de arriba, con los datos de contacto
+    del local que ya muestra la landing (teléfono / WhatsApp si están cargados).
+  - Si el 409 llega igual (por ejemplo, con la pantalla abierta desde antes), muestra el mensaje del servidor.
+- **No cambia:** el estado del turno, el resto de las reglas del turnero ni los mails.
+- **Verificación:** contra demo, con controllers + req/res simulados:
+  - cancelar y reprogramar un turno reservado futuro → OK;
+  - con un turno reservado que ya empezó → 409 sin cambios en la fila;
+  - con uno cancelado o completado → el 409 de siempre.
+
+  En el front, `vite preview` del turnero con un turno pasado y uno futuro.
+- **Va primero** (fase 1a): es un arreglo de producción chico, independiente del resto, y el turnero ya está
+  publicado.
+
 ## 5. Fases
 
 | # | Fase | Quién | Requisito previo (usuario) |
 |---|---|---|---|
 | 0 | ✅ **Hecha (2026-11-05).** Branch `feature/mejoras-operativas` desde `main` + este plan a `docs/plan_mejoras_operativas.md` (commit) | Chat de planificación | — |
+| 1a | F9 arreglo: no cancelar ni reprogramar desde el link un turno que ya empezó (backend + `GestionTurno` del turnero) | Ejecutor | — |
 | 1 | F7 comisión con barra (backend + `TabBarberos`) + F8 días con horario y aviso (solo `TabBarberos`) | Ejecutor | SQL de % no múltiplos de 5 |
 | 2 | F6a DB + backend: columnas del dueño y `telefono_local`, tabla de tokens, endpoints y mails de recuperación, Gestión → Negocio (backend), `crearTenant.js` | Ejecutor | SQL de columnas + datos de los 3 tenants + tabla de tokens |
 | 3 | F6b fronts: ver contraseña, "¿Olvidaste…?" en los dos logins, pantallas de recuperación, Gestión → Negocio; `telefono_local` en el turnero | Ejecutor | — |
@@ -239,3 +276,7 @@ viejo no inserta tenants). Post-deploy: drop de `tenant.telefono` y alta del cro
 ## 8. Hallazgos
 
 _(Los completa el orquestador durante la tanda.)_
+
+- **(2026-11-06, usuario) El cliente puede cancelar o reprogramar desde el link del mail un turno que ya pasó.**
+  `backend/src/controllers/turnero.js` (`cancelarTurno`, `reprogramarTurno`) y
+  `frontend-turnero/src/screens/GestionTurno.jsx`. **Se ataca en esta tanda:** F9, fase 1a.
