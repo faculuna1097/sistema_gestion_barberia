@@ -12,6 +12,7 @@ import { tenantMiddleware, invalidar } from './middlewares/tenantMiddleware.js';
 import { verificarClavePlataforma } from './middlewares/plataformaAuthMiddleware.js';
 import { limiterGlobal, limiterLogin } from './middlewares/rateLimitMiddleware.js';
 import { sanitizarObjeto } from './utils/sanitizarLogs.js';
+import { registrarHandlerErrores, vaciarEventos } from './config/sentry.js';
 
 // --- Importación de rutas ---
 import barberoRoutes    from './routes/barberos.js';
@@ -259,6 +260,11 @@ app.use('/api/admin/imagenes',         verificarToken, requiereRol('admin'), adm
 // socios: los dueños del negocio, para el selector de aportes y retiros de Caja.
 app.use('/api/admin/socios',           verificarToken, requiereRol('admin'), adminSociosRoutes);
 
+// --- Handler de errores de Sentry ---
+// Después de la última ruta: reporta lo que escape de un handler (los catch de
+// los controllers ya llegan solos por su console.error). No-op sin SENTRY_DSN.
+registrarHandlerErrores(app);
+
 // --- Arranque del servidor ---
 const startServer = async () => {
   console.log('[index] Verificando conexión a la base de datos...');
@@ -272,7 +278,9 @@ const startServer = async () => {
   });
 };
 
-startServer().catch((err) => {
+startServer().catch(async (err) => {
   console.error('[index] ❌ Error fatal al iniciar el servidor:', err);
+  // Sin esto, el process.exit corta el envío y el crash de arranque no llega a Sentry.
+  await vaciarEventos(2000);
   process.exit(1);
 });

@@ -16,6 +16,7 @@ import { TZ, RECORDATORIO_DIAS_ANTES } from '../utils/constantes.js';
 import { enviarRecordatorio, construirContextoMail } from './mail/mailer.js';
 import { construirLinkGestion } from './turnosService.js';
 import { sqlTurnoEnriquecido } from './sqlTurnoEnriquecido.js';
+import { conEtiquetas } from '../config/sentry.js';
 
 /**
  * Lee la sub-config de recordatorio de un tenant aplicando el default opt-in:
@@ -133,62 +134,67 @@ export const procesarRecordatorios = async ({ dryRun = false } = {}) => {
   let yaReclamados = 0; // claim perdido (re-corrida o deploy solapado)
 
   for (const tenant of tenants) {
-    const config = leerConfigRecordatorio(tenant.configuracion);
-    if (!config.activo) continue;
-    tenantsConRecordatorio++;
+    // Cada vuelta corre en su propio scope de Sentry con el tenant como tag: los
+    // errores de un tenant dicen de qué local son y no se mezclan con la vuelta
+    // siguiente. Sin SENTRY_DSN, conEtiquetas solo corre la función.
+    await conEtiquetas({ tenant: tenant.subdominio, tenant_id: tenant.id }, async () => {
+      const config = leerConfigRecordatorio(tenant.configuracion);
+      if (!config.activo) return;
+      tenantsConRecordatorio++;
 
-    try {
-      const turnos = await obtenerTurnosDelLote(tenant.id, fechaObjetivo);
-      console.log(`[recordatorios] procesarRecordatorios — lote del tenant | tenant: ${tenant.subdominio} | turnos: ${turnos.length}`);
+      try {
+        const turnos = await obtenerTurnosDelLote(tenant.id, fechaObjetivo);
+        console.log(`[recordatorios] procesarRecordatorios — lote del tenant | tenant: ${tenant.subdominio} | turnos: ${turnos.length}`);
 
-      for (const fila of turnos) {
-        // Cliente sin email: saltar ANTES del claim. No tiene sentido quemar el
-        // claim (marcar recordatorio_enviado_en) de un turno que no se va a
-        // enviar. Vale para ambos modos.
-        if (!fila.cliente_email) {
-          console.warn(`[recordatorios] procesarRecordatorios — saltado (cliente sin email) | tenant: ${tenant.subdominio} | cliente: ${fila.cliente_nombre} | inicio: ${fila.inicio}`);
-          salteados++;
-          continue;
-        }
-
-        // Dry-run: sólo lista a quién se le enviaría; no reclama ni manda nada.
-        if (dryRun) {
-          console.log(`[recordatorios] procesarRecordatorios — [dry-run] se enviaría | tenant: ${tenant.subdominio} | cliente: ${fila.cliente_nombre} | email: ${fila.cliente_email} | inicio: ${fila.inicio}`);
-          enviados++;
-          continue;
-        }
-
-        // Envío real. Cada turno se aísla en su try/catch para que un fallo
-        // puntual (p.ej. error de DB en el claim) no tire el resto del lote.
-        try {
-          // Claim atómico: marca recordatorio_enviado_en ANTES de enviar.
-          // Si lo perdió otro runner (deploy solapado / re-corrida), no se envía.
-          const gano = await reclamarTurno(fila.turno_id);
-          if (!gano) {
-            console.warn(`[recordatorios] procesarRecordatorios — claim perdido (ya reclamado) | tenant: ${tenant.subdominio} | turno_id: ${fila.turno_id}`);
-            yaReclamados++;
+        for (const fila of turnos) {
+          // Cliente sin email: saltar ANTES del claim. No tiene sentido quemar el
+          // claim (marcar recordatorio_enviado_en) de un turno que no se va a
+          // enviar. Vale para ambos modos.
+          if (!fila.cliente_email) {
+            console.warn(`[recordatorios] procesarRecordatorios — saltado (cliente sin email) | tenant: ${tenant.subdominio} | cliente: ${fila.cliente_nombre} | inicio: ${fila.inicio}`);
+            salteados++;
             continue;
           }
 
-          const { turno, barbero, servicio, cliente, tenant: tenantMail } = construirContextoMail(fila);
-          const linkGestion = construirLinkGestion(fila.tenant_subdominio, fila.token_gestion);
-          const ok = await enviarRecordatorio(turno, barbero, servicio, cliente, linkGestion, tenantMail);
-          if (ok) {
+          // Dry-run: sólo lista a quién se le enviaría; no reclama ni manda nada.
+          if (dryRun) {
+            console.log(`[recordatorios] procesarRecordatorios — [dry-run] se enviaría | tenant: ${tenant.subdominio} | cliente: ${fila.cliente_nombre} | email: ${fila.cliente_email} | inicio: ${fila.inicio}`);
             enviados++;
-          } else {
-            // Best-effort: el envío falló pero el turno queda marcado (sin
-            // rollback ni reintento). Un envío doble es peor que perder uno.
-            console.warn(`[recordatorios] procesarRecordatorios — envío falló, turno queda marcado | tenant: ${tenant.subdominio} | turno_id: ${fila.turno_id}`);
+            continue;
+          }
+
+          // Envío real. Cada turno se aísla en su try/catch para que un fallo
+          // puntual (p.ej. error de DB en el claim) no tire el resto del lote.
+          try {
+            // Claim atómico: marca recordatorio_enviado_en ANTES de enviar.
+            // Si lo perdió otro runner (deploy solapado / re-corrida), no se envía.
+            const gano = await reclamarTurno(fila.turno_id);
+            if (!gano) {
+              console.warn(`[recordatorios] procesarRecordatorios — claim perdido (ya reclamado) | tenant: ${tenant.subdominio} | turno_id: ${fila.turno_id}`);
+              yaReclamados++;
+              continue;
+            }
+
+            const { turno, barbero, servicio, cliente, tenant: tenantMail } = construirContextoMail(fila);
+            const linkGestion = construirLinkGestion(fila.tenant_subdominio, fila.token_gestion);
+            const ok = await enviarRecordatorio(turno, barbero, servicio, cliente, linkGestion, tenantMail);
+            if (ok) {
+              enviados++;
+            } else {
+              // Best-effort: el envío falló pero el turno queda marcado (sin
+              // rollback ni reintento). Un envío doble es peor que perder uno.
+              console.warn(`[recordatorios] procesarRecordatorios — envío falló, turno queda marcado | tenant: ${tenant.subdominio} | turno_id: ${fila.turno_id}`);
+              fallidos++;
+            }
+          } catch (err) {
+            console.error(`[recordatorios] procesarRecordatorios — error procesando turno | tenant: ${tenant.subdominio} | turno_id: ${fila.turno_id}:`, err);
             fallidos++;
           }
-        } catch (err) {
-          console.error(`[recordatorios] procesarRecordatorios — error procesando turno | tenant: ${tenant.subdominio} | turno_id: ${fila.turno_id}:`, err);
-          fallidos++;
         }
+      } catch (err) {
+        console.error(`[recordatorios] procesarRecordatorios — fallo procesando tenant | tenant: ${tenant.subdominio}:`, err);
       }
-    } catch (err) {
-      console.error(`[recordatorios] procesarRecordatorios — fallo procesando tenant | tenant: ${tenant.subdominio}:`, err);
-    }
+    });
   }
 
   console.log(`[recordatorios] procesarRecordatorios — lote completo | dry_run: ${dryRun} | tenants_con_recordatorio: ${tenantsConRecordatorio} | enviados: ${enviados} | salteados: ${salteados} | fallidos: ${fallidos} | ya_reclamados: ${yaReclamados}`);

@@ -33,3 +33,23 @@ export function sanitizarObjeto(obj) {
 
   return copia;
 }
+
+// Rutas con un secreto en el path: el token_gestion del turnero (con él cualquiera
+// ve y cancela el turno). Matchea el segmento siguiente a /api/turnero/turnos/.
+const RUTA_TOKEN_TURNERO = /(\/api\/turnero\/turnos\/)[^/?#]+/;
+
+/**
+ * rutaSinDatosSensibles
+ * Devuelve la ruta de un request lista para mandar a un servicio externo (Sentry):
+ * sin query string ni fragmento, y con el token_gestion del turnero reemplazado
+ * por ':token'. Acepta una URL absoluta o solo el path.
+ * Ej.: '/api/turnero/turnos/abc123/cancelar?x=1' → '/api/turnero/turnos/:token/cancelar'.
+ *
+ * @param {string} url - URL o path del request (ej. req.originalUrl).
+ * @returns {string} la ruta limpia (string vacío si url no es un string).
+ */
+export function rutaSinDatosSensibles(url) {
+  if (typeof url !== 'string') return '';
+  const sinQuery = url.split(/[?#]/)[0];
+  return sinQuery.replace(RUTA_TOKEN_TURNERO, '$1:token');
+}

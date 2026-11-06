@@ -12,11 +12,17 @@
 // fallo CATASTRÓFICO (ej.: no conecta a la DB, falla obtenerTenantsActivos), que
 // sale con código 1.
 //
+// Sentry: instrument.js es el PRIMER import (inicializa Sentry antes que todo; acá
+// no se usa --import, así el start command del servicio cron no cambia). Antes del
+// process.exit se vacía la cola de Sentry: si no, los errores del lote se pierden.
+//
 // Ejecutar desde /backend: node src/jobs/recordatorios.js
 
+import '../instrument.js';
 import 'dotenv/config';
 import { procesarRecordatorios } from '../services/recordatoriosService.js';
 import { cerrarPool } from '../config/db.js';
+import { vaciarEventos } from '../config/sentry.js';
 
 const main = async () => {
   let code = 0;
@@ -33,6 +39,7 @@ const main = async () => {
     } catch (err) {
       console.error('[recordatorios] job — error cerrando el pool:', err);
     }
+    await vaciarEventos(2000);
     process.exit(code);
   }
 };

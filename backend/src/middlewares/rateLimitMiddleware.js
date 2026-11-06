@@ -29,6 +29,8 @@
 // que documenta la misma limitación para su caché.
 
 import { rateLimit } from 'express-rate-limit';
+import { reportarAviso } from '../config/sentry.js';
+import { rutaSinDatosSensibles } from '../utils/sanitizarLogs.js';
 
 /**
  * crearHandler429
@@ -37,11 +39,21 @@ import { rateLimit } from 'express-rate-limit';
  * cuál límite se tocó) y loguea el evento como señal de abuso (convención de
  * logs §1.4: eventos de seguridad van con console.warn).
  *
+ * Además manda un aviso a Sentry (tráfico inusual), agrupado en un issue por
+ * tipo de límite (fingerprint). La IP queda solo en el log de Railway: a Sentry
+ * van el límite y la ruta, sin query string ni token del turnero. El tenant
+ * llega solo por el scope del request cuando ya está resuelto (limiterGlobal
+ * corre antes de tenantMiddleware: ahí no hay tenant).
+ *
  * @param {string} nombre - etiqueta del limiter para el log (ej. 'login')
  * @returns {Function} handler (req, res) para express-rate-limit
  */
 const crearHandler429 = (nombre) => (req, res) => {
   console.warn(`[rateLimit] límite '${nombre}' excedido | ip: ${req.ip} | ruta: ${req.method} ${req.originalUrl}`);
+  reportarAviso(`rateLimit: ${nombre}`, {
+    tags: { limite: nombre, ruta: `${req.method} ${rutaSinDatosSensibles(req.originalUrl)}` },
+    fingerprint: ['rateLimit', nombre],
+  });
   res.status(429).json({ error: 'Demasiados intentos. Esperá unos minutos y probá de nuevo.' });
 };
 
