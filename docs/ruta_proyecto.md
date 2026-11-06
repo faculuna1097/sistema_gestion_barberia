@@ -1,12 +1,12 @@
 # Ruta del proyecto - Sistema de Gestion de Barberia
 
-Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y comparado de nuevo contra `git ls-files` el 2026-11-04 (se sumaron `frontend/src/utils/pantalla.js` y `frontend-landing/src/components/ui/IconoWhatsApp.jsx`, que faltaban). Antes, el 2026-11-03 (en `frontend-turnero/src/`: `components/ui/estilos.js`, `hooks/useHover.js` y `utils/errores.js`; y `frontend/src/hooks/usePantallaAngosta.js`). Antes, el 2026-11-02 (en `frontend/src/`: `components/ui/GrupoOpciones.jsx`, `ToastProvider.jsx`, `tonosFormaPago.js`, `estilos.js`, `utils/errores.js` y `utils/toast.js`). Antes, el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
+Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y comparado de nuevo contra `git ls-files` el 2026-11-06 (monitoreo de producción: `backend/src/instrument.js`, `backend/src/config/sentry.js`, `.claude/settings.json`, las skills `.claude/skills/salud-prod/` y `arreglo-prod/`, y `docs/decisiones_monitoreo_prod.md`). Antes, el 2026-11-04 (se sumaron `frontend/src/utils/pantalla.js` y `frontend-landing/src/components/ui/IconoWhatsApp.jsx`, que faltaban). Antes, el 2026-11-03 (en `frontend-turnero/src/`: `components/ui/estilos.js`, `hooks/useHover.js` y `utils/errores.js`; y `frontend/src/hooks/usePantallaAngosta.js`). Antes, el 2026-11-02 (en `frontend/src/`: `components/ui/GrupoOpciones.jsx`, `ToastProvider.jsx`, `tonosFormaPago.js`, `estilos.js`, `utils/errores.js` y `utils/toast.js`). Antes, el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
 
 Este documento lista las carpetas y archivos del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP. Para mantenerlo, regenerar los arboles desde `git ls-files` en vez de parchearlos a mano.
 
 ## Exclusiones
 
-Solo se listan archivos versionados. No aparecen rutas generadas o locales: `node_modules/`, `dist/`, `build/`, archivos `.env`, `.claude/` y `backend/scripts/` (scripts one-off, gitignored; no confundir con `backend/src/scripts/`).
+Solo se listan archivos versionados. No aparecen rutas generadas o locales: `node_modules/`, `dist/`, `build/`, archivos `.env`, lo local de `.claude/` (`launch.json`, `settings.local.json`) y `backend/scripts/` (scripts one-off, gitignored; no confundir con `backend/src/scripts/`).
 
 ## Vista general
 
@@ -18,6 +18,7 @@ sistema-gestion-barberia/
 |-- frontend-turnero/   Turnero publico del cliente (React + Vite, base /turnos/)
 |-- frontend-landing/   Landing de marketing (React + Vite, barbermanager.app)
 |-- docs/               Documentacion tecnica
+|-- .claude/            Config compartida de Claude Code: settings.json (permisos allow/deny) y skills/ (salud-prod, arreglo-prod)
 |-- .gitignore
 |-- CLAUDE.md
 `-- README.md
@@ -36,6 +37,7 @@ docs/
 |-- decisiones_login_operativo.md
 |-- decisiones_mail_entregabilidad.md
 |-- decisiones_mail_recordatorio.md
+|-- decisiones_monitoreo_prod.md
 |-- decisiones_movimientos_extra.md
 |-- decisiones_redisenio_panel_gestion.md
 |-- decisiones_turnero.md
@@ -62,9 +64,11 @@ backend/
 |-- package.json
 `-- src/
     |-- index.js
+    |-- instrument.js        inicializa Sentry; se carga antes que todo (--import en el web, primer import en los jobs)
     |-- config/
     |   |-- db.js
     |   |-- jwt.js
+    |   |-- sentry.js        helper central de Sentry (el resto del backend no importa @sentry/node)
     |   |-- supabase-ca.crt
     |   `-- supabase.js
     |-- controllers/
@@ -581,6 +585,8 @@ frontend-landing/
 - Controllers: `backend/src/controllers/`
 - Servicios reutilizables: `backend/src/services/`
 - Cron de recordatorios: `backend/src/jobs/recordatorios.js`
+- Sentry: `backend/src/instrument.js` + `backend/src/config/sentry.js`
+- Skills de producción (diagnóstico y arreglo desde el celular): `.claude/skills/salud-prod/`, `.claude/skills/arreglo-prod/`
 - Panel principal: `frontend/src/App.jsx`
 - Panel admin: `frontend/src/screens/admin/PanelAdmin.jsx`
 - Turnero publico: `frontend-turnero/src/App.jsx`

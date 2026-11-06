@@ -56,6 +56,26 @@ Nada más. **Sin trace de navegación, sin "paso N — X seleccionado", sin "com
 - `console.warn` — algo anómalo pero recuperable (conflicto de negocio, degradación frontend, login fallido).
 - `console.error` — algo que rompió el flujo (entró al `catch`).
 
+### Backend — Sentry (desde 2026-11-06)
+
+**Todo `console.error` del backend llega a Sentry como error** (`captureConsoleIntegration` en `backend/src/instrument.js`) y puede disparar un aviso al celular por Discord. Por eso la convención de nivel pasó a ser un contrato:
+
+- `console.error` **solo** cuando algo rompió el flujo. Un rechazo esperado (token vencido, acceso denegado por rol, login fallido, conflicto de negocio) va con `console.warn`, que no llega a Sentry. Un `console.error` mal puesto es una alerta falsa en el celular.
+- Pasá siempre el `err` completo: con un `Error` entre los argumentos, el evento sale como excepción con su stack. Con solo `err.message`, sale como texto sin stack.
+- El tenant (`tenant`, `tenant_id`) y el `rol` se agregan solos como tags en `tenantMiddleware` y `authMiddleware`. No hace falta loguearlos para Sentry.
+- A Sentry no van body, cookies, query string, headers fuera de una lista blanca, IPs ni el `token_gestion` del turnero (`beforeSend` en `instrument.js`). Igual, **nunca** pongas datos de clientes en el texto de un `console.error`: el texto sí viaja.
+- Ningún archivo importa `@sentry/node` directo salvo `instrument.js`: el resto usa el helper `backend/src/config/sentry.js` (`etiquetarRequest`, `reportarAviso`, `conEtiquetas`, `registrarHandlerErrores`, `vaciarEventos`). Todas son no-op sin `SENTRY_DSN`.
+- Los cortes del rate limiter también avisan (`reportarAviso` en `crearHandler429`), agrupados por tipo de límite. La IP queda solo en el log de Railway.
+- En local, `SENTRY_DSN` apunta al proyecto de **prueba** de Sentry, nunca al de producción. Sin la variable, Sentry queda apagado y todo funciona igual.
+
+**Patrón para un job de cron nuevo** (como `jobs/recordatorios.js`):
+1. El **primer import** del archivo es `../instrument.js` (los jobs no usan `--import`).
+2. Si recorre tenants, cada vuelta corre dentro de `conEtiquetas({ tenant, tenant_id }, async () => { ... })`, así sus errores dicen de qué local son.
+3. Antes del `process.exit`, `await vaciarEventos(2000)`: Sentry manda en segundo plano y, sin vaciar la cola, los eventos se pierden.
+4. En Railway, el servicio nuevo referencia la shared variable `SENTRY_DSN` (`${{shared.SENTRY_DSN}}`): crearla a nivel proyecto no alcanza.
+
+Cómo se diagnostica y se resuelve un problema de producción (avisos en Discord, skills `salud-prod` y `arreglo-prod`): [`decisiones_monitoreo_prod.md`](decisiones_monitoreo_prod.md).
+
 ---
 
 ## 2. Manejo de errores
@@ -264,6 +284,8 @@ Dónde está aplicada: en todas las acciones de la app del barbero. En la Agenda
 ## 9. Stack y deploy (referencia)
 
 Stack y deploy viven en [`estado_actual.md`](estado_actual.md) §Stack y §Deploy. Lo visual, en [`sistema_de_disenio.md`](sistema_de_disenio.md).
+
+**A `main` se entra siempre por PR** (desde 2026-11-06). Un ruleset de GitHub (`proteger-main`) exige pull request para cualquier cambio a `main`, sin excepciones: `git push origin main` lo rechaza (`GH013`), incluso al dueño del repo. El flujo es pushear el branch de trabajo, crear el PR en github.com (título `merge: <resumen> (branch <nombre>)`), mergearlo con **Create a merge commit** y traerlo con `git pull origin main`. Cada merge a `main` deploya los dos servicios de Railway.
 
 ---
 
