@@ -1,7 +1,7 @@
 # Rediseño UX/UI del turnero — núcleo de decisiones
 
 > ✅ **Implementado** en el branch `feature/turnero-ux` (2026-10-05 a 2026-10-08), más un hotfix previo
-> en `main`. El merge, el deploy y la prueba en celulares reales están en
+> en `main`. En producción desde el 2026-11-05; la prueba en celulares reales está en
 > [`estado_actual.md`](estado_actual.md) → Pendientes. Documento **archivado**: solo el "por qué". La
 > identidad visual vigente vive en [`sistema_de_disenio.md`](sistema_de_disenio.md) §3.8; las rutas en
 > [`ruta_proyecto.md`](ruta_proyecto.md); el schema en [`SQL_Schema.md`](SQL_Schema.md); el alta de

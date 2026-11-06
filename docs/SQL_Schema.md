@@ -56,8 +56,8 @@ CREATE TABLE public.barbero (
   nombre text NOT NULL,
   pin text NOT NULL,
   -- comision_tipo: solo 'porcentaje' desde el 2026-11-03 (antes admitía 'fijo', sin
-  -- filas). Se conserva porque el backend anterior la lee y la escribe, y los fronts
-  -- anteriores la usan en Planillas; se puede borrar cuando ningún front publicado la use.
+  -- filas). Ningún front publicado la usa desde el deploy del 2026-11-05; se puede
+  -- borrar sacándola antes del backend (gestion.js la lee y la escribe).
   comision_tipo text DEFAULT 'porcentaje'::text CONSTRAINT barbero_comision_tipo_check CHECK (comision_tipo = 'porcentaje'::text),
   -- comision_valor: % actual del barbero (0 a 100, lo valida el backend). Vale para
   -- los cortes nuevos: cada corte guarda el suyo en corte.comision_porcentaje.
@@ -114,10 +114,10 @@ CREATE TABLE public.corte (
   -- % de comisión del barbero al registrar el corte (2026-11-03): un cambio de %
   -- vale solo para adelante. Lo completa registrarCorte en el mismo INSERT; los
   -- cortes anteriores se rellenaron con el % de su barbero ese día. Mismo tipo que
-  -- barbero.comision_valor y sin CHECK, para que copiarlo nunca falle. Nullable hasta
-  -- el deploy del backend que lo escribe (pasos en estado_actual.md); mientras tanto,
-  -- un corte sin % usa el actual del barbero (backend/src/utils/comision.js).
-  comision_porcentaje numeric(10,2),
+  -- barbero.comision_valor y sin CHECK, para que copiarlo nunca falle. NOT NULL desde
+  -- el 2026-11-05, con el backend que lo escribe ya desplegado (antes se rellenaron
+  -- los 38 cortes que cargó el backend anterior en el medio).
+  comision_porcentaje numeric(10,2) NOT NULL,
   CONSTRAINT corte_pkey PRIMARY KEY (id),
   CONSTRAINT corte_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id) ON DELETE CASCADE,
   -- FK compuestos con tenant_id: hacen imposible que un corte referencie un

@@ -8,8 +8,8 @@ Creado: 2026-10-15.
 
 | # | Feature | Estado |
 |---|---|---|
-| 1 | Grilla de slots y descansos en la Agenda | Hecha (2026-10-29), sin deploy. Decisiones en [`decisiones_descansos.md`](./decisiones_descansos.md) |
-| 2 | Planillas: cortes con turno vs. sin turno | Hecha (2026-10-15), sin deploy. Decisiones en [`decisiones_descansos.md`](./decisiones_descansos.md) → "Feature 2" |
+| 1 | Grilla de slots y descansos en la Agenda | Hecha (2026-10-29), en producción desde el 2026-11-05. Decisiones en [`decisiones_descansos.md`](./decisiones_descansos.md) |
+| 2 | Planillas: cortes con turno vs. sin turno | Hecha (2026-10-15), en producción desde el 2026-11-05. Decisiones en [`decisiones_descansos.md`](./decisiones_descansos.md) → "Feature 2" |
 
 Las dos están en `feature/descansos-agenda`; el merge y el deploy, en
 [`estado_actual.md`](./estado_actual.md) → Pendientes.

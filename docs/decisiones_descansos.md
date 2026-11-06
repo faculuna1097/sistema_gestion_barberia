@@ -1,7 +1,7 @@
 # Descansos en la Agenda y cortes con/sin turno — núcleo de decisiones
 
-> ✅ **Completado (2026-10-29) en `feature/descansos-agenda`; pendiente de merge y deploy**
-> (ver [`estado_actual.md`](estado_actual.md) → Pendientes). Documento **archivado**: solo el
+> ✅ **Completado (2026-10-29) en `feature/descansos-agenda`; en producción desde el 2026-11-05**
+> (lo que queda probar, en [`estado_actual.md`](estado_actual.md) → Pendientes). Documento **archivado**: solo el
 > "por qué". Schema en [`SQL_Schema.md`](SQL_Schema.md) (`barbero_suspension`).
 > Implementación: backend `services/suspensionesService.js` (`finEfectivoSql`,
 > `suspensionSolapaSql`, `crearSuspension`, `liberarSuspension`), `services/descansosService.js`
