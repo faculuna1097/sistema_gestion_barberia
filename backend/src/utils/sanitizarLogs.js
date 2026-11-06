@@ -39,6 +39,22 @@ export function sanitizarObjeto(obj) {
 const RUTA_TOKEN_TURNERO = /(\/api\/turnero\/turnos\/)[^/?#]+/;
 
 /**
+ * enmascararTokenTurnero
+ * Devuelve la URL con el token_gestion del turnero reemplazado por ':token' y
+ * todo lo demás intacto (query string incluido). Es para los logs de Railway:
+ * ahí el query string sirve para diagnosticar, pero el token no tiene que
+ * quedar escrito (los logs los lee la sesión de diagnóstico de Claude).
+ * Ej.: '/api/turnero/turnos/abc123/cancelar?x=1' → '/api/turnero/turnos/:token/cancelar?x=1'.
+ *
+ * @param {string} url - URL o path del request (ej. req.url, req.originalUrl).
+ * @returns {string} la URL con el token enmascarado (string vacío si url no es un string).
+ */
+export function enmascararTokenTurnero(url) {
+  if (typeof url !== 'string') return '';
+  return url.replace(RUTA_TOKEN_TURNERO, '$1:token');
+}
+
+/**
  * rutaSinDatosSensibles
  * Devuelve la ruta de un request lista para mandar a un servicio externo (Sentry):
  * sin query string ni fragmento, y con el token_gestion del turnero reemplazado
@@ -50,6 +66,5 @@ const RUTA_TOKEN_TURNERO = /(\/api\/turnero\/turnos\/)[^/?#]+/;
  */
 export function rutaSinDatosSensibles(url) {
   if (typeof url !== 'string') return '';
-  const sinQuery = url.split(/[?#]/)[0];
-  return sinQuery.replace(RUTA_TOKEN_TURNERO, '$1:token');
+  return enmascararTokenTurnero(url.split(/[?#]/)[0]);
 }

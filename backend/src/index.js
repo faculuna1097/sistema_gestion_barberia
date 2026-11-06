@@ -11,7 +11,7 @@ import { verificarToken } from './middlewares/authMiddleware.js';
 import { tenantMiddleware, invalidar } from './middlewares/tenantMiddleware.js';
 import { verificarClavePlataforma } from './middlewares/plataformaAuthMiddleware.js';
 import { limiterGlobal, limiterLogin } from './middlewares/rateLimitMiddleware.js';
-import { sanitizarObjeto } from './utils/sanitizarLogs.js';
+import { sanitizarObjeto, enmascararTokenTurnero } from './utils/sanitizarLogs.js';
 import { registrarHandlerErrores, vaciarEventos } from './config/sentry.js';
 
 // --- Importación de rutas ---
@@ -159,7 +159,8 @@ app.use((req, res, next) => {
   const bodyLog = req.body && Object.keys(req.body).length
     ? `— body: ${JSON.stringify(sanitizarObjeto(req.body))}`
     : '';
-  console.log(`[index] ${req.method} ${req.url}`, bodyLog);
+  // El token_gestion del turnero va enmascarado: con él se ve y cancela un turno.
+  console.log(`[index] ${req.method} ${enmascararTokenTurnero(req.url)}`, bodyLog);
   next();
 });
 

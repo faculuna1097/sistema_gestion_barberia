@@ -30,7 +30,7 @@
 
 import { rateLimit } from 'express-rate-limit';
 import { reportarAviso } from '../config/sentry.js';
-import { rutaSinDatosSensibles } from '../utils/sanitizarLogs.js';
+import { rutaSinDatosSensibles, enmascararTokenTurnero } from '../utils/sanitizarLogs.js';
 
 /**
  * crearHandler429
@@ -49,7 +49,7 @@ import { rutaSinDatosSensibles } from '../utils/sanitizarLogs.js';
  * @returns {Function} handler (req, res) para express-rate-limit
  */
 const crearHandler429 = (nombre) => (req, res) => {
-  console.warn(`[rateLimit] límite '${nombre}' excedido | ip: ${req.ip} | ruta: ${req.method} ${req.originalUrl}`);
+  console.warn(`[rateLimit] límite '${nombre}' excedido | ip: ${req.ip} | ruta: ${req.method} ${enmascararTokenTurnero(req.originalUrl)}`);
   reportarAviso(`rateLimit: ${nombre}`, {
     tags: { limite: nombre, ruta: `${req.method} ${rutaSinDatosSensibles(req.originalUrl)}` },
     fingerprint: ['rateLimit', nombre],
