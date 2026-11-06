@@ -1,26 +1,26 @@
-# Plan: tanda de mejoras antes del merge (`feature/mejoras-pre-merge`)
+# Plan: tanda de mejoras operativas (`feature/mejoras-operativas`)
 
 > **Para el chat orquestador.** Este documento es autocontenido: lo escribió un chat de planificación que no va a
 > orquestar. Todas las decisiones están cerradas con el usuario (2026-11-05); no hace falta volver a discutirlas.
 > Las líneas y archivos citados en §3 son del 2026-11-05: confirmalos al escribir cada prompt, porque las fases
 > anteriores los mueven. Aprobar el plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
-> **Estado (2026-11-05):** fase 0 hecha (branch `feature/mejoras-pre-merge` creado desde `feature/monitoreo-prod`,
-> commit `854359b`, y este doc commiteado). Próxima: fase 1.
+> **Estado (2026-11-05):** fase 0 hecha (branch `feature/mejoras-operativas` desde `main`, con el merge de
+> `feature/descansos-agenda` ya desplegado, y este doc commiteado). Próxima: fase 1.
 
 ## 1. Contexto
 
-Todo lo que está adelante de `main` (`feature/turnero-ux` → `feature/descansos-agenda` → `feature/monitoreo-prod`,
-lineal) sigue sin mergear ni desplegar. Antes del merge, el usuario quiere sumar 7 features para la app del
-barbero, el iPad y el panel (más una chica, F8: aviso de barberos sin horario), en un branch hijo de
-`feature/monitoreo-prod`.
+El rediseño del turnero, los descansos en la Agenda y las deudas técnicas (`feature/turnero-ux` →
+`feature/descansos-agenda`) están mergeados a `main` y en producción desde el 2026-11-05 (merge `a1b5ed7`). Sobre
+eso, el usuario quiere sumar 7 features para la app del barbero, el iPad y el panel (más una chica, F8: aviso de
+barberos sin horario), en este branch, hijo de `main`.
 
-**Orden general:** estas features → plan de monitoreo (`docs/plan_monitoreo_prod.md`, con `feature/monitoreo-prod`
-avanzado por fast-forward hasta este branch) → merge de todo a `main` y deploy (los hace el usuario).
+**Orden general:** estas features → merge a `main` y deploy (los hace el usuario) → plan de monitoreo
+(`docs/plan_monitoreo_prod.md`, en `feature/monitoreo-prod`, otro hijo de `main` que solo trae el plan: se rebasa
+sobre `main` cuando termine esta tanda).
 
-**En paralelo** (fuera de este plan), un chat de solo lectura analiza si el merge actual exige que kingsai use el
-turnero propio (hoy reserva por Setmore). Si el usuario mergea antes, este plan no cambia: el branch sale de
-commits que ya estarían en `main`.
+**Kingsai sigue reservando por Setmore** y nadie usa todavía la app del barbero ni el turnero propio. Lo que usan
+los dos tenants todos los días es el iPad y el panel: los cambios a esas pantallas son los que van a notar.
 
 ## 2. Modo de trabajo
 
@@ -186,7 +186,7 @@ prompt y por qué. 4. Cosas vistas de paso (posibles bugs o fallas, con archivo 
 
 | # | Fase | Quién | Requisito previo (usuario) |
 |---|---|---|---|
-| 0 | ✅ **Hecha (2026-11-05).** Branch `feature/mejoras-pre-merge` desde `feature/monitoreo-prod` + este plan a `docs/plan_mejoras_pre_merge.md` (commit) | Chat de planificación | — |
+| 0 | ✅ **Hecha (2026-11-05).** Branch `feature/mejoras-operativas` desde `main` + este plan a `docs/plan_mejoras_operativas.md` (commit) | Chat de planificación | — |
 | 1 | F7 comisión con barra + F8 aviso de barberos sin horario (backend + `TabBarberos`) | Ejecutor | SQL de % no múltiplos de 5 |
 | 2 | F6a DB + backend: columnas del dueño y `telefono_local`, tabla de tokens, endpoints y mails de recuperación, Gestión → Negocio (backend), `crearTenant.js` | Ejecutor | SQL de columnas + datos de los 3 tenants + tabla de tokens |
 | 3 | F6b fronts: ver contraseña, "¿Olvidaste…?" en los dos logins, pantallas de recuperación, Gestión → Negocio; `telefono_local` en el turnero | Ejecutor | — |
@@ -197,10 +197,11 @@ prompt y por qué. 4. Cosas vistas de paso (posibles bugs o fallas, con archivo 
 | 8 | F4 socios | Ejecutor | — |
 | 9 | F2a traspasos: backend | Ejecutor | SQL `turno_traspaso` |
 | 10 | F2b traspasos: app del barbero | Ejecutor | — |
-| 11 | Cierre: `decisiones_mejoras_pre_merge.md`, `estado_actual.md` (estado, pendientes resueltos, pasos de deploy y post-deploy: drop de `telefono`, cron nuevo, conteo de históricos), `SQL_Schema.md`, `onboarding.md`, `ruta_proyecto.md`, `plan_app_barbero.md`, mapa del `CLAUDE.md`; resumen | Orquestador | — |
+| 11 | Cierre: `decisiones_mejoras_operativas.md`, `estado_actual.md` (estado, pendientes resueltos, pasos de deploy y post-deploy: drop de `telefono`, cron nuevo, conteo de históricos), `SQL_Schema.md`, `onboarding.md`, `ruta_proyecto.md`, `plan_app_barbero.md`, mapa del `CLAUDE.md`; resumen | Orquestador | — |
 
-Después: fast-forward de `feature/monitoreo-prod`, ejecución de `docs/plan_monitoreo_prod.md` (confirmar que sus
-datos de §3 sigan vigentes) y merge a `main` + deploy siguiendo `estado_actual.md`.
+Después: merge de este branch a `main` + deploy siguiendo `estado_actual.md`; recién ahí, rebase de
+`feature/monitoreo-prod` sobre `main` y ejecución de `docs/plan_monitoreo_prod.md` (confirmar que sus datos de §3
+sigan vigentes).
 
 ## 6. Orden de deploy (para el cierre)
 
