@@ -7,8 +7,15 @@
 // La pantalla actual vive en el historial (useNavegacion) y se guarda en
 // `datos.progreso.pantalla`, para retomar ahí al recargar o desde otro
 // dispositivo.
+//
+// Contrato de cada pantalla (CONTENIDO_POR_PANTALLA): recibe `datos`,
+// `actualizar`, `onSeguir` (el mismo "Seguir" del pie, para el Enter de los
+// campos de texto) y un `ref` donde expone `intentarSeguir()`. Esa función
+// valida la pantalla (erroresDePantalla), y si hay errores los muestra, lleva
+// el foco al primero y devuelve false. Una pantalla sin ref (ej. la
+// bienvenida) siempre deja seguir.
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { theme } from '../theme/tokens.js';
 import { TOKEN } from '../services/api.js';
 import {
@@ -19,6 +26,24 @@ import { PageContainer, StickyFooter, Button } from '../components/ui';
 import EncabezadoFormulario from '../components/formulario/EncabezadoFormulario.jsx';
 import TarjetaBarberia from '../components/TarjetaBarberia.jsx';
 import PantallaPlaceholder from './PantallaPlaceholder.jsx';
+import PantallaBienvenida from './pantallas/PantallaBienvenida.jsx';
+import PantallaNombre from './pantallas/PantallaNombre.jsx';
+import PantallaDireccion from './pantallas/PantallaDireccion.jsx';
+import PantallaDias from './pantallas/PantallaDias.jsx';
+import PantallaHorario from './pantallas/PantallaHorario.jsx';
+
+/**
+ * CONTENIDO_POR_PANTALLA
+ * El componente de cada pantalla ya armada. Las que no están (5 a 14) muestran
+ * PantallaPlaceholder hasta que las arme su fase.
+ */
+const CONTENIDO_POR_PANTALLA = {
+  [PANTALLA.BIENVENIDA]: PantallaBienvenida,
+  [PANTALLA.NOMBRE]: PantallaNombre,
+  [PANTALLA.DIRECCION]: PantallaDireccion,
+  [PANTALLA.DIAS]: PantallaDias,
+  [PANTALLA.HORARIO]: PantallaHorario,
+};
 
 /**
  * Formulario
@@ -41,14 +66,26 @@ function Formulario({ solicitud }) {
     actualizar((d) => ({ ...d, progreso: { ...d.progreso, pantalla: nav.pantalla } }));
   }, [nav.pantalla, pantallaGuardada, actualizar]);
 
+  // La pantalla montada expone acá su intentarSeguir().
+  const contenidoRef = useRef(null);
+
+  // nav cambia en cada render: el "Seguir" lo lee de un ref para ser estable
+  // (las pantallas lo usan en efectos, ej. el nombre cuando espera la consulta del link).
+  const navRef = useRef(nav);
+  useEffect(() => { navRef.current = nav; });
+
   /**
    * seguir
-   * Avanza a la pantalla siguiente. En el esqueleto no valida: cada fase suma
-   * erroresDePantalla (utils/validaciones.js) al armar su pantalla.
+   * El "Seguir" del pie (y el Enter de los campos): le pregunta a la pantalla
+   * si se puede avanzar y, si sí, apila la siguiente.
    */
-  const seguir = () => {
-    if (nav.pantalla < PANTALLA.LISTO) nav.irA(nav.pantalla + 1);
-  };
+  const seguir = useCallback(() => {
+    const puede = contenidoRef.current?.intentarSeguir?.() ?? true;
+    const { pantalla: actual, irA } = navRef.current;
+    if (puede && actual < PANTALLA.LISTO) irA(actual + 1);
+  }, []);
+
+  const Contenido = CONTENIDO_POR_PANTALLA[nav.pantalla];
 
   return (
     <PageContainer>
@@ -66,7 +103,7 @@ function Formulario({ solicitud }) {
 
         {pantalla.capitulo && (
           <div style={{ padding: '16px 16px 0' }}>
-            <TarjetaBarberia datos={datos} />
+            <TarjetaBarberia datos={datos} pantalla={nav.pantalla} />
           </div>
         )}
 
@@ -95,7 +132,11 @@ function Formulario({ solicitud }) {
             )}
           </div>
 
-          <PantallaPlaceholder pantalla={pantalla} datos={datos} actualizar={actualizar} />
+          {Contenido ? (
+            <Contenido ref={contenidoRef} datos={datos} actualizar={actualizar} onSeguir={seguir} />
+          ) : (
+            <PantallaPlaceholder pantalla={pantalla} />
+          )}
         </main>
 
         {pantalla.textoSeguir && (

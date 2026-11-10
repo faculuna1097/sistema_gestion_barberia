@@ -230,6 +230,13 @@ Va en `docs/onboarding.md` como camino principal. `crearTenant.js` queda como al
 | 7 | Plantilla SQL (§5.8) y prueba punta a punta con una solicitud de prueba. | Orquestador | Alta de un tenant de prueba y su baja (`activo = false`) |
 | 8 | Cierre: `decisiones_alta_clientes.md`, `SQL_Schema.md`, `onboarding.md`, `sistema_de_disenio.md` (superficie Alta, prefijo `al-`), `ruta_proyecto.md`, `estado_actual.md`, `README.md` (puerto) y la nota de solapamiento en `plan_mejoras_operativas.md` (§4). | Orquestador | — |
 
+### 7.1 Pendientes que salieron de las revisiones
+
+- **Fase 3:** el "Seguir" del nombre frena también con el resultado de la consulta del subdominio (`validaciones.js` no sabe si está ocupado).
+- **Fase 4:** cuando la pantalla 7 se saltee, `caminoHasta` (`config/pantallas.js`) la saltea también. Los bloques a medida se precargan partidos por la pausa (D11).
+- **Fase 5:** después de un envío exitoso se muestra "Listo" sin releer la solicitud (si la relee, cae en "Ya enviada").
+- **Fase 6:** handler de errores después de `express.json` en `backend/src/index.js` que responda 400/413 en JSON y loguee con `console.warn`. Hoy Express imprime el stack con `console.error` y `captureConsoleIntegration` lo manda a Sentry (y a Discord) con cada JSON mal formado o body de más de 100 kB. Es global, va en su propio commit.
+
 ## 8. Tareas fuera del código (Facundo)
 
 1. Correr el `CREATE TABLE` (fase 0).

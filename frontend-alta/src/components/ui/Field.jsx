@@ -6,7 +6,8 @@
 // del turnero:
 //   - label asociada con htmlFor, aria-invalid y aria-describedby (useId);
 //   - `ref`, `name` e `id`, para llevar el foco al campo del primer error;
-//   - scroll-margin-bottom, para que al enfocarlo también se vea el error.
+//   - scroll-margin-bottom, para que al enfocarlo también se vea el error;
+//   - `onKeyDown` (Enter avanza de pantalla) y `autoFocus` (fase 3).
 
 import { useId, useState } from 'react';
 import { theme } from '../../theme/tokens.js';
@@ -36,6 +37,8 @@ import { estiloEtiquetaCampo, MARGEN_SCROLL_CAMPO } from './estilos.js';
  * @param {string} [props.inputMode] - Hint de teclado virtual: 'numeric'|'decimal'|'tel'|'email'|etc.
  * @param {string} [props.enterKeyHint] - Tecla Enter del teclado virtual: 'next'|'done'|etc.
  * @param {number} [props.maxLength] - Tope de caracteres; sin él, no hay tope
+ * @param {Function} [props.onKeyDown] - Recibe el evento de teclado (ej. Enter para seguir)
+ * @param {boolean} [props.autoFocus=false] - Enfoca el input al montarse
  * @param {Object} [props.ref] - Ref al <input>; React 19 lo pasa como prop
  * @returns {JSX.Element}
  */
@@ -59,6 +62,8 @@ function Field({
   inputMode,
   enterKeyHint,
   maxLength,
+  onKeyDown,
+  autoFocus = false,
   ref,
 }) {
   const [focus, setFocus] = useState(false);
@@ -93,6 +98,8 @@ function Field({
         inputMode={inputMode}
         enterKeyHint={enterKeyHint}
         maxLength={maxLength}
+        autoFocus={autoFocus}
+        onKeyDown={onKeyDown}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocus(true)}
         onBlur={() => { setFocus(false); if (onBlur) onBlur(); }}

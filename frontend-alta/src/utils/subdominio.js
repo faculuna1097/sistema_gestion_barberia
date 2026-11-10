@@ -57,11 +57,35 @@ export function sugerirSubdominio(nombre) {
   if (typeof nombre !== 'string') return '';
   return nombre
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '') // marcas de tilde que deja NFD (á → a + U+0301)
+    .replace(/[\u0300-\u036f]/g, '') // marcas de tilde que deja NFD (á → a + U+0301)
     .toLowerCase()
-    .replace(/['’]/g, '')            // apóstrofo recto y tipográfico
+    .replace(/['\u2019]/g, '')            // apóstrofo recto y tipográfico
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, SUBDOMINIO_MAX)
     .replace(/-+$/, '');
+}
+
+/**
+ * limpiarSubdominioEscrito
+ * Propia del front (no está en el backend). Lleva a la forma del link lo que
+ * el cliente escribe a mano, tecla a tecla: minúsculas, sin tildes, espacios y
+ * guiones bajos como guion, sin apóstrofos ni otros símbolos y sin dos guiones
+ * seguidos. A diferencia de sugerirSubdominio, deja un guion al final (el
+ * cliente puede estar por escribir la palabra siguiente): si queda así, lo
+ * marca la validación de formato.
+ * @param {string} texto - Lo que hay en el campo del link
+ * @returns {string} El texto limpio (hasta SUBDOMINIO_MAX caracteres).
+ */
+export function limpiarSubdominioEscrito(texto) {
+  if (typeof texto !== 'string') return '';
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/['\u2019]/g, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-{2,}/g, '-')
+    .slice(0, SUBDOMINIO_MAX);
 }

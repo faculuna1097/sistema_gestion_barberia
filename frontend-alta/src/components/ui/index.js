@@ -12,3 +12,6 @@ export { default as EmptyState }      from './EmptyState.jsx';
 export { default as PageContainer }   from './PageContainer.jsx';
 export { default as StickyFooter }    from './StickyFooter.jsx';
 export { default as IconoWhatsApp }   from './IconoWhatsApp.jsx';
+export { default as TextoError }      from './TextoError.jsx';
+export { default as Select }          from './Select.jsx';
+export { default as Casilla }         from './Casilla.jsx';

@@ -132,6 +132,15 @@ a {
    `transform`. Si lo retuvieran, pisarían el :active de al-presionable y el
    contenedor pasaría a ser bloque contenedor de los `position: fixed`.
 
+   - al-crecer: un bloque que aparece y empuja lo de abajo de a poco, en vez de
+     de golpe (plan D7: "una tarjeta que crece"). Lo usan los renglones nuevos
+     de la tarjeta "Tu barbería", el link debajo del nombre y el detalle de un
+     día en la semana. Se anima el alto (grid-template-rows de 0fr a 1fr) junto
+     con un fundido: es el único caso donde se anima el layout, porque lo que
+     tiene que verse es justamente que algo creció. Va en un contenedor con un
+     solo hijo; el hijo recorta lo que sobra mientras crece, con 4 px de margen
+     para que no corte el anillo de foco de lo que tenga adentro.
+
    Con prefers-reduced-motion: reduce, las pantallas y el contenido entran sin
    animación (el turnero deja un fundido de 120 ms; acá, nada) y el toque no
    achica; la pausa de ~150 ms de la elección la pone en 0 utils/movimiento.js. */
@@ -163,9 +172,29 @@ a {
   animation: al-fundido 180ms ease-out backwards;
 }
 
+@keyframes al-crecer {
+  from { grid-template-rows: 0fr; opacity: 0; }
+  to   { grid-template-rows: 1fr; opacity: 1; }
+}
+.al-crecer {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: al-crecer 220ms cubic-bezier(0.25, 1, 0.5, 1) backwards;
+}
+.al-crecer > * {
+  min-height: 0;
+  overflow: hidden;
+  /* El margen del anillo de foco (2 px de separación + 2 px de trazo), sin
+     cambiar el layout: el padding agranda la zona visible y el margen negativo
+     lo compensa. */
+  padding: 4px;
+  margin: -4px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .al-pantalla,
   [data-al-direccion] .al-pantalla,
-  .al-aparecer { animation: none; }
+  .al-aparecer,
+  .al-crecer { animation: none; }
   .al-presionable:active:not(:disabled) { transform: none; }
 }

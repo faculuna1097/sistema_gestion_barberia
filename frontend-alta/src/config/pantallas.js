@@ -29,13 +29,14 @@ export const PANTALLA = {
 /**
  * CAPITULOS
  * Los cuatro capítulos, en orden. El indicador muestra el de la pantalla actual
- * en lugar de "paso N de 13".
+ * en lugar de "paso N de 13". `resumen` es lo que se pregunta en cada uno: lo
+ * muestra la bienvenida.
  */
 export const CAPITULOS = [
-  { id: 'local',     nombre: 'Tu local' },
-  { id: 'equipo',    nombre: 'Tu equipo' },
-  { id: 'servicios', nombre: 'Tus servicios' },
-  { id: 'contacto',  nombre: 'Contacto' },
+  { id: 'local',     nombre: 'Tu local',      resumen: 'Nombre, link, dirección y horario.' },
+  { id: 'equipo',    nombre: 'Tu equipo',     resumen: 'Quiénes cortan y quiénes son los dueños.' },
+  { id: 'servicios', nombre: 'Tus servicios', resumen: 'Cada cuánto das turnos, servicios y productos.' },
+  { id: 'contacto',  nombre: 'Contacto',      resumen: 'Cómo te encuentran tus clientes y cómo te ubicamos.' },
 ];
 
 /**
@@ -52,13 +53,13 @@ export const CAPITULOS = [
 export const PANTALLAS = [
   { numero: 0,  capitulo: null,        titulo: 'Armemos tu barbería', subtitulo: 'Son unos 5 minutos y se guarda solo.', textoSeguir: 'Empezar',
     contenido: 'Bienvenida.' },
-  { numero: 1,  capitulo: 'local',     titulo: '¿Cómo se llama tu barbería?', textoSeguir: 'Seguir',
+  { numero: 1,  capitulo: 'local',     titulo: '¿Cómo se llama tu barbería?', subtitulo: 'Con el nombre armamos el link de tu barbería.', textoSeguir: 'Seguir',
     contenido: 'Nombre del negocio y el link sugerido (kings.barbermanager.app) con su estado: disponible, ocupado o inválido.' },
-  { numero: 2,  capitulo: 'local',     titulo: '¿Dónde queda?', textoSeguir: 'Seguir',
+  { numero: 2,  capitulo: 'local',     titulo: '¿Dónde queda?', subtitulo: 'La ven tus clientes cuando sacan turno.', textoSeguir: 'Seguir',
     contenido: 'La dirección, en un campo.' },
-  { numero: 3,  capitulo: 'local',     titulo: '¿Qué días abren?', textoSeguir: 'Seguir',
+  { numero: 3,  capitulo: 'local',     titulo: '¿Qué días abren?', subtitulo: 'Tocá los días que atienden.', textoSeguir: 'Seguir',
     contenido: 'Siete botones que se prenden y apagan, más el atajo "Lunes a sábado".' },
-  { numero: 4,  capitulo: 'local',     titulo: '¿En qué horario?', textoSeguir: 'Seguir',
+  { numero: 4,  capitulo: 'local',     titulo: '¿En qué horario?', subtitulo: 'Si algún día es distinto, tocalo en la semana.', textoSeguir: 'Seguir',
     contenido: 'Abre y cierra con botones de +/- 30 min, la semana en barras y "¿Cierran al mediodía?".' },
   { numero: 5,  capitulo: 'equipo',    titulo: '¿Quiénes cortan?', textoSeguir: 'Seguir',
     contenido: 'Nombre de cada barbero con su avatar, la comisión y el mail opcional.' },
