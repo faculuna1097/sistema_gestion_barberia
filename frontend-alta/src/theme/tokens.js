@@ -1,0 +1,96 @@
+// /frontend-alta/src/theme/tokens.js
+// Tokens del sistema de diseño — tema "Luz" (Stripe/Clerk look).
+// Single source of truth para colores, tipografía, spacing, radios.
+// Copia de la fuente de verdad de Luz (frontend/src/theme/tokens.js,
+// sistema_de_disenio.md §1 y §8), sin los tokens propios del panel
+// (neutralSoft, shadowLg y overlay: acá no hay pills neutras ni modales).
+// Se importa así:   import { theme } from '../theme/tokens';
+
+/**
+ * theme
+ * Objeto inmutable con todos los tokens visuales del producto.
+ * Cualquier componente debe leer de acá en vez de hardcodear valores.
+ */
+export const theme = {
+  // ── Colores ───────────────────────────────────────────────────
+  // Neutros (zinc).
+  bg:           '#FAFAFA',  // fondo de la app
+  surface:      '#FFFFFF',  // cards, inputs
+  surfaceAlt:   '#F4F4F5',  // hover suave, fondos de soporte
+  ink:          '#09090B',  // texto principal
+  inkSoft:      '#27272A',  // texto secundario fuerte
+  // Texto secundario. Más oscuro que zinc-500 (#71717A, 4,40:1 sobre surfaceAlt)
+  // para llegar a WCAG AA: 5,28:1 sobre blanco, 5,05 sobre #FAFAFA y 4,80 sobre surfaceAlt.
+  muted:        '#6B6B74',
+  // Deshabilitado, bordes en hover y lo decorativo. No es para texto que se lee:
+  // da 2,56:1 sobre blanco.
+  mutedSoft:    '#A1A1AA',
+  hairline:     '#E4E4E7',  // borders, separadores
+  hairlineSoft: '#F4F4F5',  // separadores muy sutiles
+
+  // Acento único — indigo.
+  accent:       '#4F46E5',
+  accentInk:    '#FFFFFF',  // texto sobre fondo accent
+  accentSoft:   '#EEF2FF',  // backgrounds tinted con accent
+
+  // Estados.
+  success:      '#15803D',
+  successSoft:  '#DCFCE7',
+  danger:       '#B91C1C',
+  dangerSoft:   '#FEE2E2',
+  warning:      '#B45309',
+  warningSoft:  '#FEF3C7',
+
+  // ── Tipografía ────────────────────────────────────────────────
+  body: '"Geist", "DM Sans", system-ui, -apple-system, sans-serif',
+  mono: '"Geist Mono", "DM Mono", ui-monospace, monospace',
+
+  // 4 tamaños recurrentes.
+  sizeTitle:   24,  // h1, h2 de pantalla
+  sizeHeading: 18,  // h3, títulos de card
+  sizeBody:    14,  // texto base
+  sizeMicro:   11,  // eyebrows, micro-labels en mayúsculas
+
+  // Tamaño funcional (no de jerarquía): los inputs deben ser ≥16px para
+  // evitar el auto-zoom de iOS Safari al enfocar un campo de texto (iPad).
+  sizeInput:   16,
+
+  weightRegular: 400,
+  weightMedium:  500,
+  weightHeading: 600,
+
+  // ── Layout ────────────────────────────────────────────────────
+  radius:    10,  // botones, inputs, cards normales
+  radiusLg:  14,  // cards "destacadas" (resumen)
+  radiusSm:   6,  // skeletons, pills chicos
+
+  // Ancho máximo de la columna principal (PageContainer): mobile-first, la
+  // misma densidad aireada del turnero (plan_alta_clientes.md §5.7).
+  maxWidth:  480,
+
+  // ── Sombras ───────────────────────────────────────────────────
+  shadowSm: '0 1px 2px rgba(0,0,0,0.06)',
+  shadowMd: '0 4px 12px rgba(0,0,0,0.06)',
+  // Sombra hacia arriba que marca "hay más contenido abajo" en una zona con
+  // scroll interno (ej. TarjetaResumen del wizard). Funcional, no decorativa.
+  shadowScroll: '0 -8px 8px -8px rgba(0,0,0,0.12)',
+
+
+  // ── Transiciones ──────────────────────────────────────────────
+  transitionFast:   '.12s ease-out',
+  transitionMedium: '.18s ease-out',
+};
+
+/**
+ * spacing
+ * Escala fija de spacing. Usar siempre múltiplos definidos.
+ * Ej: spacing[4] = 16px.
+ */
+export const spacing = {
+  1: 4,
+  2: 8,
+  3: 12,
+  4: 16,
+  6: 24,
+  8: 32,
+};
