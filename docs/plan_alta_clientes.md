@@ -22,6 +22,7 @@ Hoy, para dar de alta una barbería, Facundo le pide los datos al cliente por Wh
 | D8 | Validación completa en el front (inmediata, en cada campo) y repetida en el backend al enviar (§5.4). | Facundo pidió que se vea profesional. El backend nunca confía en el front. |
 | D9 | La vigencia de la suscripción no se pide: la maneja Facundo en la query. | Decisión de Facundo. |
 | D10 | Branch `feature/alta-clientes`, que sale de `main` y vuelve por PR. Va antes que `feature/mejoras-operativas`. | Decisión de Facundo: hacer esto primero. Ver §4. |
+| D11 | La pausa del mediodía solo parte en dos el horario de los barberos con `'igual_local'`. Un horario a medida puede cubrir la pausa. El front precarga los bloques a medida ya partidos por la pausa (fase 4). | En la DB el local tiene un rango por día: la pausa no es un dato, es un atajo para armar `barbero_horario`. Hay barberos que trabajan de corrido. Decidido en la revisión de la fase 1. |
 
 ## 3. Hechos verificados del código
 
@@ -180,7 +181,7 @@ Es un único objeto, que viaja entero en cada guardado:
 }
 ```
 
-`clave` es un id local del front, para las listas de React y para relacionar un dueño con su barbero. Las horas van en `'HH:MM'` y `dia_semana` de 0 a 6 (0 = domingo), igual que en la DB.
+`clave` es un id local del front, para las listas de React y para relacionar un dueño con su barbero. Al enviar, el backend guarda solo las claves de esta forma: un dato de interfaz que haya que conservar (por ejemplo, "es el mismo número") va dentro de `progreso`. Las horas van en `'HH:MM'` y `dia_semana` de 0 a 6 (0 = domingo), igual que en la DB.
 
 ### 5.7 Frontend
 

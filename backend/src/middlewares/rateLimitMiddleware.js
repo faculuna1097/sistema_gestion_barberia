@@ -1,9 +1,11 @@
 // /backend/src/middlewares/rateLimitMiddleware.js
 // Rate limiting por IP con express-rate-limit (auditoría 2026-07: hallazgos
-// 3.1, 1.2 y 4.1). Tres capas:
+// 3.1, 1.2 y 4.1). Cuatro capas:
 //   - limiterLogin:         estricto, para los 3 endpoints de login (fuerza bruta de PIN).
 //   - limiterReserva (+ ráfaga): para la reserva pública del turnero (email
 //     bombing / spam / agotar agenda).
+//   - limiterAlta / limiterAltaEnvio: para el formulario de alta de clientes
+//     (autoguardado holgado, envío estricto).
 //   - limiterGlobal:        backstop holgado para toda la API (protege el pool
 //     de 3 conexiones de la DB — DoS por agotamiento).
 //
@@ -30,7 +32,7 @@
 
 import { rateLimit } from 'express-rate-limit';
 import { reportarAviso } from '../config/sentry.js';
-import { rutaSinDatosSensibles, enmascararTokenTurnero } from '../utils/sanitizarLogs.js';
+import { rutaSinDatosSensibles, enmascararTokensEnRuta } from '../utils/sanitizarLogs.js';
 
 /**
  * crearHandler429
@@ -43,13 +45,13 @@ import { rutaSinDatosSensibles, enmascararTokenTurnero } from '../utils/sanitiza
  * tipo de límite (fingerprint). La IP queda solo en el log de Railway: a Sentry
  * van el límite y la ruta, sin query string ni token del turnero. El tenant
  * llega solo por el scope del request cuando ya está resuelto (limiterGlobal
- * corre antes de tenantMiddleware: ahí no hay tenant).
+ * y los del alta corren antes de tenantMiddleware: ahí no hay tenant).
  *
  * @param {string} nombre - etiqueta del limiter para el log (ej. 'login')
  * @returns {Function} handler (req, res) para express-rate-limit
  */
 const crearHandler429 = (nombre) => (req, res) => {
-  console.warn(`[rateLimit] límite '${nombre}' excedido | ip: ${req.ip} | ruta: ${req.method} ${enmascararTokenTurnero(req.originalUrl)}`);
+  console.warn(`[rateLimit] límite '${nombre}' excedido | ip: ${req.ip} | ruta: ${req.method} ${enmascararTokensEnRuta(req.originalUrl)}`);
   reportarAviso(`rateLimit: ${nombre}`, {
     tags: { limite: nombre, ruta: `${req.method} ${rutaSinDatosSensibles(req.originalUrl)}` },
     fingerprint: ['rateLimit', nombre],
@@ -111,6 +113,35 @@ export const limiterReservaRafaga = rateLimit({
   windowMs: 60 * 1000,
   limit: 3,
   handler: crearHandler429('reserva-rafaga'),
+});
+
+/**
+ * limiterAlta — para GET y PUT /api/alta/:token y GET /api/alta/:token/subdominio/:valor
+ * 120 requests por IP por minuto. El formulario autoguarda ~800 ms después de
+ * cada cambio y, en la pantalla del nombre, además consulta el subdominio: un
+ * cliente cargando rápido puede pasar los 60 por minuto, y un 429 ahí se ve como
+ * "No pudimos guardar". 120 sigue muy por debajo del backstop global y, sin un
+ * token válido (uuid v4, no se adivina), cada request termina en un 404.
+ */
+export const limiterAlta = rateLimit({
+  ...base,
+  windowMs: 60 * 1000,
+  limit: 120,
+  handler: crearHandler429('alta'),
+});
+
+/**
+ * limiterAltaEnvio — para POST /api/alta/:token/enviar
+ * 5 envíos por IP por hora. Cada solicitud se envía una sola vez (después da
+ * 409) y el envío manda un mail de aviso; 5 deja margen para reintentar si el
+ * backend marca un error que el front no vio (por ejemplo, un subdominio que
+ * otro tomó entre medio).
+ */
+export const limiterAltaEnvio = rateLimit({
+  ...base,
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  handler: crearHandler429('alta-envio'),
 });
 
 /**

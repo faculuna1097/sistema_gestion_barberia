@@ -1,4 +1,5 @@
-// Envío de mails transaccionales del turnero. Arma el HTML (sistema de diseño
+// Envío de mails transaccionales del turnero (y el aviso interno de una solicitud
+// de alta, ver enviarAvisoSolicitudAlta). Arma el HTML (sistema de diseño
 // "Luz") y delega el transporte en la capa de proveedor (mailProvider →
 // resendProvider), que envía vía la API HTTP de Resend. No conoce el proveedor
 // concreto ni su API key.
@@ -513,4 +514,48 @@ export const enviarRecordatorio = async (turno, barbero, servicio, cliente, link
   });
 
   return enviarMail({ destino: cliente.email, asunto, texto, html, nombreFuncion: 'enviarRecordatorio', remitente: tenant?.nombre });
+};
+
+/**
+ * Aviso interno de que un cliente nuevo envió su solicitud de alta (formulario de
+ * alta de clientes). No va al cliente: va a la dirección de la env var
+ * ALTA_AVISO_EMAIL (se lee en cada envío). Lleva solo la referencia, el nombre del
+ * negocio y el id de la solicitud; el resto de los datos se leen en Supabase.
+ * Best-effort como el resto: sin destino o sin credenciales, loguea un warn y no
+ * manda; si el envío falla, loguea y devuelve false.
+ *
+ * @param {Object} solicitud
+ * @param {string} solicitud.id - id de la solicitud (para buscarla en solicitud_alta)
+ * @param {string} solicitud.referencia - referencia que cargó Facundo al crearla
+ * @param {string} solicitud.nombreNegocio - nombre del negocio que cargó el cliente
+ * @returns {Promise<boolean>} true si se envió, false si se salteó o falló
+ */
+export const enviarAvisoSolicitudAlta = async ({ id, referencia, nombreNegocio }) => {
+  const destino = process.env.ALTA_AVISO_EMAIL?.trim();
+  if (!destino) {
+    console.warn('[mailer] enviarAvisoSolicitudAlta — saltado: falta ALTA_AVISO_EMAIL');
+    return false;
+  }
+  if (!mailProvider.estaConfigurado) {
+    console.warn('[mailer] enviarAvisoSolicitudAlta — saltado: faltan credenciales');
+    return false;
+  }
+
+  const asunto = `Nueva solicitud de alta — ${referencia}`;
+  const intro = 'Un cliente completó y envió el formulario de alta. Los datos están en solicitud_alta.';
+  const texto = `${intro}\n\nReferencia: ${referencia}\nNegocio: ${nombreNegocio}\nSolicitud: ${id}`;
+  const html = construirHtml({
+    eyebrow: 'Solicitud de alta',
+    eyebrowColor: paleta.accent,
+    titulo: nombreNegocio,
+    intro,
+    filas: [
+      { label: 'Referencia', valor: referencia },
+      { label: 'Negocio', valor: nombreNegocio },
+      { label: 'Solicitud', valor: id },
+    ],
+    cta: null,
+  });
+
+  return enviarMail({ destino, asunto, texto, html, nombreFuncion: 'enviarAvisoSolicitudAlta' });
 };

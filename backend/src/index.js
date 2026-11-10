@@ -11,7 +11,7 @@ import { verificarToken } from './middlewares/authMiddleware.js';
 import { tenantMiddleware, invalidar } from './middlewares/tenantMiddleware.js';
 import { verificarClavePlataforma } from './middlewares/plataformaAuthMiddleware.js';
 import { limiterGlobal, limiterLogin } from './middlewares/rateLimitMiddleware.js';
-import { sanitizarObjeto, enmascararTokenTurnero } from './utils/sanitizarLogs.js';
+import { sanitizarObjeto, enmascararTokensEnRuta } from './utils/sanitizarLogs.js';
 import { registrarHandlerErrores, vaciarEventos } from './config/sentry.js';
 
 // --- Importación de rutas ---
@@ -29,6 +29,7 @@ import authPanelRoutes  from './routes/authPanel.js';
 import authBarberoRoutes from './routes/authBarbero.js';
 import authOperativoRoutes from './routes/authOperativo.js';
 import turneroRoutes    from './routes/turnero.js';
+import altaRoutes       from './routes/alta.js';
 import turnosOperativoRoutes from './routes/turnosOperativo.js';
 import turnosAdminRoutes   from './routes/turnos.js';
 import horariosAdminRoutes     from './routes/horarios.js';
@@ -147,6 +148,20 @@ app.post('/api/plataforma/cache/invalidate', verificarClavePlataforma, (req, res
   return res.json({ ok: true, subdominio });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FORMULARIO DE ALTA DE CLIENTES — /api/alta/*, FUERA de la cadena tenant/JWT.
+//
+// Se monta ACÁ a propósito, igual que el endpoint de plataforma:
+//   - Antes de tenantMiddleware: el cliente todavía no tiene tenant. El acceso
+//     es el token del link (el id de la solicitud), que valida el controller.
+//   - Antes del log de acceso global: el body trae nombres, mails y teléfonos
+//     del cliente, y ese log lo escribe. El controller loguea sus propios
+//     eventos con la referencia de la solicitud.
+// El router cierra con un 404 propio, así ninguna ruta de /api/alta sigue de
+// largo hasta el log de acceso. Rate limit por ruta, en routes/alta.js.
+// ─────────────────────────────────────────────────────────────────────────────
+app.use('/api/alta', altaRoutes);
+
 // Log de acceso global — una línea por request que llega al servidor.
 // El body se sanitiza antes de loguear para no filtrar credenciales (PINs,
 // passwords) a los logs de Railway. Ver /utils/sanitizarLogs.js.
@@ -159,8 +174,9 @@ app.use((req, res, next) => {
   const bodyLog = req.body && Object.keys(req.body).length
     ? `— body: ${JSON.stringify(sanitizarObjeto(req.body))}`
     : '';
-  // El token_gestion del turnero va enmascarado: con él se ve y cancela un turno.
-  console.log(`[index] ${req.method} ${enmascararTokenTurnero(req.url)}`, bodyLog);
+  // Los tokens en la ruta van enmascarados (el token_gestion del turnero: con él
+  // se ve y cancela un turno). Ver enmascararTokensEnRuta.
+  console.log(`[index] ${req.method} ${enmascararTokensEnRuta(req.url)}`, bodyLog);
   next();
 });
 
