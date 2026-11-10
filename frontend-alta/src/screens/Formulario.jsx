@@ -19,7 +19,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { theme } from '../theme/tokens.js';
 import { TOKEN } from '../services/api.js';
 import {
-  PANTALLAS, PANTALLA, ULTIMA_PANTALLA_GUARDABLE, caminoHasta,
+  PANTALLAS, PANTALLA, ULTIMA_PANTALLA_GUARDABLE, caminoHasta, textoDe,
 } from '../config/pantallas.js';
 import { useNavegacion } from '../hooks/useNavegacion.js';
 import { PageContainer, StickyFooter, Button } from '../components/ui';
@@ -31,10 +31,13 @@ import PantallaNombre from './pantallas/PantallaNombre.jsx';
 import PantallaDireccion from './pantallas/PantallaDireccion.jsx';
 import PantallaDias from './pantallas/PantallaDias.jsx';
 import PantallaHorario from './pantallas/PantallaHorario.jsx';
+import PantallaBarberos from './pantallas/PantallaBarberos.jsx';
+import PantallaDuenios from './pantallas/PantallaDuenios.jsx';
+import PantallaHorariosEquipo from './pantallas/PantallaHorariosEquipo.jsx';
 
 /**
  * CONTENIDO_POR_PANTALLA
- * El componente de cada pantalla ya armada. Las que no están (5 a 14) muestran
+ * El componente de cada pantalla ya armada. Las que no están (8 a 14) muestran
  * PantallaPlaceholder hasta que las arme su fase.
  */
 const CONTENIDO_POR_PANTALLA = {
@@ -43,6 +46,9 @@ const CONTENIDO_POR_PANTALLA = {
   [PANTALLA.DIRECCION]: PantallaDireccion,
   [PANTALLA.DIAS]: PantallaDias,
   [PANTALLA.HORARIO]: PantallaHorario,
+  [PANTALLA.BARBEROS]: PantallaBarberos,
+  [PANTALLA.DUENIOS]: PantallaDuenios,
+  [PANTALLA.HORARIOS_EQUIPO]: PantallaHorariosEquipo,
 };
 
 /**
@@ -86,6 +92,8 @@ function Formulario({ solicitud }) {
   }, []);
 
   const Contenido = CONTENIDO_POR_PANTALLA[nav.pantalla];
+  const titulo = textoDe(pantalla.titulo, datos);
+  const subtitulo = textoDe(pantalla.subtitulo, datos);
 
   return (
     <PageContainer>
@@ -123,11 +131,11 @@ function Formulario({ solicitud }) {
               color: theme.ink,
               textWrap: 'balance',
             }}>
-              {pantalla.titulo}
+              {titulo}
             </h1>
-            {pantalla.subtitulo && (
+            {subtitulo && (
               <p style={{ fontFamily: theme.body, fontSize: theme.sizeBody, color: theme.muted }}>
-                {pantalla.subtitulo}
+                {subtitulo}
               </p>
             )}
           </div>

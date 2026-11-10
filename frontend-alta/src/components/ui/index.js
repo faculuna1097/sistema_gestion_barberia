@@ -15,3 +15,4 @@ export { default as IconoWhatsApp }   from './IconoWhatsApp.jsx';
 export { default as TextoError }      from './TextoError.jsx';
 export { default as Select }          from './Select.jsx';
 export { default as Casilla }         from './Casilla.jsx';
+export { default as BotonOpcion }     from './BotonOpcion.jsx';

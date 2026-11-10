@@ -40,12 +40,26 @@ export const CAPITULOS = [
 ];
 
 /**
+ * tituloHorariosEquipo (interna)
+ * El título de la pantalla 7: en singular, con su nombre, si hay un solo barbero.
+ * @param {Object} [datos] - El formulario completo
+ * @returns {string}
+ */
+function tituloHorariosEquipo(datos) {
+  const barberos = Array.isArray(datos?.barberos) ? datos.barberos : [];
+  const nombre = barberos.length === 1 ? (barberos[0]?.nombre ?? '').trim() : '';
+  if (barberos.length === 1) return nombre ? `¿${nombre} trabaja el horario del local?` : '¿Trabaja el horario del local?';
+  return '¿Todos trabajan el horario del local?';
+}
+
+/**
  * PANTALLAS
  * Una entrada por pantalla, indexada por su número.
  * - capitulo: id de CAPITULOS, o null (Bienvenida, Revisión y Listo no muestran
  *   capítulo ni la tarjeta "Tu barbería" arriba).
- * - titulo / subtitulo: el encabezado de la pantalla. Las fases 3 a 5 pueden
- *   ajustarlos al armar el contenido.
+ * - titulo / subtitulo: el encabezado de la pantalla, un texto o una función
+ *   (datos) => texto si depende de lo cargado (ej. la 7, en singular con un
+ *   solo barbero). Se leen con textoDe. Las fases 3 a 5 pueden ajustarlos.
  * - textoSeguir: el texto del botón de abajo, o null si la pantalla no lo tiene.
  * - contenido: qué va en la pantalla (plan §5.2). Hasta que la arme su fase, el
  *   placeholder lo muestra.
@@ -61,12 +75,12 @@ export const PANTALLAS = [
     contenido: 'Siete botones que se prenden y apagan, más el atajo "Lunes a sábado".' },
   { numero: 4,  capitulo: 'local',     titulo: '¿En qué horario?', subtitulo: 'Si algún día es distinto, tocalo en la semana.', textoSeguir: 'Seguir',
     contenido: 'Abre y cierra con botones de +/- 30 min, la semana en barras y "¿Cierran al mediodía?".' },
-  { numero: 5,  capitulo: 'equipo',    titulo: '¿Quiénes cortan?', textoSeguir: 'Seguir',
+  { numero: 5,  capitulo: 'equipo',    titulo: '¿Quiénes cortan?', subtitulo: 'Sumá a cada barbero con su nombre.', textoSeguir: 'Seguir',
     contenido: 'Nombre de cada barbero con su avatar, la comisión y el mail opcional.' },
-  { numero: 6,  capitulo: 'equipo',    titulo: '¿Quiénes son los dueños?', textoSeguir: 'Seguir',
+  { numero: 6,  capitulo: 'equipo',    titulo: '¿Quiénes son los dueños?', subtitulo: 'Tocá a los que son dueños. Pueden ser varios.', textoSeguir: 'Seguir',
     contenido: 'Se tocan los avatares de los dueños, más "un dueño que no corta".' },
-  { numero: 7,  capitulo: 'equipo',    titulo: '¿Todos trabajan el horario del local?', textoSeguir: 'Seguir',
-    contenido: 'Sí: se saltea. No: los días y horarios de cada barbero.' },
+  { numero: 7,  capitulo: 'equipo',    titulo: tituloHorariosEquipo, textoSeguir: 'Seguir',
+    contenido: 'La pregunta; si es "No", los días y horarios de cada barbero. No se saltea.' },
   { numero: 8,  capitulo: 'servicios', titulo: '¿Cada cuánto das turnos?', textoSeguir: 'Seguir',
     contenido: 'Botones de 15, 20, 30, 40, 45 y 60 minutos.' },
   { numero: 9,  capitulo: 'servicios', titulo: '¿Qué servicios ofrecés?', textoSeguir: 'Seguir',
@@ -89,6 +103,17 @@ export const PANTALLAS = [
  * así que al recargar nunca se retoma ahí.
  */
 export const ULTIMA_PANTALLA_GUARDABLE = PANTALLA.REVISION;
+
+/**
+ * textoDe
+ * El título o el subtítulo de una pantalla, resuelto con los datos si es una función.
+ * @param {string|Function|undefined} valor - pantalla.titulo o pantalla.subtitulo
+ * @param {Object} datos - El formulario completo
+ * @returns {string|undefined}
+ */
+export function textoDe(valor, datos) {
+  return typeof valor === 'function' ? valor(datos) : valor;
+}
 
 /**
  * indiceCapitulo
@@ -115,9 +140,9 @@ export function esPantallaValida(valor) {
  * Las pantallas por las que se pasa para llegar a `numero`, desde la
  * bienvenida. Al retomar el formulario se rearma el historial con este camino,
  * así el "atrás" vuelve de a un paso aunque se haya recargado.
- * Hoy es 0, 1, …, numero. Cuando una pantalla se pueda saltear (ej. los
- * horarios del equipo si todos trabajan el del local, fase 4), el salto se
- * refleja acá.
+ * Hoy es 0, 1, …, numero: ninguna pantalla se saltea. Los horarios del equipo
+ * (7) tampoco, porque su primera parte es la pregunta "¿Todos trabajan el
+ * horario del local?" (fase 4). Si alguna se saltea, el salto va acá.
  * @param {number} numero - Pantalla donde quedó (datos.progreso.pantalla)
  * @returns {number[]} El camino, que siempre empieza en la bienvenida.
  */

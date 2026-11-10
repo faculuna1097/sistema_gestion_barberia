@@ -198,3 +198,64 @@ a {
   .al-crecer { animation: none; }
   .al-presionable:active:not(:disabled) { transform: none; }
 }
+
+/* ── Barra de la comisión (clase al-rango) ───────────────────────
+   Un <input type="range"> nativo (teclado, lector de pantalla y arrastre vienen
+   con él) con el aspecto de Luz. Va acá y no inline porque el riel y la perilla
+   son pseudo-elementos (::-webkit-slider-*, ::-moz-range-*), que no se pueden
+   escribir en un style. La usa SelectorComision.
+   - El input mide 44 px de alto (el toque cómodo); el riel, 6.
+   - Lo lleno del riel sale de --al-relleno (0 a 1), que pone el componente:
+     dos colores con un corte seco (no es un degradado decorativo). El corte va
+     al centro de la perilla, que recorre el riel menos su propio ancho (28 px).
+     Firefox lo dibuja solo con ::-moz-range-progress. */
+.al-rango {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 10px;          /* el anillo de foco sigue el radio de Luz */
+  touch-action: pan-y;          /* arrastrar de costado mueve la barra, no la página */
+}
+.al-rango::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    #4F46E5 calc(14px + (100% - 28px) * var(--al-relleno, 0.5)),   /* theme.accent */
+    #E4E4E7 calc(14px + (100% - 28px) * var(--al-relleno, 0.5))    /* theme.hairline */
+  );
+}
+.al-rango::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -11px;
+  border-radius: 999px;
+  background: #FFFFFF;                       /* theme.surface */
+  border: 2px solid #4F46E5;                 /* theme.accent */
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);    /* theme.shadowSm */
+}
+.al-rango::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: #E4E4E7;                       /* theme.hairline */
+}
+.al-rango::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: #4F46E5;                       /* theme.accent */
+}
+.al-rango::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #FFFFFF;
+  border: 2px solid #4F46E5;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}

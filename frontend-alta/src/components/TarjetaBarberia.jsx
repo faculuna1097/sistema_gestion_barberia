@@ -1,9 +1,9 @@
 // /frontend-alta/src/components/TarjetaBarberia.jsx
 // La tarjeta "Tu barbería", que crece con cada respuesta (plan §5.2 y D7).
 // Arriba, el nombre (con su avatar) y el link elegido. Debajo, un renglón por
-// dato del local: la dirección y los días con su horario. Las fases 4 y 5 le
-// suman el equipo, los servicios y el contacto, y la Revisión la muestra
-// completa con "Editar" por bloque.
+// dato: la dirección, los días con su horario y el equipo (los avatares, los
+// dueños y la comisión). La fase 5 le suma los servicios y el contacto, y la
+// Revisión la muestra completa con "Editar" por bloque.
 //
 // Cómo crece: el renglón de un dato aparece cuando el formulario llega a la
 // pantalla que lo pregunta (vacío, con el nombre del dato en gris) y se llena
@@ -16,12 +16,13 @@
 // formulario, la pantalla de "Ya enviada" y (fase 5) la Revisión.
 
 import { useState } from 'react';
-import { Clock, MapPin } from 'lucide-react';
+import { Clock, MapPin, Users } from 'lucide-react';
 import { theme } from '../theme/tokens.js';
 import { PANTALLA } from '../config/pantallas.js';
 import { gruposPorRango, leerHorarioLocal } from '../utils/horarioLocal.js';
 import { resumirDias } from '../utils/semana.js';
 import { fmtRango } from '../utils/horas.js';
+import { leerEquipo, resumirComision, unirNombres } from '../utils/equipo.js';
 import { AvatarIniciales } from './ui';
 import { estiloSoloLector } from './ui/estilos.js';
 
@@ -99,6 +100,59 @@ function TextoHorario({ datos }) {
   );
 }
 
+// Avatares del equipo que se dibujan; los demás van como "+N".
+const AVATARES_VISIBLES = 6;
+
+/**
+ * TextoEquipo
+ * El equipo en dos renglones: los avatares superpuestos con los nombres y,
+ * debajo, los dueños y la comisión ("Dueño: Juan · Comisión 50 %"). Un avatar
+ * que no estaba al montar la tarjeta aparece con om-pop (D7); con "reducir
+ * movimiento", om-pop queda en un fundido (index.css).
+ * @param {Object} props.datos
+ * @param {Set<string>} props.clavesAlMontar - Barberos que ya estaban al montar
+ * @returns {JSX.Element|null} null si no hay barberos.
+ */
+function TextoEquipo({ datos, clavesAlMontar }) {
+  const { barberos, duenios } = leerEquipo(datos);
+  if (barberos.length === 0) return null;
+  const nombres = barberos.map((b) => (b.nombre ?? '').trim()).filter(Boolean);
+  const visibles = barberos.slice(0, AVATARES_VISIBLES);
+  const resto = barberos.length - visibles.length;
+  const comision = resumirComision(datos);
+
+  const detalle = [
+    duenios.length > 0 ? `${duenios.length === 1 ? 'Dueño' : 'Dueños'}: ${unirNombres(duenios)}` : null,
+    comision ? `Comisión ${comision}` : null,
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <span aria-hidden="true" style={{ display: 'inline-flex', flexShrink: 0 }}>
+          {visibles.map((b, i) => (
+            <span key={b.clave ?? i} style={{
+              display: 'inline-flex',
+              marginLeft: i === 0 ? 0 : -6,
+              borderRadius: 999,
+              // El anillo del color de la tarjeta separa un avatar del de al lado.
+              boxShadow: `0 0 0 2px ${theme.surface}`,
+              animation: clavesAlMontar.has(b.clave) ? undefined : 'om-pop 220ms cubic-bezier(0.25, 1, 0.5, 1) backwards',
+            }}>
+              <AvatarIniciales nombre={(b.nombre ?? '').trim()} size={24} />
+            </span>
+          ))}
+        </span>
+        <span style={{ minWidth: 0 }}>
+          {unirNombres(nombres)}
+          {resto > 0 && <span style={{ color: theme.muted }}>{` y ${resto} más`}</span>}
+        </span>
+      </span>
+      {detalle && <span style={{ color: theme.muted }}>{detalle}</span>}
+    </span>
+  );
+}
+
 /**
  * TarjetaBarberia
  * @param {Object} props.datos - El formulario completo (utils/datosSolicitud.js)
@@ -112,15 +166,23 @@ function TarjetaBarberia({ datos, pantalla }) {
   const subdominio = datos?.local?.subdominio?.trim() ?? '';
   const direccion = datos?.local?.direccion?.trim() ?? '';
   const hayDias = (datos?.local?.horario?.length ?? 0) > 0;
+  const hayEquipo = (datos?.barberos?.length ?? 0) > 0;
 
   // Desde qué pantalla se ve cada renglón, aunque esté vacío.
   const llego = (numero) => pantalla !== undefined && pantalla >= numero;
   const verDireccion = Boolean(direccion) || llego(PANTALLA.DIRECCION);
   const verHorario = hayDias || llego(PANTALLA.DIAS);
-  const verDetalle = verDireccion || verHorario;
+  const verEquipo = hayEquipo || llego(PANTALLA.BARBEROS);
+  const verDetalle = verDireccion || verHorario || verEquipo;
 
   // Lo que ya se veía al montar la tarjeta no entra creciendo.
-  const [alMontar] = useState(() => ({ detalle: verDetalle, direccion: verDireccion, horario: verHorario }));
+  const [alMontar] = useState(() => ({
+    detalle: verDetalle,
+    direccion: verDireccion,
+    horario: verHorario,
+    equipo: verEquipo,
+    claves: new Set((datos?.barberos ?? []).map((b) => b.clave)),
+  }));
 
   return (
     <section
@@ -194,6 +256,13 @@ function TarjetaBarberia({ datos, pantalla }) {
               <Crece animar={alMontar.detalle && !alMontar.horario}>
                 <Renglon icono={<Clock size={16} strokeWidth={1.75} />} etiqueta="Horario" placeholder="Días y horario">
                   {hayDias ? <TextoHorario datos={datos} /> : null}
+                </Renglon>
+              </Crece>
+            )}
+            {verEquipo && (
+              <Crece animar={alMontar.detalle && !alMontar.equipo}>
+                <Renglon icono={<Users size={16} strokeWidth={1.75} />} etiqueta="Equipo" placeholder="Barberos y dueños">
+                  {hayEquipo ? <TextoEquipo datos={datos} clavesAlMontar={alMontar.claves} /> : null}
                 </Renglon>
               </Crece>
             )}

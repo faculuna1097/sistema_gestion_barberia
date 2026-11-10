@@ -13,7 +13,6 @@ import { useId, useImperativeHandle, useRef, useState } from 'react';
 import { theme } from '../../theme/tokens.js';
 import { PANTALLA } from '../../config/pantallas.js';
 import { erroresDePantalla } from '../../utils/validaciones.js';
-import { PASO_MINUTOS, HORA_MAXIMA, HORA_MINIMA, sumarMinutos } from '../../utils/horas.js';
 import { nombreDia, resumirDias } from '../../utils/semana.js';
 import {
   cambiarHorarioComun, cambiarHorarioDia, cambiarPausa, leerHorarioLocal, pausaSugerida, volverAlHorarioComun,
@@ -21,43 +20,9 @@ import {
 import { useErroresVisibles } from '../../hooks/useErroresVisibles.js';
 import { useHover } from '../../hooks/useHover.js';
 import { prefiereMenosMovimiento } from '../../utils/movimiento.js';
-import SelectorHora from '../../components/SelectorHora.jsx';
+import ParDeHoras from '../../components/ParDeHoras.jsx';
 import SemanaEnBarras from '../../components/SemanaEnBarras.jsx';
 import { Button, TextoError } from '../../components/ui';
-
-/**
- * ParDeHoras
- * Apertura y cierre lado a lado. Cada uno frena 30 min antes del otro, así el
- * rango nunca queda al revés.
- * @param {{hora_inicio: string, hora_fin: string}} props.rango
- * @param {Function} props.onCambiar - Recibe el rango nuevo
- * @param {string} props.etiquetaInicio - "Abren", "Desde"
- * @param {string} props.etiquetaFin - "Cierran", "Hasta"
- * @param {string} [props.errorId] - id del error que describe a los botones
- * @returns {JSX.Element}
- */
-function ParDeHoras({ rango, onCambiar, etiquetaInicio, etiquetaFin, errorId }) {
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-      <SelectorHora
-        etiqueta={etiquetaInicio}
-        valor={rango.hora_inicio}
-        min={HORA_MINIMA}
-        max={sumarMinutos(rango.hora_fin, -PASO_MINUTOS)}
-        onCambiar={(hora) => onCambiar({ ...rango, hora_inicio: hora })}
-        errorId={errorId}
-      />
-      <SelectorHora
-        etiqueta={etiquetaFin}
-        valor={rango.hora_fin}
-        min={sumarMinutos(rango.hora_inicio, PASO_MINUTOS)}
-        max={HORA_MAXIMA}
-        onCambiar={(hora) => onCambiar({ ...rango, hora_fin: hora })}
-        errorId={errorId}
-      />
-    </div>
-  );
-}
 
 /**
  * InterruptorPausa

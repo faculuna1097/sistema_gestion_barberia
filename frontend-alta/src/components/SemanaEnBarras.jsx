@@ -144,7 +144,13 @@ function FilaDia({ dia, bloques, pausa, escala, propio, abierto, onTocar, detall
         color: propio ? theme.ink : theme.muted,
         textAlign: 'right',
       }}>
-        {bloques.map((b) => fmtRangoCorto(b)).join(' · ')}
+        {/* Un bloque por renglón: dos en uno ("10 a 13 · 14 a 20") no entran en la columna. */}
+        {bloques.map((b, i) => (
+          // Por posición: dos bloques iguales (solapados) no pueden compartir key.
+          <span key={i} style={{ display: 'block', whiteSpace: 'nowrap' }}>
+            {fmtRangoCorto(b)}
+          </span>
+        ))}
       </span>
     </>
   );

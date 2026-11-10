@@ -233,7 +233,8 @@ Va en `docs/onboarding.md` como camino principal. `crearTenant.js` queda como al
 ### 7.1 Pendientes que salieron de las revisiones
 
 - **Fase 3:** el "Seguir" del nombre frena también con el resultado de la consulta del subdominio (`validaciones.js` no sabe si está ocupado).
-- **Fase 4:** cuando la pantalla 7 se saltee, `caminoHasta` (`config/pantallas.js`) la saltea también. Los bloques a medida se precargan partidos por la pausa (D11).
+- **Fase 4 (hecho):** la pantalla 7 no se saltea (su primera parte es la pregunta), así que `caminoHasta` no cambia. Los bloques a medida se precargan partidos por la pausa (D11).
+- **Fase 6:** el resumen de días de la tarjeta puede quedar ambiguo con días sueltos más un tramo ("Lun, mar y jue a sáb"). Foco que cae en la página al tocar "Partir la jornada" o "Trabaja de corrido" (el botón desaparece). Avatares de 24 px en la tarjeta.
 - **Fase 5:** después de un envío exitoso se muestra "Listo" sin releer la solicitud (si la relee, cae en "Ya enviada").
 - **Fase 6:** handler de errores después de `express.json` en `backend/src/index.js` que responda 400/413 en JSON y loguee con `console.warn`. Hoy Express imprime el stack con `console.error` y `captureConsoleIntegration` lo manda a Sentry (y a Discord) con cada JSON mal formado o body de más de 100 kB. Es global, va en su propio commit.
 
