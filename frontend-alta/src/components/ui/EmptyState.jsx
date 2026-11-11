@@ -1,6 +1,8 @@
 // /frontend-alta/src/components/ui/EmptyState.jsx
 // Bloque "no hay nada acá" — ícono + título + body + acción opcional.
-// Copia idéntica del primitivo del panel (frontend/src/components/ui/EmptyState.jsx).
+// Copia del primitivo del panel (frontend/src/components/ui/EmptyState.jsx), mismo
+// aspecto. Suma `nivelTitulo`: acá un EmptyState puede ser toda la pantalla (los
+// estados del link), y la pantalla necesita su h1 (sistema_de_disenio.md §5.5).
 
 import { theme } from '../../theme/tokens.js';
 
@@ -25,8 +27,11 @@ const TONOS = {
  * @param {ReactNode} [props.action] - Botón o link de acción
  * @param {'muted'|'danger'|'success'|'warning'} [props.tone='muted'] - Semántica del
  *   estado; tinta el wrapper del glyph. Default 'muted' = render neutro de siempre.
+ * @param {number} [props.nivelTitulo] - Si viene (1 a 3), el título es un h1/h2/h3
+ *   con el mismo aspecto; si no, un div.
  */
-function EmptyState({ glyph, title, body, action, tone = 'muted' }) {
+function EmptyState({ glyph, title, body, action, tone = 'muted', nivelTitulo }) {
+  const Titulo = nivelTitulo ? `h${nivelTitulo}` : 'div';
   const t = TONOS[tone] || TONOS.muted;
   return (
     <div style={{
@@ -52,13 +57,14 @@ function EmptyState({ glyph, title, body, action, tone = 'muted' }) {
         {glyph}
       </div>
 
-      <div style={{
+      <Titulo style={{
         fontFamily: theme.body,
         fontWeight: theme.weightHeading,
         fontSize: theme.sizeHeading,
         color: theme.ink,
         letterSpacing: '-0.01em',
-      }}>{title}</div>
+        textWrap: 'balance',
+      }}>{title}</Titulo>
 
       <div style={{
         fontFamily: theme.body,

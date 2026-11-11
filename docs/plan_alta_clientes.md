@@ -237,11 +237,11 @@ Va en `docs/onboarding.md` como camino principal. `crearTenant.js` queda como al
 
 - **Fase 3:** el "Seguir" del nombre frena también con el resultado de la consulta del subdominio (`validaciones.js` no sabe si está ocupado).
 - **Fase 4 (hecho):** la pantalla 7 no se saltea (su primera parte es la pregunta), así que `caminoHasta` no cambia. Los bloques a medida se precargan partidos por la pausa (D11).
-- **Fase 6:** el resumen de días de la tarjeta puede quedar ambiguo con días sueltos más un tramo ("Lun, mar y jue a sáb"). Foco que cae en la página al tocar "Partir la jornada" o "Trabaja de corrido" (el botón desaparece). Avatares de 24 px en la tarjeta.
+- **Fase 6 (hecho):** el resumen de días de la tarjeta puede quedar ambiguo con días sueltos más un tramo ("Lun, mar y jue a sáb"). Foco que cae en la página al tocar "Partir la jornada" o "Trabaja de corrido" (el botón desaparece). Avatares de 24 px en la tarjeta.
 - **Fase 5 (hecho):** después de un envío exitoso se muestra "Listo" sin releer la solicitud.
-- **Fase 6:** el bundle pesa 141 kB con gzip (506 kB sin comprimir) por `libphonenumber-js`: cargarla recién en el capítulo Contacto con `import()` dinámico.
+- **Fase 6 (hecho, 105,6 kB inicial + 45,9 kB diferido):** el bundle pesa 141 kB con gzip (506 kB sin comprimir) por `libphonenumber-js`: cargarla recién en el capítulo Contacto con `import()` dinámico.
 - **Fase 8:** anotar en `estado_actual.md` que `pool.on('error')` de `backend/src/config/db.js` loguea con `console.error` el corte de una conexión ociosa del pooler, y eso llega a Sentry (y a Discord). Es global, no de esta feature.
-- **Fase 6:** handler de errores después de `express.json` en `backend/src/index.js` que responda 400/413 en JSON y loguee con `console.warn`. Hoy Express imprime el stack con `console.error` y `captureConsoleIntegration` lo manda a Sentry (y a Discord) con cada JSON mal formado o body de más de 100 kB. Es global, va en su propio commit.
+- **Fase 6 (hecho, commit 2c3c842):** handler de errores después de `express.json` en `backend/src/index.js` que responda 400/413 en JSON y loguee con `console.warn`. Hoy Express imprime el stack con `console.error` y `captureConsoleIntegration` lo manda a Sentry (y a Discord) con cada JSON mal formado o body de más de 100 kB. Es global, va en su propio commit.
 
 ## 8. Tareas fuera del código (Facundo)
 

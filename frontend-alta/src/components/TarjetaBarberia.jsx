@@ -39,12 +39,18 @@ const DOMINIO = 'barbermanager.app';
 // Avatares del equipo que se dibujan; los demás van como "+N".
 const AVATARES_VISIBLES = 6;
 
+// Diámetro de los avatares del equipo: 28 px, con iniciales de 11 (sizeMicro).
+// Con 24 las iniciales quedaban en 9 px. El renglón crece 8 px respecto del
+// texto (20 px), y los avatares se pisan 8 px para que seis entren junto a
+// los nombres en 375 px.
+const TAMANIO_AVATAR = 28;
+
 /**
  * TextoEquipo
  * El equipo en dos renglones: los avatares superpuestos con los nombres y,
  * debajo, los dueños y la comisión ("Dueño: Juan · Comisión 50 %"). Un avatar
  * que no estaba al montar la tarjeta aparece con om-pop (D7); con "reducir
- * movimiento", om-pop queda en un fundido (index.css).
+ * movimiento", om-pop no anima (index.css).
  * @param {Object} props.datos
  * @param {Set<string>} props.clavesAlMontar - Barberos que ya estaban al montar
  * @returns {JSX.Element|null} null si no hay barberos.
@@ -69,13 +75,13 @@ function TextoEquipo({ datos, clavesAlMontar }) {
           {visibles.map((b, i) => (
             <span key={b.clave ?? i} style={{
               display: 'inline-flex',
-              marginLeft: i === 0 ? 0 : -6,
+              marginLeft: i === 0 ? 0 : -8,
               borderRadius: 999,
               // El anillo del color de la tarjeta separa un avatar del de al lado.
               boxShadow: `0 0 0 2px ${theme.surface}`,
               animation: clavesAlMontar.has(b.clave) ? undefined : 'om-pop 220ms cubic-bezier(0.25, 1, 0.5, 1) backwards',
             }}>
-              <AvatarIniciales nombre={(b.nombre ?? '').trim()} size={24} />
+              <AvatarIniciales nombre={(b.nombre ?? '').trim()} size={TAMANIO_AVATAR} />
             </span>
           ))}
         </span>

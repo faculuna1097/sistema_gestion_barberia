@@ -30,6 +30,7 @@ import { nombreDia, ordenarDias } from '../../utils/semana.js';
 import { useErroresDePantalla } from '../../hooks/useErroresDePantalla.js';
 import { useErroresVisibles } from '../../hooks/useErroresVisibles.js';
 import { useEleccionConPausa } from '../../hooks/useEleccionConPausa.js';
+import { useFocoPendiente } from '../../hooks/useFocoPendiente.js';
 import ParDeHoras from '../../components/ParDeHoras.jsx';
 import SelectorDias from '../../components/SelectorDias.jsx';
 import SemanaEnBarras from '../../components/SemanaEnBarras.jsx';
@@ -96,11 +97,12 @@ function ListaErrores({ id, mensajes }) {
  * demás días" de la pantalla 4.
  * @param {ReactNode} props.children
  * @param {Function} props.onClick
+ * @param {Object} [props.ref] - Ref al botón
  * @returns {JSX.Element}
  */
-function AccionDia({ children, onClick }) {
+function AccionDia({ children, onClick, ref }) {
   return (
-    <Button variant="ghost" full={false} onClick={onClick} style={{ color: theme.accent, marginLeft: -16 }}>
+    <Button ref={ref} variant="ghost" full={false} onClick={onClick} style={{ color: theme.accent, marginLeft: -16 }}>
       {children}
     </Button>
   );
@@ -123,6 +125,23 @@ function DetalleDia({ datos, barbero, dia, errores, cambiar }) {
   const delDia = bloquesDelDia(barbero, dia);
   const masDeUnDia = diasDelBarbero(barbero).length > 1;
   const { clave } = barbero;
+
+  // "Partir la jornada" y "Trabaja de corrido" son el mismo botón, que cambia
+  // de texto: así el foco se queda en él y desde ahí se deshace. Si después de
+  // juntar los bloques no se puede volver a partir (no hay botón), el foco va a
+  // la primera hora del día, en lugar de perderse en la página.
+  const partir = delDia.length === 1 && sePuedePartir(delDia[0]);
+  const juntar = delDia.length > 1;
+  const alternarRef = useRef(null);
+  const primeraHoraRef = useRef(null);
+  const pedirFoco = useFocoPendiente();
+
+  /** alternarJornada — parte el bloque del día en dos, o junta los dos en uno. */
+  const alternarJornada = () => {
+    if (partir) cambiar((d) => partirJornada(d, clave, delDia[0].indice));
+    else cambiar((d) => trabajarDeCorrido(d, clave, dia));
+    pedirFoco(() => alternarRef.current ?? primeraHoraRef.current);
+  };
 
   return (
     <div style={{ padding: '12px 8px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -149,19 +168,15 @@ function DetalleDia({ datos, barbero, dia, errores, cambiar }) {
             min={rangoLocal?.hora_inicio}
             max={rangoLocal?.hora_fin}
             errorId={errores.length > 0 ? errorId : undefined}
+            refPrimero={k === 0 ? primeraHoraRef : undefined}
           />
         </div>
       ))}
 
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-        {delDia.length === 1 && sePuedePartir(delDia[0]) && (
-          <AccionDia onClick={() => cambiar((d) => partirJornada(d, clave, delDia[0].indice))}>
-            Partir la jornada
-          </AccionDia>
-        )}
-        {delDia.length > 1 && (
-          <AccionDia onClick={() => cambiar((d) => trabajarDeCorrido(d, clave, dia))}>
-            Trabaja de corrido
+        {(partir || juntar) && (
+          <AccionDia ref={alternarRef} onClick={alternarJornada}>
+            {partir ? 'Partir la jornada' : 'Trabaja de corrido'}
           </AccionDia>
         )}
         {masDeUnDia && (

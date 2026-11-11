@@ -5,7 +5,11 @@
 //   - hover con useHover (táctil: el hover no queda pegado, §4.2);
 //   - `href` + `externo` para dibujarlo como <a> (como el del turnero), para los
 //     links a WhatsApp;
-//   - clase al-presionable: se achica apenas al tocar (index.css).
+//   - clase al-presionable: se achica apenas al tocar (index.css);
+//   - `ref` (React 19 lo pasa como prop), para llevarle el foco;
+//   - deshabilitado con aria-disabled y no con el atributo `disabled`: un
+//     botón con `disabled` pierde el foco, y quien venía con el teclado (ej.
+//     "Enviar" → "Enviando…" → "Reintentar") quedaba al principio de la página.
 
 import { theme } from '../../theme/tokens.js';
 import { useHover } from '../../hooks/useHover.js';
@@ -24,6 +28,7 @@ import { useHover } from '../../hooks/useHover.js';
  * @param {string} [props.href] - Si se pasa, se dibuja un <a> hacia esa dirección
  * @param {boolean} [props.externo=false] - Con href: abre en otra pestaña
  * @param {Object} [props.style] - Override de estilos puntuales
+ * @param {Object} [props.ref] - Ref al <button> o <a>
  * @returns {JSX.Element}
  */
 function Button({
@@ -36,6 +41,7 @@ function Button({
   href,
   externo = false,
   style,
+  ref,
 }) {
   const [hover, eventosHover] = useHover();
 
@@ -86,6 +92,7 @@ function Button({
   if (href) {
     return (
       <a
+        ref={ref}
         href={href}
         target={externo ? '_blank' : undefined}
         rel={externo ? 'noopener noreferrer' : undefined}
@@ -101,10 +108,11 @@ function Button({
 
   return (
     <button
+      ref={ref}
       type={type}
       onClick={disabled ? undefined : onClick}
       {...eventosHover}
-      disabled={disabled}
+      aria-disabled={disabled || undefined}
       className="al-presionable"
       style={{ ...base, ...variants[variant], ...style }}
     >

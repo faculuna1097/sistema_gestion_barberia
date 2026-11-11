@@ -110,6 +110,7 @@ export function LinkNoValido() {
   return (
     <PantallaCentrada>
       <EmptyState
+        nivelTitulo={1}
         glyph={<Link2Off {...ICONO} />}
         title="Este link no existe o ya venció"
         body="Pedile un link nuevo a Facundo por WhatsApp. Los links duran 30 días."
@@ -145,6 +146,7 @@ export function SolicitudEnviada({ datos, cargada = false }) {
         padding: '16px 16px calc(32px + env(safe-area-inset-bottom, 0px))',
       }}>
         <EmptyState
+          nivelTitulo={1}
           tone="success"
           glyph={<CheckCircle2 {...ICONO} />}
           title={cargada ? 'Tu barbería ya está lista' : 'Ya recibimos tus datos'}
@@ -178,6 +180,7 @@ export function ErrorDeCarga({ error, onReintentar }) {
   return (
     <PantallaCentrada>
       <EmptyState
+        nivelTitulo={1}
         tone="warning"
         glyph={glyph}
         title="No pudimos cargar tu formulario"

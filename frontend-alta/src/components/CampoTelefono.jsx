@@ -9,11 +9,13 @@
 // Cumple las tres reglas de Field (sistema_de_disenio.md §5.2): label
 // asociada, aria-invalid y aria-describedby. La lógica de lo que se escribe
 // vive en utils/contacto.js (escribirTelefono).
+// Se dibuja con libphonenumber-js ya cargada (utils/libTelefono.js): lo
+// asegura Formulario, que no muestra las pantallas de Contacto sin ella.
 
 import { useId, useState } from 'react';
-import { getCountryCallingCode } from 'libphonenumber-js';
 import { theme } from '../theme/tokens.js';
 import { PAISES } from '../utils/telefono.js';
+import { libTelefono } from '../utils/libTelefono.js';
 import { estiloEtiquetaCampo, MARGEN_SCROLL_CAMPO } from './ui/estilos.js';
 
 /**
@@ -45,6 +47,7 @@ function CampoTelefono({
   const inputId = useId();
   const textoId = useId();
   const texto = error || helper;
+  const { getCountryCallingCode } = libTelefono();
 
   // Borde: error > foco > normal.
   let borde = theme.hairline;

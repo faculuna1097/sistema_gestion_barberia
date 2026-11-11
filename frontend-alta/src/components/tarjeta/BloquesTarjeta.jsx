@@ -106,9 +106,11 @@ function ContenidoEquipo({ datos }) {
           const nombre = (barbero.nombre ?? '').trim();
           const email = (barbero.email ?? '').trim();
           return (
-            <li key={barbero.clave ?? i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-              <span aria-hidden="true" style={{ display: 'inline-flex', flexShrink: 0 }}>
-                <AvatarIniciales nombre={nombre} size={24} />
+            <li key={barbero.clave ?? i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              {/* 28 px (iniciales de 11): con 24 quedaban en 9 px. Sube 4 px
+                  para centrarse con el primer renglón (20 px de alto). */}
+              <span aria-hidden="true" style={{ display: 'inline-flex', flexShrink: 0, marginTop: -4 }}>
+                <AvatarIniciales nombre={nombre} size={28} />
               </span>
               <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>

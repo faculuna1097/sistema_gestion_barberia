@@ -55,9 +55,11 @@ function BotonVolver({ onClick }) {
  * @param {Function|null} props.onVolver - Vuelve una pantalla; null en la primera (sin flecha)
  * @param {string} props.guardado - Uno de ESTADOS_GUARDADO
  * @param {Function} props.onReintentar - Reintenta el guardado (aviso de error)
+ * @param {Function} [props.enfocarTitulo] - Lleva el foco al título de la
+ *   pantalla (cuando el aviso de error desaparece con el foco adentro)
  * @returns {JSX.Element}
  */
-function EncabezadoFormulario({ pantalla, onVolver, guardado, onReintentar }) {
+function EncabezadoFormulario({ pantalla, onVolver, guardado, onReintentar, enfocarTitulo }) {
   return (
     <header style={{ padding: '8px 16px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 44 }}>
@@ -67,7 +69,7 @@ function EncabezadoFormulario({ pantalla, onVolver, guardado, onReintentar }) {
         </div>
         <IndicadorGuardado estado={guardado} />
       </div>
-      {guardado === ESTADOS_GUARDADO.ERROR && <AvisoSinGuardar onReintentar={onReintentar} />}
+      {guardado === ESTADOS_GUARDADO.ERROR && <AvisoSinGuardar onReintentar={onReintentar} alSalirConFoco={enfocarTitulo} />}
     </header>
   );
 }

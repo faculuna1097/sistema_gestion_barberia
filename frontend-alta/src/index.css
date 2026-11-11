@@ -96,14 +96,14 @@ a {
   to { stroke-dashoffset: 0; }
 }
 
-/* Con "reducir movimiento", la tilde aparece con un fundido y ya dibujada, y el
+/* Con "reducir movimiento", nada entra animado (igual que las al- de abajo):
+   la tilde y los avatares aparecen ya en su lugar, la tilde ya dibujada, y el
    skeleton queda quieto. Estas animaciones se aplican con `animation` inline
    (no con una clase), así que no se pueden pisar desde una regla: se
    redefinen los keyframes, y gana la última definición que aplica. */
 @media (prefers-reduced-motion: reduce) {
   @keyframes om-pop {
-    from { opacity: 0; }
-    to   { opacity: 1; }
+    from, to { opacity: 1; transform: none; }
   }
   @keyframes om-stroke {
     from, to { stroke-dashoffset: 0; }
@@ -166,7 +166,7 @@ a {
 
 /* Sin el recuadro gris que iOS pinta al tocar: el feedback es el achique. */
 .al-presionable { -webkit-tap-highlight-color: transparent; }
-.al-presionable:active:not(:disabled) { transform: scale(0.98); }
+.al-presionable:active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.98); }
 
 .al-aparecer {
   animation: al-fundido 180ms ease-out backwards;
@@ -196,7 +196,7 @@ a {
   [data-al-direccion] .al-pantalla,
   .al-aparecer,
   .al-crecer { animation: none; }
-  .al-presionable:active:not(:disabled) { transform: none; }
+  .al-presionable:active:not(:disabled):not([aria-disabled="true"]) { transform: none; }
 }
 
 /* ── Barra de la comisión (clase al-rango) ───────────────────────

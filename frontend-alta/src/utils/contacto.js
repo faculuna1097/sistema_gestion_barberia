@@ -22,8 +22,10 @@
 //
 // Todas las funciones de cambio reciben `datos` y devuelven `datos` nuevos.
 // Funciones puras (sin React) para poder probarlas con Node.
+// Las de teléfonos usan libphonenumber-js, que se carga aparte
+// (utils/libTelefono.js): las pantallas de Contacto esperan a tenerla.
 
-import { AsYouType, isValidPhoneNumber } from 'libphonenumber-js';
+import { libTelefono } from './libTelefono.js';
 import {
   PAISES, normalizarTelefonoCompleto, telefonoAE164, topeDigitos,
 } from './telefono.js';
@@ -94,7 +96,7 @@ export function leerTelefono(datos, id) {
 export function valorParaGuardar({ pais, nacional }) {
   const recortado = (nacional ?? '').trim();
   if (recortado === '') return '';
-  if (isValidPhoneNumber(recortado, pais)) return telefonoAE164(recortado, pais) ?? recortado;
+  if (libTelefono().isValidPhoneNumber(recortado, pais)) return telefonoAE164(recortado, pais) ?? recortado;
   return recortado;
 }
 
@@ -114,7 +116,7 @@ export function escribirTelefono(crudo, pais) {
   if (completo) return completo;
   if (crudo.replace(/\D/g, '').length > topeDigitos(crudo, pais)) return null;
   // Con "+" adelante, AsYouType sin país formatea en internacional.
-  return { pais, nacional: new AsYouType(pais).input(crudo) };
+  return { pais, nacional: new (libTelefono().AsYouType)(pais).input(crudo) };
 }
 
 /**

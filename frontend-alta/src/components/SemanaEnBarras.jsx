@@ -11,7 +11,7 @@
 
 import { theme } from '../theme/tokens.js';
 import { aMinutos, fmtHoraCorta, fmtRango, fmtRangoCorto, aHora } from '../utils/horas.js';
-import { nombreDia, ordenarDias } from '../utils/semana.js';
+import { idDiaSemana, nombreDia, ordenarDias } from '../utils/semana.js';
 import { prefiereMenosMovimiento } from '../utils/movimiento.js';
 import { useHover } from '../hooks/useHover.js';
 
@@ -77,9 +77,10 @@ function tramosSinPausa(bloque, pausa) {
  * @param {boolean} props.abierto - Su detalle está abierto
  * @param {Function} [props.onTocar]
  * @param {string} props.detalleId - id del detalle (aria-controls)
+ * @param {string} [props.id] - id del botón del día (para devolverle el foco)
  * @returns {JSX.Element}
  */
-function FilaDia({ dia, bloques, pausa, escala, propio, abierto, onTocar, detalleId }) {
+function FilaDia({ dia, bloques, pausa, escala, propio, abierto, onTocar, detalleId, id }) {
   const [hover, eventosHover] = useHover();
   const total = escala.hasta - escala.desde;
   const transicion = prefiereMenosMovimiento()
@@ -173,6 +174,7 @@ function FilaDia({ dia, bloques, pausa, escala, propio, abierto, onTocar, detall
   }
   return (
     <button
+      id={id}
       type="button"
       onClick={() => onTocar(dia)}
       {...eventosHover}
@@ -201,7 +203,8 @@ function FilaDia({ dia, bloques, pausa, escala, propio, abierto, onTocar, detall
  * @param {Function} [props.onTocarDia] - Recibe el dia_semana; sin él, las filas no se tocan
  * @param {ReactNode} [props.detalle] - Lo que va debajo del día abierto (ej. sus botones de hora)
  * @param {string} props.etiqueta - Nombre de la lista para el lector ("Horario de la semana")
- * @param {string} [props.idBase] - Prefijo de los ids de los detalles
+ * @param {string} [props.idBase] - Prefijo de los ids de los detalles y de los
+ *   botones de cada día (idDiaSemana)
  * @returns {JSX.Element}
  */
 function SemanaEnBarras({
@@ -260,6 +263,7 @@ function SemanaEnBarras({
                 abierto={abierto}
                 onTocar={onTocarDia}
                 detalleId={detalleId}
+                id={idDiaSemana(idBase, dia)}
               />
               {abierto && detalle && (
                 <div id={detalleId} className="al-crecer">

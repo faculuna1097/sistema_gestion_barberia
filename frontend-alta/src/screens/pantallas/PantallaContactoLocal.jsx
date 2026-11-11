@@ -18,6 +18,7 @@ import {
 import { alPresionarEnter } from '../../utils/teclado.js';
 import { useErroresDePantalla } from '../../hooks/useErroresDePantalla.js';
 import { useErroresVisibles } from '../../hooks/useErroresVisibles.js';
+import { useFocoPendiente } from '../../hooks/useFocoPendiente.js';
 import CampoTelefono from '../../components/CampoTelefono.jsx';
 import { Button, Casilla, Field } from '../../components/ui';
 import { estiloEtiquetaCampo } from '../../components/ui/estilos.js';
@@ -44,6 +45,8 @@ function PantallaContactoLocal({ datos, actualizar, onSeguir, ref }) {
   const whatsappRef = useRef(null);
   const telefonoRef = useRef(null);
   const resenaRef = useRef(null);
+  const agregarResenaRef = useRef(null);
+  const pedirFoco = useFocoPendiente();
   const [focoResena, setFocoResena] = useState(false);
   // El campo del teléfono propio y el de reseñas que ya estaban al entrar no entran creciendo.
   const [alMontar] = useState(() => ({ telefono: !mismo, resena: !despues }));
@@ -93,7 +96,7 @@ function PantallaContactoLocal({ datos, actualizar, onSeguir, ref }) {
     if (campo === 'local.resena_url') {
       if (despues) actualizar((d) => pasarResenaDespues(d, false));
       setFocoResena(true);
-      requestAnimationFrame(() => resenaRef.current?.focus());
+      pedirFoco(() => resenaRef.current);
     } else if (campo === 'local.telefono' && !mismo) telefonoRef.current?.focus();
     else whatsappRef.current?.focus();
   };
@@ -180,6 +183,7 @@ function PantallaContactoLocal({ datos, actualizar, onSeguir, ref }) {
                 Lo pasás después.
               </p>
               <Button
+                ref={agregarResenaRef}
                 variant="ghost"
                 full={false}
                 onClick={() => {
@@ -222,7 +226,11 @@ function PantallaContactoLocal({ datos, actualizar, onSeguir, ref }) {
                 <Button
                   variant="ghost"
                   full={false}
-                  onClick={() => actualizar((d) => pasarResenaDespues(d, true))}
+                  onClick={() => {
+                    actualizar((d) => pasarResenaDespues(d, true));
+                    // El campo y este botón desaparecen: el foco pasa a "Agregarlo ahora".
+                    pedirFoco(() => agregarResenaRef.current);
+                  }}
                   style={{ color: theme.accent, marginLeft: -16 }}
                 >
                   Lo paso después

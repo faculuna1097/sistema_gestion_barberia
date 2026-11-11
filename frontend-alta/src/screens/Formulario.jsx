@@ -43,9 +43,11 @@ import {
 import { primerError, validarDatos } from '../utils/validaciones.js';
 import { registrarErroresServidor } from '../utils/erroresServidor.js';
 import { useNavegacion } from '../hooks/useNavegacion.js';
+import { useLibTelefono } from '../hooks/useLibTelefono.js';
+import { precargarLibTelefono } from '../utils/libTelefono.js';
 import { RESULTADOS_ENVIO } from '../hooks/useSolicitud.js';
 import { ErroresServidorContext } from '../hooks/useErroresDePantalla.js';
-import { PageContainer, StickyFooter, Button } from '../components/ui';
+import { PageContainer, StickyFooter, Button, Skeleton } from '../components/ui';
 import EncabezadoFormulario from '../components/formulario/EncabezadoFormulario.jsx';
 import TarjetaBarberia from '../components/TarjetaBarberia.jsx';
 import PantallaBienvenida from './pantallas/PantallaBienvenida.jsx';
@@ -84,6 +86,49 @@ const CONTENIDO_POR_PANTALLA = {
 };
 
 /**
+ * PANTALLAS_CON_TELEFONO
+ * Las que necesitan libphonenumber-js (utils/libTelefono.js) para dibujarse:
+ * sin ella, en su lugar va EsperaTelefonos.
+ */
+const PANTALLAS_CON_TELEFONO = new Set([PANTALLA.CONTACTO_LOCAL, PANTALLA.CONTACTO_DUENIO]);
+
+/**
+ * PANTALLA_PRECARGA_TELEFONO
+ * Desde dónde se precarga libphonenumber-js: el comienzo de "Tus servicios",
+ * dos o tres pantallas antes de Contacto. Así, en el uso normal, ya está
+ * cuando el cliente llega y no nota la espera.
+ */
+const PANTALLA_PRECARGA_TELEFONO = PANTALLA.LARGO_TURNO;
+
+/**
+ * EsperaTelefonos
+ * Lo que va en lugar de una pantalla de Contacto mientras llega
+ * libphonenumber-js (casi nunca se ve: se precarga antes), o si no se pudo
+ * bajar: un aviso con "Reintentar" (lo cargado sigue guardado).
+ * @param {Error|null} props.error
+ * @param {Function} props.onReintentar
+ * @returns {JSX.Element}
+ */
+function EsperaTelefonos({ error, onReintentar }) {
+  if (error) {
+    return (
+      <div role="alert" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
+        <p style={{ fontFamily: theme.body, fontSize: theme.sizeBody, lineHeight: 1.5, color: theme.inkSoft, textWrap: 'pretty' }}>
+          No pudimos cargar esta parte del formulario. Revisá tu conexión y probá de nuevo: lo que cargaste está guardado.
+        </p>
+        <Button variant="secondary" full={false} onClick={onReintentar}>Reintentar</Button>
+      </div>
+    );
+  }
+  return (
+    <div aria-busy="true" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <Skeleton width={120} height={12} />
+      <Skeleton height={48} radius={theme.radius} />
+    </div>
+  );
+}
+
+/**
  * ESTADOS_ENVIO
  * El botón de la Revisión: listo para enviar, enviando (no acepta otro
  * toque) o un envío que falló sin respuesta útil (aviso y "Reintentar").
@@ -110,7 +155,7 @@ function AvisoEnvio({ mensaje }) {
       color: theme.danger,
     }}>
       <AlertCircle size={16} strokeWidth={1.75} aria-hidden="true" style={{ flexShrink: 0, marginTop: 2 }} />
-      <span style={{ textWrap: 'pretty' }}>{`No pudimos enviarla. ${mensaje} No se perdió nada.`}</span>
+      <span style={{ textWrap: 'pretty' }}>{`No se envió. ${mensaje} No se perdió nada.`}</span>
     </div>
   );
 }
@@ -146,6 +191,38 @@ function Formulario({ solicitud }) {
 
   // La pantalla montada expone acá su intentarSeguir().
   const contenidoRef = useRef(null);
+
+  // Al cambiar de pantalla ("Seguir", "Volver", el "atrás" del navegador), el
+  // foco va al título de la nueva: el lector la anuncia y el Tab sigue desde su
+  // contenido, no desde el "Seguir" de abajo (que queda montado) ni desde el
+  // principio de la página (si el botón tocado desapareció). Si la pantalla ya
+  // enfocó un campo (autoFocus), se deja. En la primera carga no se mueve.
+  // Va antes del efecto de mostrarErroresAlEntrar: ese, si corresponde, lleva
+  // el foco al campo del error.
+  const mainRef = useRef(null);
+  const tituloRef = useRef(null);
+  const primeraPantallaRef = useRef(true);
+  const enfocarTitulo = useCallback(() => tituloRef.current?.focus({ preventScroll: true }), []);
+  useEffect(() => {
+    if (primeraPantallaRef.current) {
+      primeraPantallaRef.current = false;
+      return;
+    }
+    if (mainRef.current?.contains(document.activeElement)) return;
+    tituloRef.current?.focus({ preventScroll: true });
+  }, [nav.pantalla, nav.profundidad]);
+
+  // libphonenumber-js: se precarga desde "Tus servicios" y la necesitan las
+  // pantallas de Contacto (ver utils/libTelefono.js).
+  const telefonos = useLibTelefono(false);
+  useEffect(() => {
+    if (nav.pantalla >= PANTALLA_PRECARGA_TELEFONO) precargarLibTelefono();
+  }, [nav.pantalla]);
+  const esperandoTelefonos = PANTALLAS_CON_TELEFONO.has(nav.pantalla) && !telefonos.lista;
+  const esperandoTelefonosRef = useRef(esperandoTelefonos);
+  useEffect(() => {
+    esperandoTelefonosRef.current = esperandoTelefonos;
+  });
 
   // nav y datos cambian en cada render: el "Seguir" y el envío los leen de un
   // ref para ser estables (las pantallas usan el "Seguir" en efectos, ej. el
@@ -219,6 +296,8 @@ function Formulario({ solicitud }) {
    * siguiente del bloque o la Revisión; en la Revisión, envía.
    */
   const seguir = useCallback(() => {
+    // Sin la pantalla dibujada no hay nada que validar: no se avanza.
+    if (esperandoTelefonosRef.current) return;
     const puede = contenidoRef.current?.intentarSeguir?.() ?? true;
     if (!puede) return;
     const { pantalla: actual, pila, irA, volverA } = navRef.current;
@@ -265,6 +344,7 @@ function Formulario({ solicitud }) {
             onVolver={nav.profundidad > 1 && !enviando ? nav.volver : null}
             guardado={guardado}
             onReintentar={reintentarGuardado}
+            enfocarTitulo={enfocarTitulo}
           />
 
           {pantalla.capitulo && (
@@ -275,12 +355,16 @@ function Formulario({ solicitud }) {
 
           {/* La key nueva en cada paso remonta el contenido y dispara su entrada. */}
           <main
+            ref={mainRef}
             key={`${nav.profundidad}-${nav.pantalla}`}
             className="al-pantalla"
             style={{ flex: 1, padding: '24px 16px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <h1 style={{
+              {/* tabIndex -1: recibe el foco al cambiar de pantalla (no es un
+                  control, así que sin anillo). */}
+              <h1 ref={tituloRef} tabIndex={-1} style={{
+                outline: 'none',
                 fontFamily: theme.body,
                 fontSize: theme.sizeTitle,
                 fontWeight: theme.weightHeading,
@@ -299,7 +383,8 @@ function Formulario({ solicitud }) {
             </div>
 
             {enRevision && <TarjetaBarberia datos={datos} completa onEditar={editarBloque} />}
-            {Contenido && <Contenido ref={contenidoRef} datos={datos} actualizar={actualizar} onSeguir={seguir} />}
+            {Contenido && esperandoTelefonos && <EsperaTelefonos error={telefonos.error} onReintentar={telefonos.reintentar} />}
+            {Contenido && !esperandoTelefonos && <Contenido ref={contenidoRef} datos={datos} actualizar={actualizar} onSeguir={seguir} />}
           </main>
 
           {textoSeguir && (

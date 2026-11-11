@@ -35,6 +35,18 @@ export function nombreDia(dia, { corto = false, mayuscula = false } = {}) {
 }
 
 /**
+ * idDiaSemana
+ * El id del botón de un día en SemanaEnBarras: para devolverle el foco cuando
+ * su detalle se cierra desde adentro (el botón que se tocó desaparece).
+ * @param {string} idBase - El idBase de SemanaEnBarras
+ * @param {number} dia - dia_semana
+ * @returns {string}
+ */
+export function idDiaSemana(idBase, dia) {
+  return `${idBase}-dia-${dia}`;
+}
+
+/**
  * posicionEnSemana
  * Lugar de un día en ORDEN_SEMANA (lunes = 0, domingo = 6), para ordenar.
  * @param {number} dia - dia_semana
@@ -84,10 +96,16 @@ function unirConY(partes) {
 
 /**
  * resumirDias
- * Un conjunto de días para leer de un vistazo. Tres o más días seguidos van
- * como rango ("lun a sáb"); el resto, separados ("lun, mié y vie").
- * Ej.: [1..6] → "Lun a sáb"; [1..5, 0] → "Lun a vie y dom"; [1, 3] → "Lun y mié";
- * los 7 → "Todos los días".
+ * Un conjunto de días para leer de un vistazo, sin que se pueda leer de dos maneras.
+ *   - Un solo tramo de tres o más días seguidos va como rango: "Lun a sáb".
+ *   - Días sueltos o de a dos, separados: "Lun, mié y vie".
+ *   - Un rango mezclado con otros días se leía ambiguo ("Lun, mar y jue a
+ *     sáb": ¿de martes a sábado?, ¿de jueves?). Si al rango que va del primer
+ *     día al último le falta uno (o dos, si quedan cinco días o más), se dice
+ *     por lo que falta: "Lun a sáb, menos mié" ("Todos los días, menos sáb"
+ *     si va de lunes a domingo). Si no, van todos separados ("Lun, mar, mié y dom").
+ * Ej.: [1..6] → "Lun a sáb"; [1,2,4,5,6] → "Lun a sáb, menos mié";
+ * [1..5, 0] → "Todos los días, menos sáb"; [1, 3] → "Lun y mié"; los 7 → "Todos los días".
  * @param {Iterable<number>} dias - dia_semana
  * @param {Object} [opciones]
  * @param {boolean} [opciones.corto=true] - Nombres cortos ("lun") o largos ("lunes")
@@ -98,10 +116,29 @@ export function resumirDias(dias, { corto = true } = {}) {
   if (ordenados.length === 0) return '';
   if (ordenados.length === 7) return 'Todos los días';
 
-  const partes = tramosSeguidos(ordenados).flatMap((tramo) => {
-    const nombres = tramo.map((dia) => nombreDia(dia, { corto }));
-    return tramo.length >= 3 ? [`${nombres[0]} a ${nombres[nombres.length - 1]}`] : nombres;
-  });
-  const texto = unirConY(partes);
+  const nombre = (dia) => nombreDia(dia, { corto });
+  const tramos = tramosSeguidos(ordenados);
+  const hayRango = tramos.some((tramo) => tramo.length >= 3);
+  let texto;
+  if (tramos.length === 1 && hayRango) {
+    texto = `${nombre(ordenados[0])} a ${nombre(ordenados[ordenados.length - 1])}`;
+  } else if (!hayRango) {
+    texto = unirConY(ordenados.map(nombre));
+  } else {
+    // Un rango y algo más: por lo que falta entre el primero y el último.
+    const desde = posicionEnSemana(ordenados[0]);
+    const hasta = posicionEnSemana(ordenados[ordenados.length - 1]);
+    const faltan = ORDEN_SEMANA.slice(desde, hasta + 1).filter((dia) => !ordenados.includes(dia));
+    // Con dos que faltan, "menos" conviene solo si quedan cinco días o más:
+    // "Lun, jue, vie y sáb" se lee más fácil que "Lun a sáb, menos mar y mié".
+    if (faltan.length === 1 || (faltan.length === 2 && ordenados.length >= 5)) {
+      const base = desde === 0 && hasta === 6
+        ? 'todos los días'
+        : `${nombre(ordenados[0])} a ${nombre(ordenados[ordenados.length - 1])}`;
+      texto = `${base}, menos ${unirConY(faltan.map(nombre))}`;
+    } else {
+      texto = unirConY(ordenados.map(nombre));
+    }
+  }
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }

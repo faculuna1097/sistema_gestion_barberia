@@ -24,7 +24,9 @@ function BotonPaso({ children, etiqueta, deshabilitado, onClick, describedBy, re
       type="button"
       onClick={deshabilitado ? undefined : onClick}
       {...eventosHover}
-      disabled={deshabilitado}
+      // aria-disabled y no `disabled`: al llegar al tope con el teclado, el
+      // botón conserva el foco (con `disabled` se iba al principio de la página).
+      aria-disabled={deshabilitado || undefined}
       aria-label={etiqueta}
       aria-describedby={describedBy}
       className="al-presionable"

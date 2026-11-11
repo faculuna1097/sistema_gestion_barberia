@@ -35,7 +35,7 @@ const PASOS = [
  * Tilde
  * El círculo con la tilde que se dibuja: el círculo entra con om-pop y el
  * trazo se dibuja con om-stroke (index.css). Con "reducir movimiento", los
- * dos keyframes quedan en un fundido y la tilde ya dibujada.
+ * dos keyframes no animan: el círculo aparece en su lugar con la tilde ya dibujada.
  * @returns {JSX.Element}
  */
 function Tilde() {

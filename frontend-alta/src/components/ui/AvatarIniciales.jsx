@@ -1,6 +1,8 @@
 // /frontend-alta/src/components/ui/AvatarIniciales.jsx
 // Círculo con las iniciales de un nombre. Color de fondo determinístico (hash del nombre).
-// Copia idéntica del primitivo del panel (frontend/src/components/ui/AvatarIniciales.jsx).
+// Copia del primitivo del panel (frontend/src/components/ui/AvatarIniciales.jsx),
+// con un cambio: las iniciales no bajan de sizeMicro (11). Con el 36 % del
+// diámetro, un avatar de 24 o 28 px las dejaba en 9 o 10 px.
 
 import { theme } from '../../theme/tokens.js';
 
@@ -28,7 +30,7 @@ function AvatarIniciales({ nombre, size = 40 }) {
       flexShrink: 0,
       fontFamily: theme.body,
       fontWeight: theme.weightHeading,
-      fontSize: Math.round(size * 0.36),
+      fontSize: Math.max(theme.sizeMicro, Math.round(size * 0.36)),
       letterSpacing: '-0.01em',
       userSelect: 'none',
     }}>

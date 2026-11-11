@@ -4,7 +4,7 @@
 // y los dueños que no cortan (pantalla 6).
 // Una fila nueva entra creciendo (al-crecer) y su avatar aparece con om-pop
 // (plan D7: "avatares que aparecen"); las que ya estaban al montar la
-// pantalla, no. Con "reducir movimiento", om-pop queda en un fundido (index.css).
+// pantalla, no. Con "reducir movimiento", om-pop no anima (index.css).
 
 import { useId } from 'react';
 import { Pencil, X } from 'lucide-react';

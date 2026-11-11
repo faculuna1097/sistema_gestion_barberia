@@ -6,10 +6,12 @@
 // E.164, normalización de lo que entrega el autocompletado del navegador,
 // formato para mostrar y link de WhatsApp.
 // Funciones puras (sin React) para poder probarlas con Node.
+//
+// libphonenumber-js se carga aparte (utils/libTelefono.js): las funciones de
+// acá la leen con libTelefono() y solo se llaman con la librería ya cargada.
+// La excepción es fmtTelefono, que tiene un plan B si todavía no llegó.
 
-import {
-  AsYouType, getCountryCallingCode, parsePhoneNumber, parsePhoneNumberFromString,
-} from 'libphonenumber-js';
+import { libTelefono, libTelefonoCargada } from './libTelefono.js';
 
 /**
  * PAISES
@@ -73,6 +75,7 @@ export function topeDigitos(crudo, pais) {
     const conPrefijo = pais === 'AR' && /^(54|0)/.test(crudo.replace(/\D/g, ''));
     return conPrefijo ? TOPE_AR_COMPLETO : tope;
   }
+  const { getCountryCallingCode } = libTelefono();
   const digitos = crudo.replace(/\D/g, '');
   const destino = PAISES.find((p) => digitos.startsWith(getCountryCallingCode(p.iso)));
   if (!destino) return tope;
@@ -91,7 +94,7 @@ export function topeDigitos(crudo, pais) {
  */
 export function telefonoAE164(nacional, pais) {
   try {
-    return parsePhoneNumber(nacional, pais).number;
+    return libTelefono().parsePhoneNumber(nacional, pais).number;
   } catch {
     return null;
   }
@@ -120,6 +123,7 @@ export function normalizarTelefonoCompleto(crudo, paisActual) {
   const tope = MAX_DIGITOS_POR_PAIS[paisActual] ?? 15;
   if (!crudo.trim().startsWith('+') && digitos.length <= tope) return null;
 
+  const { AsYouType, parsePhoneNumberFromString } = libTelefono();
   // parsePhoneNumberFromString no lanza: devuelve undefined si no puede parsear.
   const p = parsePhoneNumberFromString(crudo, paisActual);
   if (!p || !p.isValid() || !PAISES.some((x) => x.iso === p.country)) return null;
@@ -139,10 +143,15 @@ export function normalizarTelefonoCompleto(crudo, paisActual) {
  * nacional (que es lo que devuelve `formatNational`: "011 15-3311-1686") y sin
  * el 9 de celular. Uno de otro país, en internacional (con su +código).
  * @param {string} tel - Teléfono como está guardado (ej. "1133111686", "+541133111686" o "+5491133111686")
+ * Si la librería todavía no se cargó (o no se pudo bajar), el número va tal
+ * cual: es el plan B, que en el uso normal no se ve (App y Formulario la
+ * cargan antes de mostrar un teléfono).
  * @returns {string} Ej: "11 3311-1686". Si no se puede interpretar como un
  *   número válido, el texto tal cual.
  */
 export function fmtTelefono(tel) {
+  if (!libTelefonoCargada()) return tel;
+  const { AsYouType, parsePhoneNumberFromString } = libTelefono();
   // parsePhoneNumberFromString no lanza: devuelve undefined si no puede parsear.
   const p = parsePhoneNumberFromString(tel, 'AR');
   if (!p || !p.isValid()) return tel;

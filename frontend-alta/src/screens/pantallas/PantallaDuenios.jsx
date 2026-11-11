@@ -19,6 +19,7 @@ import {
 } from '../../utils/equipo.js';
 import { useErroresDePantalla } from '../../hooks/useErroresDePantalla.js';
 import { useErroresVisibles } from '../../hooks/useErroresVisibles.js';
+import { useFocoPendiente } from '../../hooks/useFocoPendiente.js';
 import { useHover } from '../../hooks/useHover.js';
 import { prefiereMenosMovimiento } from '../../utils/movimiento.js';
 import CampoAgregarNombre from '../../components/CampoAgregarNombre.jsx';
@@ -141,6 +142,7 @@ function claveDuenio(lista, k) {
  * @returns {JSX.Element}
  */
 function PantallaDuenios({ datos, actualizar, onSeguir, ref }) {
+  const pedirFoco = useFocoPendiente();
   const { barberos, dueniosSinCorte } = leerEquipo(datos);
   const errores = useErroresDePantalla(PANTALLA.DUENIOS, datos);
   const { errorDe, revelarTodos } = useErroresVisibles(errores);
@@ -192,7 +194,7 @@ function PantallaDuenios({ datos, actualizar, onSeguir, ref }) {
   const quitar = (k) => {
     actualizar((d) => quitarDuenioSinCorte(d, k));
     setCampoAbierto(true);
-    requestAnimationFrame(() => campoRef.current?.focus());
+    pedirFoco(() => campoRef.current);
   };
 
   useImperativeHandle(ref, () => ({

@@ -64,10 +64,10 @@ function Casilla({ marcada, onCambiar, children, name }) {
         onFocus={(e) => setFocoTeclado(e.target.matches(':focus-visible'))}
         onBlur={() => setFocoTeclado(false)}
         style={{
+          // inset -1: cubre también el borde de 1 px de la label. Con 0 medía
+          // 42 px de alto (el área de toque es la del input, no la de la label).
           position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
+          inset: -1,
           margin: 0,
           opacity: 0,
           cursor: 'pointer',

@@ -12,17 +12,21 @@
 import { useId, useImperativeHandle, useRef, useState } from 'react';
 import { theme } from '../../theme/tokens.js';
 import { PANTALLA } from '../../config/pantallas.js';
-import { nombreDia, resumirDias } from '../../utils/semana.js';
+import { idDiaSemana, nombreDia, resumirDias } from '../../utils/semana.js';
 import {
   cambiarHorarioComun, cambiarHorarioDia, cambiarPausa, leerHorarioLocal, pausaSugerida, volverAlHorarioComun,
 } from '../../utils/horarioLocal.js';
 import { useErroresDePantalla } from '../../hooks/useErroresDePantalla.js';
 import { useErroresVisibles } from '../../hooks/useErroresVisibles.js';
 import { useHover } from '../../hooks/useHover.js';
+import { useFocoPendiente } from '../../hooks/useFocoPendiente.js';
 import { prefiereMenosMovimiento } from '../../utils/movimiento.js';
 import ParDeHoras from '../../components/ParDeHoras.jsx';
 import SemanaEnBarras from '../../components/SemanaEnBarras.jsx';
 import { Button, TextoError } from '../../components/ui';
+
+// Prefijo de los ids de la semana del local (SemanaEnBarras).
+const ID_SEMANA = 'horario-local';
 
 /**
  * InterruptorPausa
@@ -102,6 +106,7 @@ function InterruptorPausa({ prendido, onCambiar }) {
  * @returns {JSX.Element}
  */
 function PantallaHorario({ datos, actualizar, ref }) {
+  const pedirFoco = useFocoPendiente();
   const vista = leerHorarioLocal(datos);
   const comunes = vista.dias.filter((d) => !vista.distintos.has(d));
   const [diaAbierto, setDiaAbierto] = useState(null);
@@ -165,8 +170,11 @@ function PantallaHorario({ datos, actualizar, ref }) {
             variant="ghost"
             full={false}
             onClick={() => {
-              actualizar((d) => volverAlHorarioComun(d, diaAbierto));
+              const dia = diaAbierto;
+              actualizar((d) => volverAlHorarioComun(d, dia));
               setDiaAbierto(null);
+              // El botón desaparece con el detalle: el foco vuelve a la fila del día.
+              pedirFoco(() => document.getElementById(idDiaSemana(ID_SEMANA, dia)));
             }}
             style={{ color: theme.accent, marginLeft: -16 }}
           >
@@ -190,7 +198,7 @@ function PantallaHorario({ datos, actualizar, ref }) {
         {comunes.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <p style={{ fontFamily: theme.body, fontSize: theme.sizeBody, fontWeight: theme.weightMedium, color: theme.ink }}>
-              {vista.distintos.size > 0 ? resumirDias(comunes, { corto: false }) : 'Todos los días'}
+              {resumirDias(comunes, { corto: false })}
             </p>
             <ParDeHoras
               rango={vista.comun}
@@ -210,7 +218,7 @@ function PantallaHorario({ datos, actualizar, ref }) {
           onTocarDia={alternarDiaAbierto}
           detalle={detalle}
           etiqueta="Semana del local. Tocá un día para darle otro horario."
-          idBase="horario-local"
+          idBase={ID_SEMANA}
         />
 
         {errorHorario && <TextoError id={errorHorarioId}>{errorHorario}</TextoError>}

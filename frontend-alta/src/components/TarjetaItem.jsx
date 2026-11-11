@@ -132,7 +132,7 @@ function TarjetaItem({
               }}
             />
           ) : (
-            <h3 id={tituloId} style={{
+            <h2 id={tituloId} style={{
               flex: 1,
               minWidth: 0,
               fontFamily: theme.body,
@@ -142,9 +142,9 @@ function TarjetaItem({
               overflowWrap: 'anywhere',
             }}>
               {visible}
-            </h3>
+            </h2>
           )}
-          {/* El título para el lector mientras se edita (el h3 no está). */}
+          {/* El título para el lector mientras se edita (el h2 no está). */}
           {editando && <span id={tituloId} style={estiloSoloLector}>{visible}</span>}
           {!editando && (
             <BotonIcono ref={refEditar} etiqueta={`Cambiar el nombre de ${(nombre ?? '').trim() || articulo}`} onClick={onEditar}>
