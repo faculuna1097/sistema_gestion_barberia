@@ -45,12 +45,15 @@ function leerPilaDelHistorial(token) {
  *   este formulario (caminoHasta(progreso.pantalla)). Se lee solo al montar.
  * @returns {{
  *   pantalla: number,
+ *   pila: number[],
  *   profundidad: number,
  *   direccion: 'adelante'|'atras'|null,
  *   irA: (pantalla: number) => void,
  *   volver: () => void,
- * }} `pantalla` es la de arriba de la pila; `profundidad`, el largo de la
- *   pila; `direccion`, la del último movimiento (null en la primera carga)
+ *   volverA: (pantalla: number) => void,
+ * }} `pantalla` es la de arriba de la pila; `pila`, la pila entera (el modo
+ *   Editar de la Revisión se lee de ahí); `profundidad`, el largo de la pila;
+ *   `direccion`, la del último movimiento (null en la primera carga)
  */
 export function useNavegacion({ token, pilaInicial }) {
   // Si la entrada actual ya es del formulario, se retoma su pila (sin flash: se
@@ -136,11 +139,28 @@ export function useNavegacion({ token, pilaInicial }) {
     if (nav.pila.length > 1) history.back();
   };
 
+  /**
+   * volverA
+   * Vuelve hasta la última vez que se pasó por `pantalla` (ej. del modo Editar
+   * a la Revisión) retrocediendo en el historial (history.go), en lugar de
+   * apilar otra entrada: el "atrás" de la Revisión sigue llevando adonde
+   * llevaba antes de editar. Si la pantalla no está en la pila, la apila.
+   * @param {number} pantalla
+   */
+  const volverA = (pantalla) => {
+    const indice = nav.pila.lastIndexOf(pantalla);
+    const pasos = nav.pila.length - 1 - indice;
+    if (indice === -1) irA(pantalla);
+    else if (pasos > 0) history.go(-pasos);
+  };
+
   return {
     pantalla: nav.pila[nav.pila.length - 1],
+    pila: nav.pila,
     profundidad: nav.pila.length,
     direccion: nav.direccion,
     irA,
     volver,
+    volverA,
   };
 }

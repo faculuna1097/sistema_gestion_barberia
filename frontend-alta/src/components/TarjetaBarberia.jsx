@@ -1,9 +1,16 @@
 // /frontend-alta/src/components/TarjetaBarberia.jsx
 // La tarjeta "Tu barbería", que crece con cada respuesta (plan §5.2 y D7).
 // Arriba, el nombre (con su avatar) y el link elegido. Debajo, un renglón por
-// dato: la dirección, los días con su horario y el equipo (los avatares, los
-// dueños y la comisión). La fase 5 le suma los servicios y el contacto, y la
-// Revisión la muestra completa con "Editar" por bloque.
+// dato: la dirección, los días con su horario, el equipo (los avatares, los
+// dueños y la comisión), los servicios (con el turno y los productos) y el
+// contacto.
+//
+// Tiene dos formas:
+//   - La del formulario (sin `completa`): crece arriba de cada pantalla, con un
+//     renglón corto por dato.
+//   - La completa (`completa`): el detalle entero por bloques
+//     (tarjeta/BloquesTarjeta.jsx). La usan la Revisión, con "Editar" por
+//     bloque (`onEditar`), y "Ya enviada", sin edición.
 //
 // Cómo crece: el renglón de un dato aparece cuando el formulario llega a la
 // pantalla que lo pregunta (vacío, con el nombre del dato en gris) y se llena
@@ -13,92 +20,21 @@
 // montar la tarjeta (ej. al recargar) no se animan.
 //
 // Vive en components/ y no en ui/: es del dominio del formulario, y la usan el
-// formulario, la pantalla de "Ya enviada" y (fase 5) la Revisión.
+// formulario, la Revisión y la pantalla de "Ya enviada".
 
 import { useState } from 'react';
-import { Clock, MapPin, Users } from 'lucide-react';
+import { Clock, MapPin, MessageCircle, Scissors, Users } from 'lucide-react';
 import { theme } from '../theme/tokens.js';
 import { PANTALLA } from '../config/pantallas.js';
-import { gruposPorRango, leerHorarioLocal } from '../utils/horarioLocal.js';
-import { resumirDias } from '../utils/semana.js';
-import { fmtRango } from '../utils/horas.js';
 import { leerEquipo, resumirComision, unirNombres } from '../utils/equipo.js';
+import { duracionTurno, leerServicios } from '../utils/servicios.js';
+import { detalleServicios, fmtTelefonoGuardado, resumirServicios } from '../utils/resumen.js';
 import { AvatarIniciales } from './ui';
-import { estiloSoloLector } from './ui/estilos.js';
+import { Crece, Renglon, TextoHorario } from './tarjeta/PartesTarjeta.jsx';
+import BloquesTarjeta from './tarjeta/BloquesTarjeta.jsx';
 
 // Dominio de los links de las barberías.
 const DOMINIO = 'barbermanager.app';
-
-/**
- * Crece
- * Envuelve algo que puede aparecer después de montada la tarjeta: si no
- * estaba al montarla, entra creciendo (al-crecer, index.css).
- * @param {boolean} props.animar - Si entra creciendo
- * @param {ReactNode} props.children
- * @returns {JSX.Element}
- */
-function Crece({ animar, children }) {
-  if (!animar) return children;
-  return (
-    <div className="al-crecer">
-      <div>{children}</div>
-    </div>
-  );
-}
-
-/**
- * Renglon
- * Un dato de la tarjeta: ícono y texto. Vacío, muestra `placeholder` en gris.
- * @param {ReactNode} props.icono - Ícono Lucide de 16 (decorativo)
- * @param {string} props.etiqueta - Qué dato es, para el lector ("Dirección")
- * @param {ReactNode} [props.children] - El valor; si no hay, va el placeholder
- * @param {string} props.placeholder
- * @returns {JSX.Element}
- */
-function Renglon({ icono, etiqueta, children, placeholder }) {
-  const vacio = !children;
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-      <span aria-hidden="true" style={{ display: 'inline-flex', paddingTop: 2, color: theme.muted, flexShrink: 0 }}>
-        {icono}
-      </span>
-      <div style={{
-        minWidth: 0,
-        fontFamily: theme.body,
-        fontSize: theme.sizeBody,
-        lineHeight: 1.45,
-        color: vacio ? theme.muted : theme.ink,
-        overflowWrap: 'anywhere',
-      }}>
-        <span style={estiloSoloLector}>{`${etiqueta}: `}</span>
-        {vacio ? placeholder : children}
-      </div>
-    </div>
-  );
-}
-
-/**
- * TextoHorario
- * El horario resumido: una línea por grupo de días con el mismo rango
- * ("Lun a vie · 10:00 a 20:00", "Sáb · 10:00 a 18:00") y la pausa, si hay.
- * @param {Object} props.datos
- * @returns {JSX.Element|null} null si no abre ningún día.
- */
-function TextoHorario({ datos }) {
-  const grupos = gruposPorRango(datos);
-  if (grupos.length === 0) return null;
-  const { pausa } = leerHorarioLocal(datos);
-  return (
-    <span style={{ display: 'flex', flexDirection: 'column' }}>
-      {grupos.map((g) => (
-        <span key={g.dias.join('-')}>
-          {`${resumirDias(g.dias)} · ${fmtRango(g.rango)}`}
-        </span>
-      ))}
-      {pausa && <span style={{ color: theme.muted }}>{`Cierran de ${fmtRango(pausa)}`}</span>}
-    </span>
-  );
-}
 
 // Avatares del equipo que se dibujan; los demás van como "+N".
 const AVATARES_VISIBLES = 6;
@@ -154,26 +90,73 @@ function TextoEquipo({ datos, clavesAlMontar }) {
 }
 
 /**
+ * TextoServicios
+ * Los servicios en dos renglones: los nombres ("Corte, Barba y Corte y
+ * barba") y, debajo, el turno y los productos ("Turnos de 30 min · 2 productos").
+ * Sin servicios todavía, el turno va arriba.
+ * @param {Object} props.datos
+ * @returns {JSX.Element|null} null si no hay ni turno ni servicios.
+ */
+function TextoServicios({ datos }) {
+  const nombres = resumirServicios(datos);
+  const detalle = detalleServicios(datos);
+  if (!nombres && !detalle) return null;
+  if (!nombres) return <span>{detalle}</span>;
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column' }}>
+      <span>{nombres}</span>
+      {detalle && <span style={{ color: theme.muted }}>{detalle}</span>}
+    </span>
+  );
+}
+
+/**
+ * TextoContacto
+ * El WhatsApp del local y, debajo, a quién contactar ("Contacto: Juan").
+ * @param {Object} props.datos
+ * @returns {JSX.Element|null} null si no hay ninguno de los dos.
+ */
+function TextoContacto({ datos }) {
+  const whatsapp = fmtTelefonoGuardado(datos?.local?.whatsapp);
+  const contacto = (datos?.contacto?.nombre ?? '').trim();
+  if (!whatsapp && !contacto) return null;
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column' }}>
+      {whatsapp && <span>{whatsapp}</span>}
+      {contacto && <span style={{ color: theme.muted }}>{`Contacto: ${contacto}`}</span>}
+    </span>
+  );
+}
+
+/**
  * TarjetaBarberia
  * @param {Object} props.datos - El formulario completo (utils/datosSolicitud.js)
  * @param {number} [props.pantalla] - Pantalla actual del formulario: muestra
- *   vacíos los renglones de lo que ya se preguntó. Sin ella (ej. "Ya
- *   enviada"), solo van los renglones con datos.
+ *   vacíos los renglones de lo que ya se preguntó. Sin ella, solo van los
+ *   renglones con datos.
+ * @param {boolean} [props.completa=false] - El detalle entero por bloques
+ *   (Revisión y "Ya enviada"), en lugar de los renglones cortos
+ * @param {Function} [props.onEditar] - Con `completa`: recibe el bloque a
+ *   editar; sin él, no hay "Editar"
  * @returns {JSX.Element}
  */
-function TarjetaBarberia({ datos, pantalla }) {
+function TarjetaBarberia({ datos, pantalla, completa = false, onEditar }) {
   const nombre = datos?.local?.nombre?.trim() ?? '';
   const subdominio = datos?.local?.subdominio?.trim() ?? '';
   const direccion = datos?.local?.direccion?.trim() ?? '';
   const hayDias = (datos?.local?.horario?.length ?? 0) > 0;
   const hayEquipo = (datos?.barberos?.length ?? 0) > 0;
+  const hayServicios = leerServicios(datos ?? {}).length > 0 || duracionTurno(datos) !== null;
+  const hayContacto = Boolean(fmtTelefonoGuardado(datos?.local?.whatsapp) || (datos?.contacto?.nombre ?? '').trim());
 
   // Desde qué pantalla se ve cada renglón, aunque esté vacío.
   const llego = (numero) => pantalla !== undefined && pantalla >= numero;
   const verDireccion = Boolean(direccion) || llego(PANTALLA.DIRECCION);
   const verHorario = hayDias || llego(PANTALLA.DIAS);
   const verEquipo = hayEquipo || llego(PANTALLA.BARBEROS);
-  const verDetalle = verDireccion || verHorario || verEquipo;
+  const verServicios = hayServicios || llego(PANTALLA.LARGO_TURNO);
+  const verContacto = hayContacto || llego(PANTALLA.CONTACTO_LOCAL);
+  const verDetalle = verDireccion || verHorario || verEquipo || verServicios || verContacto;
 
   // Lo que ya se veía al montar la tarjeta no entra creciendo.
   const [alMontar] = useState(() => ({
@@ -181,6 +164,8 @@ function TarjetaBarberia({ datos, pantalla }) {
     direccion: verDireccion,
     horario: verHorario,
     equipo: verEquipo,
+    servicios: verServicios,
+    contacto: verContacto,
     claves: new Set((datos?.barberos ?? []).map((b) => b.clave)),
   }));
 
@@ -235,7 +220,9 @@ function TarjetaBarberia({ datos, pantalla }) {
         </div>
       </div>
 
-      {verDetalle && (
+      {completa && <BloquesTarjeta datos={datos} onEditar={onEditar} />}
+
+      {!completa && verDetalle && (
         <Crece animar={!alMontar.detalle}>
           <div style={{
             marginTop: 12,
@@ -263,6 +250,20 @@ function TarjetaBarberia({ datos, pantalla }) {
               <Crece animar={alMontar.detalle && !alMontar.equipo}>
                 <Renglon icono={<Users size={16} strokeWidth={1.75} />} etiqueta="Equipo" placeholder="Barberos y dueños">
                   {hayEquipo ? <TextoEquipo datos={datos} clavesAlMontar={alMontar.claves} /> : null}
+                </Renglon>
+              </Crece>
+            )}
+            {verServicios && (
+              <Crece animar={alMontar.detalle && !alMontar.servicios}>
+                <Renglon icono={<Scissors size={16} strokeWidth={1.75} />} etiqueta="Servicios" placeholder="Turnos y servicios">
+                  {hayServicios ? <TextoServicios datos={datos} /> : null}
+                </Renglon>
+              </Crece>
+            )}
+            {verContacto && (
+              <Crece animar={alMontar.detalle && !alMontar.contacto}>
+                <Renglon icono={<MessageCircle size={16} strokeWidth={1.75} />} etiqueta="Contacto" placeholder="WhatsApp y contacto">
+                  {hayContacto ? <TextoContacto datos={datos} /> : null}
                 </Renglon>
               </Crece>
             )}

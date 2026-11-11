@@ -1,7 +1,7 @@
 // /frontend-alta/src/components/ui/Casilla.jsx
 // Opción de sí o no al lado de un campo, con forma de botón: "Sin número" en
-// la dirección (pantalla 2) y, en la fase 5, "es el mismo número para
-// llamadas" (pantalla 11). Primitivo propio de este front.
+// la dirección (pantalla 2) y "Es el mismo número para llamadas" (pantalla
+// 11). Primitivo propio de este front.
 //
 // Por dentro es un <input type="checkbox"> nativo, invisible y encima de todo
 // el botón: el toque, el teclado (Espacio), el lector de pantalla y el foco

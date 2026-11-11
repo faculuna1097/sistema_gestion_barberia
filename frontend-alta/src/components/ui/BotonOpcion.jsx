@@ -1,8 +1,8 @@
 // /frontend-alta/src/components/ui/BotonOpcion.jsx
 // Una opción de una pregunta de respuesta única, como botón grande: "Sí,
 // todos" / "No…" en los horarios del equipo (pantalla 7), y "Igual al local" /
-// "Otro horario" de cada barbero. En la fase 5 sirve para el largo del turno y
-// "¿Vendés productos?". Primitivo propio de este front.
+// "Otro horario" de cada barbero, y "¿Vendés productos?" (pantalla 10).
+// Primitivo propio de este front.
 //
 // La elegida se ve con el acento suave, el borde del acento y una tilde (el
 // color nunca va solo), y lo dice `aria-pressed`. Si la elección hace avanzar

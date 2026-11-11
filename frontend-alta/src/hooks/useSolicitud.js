@@ -5,8 +5,8 @@
 // navegador (online, página oculta).
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { TOKEN, guardarSolicitud, obtenerSolicitud } from '../services/api.js';
-import { CODIGOS } from '../utils/errores.js';
+import { TOKEN, enviarSolicitud, guardarSolicitud, obtenerSolicitud } from '../services/api.js';
+import { CODIGOS, mensajeDeError } from '../utils/errores.js';
 import { completarDatos } from '../utils/datosSolicitud.js';
 import { crearAutoguardado, ESTADOS_GUARDADO } from '../utils/autoguardado.js';
 
@@ -15,6 +15,8 @@ import { crearAutoguardado, ESTADOS_GUARDADO } from '../utils/autoguardado.js';
  * En qué está el link, según lo que respondió el backend (plan §5.3):
  * - CARGANDO: todavía no respondió.
  * - BORRADOR: se puede completar.
+ * - LISTO: se acaba de enviar desde esta pestaña (pantalla 14, "Listo"). No
+ *   se relee la solicitud (plan §7.1): releída, ya es ENVIADA.
  * - ENVIADA / CARGADA: ya se envió (y Facundo quizás ya la cargó); sin edición.
  * - NO_ENCONTRADA: no existe, venció o el token está mal formado (404), o no hay token.
  * - ERROR_CARGA: no se pudo cargar (sin red, servidor caído, 500, 429); se puede reintentar.
@@ -22,10 +24,27 @@ import { crearAutoguardado, ESTADOS_GUARDADO } from '../utils/autoguardado.js';
 export const ESTADOS_LINK = {
   CARGANDO: 'cargando',
   BORRADOR: 'borrador',
+  LISTO: 'listo',
   ENVIADA: 'enviada',
   CARGADA: 'cargada',
   NO_ENCONTRADA: 'no_encontrada',
   ERROR_CARGA: 'error_carga',
+};
+
+/**
+ * RESULTADOS_ENVIO
+ * Qué pasó con enviar() (la pantalla decide qué mostrar):
+ * - ENVIADA: 200. El estado del link pasa a LISTO.
+ * - ERRORES: 400 datos_invalidos; trae `errores` del backend para mostrar en sus campos.
+ * - FALLO: no se pudo (sin red, 429, 500…); trae `mensaje`. Se puede reintentar.
+ * - CERRADA: ya no se puede enviar (409: ya se envió; 404: venció). El estado
+ *   del link ya cambió solo (a "Ya enviada" o al link vencido).
+ */
+export const RESULTADOS_ENVIO = {
+  ENVIADA: 'enviada',
+  ERRORES: 'errores',
+  FALLO: 'fallo',
+  CERRADA: 'cerrada',
 };
 
 /**
@@ -61,11 +80,13 @@ function estadoDeSolicitud(estado) {
  *   actualizar: (cambio: Object|Function) => void,
  *   guardado: string,
  *   reintentarGuardado: () => void,
+ *   enviar: () => Promise<{tipo: string, errores?: Array, mensaje?: string}>,
  * }}
  *   `estado`: uno de ESTADOS_LINK. `datos`: la forma completa
  *   (utils/datosSolicitud.js), null hasta que carga. `errorCarga`: el error de la
  *   última carga fallida. `actualizar` recibe los datos nuevos o una función
  *   (datosActuales) => datosNuevos. `guardado`: uno de ESTADOS_GUARDADO.
+ *   `enviar`: el envío final (ver la función); devuelve uno de RESULTADOS_ENVIO.
  */
 export function useSolicitud() {
   const [estado, setEstado] = useState(TOKEN ? ESTADOS_LINK.CARGANDO : ESTADOS_LINK.NO_ENCONTRADA);
@@ -179,7 +200,53 @@ export function useSolicitud() {
     autoguardado.cambiar(nuevos);
   }, [autoguardado]);
 
+  /**
+   * enviar
+   * El envío final (POST /enviar) con los datos más nuevos. No puede convivir
+   * con un guardado: un PUT que llega después del envío da 409 y se leería como
+   * "se envió desde otro lado". Por eso primero pausa el autoguardado (corta el
+   * debounce y espera el PUT en vuelo, si hay). Lo que no se llegó a guardar
+   * viaja en el POST, que lo guarda junto con el cambio a 'enviada'.
+   *   - 200: el autoguardado se detiene y el estado pasa a LISTO, sin releer.
+   *   - 409: ya se envió (desde otro lado): se relee y queda "Ya enviada".
+   *   - 404: venció.
+   *   - 400 datos_invalidos, sin red, 429, 500: el autoguardado vuelve a andar.
+   * @returns {Promise<{tipo: string, errores?: Array<{campo: string, mensaje: string}>, mensaje?: string}>}
+   *   `tipo`: uno de RESULTADOS_ENVIO.
+   */
+  const enviar = useCallback(async () => {
+    const sePuede = await autoguardado.pausar();
+    // El PUT que viajaba dio 409 o 404: el efecto de falloGuardado ya cambia el estado.
+    if (!sePuede) return { tipo: RESULTADOS_ENVIO.CERRADA };
+    try {
+      await enviarSolicitud(datosRef.current);
+    } catch (err) {
+      if (err.status === 409 || err.codigo === CODIGOS.YA_ENVIADA) {
+        console.warn('[useSolicitud] la solicitud ya se había enviado: se relee');
+        autoguardado.detener();
+        cargar();
+        return { tipo: RESULTADOS_ENVIO.CERRADA };
+      }
+      if (err.status === 404) {
+        console.warn('[useSolicitud] el link venció antes de enviar');
+        autoguardado.detener();
+        setEstado(ESTADOS_LINK.NO_ENCONTRADA);
+        return { tipo: RESULTADOS_ENVIO.CERRADA };
+      }
+      autoguardado.reanudar();
+      if (err.status === 400 && err.codigo === CODIGOS.DATOS_INVALIDOS && Array.isArray(err.errores)) {
+        return { tipo: RESULTADOS_ENVIO.ERRORES, errores: err.errores };
+      }
+      console.error('[useSolicitud] Error en enviar:', err.message);
+      return { tipo: RESULTADOS_ENVIO.FALLO, mensaje: mensajeDeError(err) };
+    }
+    autoguardado.detener();
+    setEstado(ESTADOS_LINK.LISTO);
+    return { tipo: RESULTADOS_ENVIO.ENVIADA };
+  }, [autoguardado, cargar]);
+
   return {
+    enviar,
     estado,
     datos,
     venceEn,

@@ -126,30 +126,39 @@ export function LinkNoValido() {
 
 /**
  * SolicitudEnviada
- * La solicitud ya se envió (o Facundo ya la cargó): se muestra sin edición, con
- * la tarjeta "Tu barbería". El resumen completo llega cuando la tarjeta tenga
- * todo su contenido (fases 3 a 5).
+ * La solicitud ya se envió (o Facundo ya la cargó): el resumen completo de lo
+ * que mandó (la tarjeta "Tu barbería" por bloques), sin edición, y el WhatsApp
+ * de Facundo para pedir un cambio. Arranca arriba (no centrada como los otros
+ * estados): el resumen es largo y centrado quedaría cortado arriba.
  * @param {Object} props.datos - El formulario como quedó guardado
  * @param {boolean} [props.cargada=false] - true si Facundo ya la dio de alta
  * @returns {JSX.Element}
  */
 export function SolicitudEnviada({ datos, cargada = false }) {
   return (
-    <PantallaCentrada>
-      <EmptyState
-        tone="success"
-        glyph={<CheckCircle2 {...ICONO} />}
-        title={cargada ? 'Tu barbería ya está lista' : 'Ya recibimos tus datos'}
-        body={cargada
-          ? 'Facundo ya la dio de alta. Si necesitás cambiar algo, escribile.'
-          : 'Facundo los revisa y te escribe cuando tu barbería esté lista. Desde acá ya no se pueden cambiar.'}
-      />
-      <TarjetaBarberia datos={datos} />
-      <Button variant="secondary" href={linkWhatsAppContacto(MENSAJE_CAMBIO)} externo>
-        <IconoWhatsApp />
-        Escribirle a Facundo
-      </Button>
-    </PantallaCentrada>
+    <PageContainer>
+      <main className="al-aparecer" style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 24,
+        padding: '16px 16px calc(32px + env(safe-area-inset-bottom, 0px))',
+      }}>
+        <EmptyState
+          tone="success"
+          glyph={<CheckCircle2 {...ICONO} />}
+          title={cargada ? 'Tu barbería ya está lista' : 'Ya recibimos tus datos'}
+          body={cargada
+            ? 'Facundo ya la dio de alta. Si necesitás cambiar algo, escribile.'
+            : 'Facundo los revisa, arma tu barbería y te manda los accesos por WhatsApp. Desde acá ya no se pueden cambiar.'}
+        />
+        <TarjetaBarberia datos={datos} completa />
+        <Button variant="secondary" href={linkWhatsAppContacto(MENSAJE_CAMBIO)} externo>
+          <IconoWhatsApp />
+          Escribirle a Facundo
+        </Button>
+      </main>
+    </PageContainer>
   );
 }
 

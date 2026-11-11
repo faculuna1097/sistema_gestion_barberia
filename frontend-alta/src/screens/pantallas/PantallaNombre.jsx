@@ -15,11 +15,12 @@ import { useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
 import { PANTALLA } from '../../config/pantallas.js';
-import { LARGO_NOMBRE_NEGOCIO, erroresDePantalla } from '../../utils/validaciones.js';
+import { LARGO_NOMBRE_NEGOCIO } from '../../utils/validaciones.js';
 import {
   MENSAJES_SUBDOMINIO, SUBDOMINIO_MAX, limpiarSubdominioEscrito, sugerirSubdominio,
 } from '../../utils/subdominio.js';
 import { alPresionarEnter } from '../../utils/teclado.js';
+import { useErroresDePantalla } from '../../hooks/useErroresDePantalla.js';
 import { useErroresVisibles } from '../../hooks/useErroresVisibles.js';
 import { useEstadoSubdominio, ESTADOS_SUBDOMINIO } from '../../hooks/useEstadoSubdominio.js';
 import { Button, Field, TextoError } from '../../components/ui';
@@ -157,7 +158,7 @@ function PantallaNombre({ datos, actualizar, onSeguir, ref }) {
   const estadoLink = useEstadoSubdominio(subdominio);
 
   // Los errores de validaciones.js, más "ocupado", que lo sabe solo el backend.
-  const errores = erroresDePantalla(PANTALLA.NOMBRE, datos);
+  const errores = useErroresDePantalla(PANTALLA.NOMBRE, datos);
   if (estadoLink === ESTADOS_SUBDOMINIO.OCUPADO && !errores.some((e) => e.campo === 'local.subdominio')) {
     errores.push({ campo: 'local.subdominio', mensaje: MENSAJES_SUBDOMINIO.ocupado });
   }

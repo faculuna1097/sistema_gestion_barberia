@@ -17,6 +17,7 @@ import { LARGO_NOMBRE_PERSONA, erroresDePantalla } from '../../utils/validacione
 import {
   agregarDuenioSinCorte, alternarDuenio, confirmarDuenios, errorAlAgregarDuenio, leerEquipo, quitarDuenioSinCorte,
 } from '../../utils/equipo.js';
+import { useErroresDePantalla } from '../../hooks/useErroresDePantalla.js';
 import { useErroresVisibles } from '../../hooks/useErroresVisibles.js';
 import { useHover } from '../../hooks/useHover.js';
 import { prefiereMenosMovimiento } from '../../utils/movimiento.js';
@@ -141,7 +142,7 @@ function claveDuenio(lista, k) {
  */
 function PantallaDuenios({ datos, actualizar, onSeguir, ref }) {
   const { barberos, dueniosSinCorte } = leerEquipo(datos);
-  const errores = erroresDePantalla(PANTALLA.DUENIOS, datos);
+  const errores = useErroresDePantalla(PANTALLA.DUENIOS, datos);
   const { errorDe, revelarTodos } = useErroresVisibles(errores);
 
   const [nombreNuevo, setNombreNuevo] = useState('');
@@ -208,7 +209,7 @@ function PantallaDuenios({ datos, actualizar, onSeguir, ref }) {
         conDatos = intentarAgregar();
         if (!conDatos) return false;
       }
-      const erroresActuales = erroresDePantalla(PANTALLA.DUENIOS, conDatos);
+      const erroresActuales = conDatos === datos ? errores : erroresDePantalla(PANTALLA.DUENIOS, conDatos);
       if (erroresActuales.length === 0) {
         actualizar((d) => confirmarDuenios(d));
         return true;

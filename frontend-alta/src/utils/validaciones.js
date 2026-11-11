@@ -130,8 +130,15 @@ function esHoraValida(valor) {
 
 // ─── Constantes de validarSolicitudAlta.js ──────────────────────────────────
 
-// Copia de DURACIONES_TURNO: largos de turno que se pueden elegir.
-export const DURACIONES_TURNO = [15, 20, 30, 40, 45, 60];
+// Copia de TURNO_MINIMO, TURNO_MAXIMO, PASO_TURNO y DURACIONES_TURNO: largos de
+// turno que se pueden elegir, de 10 a 60 minutos de a 5.
+export const TURNO_MINIMO = 10;
+export const TURNO_MAXIMO = 60;
+export const PASO_TURNO = 5;
+export const DURACIONES_TURNO = Array.from(
+  { length: (TURNO_MAXIMO - TURNO_MINIMO) / PASO_TURNO + 1 },
+  (_, i) => TURNO_MINIMO + i * PASO_TURNO,
+);
 
 // Copia de los largos y topes de validarSolicitudAlta.js.
 export const LARGO_NOMBRE_NEGOCIO = { min: 2, max: 60 };

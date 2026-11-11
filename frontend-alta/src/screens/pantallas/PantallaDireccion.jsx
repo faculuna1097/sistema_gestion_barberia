@@ -12,13 +12,13 @@ import { useImperativeHandle, useRef, useState } from 'react';
 import { MapPin } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
 import { PANTALLA } from '../../config/pantallas.js';
-import { erroresDePantalla } from '../../utils/validaciones.js';
 import {
   LARGOS_DIRECCION, PROVINCIAS, cambiarPartesDireccion, direccionCompleta, erroresDeDireccion, esCaba,
   leerPartesDireccion, soloDigitos,
 } from '../../utils/direccion.js';
 import { linkMapa } from '../../utils/mapa.js';
 import { alPresionarEnter } from '../../utils/teclado.js';
+import { useErroresDePantalla } from '../../hooks/useErroresDePantalla.js';
 import { useErroresVisibles } from '../../hooks/useErroresVisibles.js';
 import { Button, Casilla, Field, Select, TextoError } from '../../components/ui';
 
@@ -37,7 +37,8 @@ function PantallaDireccion({ datos, actualizar, onSeguir, ref }) {
   // Los errores de cada parte (del front) y, si están todas bien, el del texto
   // armado (la regla del backend: hasta 120 caracteres).
   const erroresPartes = erroresDeDireccion(partes);
-  const errores = erroresPartes.length > 0 ? erroresPartes : erroresDePantalla(PANTALLA.DIRECCION, datos);
+  const erroresArmado = useErroresDePantalla(PANTALLA.DIRECCION, datos);
+  const errores = erroresPartes.length > 0 ? erroresPartes : erroresArmado;
   const { errorDe, revelar, revelarTodos } = useErroresVisibles(errores);
 
   const calleRef = useRef(null);

@@ -12,11 +12,11 @@
 import { useId, useImperativeHandle, useRef, useState } from 'react';
 import { theme } from '../../theme/tokens.js';
 import { PANTALLA } from '../../config/pantallas.js';
-import { erroresDePantalla } from '../../utils/validaciones.js';
 import { nombreDia, resumirDias } from '../../utils/semana.js';
 import {
   cambiarHorarioComun, cambiarHorarioDia, cambiarPausa, leerHorarioLocal, pausaSugerida, volverAlHorarioComun,
 } from '../../utils/horarioLocal.js';
+import { useErroresDePantalla } from '../../hooks/useErroresDePantalla.js';
 import { useErroresVisibles } from '../../hooks/useErroresVisibles.js';
 import { useHover } from '../../hooks/useHover.js';
 import { prefiereMenosMovimiento } from '../../utils/movimiento.js';
@@ -106,7 +106,7 @@ function PantallaHorario({ datos, actualizar, ref }) {
   const comunes = vista.dias.filter((d) => !vista.distintos.has(d));
   const [diaAbierto, setDiaAbierto] = useState(null);
 
-  const errores = erroresDePantalla(PANTALLA.HORARIO, datos);
+  const errores = useErroresDePantalla(PANTALLA.HORARIO, datos);
   const { errorDe, revelar, revelarTodos } = useErroresVisibles(errores);
   const errorHorario = errorDe('local.horario');
   const errorPausa = errorDe('local.pausa');

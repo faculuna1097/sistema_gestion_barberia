@@ -51,23 +51,6 @@ export function nuevaClave() {
 const esComisionValida = (valor) => Number.isInteger(valor) && valor >= 0 && valor <= COMISION_MAXIMA;
 
 /**
- * pasoComision
- * El % después de un toque de - o +: salta al múltiplo de PASO_COMISION
- * anterior o siguiente (un 37 que vino guardado pasa a 35 o 40), sin salir de
- * 0 a COMISION_MAXIMA (un 120 baja a 100).
- * @param {number} valor - El % actual (puede no ser válido)
- * @param {number} sentido - -1 (menos) o +1 (más)
- * @returns {number}
- */
-export function pasoComision(valor, sentido) {
-  const actual = Number.isFinite(valor) ? valor : COMISION_POR_DEFECTO;
-  const siguiente = sentido > 0
-    ? Math.floor(actual / PASO_COMISION) * PASO_COMISION + PASO_COMISION
-    : Math.ceil(actual / PASO_COMISION) * PASO_COMISION - PASO_COMISION;
-  return Math.min(Math.max(siguiente, 0), COMISION_MAXIMA);
-}
-
-/**
  * leerEquipo
  * La vista del equipo que usan las pantallas y la tarjeta.
  * @param {Object} datos - El formulario completo

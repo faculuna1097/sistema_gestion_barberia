@@ -19,8 +19,16 @@ import { motivoFormatoSubdominio, subdominioOcupado, MENSAJES_SUBDOMINIO } from 
 
 // Versión de la forma de `datos` que entiende este validador.
 export const VERSION_DATOS = 1;
-// Largos de turno que se pueden elegir (tenant.duracion_slot_minutos).
-export const DURACIONES_TURNO = [15, 20, 30, 40, 45, 60];
+// Largos de turno que se pueden elegir (tenant.duracion_slot_minutos): de
+// TURNO_MINIMO a TURNO_MAXIMO minutos, de a PASO_TURNO (10, 15, …, 60). El
+// front los elige con una barra que salta de a 5.
+export const TURNO_MINIMO = 10;
+export const TURNO_MAXIMO = 60;
+export const PASO_TURNO = 5;
+export const DURACIONES_TURNO = Array.from(
+  { length: (TURNO_MAXIMO - TURNO_MINIMO) / PASO_TURNO + 1 },
+  (_, i) => TURNO_MINIMO + i * PASO_TURNO,
+);
 
 const LARGO_NOMBRE_NEGOCIO = { min: 2, max: 60 };
 const LARGO_DIRECCION = { min: 5, max: 120 };

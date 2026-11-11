@@ -20,6 +20,7 @@ import {
   errorAlAgregarBarbero, leerEquipo, nuevaClave, quitarBarbero, renombrarBarbero,
 } from '../../utils/equipo.js';
 import { alPresionarEnter } from '../../utils/teclado.js';
+import { useErroresDePantalla } from '../../hooks/useErroresDePantalla.js';
 import { useErroresVisibles } from '../../hooks/useErroresVisibles.js';
 import CampoAgregarNombre from '../../components/CampoAgregarNombre.jsx';
 import FilaPersona from '../../components/FilaPersona.jsx';
@@ -65,7 +66,7 @@ function TituloBloque({ id, titulo, texto }) {
  */
 function PantallaBarberos({ datos, actualizar, onSeguir, ref }) {
   const { barberos, comisionIgual, comisionComun } = leerEquipo(datos);
-  const errores = erroresDePantalla(PANTALLA.BARBEROS, datos);
+  const errores = useErroresDePantalla(PANTALLA.BARBEROS, datos);
   const { errorDe, revelar, revelarTodos } = useErroresVisibles(errores);
 
   // El nombre que se está por agregar (no se guarda hasta "Agregar") y por qué no se pudo.
@@ -160,7 +161,7 @@ function PantallaBarberos({ datos, actualizar, onSeguir, ref }) {
         conDatos = intentarAgregar();
         if (!conDatos) return false;
       }
-      const erroresActuales = erroresDePantalla(PANTALLA.BARBEROS, conDatos);
+      const erroresActuales = conDatos === datos ? errores : erroresDePantalla(PANTALLA.BARBEROS, conDatos);
       if (erroresActuales.length === 0) return true;
       revelarTodos();
       enfocarError(erroresActuales[0], conDatos);

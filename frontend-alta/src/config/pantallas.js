@@ -59,42 +59,26 @@ function tituloHorariosEquipo(datos) {
  *   capítulo ni la tarjeta "Tu barbería" arriba).
  * - titulo / subtitulo: el encabezado de la pantalla, un texto o una función
  *   (datos) => texto si depende de lo cargado (ej. la 7, en singular con un
- *   solo barbero). Se leen con textoDe. Las fases 3 a 5 pueden ajustarlos.
+ *   solo barbero). Se leen con textoDe.
  * - textoSeguir: el texto del botón de abajo, o null si la pantalla no lo tiene.
- * - contenido: qué va en la pantalla (plan §5.2). Hasta que la arme su fase, el
- *   placeholder lo muestra.
+ *   En el modo Editar de la Revisión lo cambia textoSeguirEnEdicion.
  */
 export const PANTALLAS = [
-  { numero: 0,  capitulo: null,        titulo: 'Armemos tu barbería', subtitulo: 'Son unos 5 minutos y se guarda solo.', textoSeguir: 'Empezar',
-    contenido: 'Bienvenida.' },
-  { numero: 1,  capitulo: 'local',     titulo: '¿Cómo se llama tu barbería?', subtitulo: 'Con el nombre armamos el link de tu barbería.', textoSeguir: 'Seguir',
-    contenido: 'Nombre del negocio y el link sugerido (kings.barbermanager.app) con su estado: disponible, ocupado o inválido.' },
-  { numero: 2,  capitulo: 'local',     titulo: '¿Dónde queda?', subtitulo: 'La ven tus clientes cuando sacan turno.', textoSeguir: 'Seguir',
-    contenido: 'La dirección, en un campo.' },
-  { numero: 3,  capitulo: 'local',     titulo: '¿Qué días abren?', subtitulo: 'Tocá los días que atienden.', textoSeguir: 'Seguir',
-    contenido: 'Siete botones que se prenden y apagan, más el atajo "Lunes a sábado".' },
-  { numero: 4,  capitulo: 'local',     titulo: '¿En qué horario?', subtitulo: 'Si algún día es distinto, tocalo en la semana.', textoSeguir: 'Seguir',
-    contenido: 'Abre y cierra con botones de +/- 30 min, la semana en barras y "¿Cierran al mediodía?".' },
-  { numero: 5,  capitulo: 'equipo',    titulo: '¿Quiénes cortan?', subtitulo: 'Sumá a cada barbero con su nombre.', textoSeguir: 'Seguir',
-    contenido: 'Nombre de cada barbero con su avatar, la comisión y el mail opcional.' },
-  { numero: 6,  capitulo: 'equipo',    titulo: '¿Quiénes son los dueños?', subtitulo: 'Tocá a los que son dueños. Pueden ser varios.', textoSeguir: 'Seguir',
-    contenido: 'Se tocan los avatares de los dueños, más "un dueño que no corta".' },
-  { numero: 7,  capitulo: 'equipo',    titulo: tituloHorariosEquipo, textoSeguir: 'Seguir',
-    contenido: 'La pregunta; si es "No", los días y horarios de cada barbero. No se saltea.' },
-  { numero: 8,  capitulo: 'servicios', titulo: '¿Cada cuánto das turnos?', textoSeguir: 'Seguir',
-    contenido: 'Botones de 15, 20, 30, 40, 45 y 60 minutos.' },
-  { numero: 9,  capitulo: 'servicios', titulo: '¿Qué servicios ofrecés?', textoSeguir: 'Seguir',
-    contenido: 'Los servicios comunes con su precio y duración, y "Agregar otro".' },
-  { numero: 10, capitulo: 'servicios', titulo: '¿Vendés productos?', textoSeguir: 'Seguir',
-    contenido: 'Productos con precio y stock, o "Ahora no".' },
-  { numero: 11, capitulo: 'contacto',  titulo: '¿Cómo te contactan tus clientes?', textoSeguir: 'Seguir',
-    contenido: 'WhatsApp, "es el mismo número para llamadas" y el link de reseñas.' },
-  { numero: 12, capitulo: 'contacto',  titulo: '¿Cómo te contactamos a vos?', textoSeguir: 'Revisar',
-    contenido: 'Tu nombre, celular y mail.' },
-  { numero: 13, capitulo: null,        titulo: 'Revisá tu barbería', textoSeguir: 'Enviar',
-    contenido: 'La tarjeta completa, con "Editar" por bloque.' },
-  { numero: 14, capitulo: null,        titulo: '¡Listo!', textoSeguir: null,
-    contenido: 'La tilde y qué pasa ahora.' },
+  { numero: 0,  capitulo: null,        titulo: 'Armemos tu barbería', subtitulo: 'Son unos 5 minutos y se guarda solo.', textoSeguir: 'Empezar' },
+  { numero: 1,  capitulo: 'local',     titulo: '¿Cómo se llama tu barbería?', subtitulo: 'Con el nombre armamos el link de tu barbería.', textoSeguir: 'Seguir' },
+  { numero: 2,  capitulo: 'local',     titulo: '¿Dónde queda?', subtitulo: 'La ven tus clientes cuando sacan turno.', textoSeguir: 'Seguir' },
+  { numero: 3,  capitulo: 'local',     titulo: '¿Qué días abren?', subtitulo: 'Tocá los días que atienden.', textoSeguir: 'Seguir' },
+  { numero: 4,  capitulo: 'local',     titulo: '¿En qué horario?', subtitulo: 'Si algún día es distinto, tocalo en la semana.', textoSeguir: 'Seguir' },
+  { numero: 5,  capitulo: 'equipo',    titulo: '¿Quiénes cortan?', subtitulo: 'Sumá a cada barbero con su nombre.', textoSeguir: 'Seguir' },
+  { numero: 6,  capitulo: 'equipo',    titulo: '¿Quiénes son los dueños?', subtitulo: 'Tocá a los que son dueños. Pueden ser varios.', textoSeguir: 'Seguir' },
+  { numero: 7,  capitulo: 'equipo',    titulo: tituloHorariosEquipo, textoSeguir: 'Seguir' },
+  { numero: 8,  capitulo: 'servicios', titulo: '¿Cada cuánto das turnos?', subtitulo: 'Es el espacio más chico de la agenda. Cada servicio ocupa uno o más turnos.', textoSeguir: 'Seguir' },
+  { numero: 9,  capitulo: 'servicios', titulo: '¿Qué servicios ofrecés?', subtitulo: 'Tocá los que hacés y poné el precio de cada uno.', textoSeguir: 'Seguir' },
+  { numero: 10, capitulo: 'servicios', titulo: '¿Vendés productos?', subtitulo: 'Ceras, shampoos, aceites: lo que vendés en el mostrador.', textoSeguir: 'Seguir' },
+  { numero: 11, capitulo: 'contacto',  titulo: '¿Cómo te contactan tus clientes?', subtitulo: 'Lo ven en la página donde sacan turno.', textoSeguir: 'Seguir' },
+  { numero: 12, capitulo: 'contacto',  titulo: '¿Cómo te contactamos a vos?', subtitulo: 'Para avisarte cuando tu barbería esté lista.', textoSeguir: 'Revisar' },
+  { numero: 13, capitulo: null,        titulo: 'Revisá tu barbería', subtitulo: 'Si algo no está bien, tocá Editar. Cuando esté todo, enviala.', textoSeguir: 'Enviar' },
+  { numero: 14, capitulo: null,        titulo: '¡Listo!', textoSeguir: null },
 ];
 
 /**
@@ -149,4 +133,62 @@ export function esPantallaValida(valor) {
 export function caminoHasta(numero) {
   const destino = esPantallaValida(numero) ? numero : PANTALLA.BIENVENIDA;
   return Array.from({ length: destino + 1 }, (_, i) => i);
+}
+
+// ─── Revisión y modo Editar ─────────────────────────────────────────────────
+
+/**
+ * BLOQUES_REVISION
+ * Los bloques de la tarjeta completa de la Revisión, cada uno con las
+ * pantallas donde se cargan sus datos. "Editar" lleva a la primera.
+ */
+export const BLOQUES_REVISION = [
+  { id: 'local',     titulo: 'Tu local',              pantallas: [PANTALLA.NOMBRE, PANTALLA.DIRECCION] },
+  { id: 'horario',   titulo: 'Horario',               pantallas: [PANTALLA.DIAS, PANTALLA.HORARIO] },
+  { id: 'equipo',    titulo: 'Equipo',                pantallas: [PANTALLA.BARBEROS, PANTALLA.DUENIOS, PANTALLA.HORARIOS_EQUIPO] },
+  { id: 'servicios', titulo: 'Servicios y productos', pantallas: [PANTALLA.LARGO_TURNO, PANTALLA.SERVICIOS, PANTALLA.PRODUCTOS] },
+  { id: 'contacto',  titulo: 'Contacto',              pantallas: [PANTALLA.CONTACTO_LOCAL, PANTALLA.CONTACTO_DUENIO] },
+];
+
+/**
+ * enEdicion
+ * El modo Editar: se llegó a la pantalla actual desde la Revisión (con
+ * "Editar", o llevado a corregir un error del envío). Se lee de la pila del
+ * historial (useNavegacion), así sobrevive a una recarga en la misma pestaña y
+ * el "atrás" lo deshace solo.
+ * @param {number[]} pila - La pila de pantallas, la actual al final
+ * @returns {boolean}
+ */
+export function enEdicion(pila) {
+  if (!Array.isArray(pila) || pila.length < 2) return false;
+  const actual = pila[pila.length - 1];
+  return actual !== PANTALLA.REVISION && actual !== PANTALLA.LISTO && pila.slice(0, -1).includes(PANTALLA.REVISION);
+}
+
+/**
+ * siguienteEnEdicion
+ * A dónde lleva el "Seguir" en el modo Editar: a la pantalla que sigue dentro
+ * del mismo bloque, o de vuelta a la Revisión si era la última del bloque. Así
+ * no hace falta recorrer el resto del formulario.
+ * @param {number} pantalla - La actual
+ * @returns {number} La pantalla siguiente del bloque, o PANTALLA.REVISION.
+ */
+export function siguienteEnEdicion(pantalla) {
+  const bloque = BLOQUES_REVISION.find((b) => b.pantallas.includes(pantalla));
+  if (!bloque) return PANTALLA.REVISION;
+  const i = bloque.pantallas.indexOf(pantalla);
+  return bloque.pantallas[i + 1] ?? PANTALLA.REVISION;
+}
+
+/**
+ * textoSeguirEnEdicion
+ * El texto del botón de abajo según el modo: en Editar, la última pantalla del
+ * bloque vuelve a la Revisión y lo dice.
+ * @param {number} pantalla
+ * @param {boolean} editando - enEdicion(pila)
+ * @returns {string|null}
+ */
+export function textoSeguirEnEdicion(pantalla, editando) {
+  if (editando && siguienteEnEdicion(pantalla) === PANTALLA.REVISION) return 'Volver a la revisión';
+  return PANTALLAS[pantalla]?.textoSeguir ?? null;
 }

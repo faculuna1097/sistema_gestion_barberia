@@ -22,6 +22,7 @@ Hoy, para dar de alta una barbería, Facundo le pide los datos al cliente por Wh
 | D8 | Validación completa en el front (inmediata, en cada campo) y repetida en el backend al enviar (§5.4). | Facundo pidió que se vea profesional. El backend nunca confía en el front. |
 | D9 | La vigencia de la suscripción no se pide: la maneja Facundo en la query. | Decisión de Facundo. |
 | D10 | Branch `feature/alta-clientes`, que sale de `main` y vuelve por PR. Va antes que `feature/mejoras-operativas`. | Decisión de Facundo: hacer esto primero. Ver §4. |
+| D12 | El largo del turno va de 10 a 60 minutos de a 5 (antes, 15/20/30/40/45/60), con una barra en vez de botones. | Decisión de Facundo en la fase 5. `tenant.duracion_slot_minutos` acepta de 1 a 240, y el sistema ya funciona con largos que no dividen la hora (demo usa 50). |
 | D11 | La pausa del mediodía solo parte en dos el horario de los barberos con `'igual_local'`. Un horario a medida puede cubrir la pausa. El front precarga los bloques a medida ya partidos por la pausa (fase 4). | En la DB el local tiene un rango por día: la pausa no es un dato, es un atajo para armar `barbero_horario`. Hay barberos que trabajan de corrido. Decidido en la revisión de la fase 1. |
 
 ## 3. Hechos verificados del código
@@ -76,7 +77,7 @@ Hoy, para dar de alta una barbería, Facundo le pide los datos al cliente por Wh
 | 5 | Tu equipo | Barberos | Nombre y Enter: aparece su avatar con iniciales. Comisión con botones (40/50/60/70) o un valor de 0 a 100. "Mismo % para todos" por defecto. Mail opcional, con aviso de Calendar. |
 | 6 | Tu equipo | Dueños | Se tocan los avatares de quienes son dueños, más "un dueño que no corta". |
 | 7 | Tu equipo | Horarios del equipo | "¿Todos trabajan el horario del local?" Sí: se saltea. No: los mismos botones de días por barbero. |
-| 8 | Tus servicios | Largo del turno | "¿Cada cuánto das turnos?" 15/20/30/40/45/60. |
+| 8 | Tus servicios | Largo del turno | "¿Cada cuánto das turnos?" Barra de 10 a 60 min de a 5, que arranca en 30 (D12). |
 | 9 | Tus servicios | Servicios | Botones con los comunes (Corte, Barba, Corte y barba…). Al tocar pide el precio. Duración en múltiplos del turno, mostrada en minutos. "Agregar otro". |
 | 10 | Tus servicios | Productos | "¿Vendés productos?" Con "Ahora no" se saltea. |
 | 11 | Contacto | Del local | WhatsApp, "es el mismo número para llamadas" y link de reseñas con "lo paso después". |
@@ -114,7 +115,7 @@ Las mismas reglas en el front y en el backend. El front marca el error **al sali
 | Barberos | Al menos 1. Nombre de 2 a `MAX_NOMBRE`, sin repetir (sin importar mayúsculas). Comisión entera de 0 a 100. Mail opcional (`esEmailValido`), sin repetir. |
 | Dueños | Al menos 1. Nombres sin repetir. |
 | Horario de cada barbero | Al menos 1 día. Cada bloque dentro del horario del local ese día y sin solaparse. |
-| Largo del turno | Uno de 15/20/30/40/45/60. |
+| Largo del turno | De 10 a 60 minutos, de a 5 (D12). |
 | Servicios | Al menos 1. Nombre de 2 a 40, sin repetir. Precio entero mayor a 0 y menor o igual a `MONTO_MAXIMO`, con separador de miles mientras se escribe. Slots de 1 a 20. |
 | Productos | Opcionales. Nombre de 2 a 40, sin repetir. Precio como los servicios. Stock y stock mínimo enteros mayores o iguales a 0. |
 | WhatsApp y teléfono | Con `libphonenumber-js` (país AR por defecto, formato al escribir). Se guardan en E.164 y el backend los valida con `esTelefonoE164`. |
@@ -177,11 +178,13 @@ Es un único objeto, que viaja entero en cada guardado:
   servicios: [{ nombre, precio, cantidad_slots }],
   productos: [{ nombre, precio, stock, stock_minimo }],
   contacto:  { nombre, celular, email },
-  progreso:  { pantalla }   // para retomar donde quedó
+  progreso:  { pantalla, ... }   // para retomar donde quedó, y los datos de interfaz (ver abajo)
 }
 ```
 
-`clave` es un id local del front, para las listas de React y para relacionar un dueño con su barbero. Al enviar, el backend guarda solo las claves de esta forma: un dato de interfaz que haya que conservar (por ejemplo, "es el mismo número") va dentro de `progreso`. Las horas van en `'HH:MM'` y `dia_semana` de 0 a 6 (0 = domingo), igual que en la DB.
+`clave` es un id local del front, para las listas de React y para relacionar un dueño con su barbero. Al enviar, el backend guarda solo las claves de esta forma: un dato de interfaz que haya que conservar (por ejemplo, "es el mismo número") va dentro de `progreso`.
+
+Claves de `progreso` que usa el front (fases 3 a 5): `pantalla`, `subdominio_editado`, `direccion` (las partes), `horario_comun`, `dias_distintos`, `comision_igual`, `comision_comun`, `duenios_confirmados`, `horarios_distintos`, `turno_de_servicios`, `productos_apartados`, `telefonos` (país y número formateado), `telefono_propio` y `contacto_precargado`. Servicios y productos llevan también una `clave` local. Al enviar, el backend guarda `progreso` tal como llega y descarta la `clave` de servicios y productos. Las horas van en `'HH:MM'` y `dia_semana` de 0 a 6 (0 = domingo), igual que en la DB.
 
 ### 5.7 Frontend
 
@@ -235,7 +238,9 @@ Va en `docs/onboarding.md` como camino principal. `crearTenant.js` queda como al
 - **Fase 3:** el "Seguir" del nombre frena también con el resultado de la consulta del subdominio (`validaciones.js` no sabe si está ocupado).
 - **Fase 4 (hecho):** la pantalla 7 no se saltea (su primera parte es la pregunta), así que `caminoHasta` no cambia. Los bloques a medida se precargan partidos por la pausa (D11).
 - **Fase 6:** el resumen de días de la tarjeta puede quedar ambiguo con días sueltos más un tramo ("Lun, mar y jue a sáb"). Foco que cae en la página al tocar "Partir la jornada" o "Trabaja de corrido" (el botón desaparece). Avatares de 24 px en la tarjeta.
-- **Fase 5:** después de un envío exitoso se muestra "Listo" sin releer la solicitud (si la relee, cae en "Ya enviada").
+- **Fase 5 (hecho):** después de un envío exitoso se muestra "Listo" sin releer la solicitud.
+- **Fase 6:** el bundle pesa 141 kB con gzip (506 kB sin comprimir) por `libphonenumber-js`: cargarla recién en el capítulo Contacto con `import()` dinámico.
+- **Fase 8:** anotar en `estado_actual.md` que `pool.on('error')` de `backend/src/config/db.js` loguea con `console.error` el corte de una conexión ociosa del pooler, y eso llega a Sentry (y a Discord). Es global, no de esta feature.
 - **Fase 6:** handler de errores después de `express.json` en `backend/src/index.js` que responda 400/413 en JSON y loguee con `console.warn`. Hoy Express imprime el stack con `console.error` y `captureConsoleIntegration` lo manda a Sentry (y a Discord) con cada JSON mal formado o body de más de 100 kB. Es global, va en su propio commit.
 
 ## 8. Tareas fuera del código (Facundo)

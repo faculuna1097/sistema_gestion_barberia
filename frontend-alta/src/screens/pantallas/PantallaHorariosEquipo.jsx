@@ -18,7 +18,6 @@
 import { useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
 import { theme } from '../../theme/tokens.js';
 import { PANTALLA } from '../../config/pantallas.js';
-import { erroresDePantalla } from '../../utils/validaciones.js';
 import { leerEquipo } from '../../utils/equipo.js';
 import { leerHorarioLocal } from '../../utils/horarioLocal.js';
 import {
@@ -28,6 +27,7 @@ import {
 } from '../../utils/horarioEquipo.js';
 import { fmtRango } from '../../utils/horas.js';
 import { nombreDia, ordenarDias } from '../../utils/semana.js';
+import { useErroresDePantalla } from '../../hooks/useErroresDePantalla.js';
 import { useErroresVisibles } from '../../hooks/useErroresVisibles.js';
 import { useEleccionConPausa } from '../../hooks/useEleccionConPausa.js';
 import ParDeHoras from '../../components/ParDeHoras.jsx';
@@ -287,7 +287,7 @@ function PantallaHorariosEquipo({ datos, actualizar, onSeguir, ref }) {
   const { barberos } = leerEquipo(datos);
   const uno = barberos.length === 1;
   const respuesta = respuestaHorarios(datos);
-  const errores = erroresDePantalla(PANTALLA.HORARIOS_EQUIPO, datos);
+  const errores = useErroresDePantalla(PANTALLA.HORARIOS_EQUIPO, datos);
   const { errorDe, revelar, revelarTodos } = useErroresVisibles(errores);
 
   const [faltaRespuesta, setFaltaRespuesta] = useState(false);

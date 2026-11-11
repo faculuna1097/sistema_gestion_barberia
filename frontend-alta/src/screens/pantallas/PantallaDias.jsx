@@ -8,9 +8,9 @@ import { useEffect, useId, useImperativeHandle, useRef } from 'react';
 import { CalendarCheck, Check } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
 import { PANTALLA } from '../../config/pantallas.js';
-import { erroresDePantalla } from '../../utils/validaciones.js';
 import { DIAS_LUNES_A_SABADO } from '../../utils/semana.js';
 import { alternarDia, elegirDias, leerHorarioLocal } from '../../utils/horarioLocal.js';
+import { useErroresDePantalla } from '../../hooks/useErroresDePantalla.js';
 import { useErroresVisibles } from '../../hooks/useErroresVisibles.js';
 import SelectorDias from '../../components/SelectorDias.jsx';
 import { Button, TextoError } from '../../components/ui';
@@ -68,7 +68,7 @@ function Atajo({ activo, onClick }) {
  */
 function PantallaDias({ datos, actualizar, ref }) {
   const { dias } = leerHorarioLocal(datos);
-  const errores = erroresDePantalla(PANTALLA.DIAS, datos);
+  const errores = useErroresDePantalla(PANTALLA.DIAS, datos);
   const { errorDe, revelarTodos } = useErroresVisibles(errores);
   const primerDiaRef = useRef(null);
   const errorId = useId();
