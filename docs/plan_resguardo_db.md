@@ -77,7 +77,10 @@ Kingsai. También es un `DROP`/`TRUNCATE` corrido sin querer con credenciales de
 | `EXPLAIN` de un `INSERT` da `42501`; `PREPARE` + `DEALLOCATE` del mismo `INSERT` con `extensions.crypt` pasa, y con una columna inexistente da `42703` | Confirma el cambio de `armarQuery.mjs` de `EXPLAIN` a `PREPARE` |
 | `db.js` hace `SET statement_timeout = 5000` en cada conexión, que pisa los 30 s del rol | Esperado: los 30 s quedan para conexiones que no usan `db.js` |
 
-**Por verificar en la fase 2:** cuántos monitores de Sentry Crons trae el plan gratis.
+**Fase 2 (2026-11-11):** según la página de precios de Sentry, todos los planes,
+incluido el gratis, traen **1 monitor de Crons**; los extra solo con presupuesto
+pago (PAYG). `backup-db` usa ese único lugar: otro job (por ejemplo, el cron de
+recordatorios) ya no entra gratis en Sentry Crons y tendría que ir a healthchecks.io.
 
 ---
 
@@ -88,8 +91,8 @@ Kingsai. También es un `DROP`/`TRUNCATE` corrido sin querer con credenciales de
 | D1 | **Backup propio diario** con `pg_dump` desde un **GitHub Action** programado | El plan Free no trae backups. GitHub Actions es gratis e ilimitado en repos públicos, corre fuera de Railway y no suma un servicio a mantener. Railway Cron era la alternativa, pero cuesta créditos y hay que armar una imagen con `pg_dump` |
 | D2 | Se copia **solo el schema `public`**: tablas, datos, triggers, vistas y funciones. **Storage queda afuera** | Decisión del usuario: las barberías tienen sus fotos guardadas y se vuelven a subir. Los triggers `web_*` solo viven en la DB, así que el dump es además su única copia |
 | D3 | Destino: **Backblaze B2**, bucket privado | Tiene 10 GB gratis, una API compatible con S3 (sirve el `aws` CLI que ya viene en los runners de GitHub) y claves que **suben pero no pueden borrar** |
-| D4 | La clave de B2 que usa el Action solo tiene permiso `writeFiles`, sin `deleteFiles` ni lectura | Si se filtra, nadie puede borrar ni leer los backups. Los borra B2 solo, con reglas de ciclo de vida |
-| D5 | Retención: `diarios/` 30 días, `mensuales/` (el del día 1) 365 días. Corre a las **04:00 ART** (`0 7 * * *` UTC; Argentina no tiene horario de verano) | Decisión del usuario. Dos prefijos con su regla de ciclo de vida cada uno |
+| D4 | La clave de B2 que usa el Action solo tiene `listBuckets` y `writeFiles`, sin `deleteFiles`, sin lectura y sin permisos sobre la configuración del bucket. Se crea por la API (`b2_create_key`), no desde la web | Si se filtra, nadie puede borrar ni leer los backups ni cambiar las reglas de ciclo de vida. Los borra B2 solo, con esas reglas. La opción "Write Only" de la web suma `deleteFiles` y `writeBucket*` (verificado el 2026-11-11), por eso la API |
+| D5 | Retención: `diarios/` 30 días, `mensuales/` (el del día 1) 365 días. Corre a las **04:17 ART** (`17 7 * * *` UTC; Argentina no tiene horario de verano) | Decisión del usuario. Dos prefijos con su regla de ciclo de vida cada uno. Minuto 17 y no en punto porque GitHub demora más las tareas programadas al principio de la hora |
 | D6 | **Cifrado con `age`** antes de subir. La clave pública va en el workflow y la privada la guarda el usuario en dos lugares: su Google Drive y una copia local fuera del repo | Los dumps tienen teléfonos y mails de los clientes de las barberías, datos de terceros. En el día a día no cuesta nada. El riesgo es perder la clave privada: por eso van dos copias y la prueba de restauración la usa |
 | D7 | **Aviso si el backup no corre** (no solo si falla), con **Sentry Crons**. Si el plan gratis no trae un monitor libre, va **healthchecks.io** (gratis, integra Discord) | En repos públicos, GitHub desactiva solos los workflows programados tras 60 días sin actividad en el repo: el backup dejaría de correr sin fallar. UptimeRobot no sirve: el monitoreo por "heartbeat" es de los planes pagos. Sentry ya avisa a Discord y suma una herramienta menos |
 | D8 | **Restauración probada** en un **segundo proyecto Free** de Supabase, con un instructivo en `docs/restaurar_db.md`. La prueba la **corre el usuario** siguiendo el instructivo, con Claude guiando | Un backup que nunca se restauró no cuenta. El día del accidente lo va a correr el usuario, así que el simulacro es suyo y sirve para corregir el instructivo |
@@ -228,26 +231,42 @@ con el `.env`".
 
 ### Fase 2 — Backup diario (D1-D7)
 
+> **Código hecho (2026-11-11), verificación pendiente del merge.** El workflow
+> (`.github/workflows/backup-db.yml`) llama a `.github/scripts/backup-db.sh`, que baja
+> del mismo commit junto con la CA de Supabase (no usa ninguna action). Además de lo
+> pedido: el id del check-in lo genera el workflow y viaja en el cuerpo y en la query
+> (lo que falta confirmar es que Sentry lo tome como un solo check-in); se tapan en el
+> log con `::add-mask::` el usuario, la contraseña, el host y el ref de la conexión;
+> la fecha se calcula una vez en hora argentina y corta si la zona no resuelve a
+> `-0300`; y se confirma el encabezado de `age` del archivo antes de subir.
+
 **Cuentas externas (guía del orquestador, las hace el usuario):**
 
-1. **B2:** cuenta, un bucket privado, reglas de ciclo de vida por prefijo (D5) y una
-   application key restringida a ese bucket con `writeFiles` solamente. Antes de
-   seguir, confirmar que con esa clave se puede subir y que **no** se puede borrar ni listar.
-2. **age:** el usuario instala `age` en Windows (`winget install FiloSottile.age`),
-   genera las claves con `age-keygen -o clave_backup_db.txt` y guarda el archivo en
-   su Google Drive y en una carpeta local fuera del repo. La línea `public key:` va
-   al workflow.
-3. **Aviso:** crear un monitor de Sentry Crons con schedule `0 7 * * *` UTC, un margen
-   de 60 min y alerta al canal de Discord. Si el plan gratis no lo permite, usar
-   healthchecks.io con la integración de Discord (D7).
-4. **Secrets de GitHub** (Settings → Secrets → Actions): la URL de conexión de
-   `resguardo_lectura` por el pooler, el endpoint, el bucket, el key id y la key de
-   B2, y la URL de check-in del monitor.
+1. **B2:** ✅ cuenta, bucket privado con cifrado del lado de B2, reglas de ciclo de
+   vida por prefijo (D5) y la key `backup-github-subida` restringida al bucket con
+   `listBuckets, writeFiles` (D4), creada por la API con un script que corrió el
+   usuario. La key "Write Only" de la web se borró.
+2. **age:** ✅ claves generadas; la privada, en el Drive del usuario y en una carpeta
+   local fuera del repo. Clave pública (va en el workflow):
+   `age12zu3jvs0ymxcvvgxlg9qw0jyfuze6g2lu5q2yev76mfmc7qnxeesvnhuj0`.
+3. **Aviso:** ✅ no se crea a mano. El monitor `backup-db` de Sentry Crons (proyecto
+   del backend) **se crea solo con el primer check-in**, que manda su configuración:
+   `17 7 * * *` UTC, margen de 90 min, duración máxima de 30 min. Así la
+   configuración queda versionada en el workflow. Después de la primera corrida: el
+   usuario le configura el aviso a Discord en Sentry. Si el plan gratis no deja crear
+   el monitor, healthchecks.io (D7).
+4. **Secrets de GitHub** (Settings → Secrets → Actions, del repositorio):
+   `BACKUP_DB_URL` (`postgresql://resguardo_lectura.<ref>:<contraseña>@<host del pooler>:5432/postgres`,
+   sin parámetros de SSL), `B2_ENDPOINT` (`https://s3.<región>.backblazeb2.com`),
+   `B2_BUCKET`, `B2_KEY_ID`, `B2_APP_KEY` y `MONITOR_CHECKIN_URL`
+   (`https://<host>/api/<project_id>/cron/backup-db/<public_key>/`, armada desde el
+   `SENTRY_DSN`). El repo tiene Actions habilitadas y el token por defecto en solo lectura.
 
 **Código (ejecutor): `.github/workflows/backup-db.yml`**
 
-- Disparadores: `schedule` (`0 7 * * *`) y `workflow_dispatch`. **Ningún disparador
-  de `pull_request`**, para que un fork no pueda ejecutarlo.
+- Disparadores: `schedule` (`17 7 * * *`) y `workflow_dispatch`, con un input
+  booleano `forzar_falla` para probar el aviso sin tocar los secrets. **Ningún
+  disparador de `pull_request`**, para que un fork no pueda ejecutarlo.
 - **Sin actions de terceros.** Todo con `run:` y herramientas de apt o las que ya
   trae `ubuntu-latest`, así no hay riesgo de cadena de suministro. Permisos del
   token en `contents: read`.
@@ -256,8 +275,8 @@ con el `.env`".
   2. Instalar el cliente de Postgres de la **misma versión mayor que el servidor**,
      desde el repo oficial PGDG (la de Ubuntu puede ser más vieja y `pg_dump` se niega).
   3. Instalar `age`.
-  4. `pg_dump --format=custom --schema=public`, más `--enable-row-security` si la
-     fase 1 fue con policies.
+  4. `pg_dump --format=custom --schema=public` (sin `--enable-row-security`: la
+     fase 1 fue con `BYPASSRLS`).
   5. Cifrar con la clave pública.
   6. Subir a `diarios/AAAA-MM-DD.dump.age` y, si es día 1, también a
      `mensuales/AAAA-MM.dump.age`, con `aws s3 cp --endpoint-url`.
@@ -275,10 +294,10 @@ el backup arranque ya. Después se sigue en el mismo branch, rebasado sobre `mai
 
 - Correr el workflow a mano: termina en verde, el archivo aparece en
   `diarios/` y el monitor recibe el check-in `ok`.
-- Forzar una falla, por ejemplo con un secret de prueba equivocado en una corrida
-  manual: el monitor marca el error y llega el aviso a Discord.
+- Forzar una falla con una corrida manual con `forzar_falla`: el monitor marca el
+  error y llega el aviso a Discord.
 - Revisar el log de la corrida: no hay datos ni secretos a la vista.
-- Al día siguiente, confirmar que la corrida programada de las 04:00 apareció sola.
+- Al día siguiente, confirmar que la corrida programada de las 04:17 apareció sola.
 
 ### Fase 3 — Restauración probada e instructivo (D8)
 
@@ -289,7 +308,8 @@ el backup arranque ya. Después se sigue en el mismo branch, rebasado sobre `mai
    - Descifrarlo con la clave privada.
    - Restaurar con `pg_restore` en un proyecto destino. Antes, activar las
      extensiones `btree_gist` (en el schema `public`, como en producción) y
-     `uuid-ossp` (en `extensions`), y crear los roles `app_backend` y
+     `uuid-ossp` (en `extensions`); el dump no las trae, porque `pg_dump --schema`
+     no vuelca extensiones aunque vivan en ese schema. Crear también los roles `app_backend` y
      `resguardo_lectura`, o restaurar con `--no-owner --no-privileges`.
    - Volver a crear el secreto de Vault `kingsai_deploy_hook`, que no viaja en el dump.
    - Validar conteos por tabla.

@@ -1,0 +1,165 @@
+# .github/workflows/backup-db.yml
+# Backup diario de la base (plan: docs/plan_resguardo_db.md, fase 2, decisiones D1-D7).
+#
+# Qué hace: todos los días a las 04:17 ART (07:17 UTC) corre pg_dump del schema
+# `public` con el rol de solo lectura `resguardo_lectura`, lo cifra con age (clave
+# pública de abajo; la privada la tiene solo el usuario) y lo sube a Backblaze B2:
+# `diarios/AAAA-MM-DD.dump.age` y, el día 1, también `mensuales/AAAA-MM.dump.age`.
+# Avisa a Sentry Crons al empezar y al terminar: si el backup falla, no corre o se
+# cuelga, el monitor `backup-db` abre un issue y llega el aviso a Discord.
+#
+# La lógica vive en .github/scripts/backup-db.sh, que se baja del mismo commit
+# (el workflow no usa actions, ni siquiera actions/checkout).
+#
+# Secrets (Settings → Secrets and variables → Actions; formatos en el plan, fase 2, paso 4):
+#   BACKUP_DB_URL        conexión de resguardo_lectura al Session Pooler, sin parámetros de SSL
+#   B2_ENDPOINT          endpoint S3 de B2: https://s3.<región>.backblazeb2.com
+#   B2_BUCKET            bucket privado de los backups
+#   B2_KEY_ID            keyID de la key `backup-github-subida` (solo listBuckets y writeFiles, D4)
+#   B2_APP_KEY           applicationKey de esa misma key
+#   MONITOR_CHECKIN_URL  URL de check-in HTTP de Sentry Crons, armada desde el SENTRY_DSN del backend
+#
+# Cómo se prueba el aviso: Actions → "Backup diario de la base" → Run workflow, con
+# `forzar_falla` tildado. La corrida hace el dump, falla antes de subir, manda el
+# check-in `error` y Sentry avisa. No sube nada ni toca los secrets.
+#
+# Los logs de Actions son públicos (el repo es público): ningún paso imprime URLs,
+# hosts, variables ni contenido del dump, y no hay upload-artifact.
+
+name: Backup diario de la base
+
+on:
+  schedule:
+    # 04:17 ART. Argentina no tiene horario de verano. Minuto 17 porque GitHub demora
+    # más las tareas programadas en punto. Si cambia, cambiar también MONITOR_CRON.
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+    inputs:
+      forzar_falla:
+        description: 'Fallar a propósito después del dump y antes de subir (prueba el aviso)'
+        type: boolean
+        default: false
+  # Sin pull_request ni push: un fork o un branch no pueden ejecutarlo.
+
+# El token de GitHub solo puede leer el repo.
+permissions:
+  contents: read
+
+# Nunca dos backups a la vez; si se pisan, el segundo espera al primero.
+concurrency:
+  group: backup-db
+  cancel-in-progress: false
+
+# Explícito: con `shell: bash` GitHub corre cada paso con `bash -eo pipefail`.
+defaults:
+  run:
+    shell: bash
+
+env:
+  # Clave PÚBLICA de age (D6). Es pública: cifra, no descifra.
+  AGE_CLAVE_PUBLICA: age12zu3jvs0ymxcvvgxlg9qw0jyfuze6g2lu5q2yev76mfmc7qnxeesvnhuj0
+  # Configuración del monitor de Sentry, que viaja en cada check-in (el primero lo
+  # crea). MONITOR_CRON tiene que coincidir con el `schedule` de arriba (en UTC).
+  MONITOR_CRON: '17 7 * * *'
+  MONITOR_MARGEN_MIN: '90'
+  MONITOR_DURACION_MAX_MIN: '30'
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # Prepara la carpeta de trabajo: genera el id del check-in (lo arma el cliente,
+      # como indica la doc de Sentry, para que el `ok`/`error` cierre este mismo
+      # check-in), baja el script y la CA de Supabase del mismo commit y fija la fecha
+      # argentina del backup una sola vez (no cambia si la corrida cruza la medianoche).
+      - name: Preparar la corrida
+        run: |
+          # Las asignaciones van aparte del echo: un $(...) que falla dentro de un
+          # argumento no corta el paso, en una asignación sí.
+          checkin_id="$(cat /proc/sys/kernel/random/uuid)"
+          echo "CHECKIN_ID=$checkin_id" >> "$GITHUB_ENV"
+          dir="$RUNNER_TEMP/backup"
+          mkdir -p "$dir"
+          base="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}"
+          curl -fsS --retry 3 --max-time 30 -o "$dir/backup-db.sh" "$base/.github/scripts/backup-db.sh"
+          curl -fsS --retry 3 --max-time 30 -o "$dir/supabase-ca.crt" "$base/backend/src/config/supabase-ca.crt"
+          fecha="$(bash "$dir/backup-db.sh" fecha)"
+          echo "FECHA_BACKUP=$fecha" >> "$GITHUB_ENV"
+          echo "[backup-db] corrida preparada | fecha del backup: $fecha"
+
+      # Avisa a Sentry que el backup arrancó (y crea o actualiza el monitor).
+      # Si Sentry no responde, deja un warning y sigue.
+      - name: Check-in in_progress a Sentry
+        env:
+          MONITOR_CHECKIN_URL: ${{ secrets.MONITOR_CHECKIN_URL }}
+        run: bash "$RUNNER_TEMP/backup/backup-db.sh" checkin in_progress
+
+      # Cliente de Postgres 17 (la versión mayor del servidor) desde el repo oficial
+      # PGDG: el de Ubuntu es más viejo y pg_dump se niega a volcar un servidor más nuevo.
+      - name: Instalar el cliente de Postgres 17
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq postgresql-client-17
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      # age, para cifrar el dump con la clave pública.
+      - name: Instalar age
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get install -y -qq age
+          age --version
+
+      # pg_dump | age en un solo pipe: el dump en claro nunca toca el disco.
+      - name: Dump cifrado de la base
+        env:
+          BACKUP_DB_URL: ${{ secrets.BACKUP_DB_URL }}
+        run: bash "$RUNNER_TEMP/backup/backup-db.sh" dump
+
+      # Solo con workflow_dispatch y forzar_falla: corta antes de subir para probar
+      # el aviso de Sentry. En las corridas programadas `inputs` viene vacío.
+      - name: Falla forzada (prueba del aviso)
+        if: inputs.forzar_falla
+        run: |
+          echo "::error::Falla forzada con forzar_falla: el backup no se sube."
+          exit 1
+
+      # Sube a B2 con la key que solo puede escribir. Los checksums nuevos de la CLI
+      # de AWS se apagan porque B2 no siempre los acepta.
+      - name: Subir a B2
+        env:
+          B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
+          B2_BUCKET: ${{ secrets.B2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APP_KEY }}
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          AWS_EC2_METADATA_DISABLED: 'true'
+          AWS_PAGER: ''
+        run: bash "$RUNNER_TEMP/backup/backup-db.sh" subir
+
+      # Cierra el check-in como `ok`: el backup quedó en B2.
+      - name: Check-in ok a Sentry
+        env:
+          MONITOR_CHECKIN_URL: ${{ secrets.MONITOR_CHECKIN_URL }}
+        run: bash "$RUNNER_TEMP/backup/backup-db.sh" checkin ok
+
+      # Si algo falló o la corrida se canceló (incluido el timeout), cierra el
+      # check-in como `error`. Si ni siquiera se pudo bajar el script, no se mandó el
+      # in_progress tampoco: Sentry avisa igual por check-in perdido al pasar el margen.
+      - name: Check-in error a Sentry
+        if: failure() || cancelled()
+        env:
+          MONITOR_CHECKIN_URL: ${{ secrets.MONITOR_CHECKIN_URL }}
+        run: |
+          script="$RUNNER_TEMP/backup/backup-db.sh"
+          if [[ -f "$script" ]]; then
+            bash "$script" checkin error
+          else
+            echo "::warning::No está el script: no se mandó el check-in error (Sentry avisa por check-in perdido)."
+          fi
