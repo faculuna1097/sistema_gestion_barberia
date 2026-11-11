@@ -1,31 +1,29 @@
 // /.claude/skills/alta-cliente/armarQuery.mjs
 // Arma la query de alta de un tenant (plantilla_alta.sql) con los parámetros que
 // decide Facundo, para la skill alta-cliente. Valida los parámetros, los escapa,
-// y comprueba la query con EXPLAIN (sin ANALYZE: no ejecuta nada ni escribe).
-// SOLO LECTURA: un SELECT de la solicitud, otro de los tenants y el EXPLAIN.
+// y comprueba la query con PREPARE + DEALLOCATE (no ejecuta nada ni escribe).
+// SOLO LECTURA: un SELECT de la solicitud, otro de los tenants y el PREPARE.
 //
-// Uso (desde la raíz del repo; usa el .env de backend/):
+// Uso (desde la raíz del repo o desde cualquier lado):
 //   node .claude/skills/alta-cliente/armarQuery.mjs \
 //     --solicitud <id> --pin-admin 4321 --pines 1111,2222 \
 //     --usuario kings --password kings2026 [--hasta 2026-12-31]
+//
+// Se conecta con el rol de solo lectura (backend/.env.lectura), a través de
+// backend/src/scripts/conexionLectura.js. Sin ese archivo, corta sin conectarse.
 //
 // Sin --hasta, la suscripción vence el último día del mes actual (hora argentina).
 // Imprime la query lista para pegar en el SQL Editor de Supabase, o los
 // problemas encontrados (y sale con código 1).
 
 import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { conectarLectura } from '../../../backend/src/scripts/conexionLectura.js';
+import { esUUID } from '../../../backend/src/utils/validarUuid.js';
 
-const AQUI = path.dirname(fileURLToPath(import.meta.url));
-const BACKEND = path.resolve(AQUI, '../../../backend');
+const RUTA_PLANTILLA = new URL('./plantilla_alta.sql', import.meta.url);
 
-// db.js lee el .env del directorio actual: se corre parado en backend/.
-process.chdir(BACKEND);
-const desdeBackend = (archivo) => new URL(`file:///${path.join(BACKEND, 'src', archivo).replace(/\\/g, '/')}`).href;
-
-const { query } = await import(desdeBackend('config/db.js'));
-const { esUUID } = await import(desdeBackend('utils/validarUuid.js'));
+// Nombre del statement preparado que se arma y se descarta para validar la query.
+const NOMBRE_PREPARE = 'alta_cliente_validacion';
 
 const USUARIO_MIN = 3;   // credencialesOperativas.js
 const PASSWORD_MIN = 8;  // credencialesOperativas.js
@@ -58,11 +56,38 @@ function leerArgumentos(args) {
 const literal = (texto) => `'${String(texto).replace(/'/g, "''")}'`;
 
 /**
+ * validarSinEjecutar
+ * Comprueba la query de alta con PREPARE + DEALLOCATE: Postgres la analiza entera
+ * (sintaxis, tablas, columnas, tipos y funciones, como `extensions.crypt`) sin
+ * ejecutarla. A diferencia de EXPLAIN, PREPARE no chequea permisos de escritura,
+ * así que funciona con el rol de solo lectura.
+ *
+ * Va en un solo envío porque el `query` de db.js usa un pool: separados, el PREPARE
+ * y el DEALLOCATE podrían caer en conexiones distintas. Si el PREPARE falla, Postgres
+ * saltea el DEALLOCATE (no hay nada que descartar).
+ *
+ * Al final de la query se le saca el `;` (y los espacios): si no, terminaría el
+ * PREPARE ahí y el resto quedaría suelto. Los saltos de línea protegen de un
+ * `-- comentario` al final. Los comentarios del principio de la plantilla no molestan.
+ *
+ * @param {Function} query - El `query` de db.js.
+ * @param {string} sql - La query de alta ya armada (una sola sentencia).
+ * @returns {Promise<void>} Resuelve si la query es válida.
+ * @throws {Error} El error de Postgres si no lo es (por ejemplo, 42703 por una
+ *   columna inexistente).
+ */
+async function validarSinEjecutar(query, sql) {
+  const sentencia = sql.replace(/[\s;]+$/, '');
+  await query(`PREPARE ${NOMBRE_PREPARE} AS\n${sentencia}\n;\nDEALLOCATE ${NOMBRE_PREPARE};`);
+}
+
+/**
  * main
  * Valida los parámetros contra la solicitud, arma la query y la comprueba.
+ * @param {Function} query - El `query` de db.js, conectado con el rol de lectura.
  * @returns {Promise<number>} El código de salida.
  */
-async function main() {
+async function main(query) {
   const a = leerArgumentos(process.argv.slice(2));
   const problemas = [];
 
@@ -119,7 +144,7 @@ async function main() {
     return 1;
   }
 
-  const sql = fs.readFileSync(path.join(AQUI, 'plantilla_alta.sql'), 'utf8')
+  const sql = fs.readFileSync(RUTA_PLANTILLA, 'utf8')
     // Reemplazos con función: con un texto, replace interpreta $& o $' (una contraseña podría traerlos).
     .replace('<SOLICITUD_ID>', () => id)
     .replace("'<PIN_ADMIN>'", () => literal(pinAdmin))
@@ -128,11 +153,11 @@ async function main() {
     .replace("'<PASSWORD_OPERATIVA>'", () => literal(password))
     .replace('<VIGENTE_HASTA>', () => vigenteHasta);
 
-  // EXPLAIN sin ANALYZE: arma el plan sin ejecutar. Detecta sintaxis, tipos y columnas.
   try {
-    await query(`EXPLAIN ${sql}`);
+    await validarSinEjecutar(query, sql);
   } catch (err) {
-    console.log(`PROBLEMAS:\n- La query no pasa el EXPLAIN: ${err.message}`);
+    const sqlstate = err.code ? ` [${err.code}]` : '';
+    console.log(`PROBLEMAS:\n- La query no pasa la validación (PREPARE)${sqlstate}: ${err.message}`);
     return 1;
   }
 
@@ -142,7 +167,8 @@ async function main() {
 
 let codigo = 1;
 try {
-  codigo = await main();
+  const { query } = await conectarLectura();
+  codigo = await main(query);
 } catch (err) {
   console.log(`PROBLEMAS:\n- No se pudo armar la query: ${err.message}`);
 }
