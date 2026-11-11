@@ -23,7 +23,8 @@ import { errorCredencialesOperativas, hashearPasswordOperativa } from '../utils/
 // FK compuesto gasto(tenant_id, categoria_id) aplique. "Productos para venta" tiene
 // que coincidir con CATEGORIA_PRODUCTOS_VENTA de frontend/src/screens/flows/FlujoGasto.jsx
 // (el iPad recuerda actualizar el stock). Si cambia la lista, actualizar también
-// onboarding.md (paso 2c) y los tenants existentes.
+// onboarding.md (paso 2c), la plantilla de alta (.claude/skills/alta-cliente/
+// plantilla_alta.sql) y los tenants existentes.
 const CATEGORIAS_GASTO_BASE = [
   'Alquiler',
   'Comida y/o bebidas',

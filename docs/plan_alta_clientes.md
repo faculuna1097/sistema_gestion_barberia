@@ -1,5 +1,7 @@
 # Plan — Formulario de alta de clientes (`frontend-alta`)
 
+> **Archivado (2026-11-11).** Las 8 fases están hechas; el núcleo de decisiones vive en `docs/decisiones_alta_clientes.md`, y el deploy y lo que queda, en `docs/estado_actual.md` → Pendientes. Desde la fase 1, `enmascararTokenTurnero` se llama `enmascararTokensEnRuta` (§3).
+>
 > Plan autocontenido para un chat orquestador con contexto limpio. Al arrancar la ejecución se copia a `docs/plan_alta_clientes.md`, y al cerrar se resume en `docs/decisiones_alta_clientes.md`. Hechos verificados el 2026-11-10 sobre `main` (`0626b4c`).
 
 ## 1. Contexto
@@ -243,8 +245,8 @@ Vive en la skill `alta-cliente` (`.claude/skills/alta-cliente/plantilla_alta.sql
 - **Fase 5 (hecho):** después de un envío exitoso se muestra "Listo" sin releer la solicitud.
 - **Fase 6 (hecho, 105,6 kB inicial + 45,9 kB diferido):** el bundle pesa 141 kB con gzip (506 kB sin comprimir) por `libphonenumber-js`: cargarla recién en el capítulo Contacto con `import()` dinámico.
 - **Fase 7 (hecho, 2026-11-11):** prueba punta a punta con front y backend locales: Facundo completó el formulario como cliente ("Pepe Barber", 3 barberos, uno con horario propio, pausa, turnos de 25 min, un dueño que no corta con apóstrofo), le llegó el mail, la skill armó la query, la corrió en el SQL Editor (1 fila: 6 días, 3 barberos, 32 bloques, 2 socios, 3 servicios, 1 producto, 9 categorías), `verificarAlta.mjs` confirmó los PINs y la contraseña con `bcrypt.compare`, y el checklist en el navegador dio OK (login operativo, PIN admin, app del barbero y turnero). Faltaba `booking_url` (el botón "Reservar" del panel): se sumó a la plantilla. Baja con `activo = false`; el caché de prod se limpia con el próximo deploy.
-- **Fase 8:** en `backend/.env.example`, dejar `ALTA_AVISO_EMAIL` con su comentario (Facundo ya agregó la línea). En demo, `booking_url` termina en `\r\n` (opcional: limpiarlo).
-- **Fase 8:** anotar en `estado_actual.md` que `pool.on('error')` de `backend/src/config/db.js` loguea con `console.error` el corte de una conexión ociosa del pooler, y eso llega a Sentry (y a Discord). Es global, no de esta feature.
+- **Fase 8 (hecho):** en `backend/.env.example`, dejar `ALTA_AVISO_EMAIL` con su comentario (Facundo ya agregó la línea). En demo, `booking_url` termina en `\r\n` (opcional: limpiarlo).
+- **Fase 8 (hecho):** anotar en `estado_actual.md` que `pool.on('error')` de `backend/src/config/db.js` loguea con `console.error` el corte de una conexión ociosa del pooler, y eso llega a Sentry (y a Discord). Es global, no de esta feature.
 - **Fase 6 (hecho, commit 2c3c842):** handler de errores después de `express.json` en `backend/src/index.js` que responda 400/413 en JSON y loguee con `console.warn`. Hoy Express imprime el stack con `console.error` y `captureConsoleIntegration` lo manda a Sentry (y a Discord) con cada JSON mal formado o body de más de 100 kB. Es global, va en su propio commit.
 
 ## 8. Tareas fuera del código (Facundo)

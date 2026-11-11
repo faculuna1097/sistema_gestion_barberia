@@ -1,6 +1,6 @@
 # Ruta del proyecto - Sistema de Gestion de Barberia
 
-Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y comparado de nuevo contra `git ls-files` el 2026-11-06 (monitoreo de producción: `backend/src/instrument.js`, `backend/src/config/sentry.js`, `.claude/settings.json`, las skills `.claude/skills/salud-prod/` y `arreglo-prod/`, y `docs/decisiones_monitoreo_prod.md`). Antes, el 2026-11-04 (se sumaron `frontend/src/utils/pantalla.js` y `frontend-landing/src/components/ui/IconoWhatsApp.jsx`, que faltaban). Antes, el 2026-11-03 (en `frontend-turnero/src/`: `components/ui/estilos.js`, `hooks/useHover.js` y `utils/errores.js`; y `frontend/src/hooks/usePantallaAngosta.js`). Antes, el 2026-11-02 (en `frontend/src/`: `components/ui/GrupoOpciones.jsx`, `ToastProvider.jsx`, `tonosFormaPago.js`, `estilos.js`, `utils/errores.js` y `utils/toast.js`). Antes, el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
+Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y comparado de nuevo contra `git ls-files` el 2026-11-11 (formulario de alta de clientes: `frontend-alta/` completo, en `backend/src/` `controllers/alta.js`, `routes/alta.js`, `utils/subdominio.js` y `utils/validarSolicitudAlta.js`, la skill `.claude/skills/alta-cliente/` y `docs/decisiones_alta_clientes.md` y `plan_alta_clientes.md`). Antes, el 2026-11-06 (monitoreo de producción: `backend/src/instrument.js`, `backend/src/config/sentry.js`, `.claude/settings.json`, las skills `.claude/skills/salud-prod/` y `arreglo-prod/`, y `docs/decisiones_monitoreo_prod.md`). Antes, el 2026-11-04 (se sumaron `frontend/src/utils/pantalla.js` y `frontend-landing/src/components/ui/IconoWhatsApp.jsx`, que faltaban). Antes, el 2026-11-03 (en `frontend-turnero/src/`: `components/ui/estilos.js`, `hooks/useHover.js` y `utils/errores.js`; y `frontend/src/hooks/usePantallaAngosta.js`). Antes, el 2026-11-02 (en `frontend/src/`: `components/ui/GrupoOpciones.jsx`, `ToastProvider.jsx`, `tonosFormaPago.js`, `estilos.js`, `utils/errores.js` y `utils/toast.js`). Antes, el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
 
 Este documento lista las carpetas y archivos del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP. Para mantenerlo, regenerar los arboles desde `git ls-files` en vez de parchearlos a mano.
 
@@ -17,8 +17,9 @@ sistema-gestion-barberia/
 |-- frontend-barbero/   App del barbero (React + Vite, base /barbero/)
 |-- frontend-turnero/   Turnero publico del cliente (React + Vite, base /turnos/)
 |-- frontend-landing/   Landing de marketing (React + Vite, barbermanager.app)
+|-- frontend-alta/      Formulario de alta de clientes (React + Vite, alta.barbermanager.app)
 |-- docs/               Documentacion tecnica
-|-- .claude/            Config compartida de Claude Code: settings.json (permisos allow/deny) y skills/ (salud-prod, arreglo-prod)
+|-- .claude/            Config compartida de Claude Code: settings.json (permisos allow/deny) y skills/ (salud-prod, arreglo-prod, alta-cliente)
 |-- .gitignore
 |-- CLAUDE.md
 `-- README.md
@@ -31,6 +32,7 @@ docs/
 |-- auditoria_2026-07.md
 |-- convenciones_tecnicas.md
 |-- decisiones_acceso_barberos.md
+|-- decisiones_alta_clientes.md
 |-- decisiones_descansos.md
 |-- decisiones_horario_atencion.md
 |-- decisiones_landing_ia.md
@@ -46,6 +48,7 @@ docs/
 |-- estado_actual.md
 |-- onboarding.md
 |-- performance_frontends.md
+|-- plan_alta_clientes.md
 |-- plan_app_barbero.md
 |-- plan_monitoreo_prod.md
 |-- postmortem_golive_turnero.md
@@ -74,6 +77,7 @@ backend/
     |-- controllers/
     |   |-- adminOperativo.js
     |   |-- agenda.js
+    |   |-- alta.js              formulario de alta: solicitud, autoguardado, subdominio y envío
     |   |-- authBarbero.js
     |   |-- authOperativo.js
     |   |-- authPanel.js
@@ -121,6 +125,7 @@ backend/
     |   |-- adminSocios.js
     |   |-- adminTurneroConfig.js
     |   |-- agenda.js
+    |   |-- alta.js
     |   |-- authBarbero.js
     |   |-- authOperativo.js
     |   |-- authPanel.js
@@ -183,10 +188,12 @@ backend/
         |-- sanitizarLogs.js
         |-- scopingRol.js
         |-- stock.js
+        |-- subdominio.js        formato, reservados, ocupado y sugerencia del subdominio (alta)
         |-- suscripcion.js
         |-- validarFecha.js
         |-- validarNumero.js
         |-- validarPago.js
+        |-- validarSolicitudAlta.js  reglas del formulario de alta (§5.4 del plan)
         |-- validarTexto.js
         `-- validarUuid.js
 ```
@@ -217,6 +224,7 @@ backend/src/routes/
 |-- suspensiones.js           suspensiones admin/barbero
 |-- descansos.js              descansos admin/barbero
 |-- agenda.js                 agenda del dia admin/barbero
+|-- alta.js                   formulario de alta (sin tenant: el token del link)
 |-- clientes.js               clientes admin/barbero
 |-- planilla.js               planilla admin/barbero
 |-- adminBarberos.js          gestion admin de barberos
@@ -578,6 +586,129 @@ frontend-landing/
         `-- formato.js
 ```
 
+## Frontend alta
+
+Formulario de alta de clientes (`alta.barbermanager.app/<token>`, puerto 5177). Decisiones en `docs/decisiones_alta_clientes.md`.
+
+```txt
+frontend-alta/
+|-- .env.example
+|-- .gitignore
+|-- eslint.config.js
+|-- index.html            noindex, etiquetas og: y twitter: (vista previa en WhatsApp)
+|-- package-lock.json
+|-- package.json
+|-- vercel.json           rewrite de SPA y X-Robots-Tag: noindex
+|-- vite.config.js
+|-- public/
+|   |-- apple-touch-icon.png
+|   |-- favicon.png
+|   |-- og-image.png
+|   |-- robots.txt        bloquea todo (cada link es privado)
+|   `-- fonts/
+|       |-- geist-latin.woff2
+|       `-- geist-mono-latin.woff2
+`-- src/
+    |-- App.jsx           estado del link: cargando, formulario, Listo, ya enviada, vencido, error
+    |-- index.css         copia de Luz + clases al- de movimiento
+    |-- main.jsx
+    |-- components/
+    |   |-- BotonPaso.jsx
+    |   |-- CampoAgregarNombre.jsx
+    |   |-- CampoPrecio.jsx
+    |   |-- CampoTelefono.jsx
+    |   |-- FilaPersona.jsx
+    |   |-- ParDeHoras.jsx
+    |   |-- SelectorComision.jsx
+    |   |-- SelectorConBarra.jsx
+    |   |-- SelectorDias.jsx
+    |   |-- SelectorHora.jsx
+    |   |-- SemanaEnBarras.jsx
+    |   |-- TarjetaBarberia.jsx   la tarjeta "Tu barbería" que crece con cada respuesta
+    |   |-- TarjetaItem.jsx
+    |   |-- formulario/
+    |   |   |-- AvisoSinGuardar.jsx
+    |   |   |-- EncabezadoFormulario.jsx
+    |   |   |-- IndicadorCapitulos.jsx
+    |   |   `-- IndicadorGuardado.jsx
+    |   |-- tarjeta/
+    |   |   |-- BloquesTarjeta.jsx
+    |   |   `-- PartesTarjeta.jsx
+    |   `-- ui/
+    |       |-- AvatarIniciales.jsx
+    |       |-- BotonOpcion.jsx
+    |       |-- Button.jsx
+    |       |-- Casilla.jsx
+    |       |-- EmptyState.jsx
+    |       |-- Field.jsx
+    |       |-- IconoWhatsApp.jsx
+    |       |-- PageContainer.jsx
+    |       |-- Select.jsx
+    |       |-- Skeleton.jsx
+    |       |-- StickyFooter.jsx
+    |       |-- TextoError.jsx
+    |       |-- estilos.js
+    |       `-- index.js
+    |-- config/
+    |   |-- contacto.js       WhatsApp de Facundo (link vencido)
+    |   `-- pantallas.js      las 15 pantallas y los 4 capítulos
+    |-- hooks/
+    |   |-- useEleccionConPausa.js
+    |   |-- useErroresDePantalla.js
+    |   |-- useErroresVisibles.js
+    |   |-- useEstadoSubdominio.js
+    |   |-- useFocoPendiente.js
+    |   |-- useHover.js
+    |   |-- useLibTelefono.js
+    |   |-- useNavegacion.js  pantallas en el historial del navegador
+    |   `-- useSolicitud.js   carga, autoguardado y envío
+    |-- screens/
+    |   |-- EstadosDelLink.jsx
+    |   |-- Formulario.jsx
+    |   |-- PantallaListo.jsx
+    |   `-- pantallas/        una por pantalla (Bienvenida a Contacto)
+    |       |-- PantallaBarberos.jsx
+    |       |-- PantallaBienvenida.jsx
+    |       |-- PantallaContactoDuenio.jsx
+    |       |-- PantallaContactoLocal.jsx
+    |       |-- PantallaDias.jsx
+    |       |-- PantallaDireccion.jsx
+    |       |-- PantallaDuenios.jsx
+    |       |-- PantallaHorario.jsx
+    |       |-- PantallaHorariosEquipo.jsx
+    |       |-- PantallaLargoTurno.jsx
+    |       |-- PantallaNombre.jsx
+    |       |-- PantallaProductos.jsx
+    |       `-- PantallaServicios.jsx
+    |-- services/
+    |   `-- api.js            /api/alta, sin tenant (el token sale del path)
+    |-- theme/
+    |   `-- tokens.js
+    `-- utils/
+        |-- autoguardado.js   motor del guardado (debounce, un PUT en vuelo, pausa para el envío)
+        |-- barra.js
+        |-- contacto.js
+        |-- datosSolicitud.js la forma de datos (plan §5.6)
+        |-- direccion.js
+        |-- equipo.js
+        |-- errores.js
+        |-- erroresServidor.js
+        |-- horarioEquipo.js
+        |-- horarioLocal.js
+        |-- horas.js
+        |-- libTelefono.js    carga diferida de libphonenumber-js
+        |-- mapa.js
+        |-- movimiento.js
+        |-- precio.js
+        |-- resumen.js
+        |-- semana.js
+        |-- servicios.js
+        |-- subdominio.js     copia de backend/src/utils/subdominio.js
+        |-- teclado.js
+        |-- telefono.js
+        `-- validaciones.js   copia de backend/src/utils/validarSolicitudAlta.js
+```
+
 ## Notas rapidas
 
 - Backend: `backend/src/index.js`
@@ -592,6 +723,8 @@ frontend-landing/
 - Turnero publico: `frontend-turnero/src/App.jsx`
 - App barbero: `frontend-barbero/src/App.jsx`
 - Landing: `frontend-landing/src/App.jsx`
+- Formulario de alta: `frontend-alta/src/App.jsx`
+- Skill de alta de clientes (revisa la solicitud, arma la query y el mensaje): `.claude/skills/alta-cliente/`
 
 ---
 
