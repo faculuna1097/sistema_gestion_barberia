@@ -67,9 +67,17 @@ Kingsai. También es un `DROP`/`TRUNCATE` corrido sin querer con credenciales de
 | `USAGE` en el schema `extensions`: solo `postgres`, `anon`, `authenticated`, `service_role` y `dashboard_user`. **`PUBLIC` no lo tiene** | Hace falta `GRANT USAGE ON SCHEMA extensions` a `resguardo_lectura` (fase 1, por `extensions.crypt`) y a `app_backend` (fase 5, por `uuid_generate_v4()`) |
 | `resguardo_lectura` y `app_backend` **no existen** todavía | Se crean en las fases 1 y 5 |
 
-**Por verificar en la fase que corresponda:** si el Session Pooler acepta roles
-propios (`<rol>.<project_ref>`, fase 1) y cuántos monitores de Sentry Crons trae el
-plan gratis (fase 2).
+**Verificado en la fase 1 (2026-11-11), con `resguardo_lectura` creado:**
+
+| Hecho | Consecuencia |
+|---|---|
+| El Session Pooler acepta el rol propio con el usuario `resguardo_lectura.<project_ref>` (con un `postgres.` de más en el medio responde `EAUTHQUERY user not found`) | El `.env.lectura` solo cambia `DB_USER` y `DB_PASSWORD`; host, puerto y base salen del `.env` |
+| `count(*)` de las 19 tablas igual con `resguardo_lectura` que con el dueño (3819 filas) | `BYPASSRLS` funciona: RLS no lo filtra |
+| `INSERT`/`UPDATE`/`DELETE` fallan con `25006` (transacción de solo lectura). Con el modo apagado a mano, fallan con `42501` (sin permiso), igual que `TRUNCATE` y `CREATE TABLE` | Dos capas: aunque alguien apague el modo solo lectura, no tiene permisos |
+| `EXPLAIN` de un `INSERT` da `42501`; `PREPARE` + `DEALLOCATE` del mismo `INSERT` con `extensions.crypt` pasa, y con una columna inexistente da `42703` | Confirma el cambio de `armarQuery.mjs` de `EXPLAIN` a `PREPARE` |
+| `db.js` hace `SET statement_timeout = 5000` en cada conexión, que pisa los 30 s del rol | Esperado: los 30 s quedan para conexiones que no usan `db.js` |
+
+**Por verificar en la fase 2:** cuántos monitores de Sentry Crons trae el plan gratis.
 
 ---
 
@@ -153,6 +161,12 @@ plan gratis (fase 2).
 
 ### Fase 1 — Rol de solo lectura (D9)
 
+> **Hecha (2026-11-11).** Rol creado con `BYPASSRLS` (sin policies), `CONNECTION
+> LIMIT 3` y `NOINHERIT`. Los scripts quedaron en `backend/src/scripts/`, junto a los
+> otros CLI versionados (`backend/scripts/` sigue siendo la carpeta ignorada de
+> scripts de un solo uso). `conectarLectura()` además confirma con `current_user`
+> que el pool quedó con el rol de lectura y corta si no. Lo verificado, en §2.
+
 **SQL (lo arma el orquestador, lo corre el usuario):**
 
 - `CREATE ROLE resguardo_lectura LOGIN PASSWORD '<CONTRASEÑA_LECTURA>'`, con
@@ -173,7 +187,7 @@ plan gratis (fase 2).
 
 **Código (ejecutor):**
 
-- `backend/scripts/consultar.js`: recibe un SQL por argumento, carga
+- `backend/src/scripts/consultar.js`: recibe un SQL por argumento, carga
   `backend/.env.lectura` (con prioridad sobre `.env`), **reusa el pool de
   `src/config/db.js`** (CA, SSL, reintentos), corre la consulta dentro de
   `BEGIN READ ONLY`, imprime el resultado como tabla y cierra el pool.
@@ -183,7 +197,7 @@ plan gratis (fase 2).
 - **Skill `alta-cliente`:** sus 3 scripts (`leerSolicitud.mjs`, `verificarAlta.mjs`,
   `armarQuery.mjs`) pasan a conectarse con `resguardo_lectura`, cargando
   `backend/.env.lectura` de la misma forma que `consultar.js`. La carga del
-  `.env.lectura` se **centraliza** en un solo módulo de `backend/scripts/` que usan
+  `.env.lectura` se **centraliza** en un solo módulo de `backend/src/scripts/` que usan
   los cuatro. Si falta el `.env.lectura`, el script corta con un mensaje claro y
   **no** cae al `.env` de dueño. Se actualiza el `SKILL.md` (hoy dice que usa
   `backend/.env`).
@@ -209,7 +223,7 @@ plan gratis (fase 2).
 - Sin `.env.lectura`, los 4 scripts cortan con el mensaje claro.
 
 **Al cerrar:** una memoria nueva de Claude, "para consultar datos usar
-`node scripts/consultar.js` (rol de solo lectura); las pruebas que escriben siguen
+`node src/scripts/consultar.js` (rol de solo lectura); las pruebas que escriben siguen
 con el `.env`".
 
 ### Fase 2 — Backup diario (D1-D7)

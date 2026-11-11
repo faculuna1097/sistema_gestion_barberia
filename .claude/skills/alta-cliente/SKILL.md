@@ -20,32 +20,40 @@ cuando la feature se archive) y `docs/onboarding.md`.
 
 ## Reglas (no negociables)
 
-1. **Nunca se escribe en la DB desde acá.** Los tres scripts de esta carpeta solo
-   hacen `SELECT` y `EXPLAIN` (sin `ANALYZE`, que no ejecuta). La query de alta
+1. **Nunca se escribe en la DB desde acá.** Los tres scripts de esta carpeta se
+   conectan con el rol de **solo lectura** y solo hacen `SELECT` y un `PREPARE` +
+   `DEALLOCATE` (valida la query sin ejecutarla). La query de alta
    la corre **Facundo** en el SQL Editor de Supabase. No la corras vos, ni con
    un script, ni "para probar". Tampoco el `UPDATE` de una baja ni ningún otro.
 2. **Una sola DB.** No hay staging: la DB de los scripts es la de producción.
    Por eso la regla 1.
 3. **No completes la plantilla a mano.** La query sale siempre de
    `armarQuery.mjs`, que valida los parámetros, escapa las comillas y la
-   comprueba con `EXPLAIN`. Si el script marca un problema, se resuelve el
+   comprueba con `PREPARE`. Si el script marca un problema, se resuelve el
    problema; no se lo esquiva.
 4. **Privacidad.** Los datos del cliente (nombres, teléfonos, mails) se le
    muestran a Facundo en el chat, que es para lo que existen. No los copies a
    archivos del repo, commits, issues ni a ningún otro lado. Las credenciales,
    igual: solo en el chat y en el mensaje que Facundo decide mandar.
-5. **Sin inventar.** Si un script falla (sin `.env`, sin red, la DB no
+5. **Sin inventar.** Si un script falla (sin `.env.lectura`, sin red, la DB no
    responde), decilo con el error tal cual y qué falta. No sigas con
    suposiciones.
-6. **Corre en la PC.** Los scripts usan `backend/.env` para conectarse a la DB.
-   En una sesión en la nube no hay `.env`: decilo y frená.
+6. **Corre en la PC, con el rol de solo lectura.** Los scripts se conectan con
+   `backend/src/scripts/conexionLectura.js`: usuario y contraseña del rol
+   `resguardo_lectura` desde `backend/.env.lectura`, y host, puerto y base desde
+   `backend/.env`. En una sesión en la nube no hay ninguno de los dos: decilo y
+   frená.
+   - **Si falta `backend/.env.lectura`** (o no es del rol de lectura), el script
+     corta con un error que lo dice y **no se conecta**. No lo crees vos ni
+     cambies el script para que use el `.env` de dueño: decile a Facundo que lo
+     cree a partir de `backend/.env.lectura.example` (ver `README.md`) y frená.
 
 ## Scripts (desde la raíz del repo)
 
 | Script | Para qué |
 |---|---|
 | `node .claude/skills/alta-cliente/leerSolicitud.mjs <id>` | Lee la solicitud y devuelve un JSON con `solicitud` (estado, vigencia), `errores` (las reglas del backend, `validarSolicitudAlta`), `alertas` y `datos`. |
-| `node .claude/skills/alta-cliente/armarQuery.mjs --solicitud <id> --pin-admin <pin> --pines <p1,p2,…> --usuario <u> --password <p> [--hasta AAAA-MM-DD]` | Valida las credenciales, arma la query desde `plantilla_alta.sql` y la comprueba con `EXPLAIN`. Imprime `QUERY OK` y la query, o `PROBLEMAS:` y la lista. |
+| `node .claude/skills/alta-cliente/armarQuery.mjs --solicitud <id> --pin-admin <pin> --pines <p1,p2,…> --usuario <u> --password <p> [--hasta AAAA-MM-DD]` | Valida las credenciales, arma la query desde `plantilla_alta.sql` y la comprueba con `PREPARE` (sin ejecutarla). Imprime `QUERY OK` y la query, o `PROBLEMAS:` y la lista. |
 | `node .claude/skills/alta-cliente/verificarAlta.mjs --solicitud <id> [--pin-admin <pin> --pines <p1,p2,…> --password <p>]` | Después del alta: estado de la solicitud, el tenant, cuántas filas cargó en cada tabla, y si los PINs y la contraseña entran (mismo `bcrypt.compare` que los logins). |
 
 ## Paso 1 — Revisar la solicitud

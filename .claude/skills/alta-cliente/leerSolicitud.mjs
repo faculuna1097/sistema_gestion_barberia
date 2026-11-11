@@ -3,8 +3,11 @@
 // alta-cliente. SOLO LECTURA: hace únicamente SELECT (la solicitud y, a través
 // de validarSolicitudAlta, si el subdominio ya lo usa un tenant).
 //
-// Uso (desde la raíz del repo; usa el .env de backend/ para conectarse a la DB):
+// Uso (desde la raíz del repo o desde cualquier lado):
 //   node .claude/skills/alta-cliente/leerSolicitud.mjs <id-de-la-solicitud>
+//
+// Se conecta con el rol de solo lectura (backend/.env.lectura), a través de
+// backend/src/scripts/conexionLectura.js. Sin ese archivo, corta sin conectarse.
 //
 // Imprime un JSON con:
 //   - solicitud: estado, referencia y fechas;
@@ -14,19 +17,8 @@
 //   - datos: el `datos` completo, para armar el resumen.
 // Sale con código 1 si la solicitud no existe o el id está mal formado.
 
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const BACKEND = path.join(RAIZ, 'backend');
-
-// db.js lee el .env del directorio actual: se corre parado en backend/.
-process.chdir(BACKEND);
-const desdeBackend = (archivo) => new URL(`file:///${path.join(BACKEND, 'src', archivo).replace(/\\/g, '/')}`).href;
-
-const { query } = await import(desdeBackend('config/db.js'));
-const { esUUID } = await import(desdeBackend('utils/validarUuid.js'));
-const { validarSolicitudAlta } = await import(desdeBackend('utils/validarSolicitudAlta.js'));
+import { conectarLectura } from '../../../backend/src/scripts/conexionLectura.js';
+import { esUUID } from '../../../backend/src/utils/validarUuid.js';
 
 // Umbrales de las alertas de precio (en pesos). No son reglas: solo avisan.
 const PRECIO_BAJO = 1000;
@@ -103,9 +95,12 @@ function calcularAlertas(datos) {
 /**
  * main
  * Lee la solicitud del id recibido por argumento, la valida e imprime el JSON.
+ * @param {Function} query - El `query` de db.js, conectado con el rol de lectura.
+ * @param {Function} validarSolicitudAlta - El validador del backend (lee la DB
+ *   para ver si el subdominio está ocupado, por eso se importa después de conectar).
  * @returns {Promise<number>} El código de salida.
  */
-async function main() {
+async function main(query, validarSolicitudAlta) {
   const id = (process.argv[2] ?? '').trim();
   if (!esUUID(id)) {
     console.log(JSON.stringify({ error: 'El id no es un uuid válido.' }));
@@ -143,7 +138,11 @@ async function main() {
 
 let codigo = 1;
 try {
-  codigo = await main();
+  const { query } = await conectarLectura();
+  // Después de conectar: validarSolicitudAlta importa db.js (vía utils/subdominio.js)
+  // y así usa el mismo pool, con el rol de lectura.
+  const { validarSolicitudAlta } = await import('../../../backend/src/utils/validarSolicitudAlta.js');
+  codigo = await main(query, validarSolicitudAlta);
 } catch (err) {
   console.log(JSON.stringify({ error: `No se pudo leer la solicitud: ${err.message}` }));
 }

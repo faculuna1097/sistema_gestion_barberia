@@ -5,24 +5,19 @@
 // contraseña entren, con el mismo bcrypt.compare que usan los logins.
 // SOLO LECTURA: únicamente SELECT.
 //
-// Uso (desde la raíz del repo; usa el .env de backend/):
+// Uso (desde la raíz del repo o desde cualquier lado):
 //   node .claude/skills/alta-cliente/verificarAlta.mjs --solicitud <id> \
 //     [--pin-admin 4321 --pines 1111,2222 --password kings2026]
+//
+// Se conecta con el rol de solo lectura (backend/.env.lectura), a través de
+// backend/src/scripts/conexionLectura.js. Sin ese archivo, corta sin conectarse.
 
-import path from 'node:path';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { conectarLectura } from '../../../backend/src/scripts/conexionLectura.js';
+import { esUUID } from '../../../backend/src/utils/validarUuid.js';
 
-const BACKEND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../backend');
-
-// db.js lee el .env del directorio actual: se corre parado en backend/.
-process.chdir(BACKEND);
-const desdeBackend = (archivo) => new URL(`file:///${path.join(BACKEND, 'src', archivo).replace(/\\/g, '/')}`).href;
-
-const { query } = await import(desdeBackend('config/db.js'));
-const { esUUID } = await import(desdeBackend('utils/validarUuid.js'));
 // bcrypt se resuelve desde backend/ (el script vive fuera de ese árbol).
-const bcrypt = createRequire(path.join(BACKEND, 'package.json'))('bcrypt');
+const bcrypt = createRequire(new URL('../../../backend/package.json', import.meta.url))('bcrypt');
 
 /**
  * leerArgumentos
@@ -42,9 +37,11 @@ function leerArgumentos(args) {
 
 /**
  * main
+ * Verifica el alta de la solicitud recibida por argumento e imprime el JSON.
+ * @param {Function} query - El `query` de db.js, conectado con el rol de lectura.
  * @returns {Promise<number>} El código de salida (1 si algo no cierra).
  */
-async function main() {
+async function main(query) {
   const a = leerArgumentos(process.argv.slice(2));
   const id = (a.solicitud ?? '').trim();
   if (!esUUID(id)) {
@@ -130,7 +127,8 @@ async function main() {
 
 let codigo = 1;
 try {
-  codigo = await main();
+  const { query } = await conectarLectura();
+  codigo = await main(query);
 } catch (err) {
   console.log(JSON.stringify({ error: `No se pudo verificar: ${err.message}` }));
 }

@@ -1,6 +1,6 @@
 # Ruta del proyecto - Sistema de Gestion de Barberia
 
-Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y comparado de nuevo contra `git ls-files` el 2026-11-11 (formulario de alta de clientes: `frontend-alta/` completo, en `backend/src/` `controllers/alta.js`, `routes/alta.js`, `utils/subdominio.js` y `utils/validarSolicitudAlta.js`, la skill `.claude/skills/alta-cliente/` y `docs/decisiones_alta_clientes.md` y `plan_alta_clientes.md`). Antes, el 2026-11-06 (monitoreo de producción: `backend/src/instrument.js`, `backend/src/config/sentry.js`, `.claude/settings.json`, las skills `.claude/skills/salud-prod/` y `arreglo-prod/`, y `docs/decisiones_monitoreo_prod.md`). Antes, el 2026-11-04 (se sumaron `frontend/src/utils/pantalla.js` y `frontend-landing/src/components/ui/IconoWhatsApp.jsx`, que faltaban). Antes, el 2026-11-03 (en `frontend-turnero/src/`: `components/ui/estilos.js`, `hooks/useHover.js` y `utils/errores.js`; y `frontend/src/hooks/usePantallaAngosta.js`). Antes, el 2026-11-02 (en `frontend/src/`: `components/ui/GrupoOpciones.jsx`, `ToastProvider.jsx`, `tonosFormaPago.js`, `estilos.js`, `utils/errores.js` y `utils/toast.js`). Antes, el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
+Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y comparado de nuevo contra `git ls-files` el 2026-11-11 (resguardo de la base, fase 1: `backend/.env.lectura.example` y, en `backend/src/scripts/`, `conexionLectura.js` y `consultar.js`; antes, ese mismo día, formulario de alta de clientes: `frontend-alta/` completo, en `backend/src/` `controllers/alta.js`, `routes/alta.js`, `utils/subdominio.js` y `utils/validarSolicitudAlta.js`, la skill `.claude/skills/alta-cliente/` y `docs/decisiones_alta_clientes.md` y `plan_alta_clientes.md`). Antes, el 2026-11-06 (monitoreo de producción: `backend/src/instrument.js`, `backend/src/config/sentry.js`, `.claude/settings.json`, las skills `.claude/skills/salud-prod/` y `arreglo-prod/`, y `docs/decisiones_monitoreo_prod.md`). Antes, el 2026-11-04 (se sumaron `frontend/src/utils/pantalla.js` y `frontend-landing/src/components/ui/IconoWhatsApp.jsx`, que faltaban). Antes, el 2026-11-03 (en `frontend-turnero/src/`: `components/ui/estilos.js`, `hooks/useHover.js` y `utils/errores.js`; y `frontend/src/hooks/usePantallaAngosta.js`). Antes, el 2026-11-02 (en `frontend/src/`: `components/ui/GrupoOpciones.jsx`, `ToastProvider.jsx`, `tonosFormaPago.js`, `estilos.js`, `utils/errores.js` y `utils/toast.js`). Antes, el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
 
 Este documento lista las carpetas y archivos del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP. Para mantenerlo, regenerar los arboles desde `git ls-files` en vez de parchearlos a mano.
 
@@ -62,6 +62,7 @@ docs/
 ```txt
 backend/
 |-- .env.example
+|-- .env.lectura.example
 |-- .gitignore
 |-- package-lock.json
 |-- package.json
@@ -149,6 +150,8 @@ backend/
     |   `-- ventas.js
     |-- scripts/
     |   |-- backfillCacheControl.js
+    |   |-- conexionLectura.js
+    |   |-- consultar.js
     |   |-- crearTenant.js
     |   |-- generarHashOperativo.js
     |   |-- hashearPinAdmin.js
@@ -725,6 +728,7 @@ frontend-alta/
 - Landing: `frontend-landing/src/App.jsx`
 - Formulario de alta: `frontend-alta/src/App.jsx`
 - Skill de alta de clientes (revisa la solicitud, arma la query y el mensaje): `.claude/skills/alta-cliente/`
+- Consultar la base con el rol de solo lectura: `backend/src/scripts/consultar.js` (conexión en `conexionLectura.js`, credenciales en `backend/.env.lectura`)
 
 ---
 

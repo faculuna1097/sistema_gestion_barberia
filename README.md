@@ -43,3 +43,26 @@ npm run dev
 En local no hay subdominio: el backend resuelve el tenant con `TENANT_ID` del `.env`.
 El formulario de alta no usa tenant: se abre en `http://localhost:5177/<id>`, con el id de una fila de `solicitud_alta`.
 Para probar desde un celular en la red local, ver `docs/estado_actual.md` → Deploy.
+
+## Consultar la base (solo lectura)
+
+Para leer datos desde la PC, sin levantar el backend:
+
+```bash
+cd backend
+node src/scripts/consultar.js "select count(*) from tenant"
+```
+
+Corre la consulta con el rol de **solo lectura** `resguardo_lectura`, dentro de una
+transacción `READ ONLY`, e imprime el resultado como tabla. Acepta varias sentencias
+separadas por `;`. Una escritura falla (`25006`) y cualquier error sale con código 1.
+
+Necesita `backend/.env.lectura` (está en el `.gitignore`), con el usuario y la
+contraseña del rol. Se crea copiando `backend/.env.lectura.example` y completando
+`DB_USER` (`resguardo_lectura.<project_ref>`) y `DB_PASSWORD`. Host, puerto y base
+salen de `backend/.env`. Si falta el archivo, o si no es del rol de lectura, el script
+corta sin conectarse: nunca usa las credenciales de dueño del `.env`.
+
+Los scripts de la skill `alta-cliente` usan la misma conexión
+(`backend/src/scripts/conexionLectura.js`). Las pruebas que escriben en demo siguen con el
+`.env`.
