@@ -8,14 +8,15 @@
 > **Estado (2026-11-05):** fase 0 hecha (branch `feature/mejoras-operativas` desde `main`, con el merge de
 > `feature/descansos-agenda` ya desplegado, y este doc commiteado). **En espera:** el usuario decidió ejecutar antes
 > el plan de monitoreo (`feature/monitoreo-prod`). Al retomar: rebasar este branch sobre el `main` que ya tenga el
-> monitoreo, reconfirmar los hechos de §3 y seguir con la fase 1a (F9, agregada el 2026-11-06).
+> monitoreo, reconfirmar los hechos de §3 y seguir con la fase 1a (F9, agregada el 2026-11-06), después 1b (F11) y 1c (F10), agregadas el 2026-11-11.
 
 ## 1. Contexto
 
 El rediseño del turnero, los descansos en la Agenda y las deudas técnicas (`feature/turnero-ux` →
 `feature/descansos-agenda`) están mergeados a `main` y en producción desde el 2026-11-05 (merge `a1b5ed7`). Sobre
 eso, el usuario quiere sumar 7 features para la app del barbero, el iPad y el panel (más una chica, F8: aviso de
-barberos sin horario), en este branch, hijo de `main`.
+barberos sin horario), en este branch, hijo de `main`. Después se sumaron F9 (arreglo de la gestión del turno vencido) y dos
+mejoras del turnero: F11 (apto para compu y iPad) y F10 (pantalla de éxito más liviana).
 
 **Orden general:** primero el plan de monitoreo (`docs/plan_monitoreo_prod.md`, en `feature/monitoreo-prod`, otro
 hijo de `main`) → su merge a `main` y deploy (los hace el usuario) → rebase de este branch sobre `main` → estas
@@ -235,12 +236,44 @@ prompt y por qué. 4. Cosas vistas de paso (posibles bugs o fallas, con archivo 
 - **Va primero** (fase 1a): es un arreglo de producción chico, independiente del resto, y el turnero ya está
   publicado.
 
+### F11 — Turnero apto para compu y iPad (agregado el 2026-11-11)
+- **Problema:** el turnero es mobile-first y en pantallas grandes se ve como un celular: todo vive en una columna
+  de 480 px (`theme.maxWidth` en `frontend-turnero/src/theme/tokens.js:79`, que usa `PageContainer.jsx`), sin
+  ningún `@media` de layout.
+- **Alcance:** todas las pantallas del turnero: `Landing`, `SeleccionServicio`, `SeleccionCuando`,
+  `ConfirmarTurno`, `TurnoConfirmado` y `GestionTurno` (`frontend-turnero/src/screens/`), y los primitivos que
+  haga falta. En celular no cambia nada.
+- **Diseño en el chat de la fase,** como F5: el ejecutor revisa cómo se ve hoy en compu (~1280 px) e iPad
+  (~1024 y ~768 px), propone **2 direcciones** con capturas, el usuario elige y recién ahí implementa. Ejemplos de
+  lo que puede plantear: landing con la foto y la información en dos columnas; en el flujo, el paso a la izquierda
+  y el resumen del turno fijo a la derecha; grilla de días y horarios más ancha. Respeta la identidad propia del
+  turnero (`sistema_de_disenio.md` §3.8).
+- **Técnica:** responsive por CSS (breakpoints en `index.css` del turnero, como la landing de marketing,
+  `decisiones_landing_ia.md`) o con un hook de ancho como `usePantallaAngosta` del panel; el ejecutor lo decide
+  según `sistema_de_disenio.md` y lo justifica. Sin cambios de backend.
+- **Verificación:** `vite preview` del turnero contra demo en 375, 768, 1024 y 1280 px, con capturas de cada
+  pantalla; en celular, igual que antes.
+- **Va antes de F10:** F10 rediseña una de estas pantallas y conviene hacerla ya sobre el layout nuevo.
+
+### F10 — Pantalla de éxito del turnero más liviana (agregado el 2026-11-11)
+- **Problema (usuario):** la pantalla que aparece al reservar (`frontend-turnero/src/screens/TurnoConfirmado.jsx`)
+  está muy cargada. Hoy tiene, entre otros, "Agregar al calendario", "Cómo llegar", la gestión del turno y
+  "Reservar otro turno" (`estado_actual.md` → Turnero del cliente).
+- **El usuario va a dar los detalles de cómo la quiere al arrancar la fase.** El orquestador no escribe el prompt
+  del ejecutor hasta tener esos detalles: se los pide al usuario, los cierra con preguntas numeradas si hace falta
+  y los vuelca en el prompt. Se diseña para celular y para el layout de compu e iPad de F11.
+- **No cambia:** el backend, el mail de confirmación ni la pantalla de gestión del turno (`GestionTurno`).
+- **Verificación:** `vite preview` del turnero contra demo, reservando un turno (o simulando el resultado), en
+  celular y compu, con capturas.
+
 ## 5. Fases
 
 | # | Fase | Quién | Requisito previo (usuario) |
 |---|---|---|---|
 | 0 | ✅ **Hecha (2026-11-05).** Branch `feature/mejoras-operativas` desde `main` + este plan a `docs/plan_mejoras_operativas.md` (commit) | Chat de planificación | — |
 | 1a | F9 arreglo: no cancelar ni reprogramar desde el link un turno que ya empezó (backend + `GestionTurno` del turnero) | Ejecutor | — |
+| 1b | F11 turnero apto para compu y iPad (diseño con el usuario → implementación) | Ejecutor | — |
+| 1c | F10 pantalla de éxito del turnero más liviana | Ejecutor | Detalles del usuario sobre cómo la quiere |
 | 1 | F7 comisión con barra (backend + `TabBarberos`) + F8 días con horario y aviso (solo `TabBarberos`) | Ejecutor | SQL de % no múltiplos de 5 |
 | 2 | F6a DB + backend: columnas del dueño y `telefono_local`, tabla de tokens, endpoints y mails de recuperación, Gestión → Negocio (backend), `crearTenant.js` | Ejecutor | SQL de columnas + datos de los 3 tenants + tabla de tokens |
 | 3 | F6b fronts: ver contraseña, "¿Olvidaste…?" en los dos logins, pantallas de recuperación, Gestión → Negocio; `telefono_local` en el turnero | Ejecutor | — |
