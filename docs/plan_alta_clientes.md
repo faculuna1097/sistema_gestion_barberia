@@ -23,6 +23,7 @@ Hoy, para dar de alta una barbería, Facundo le pide los datos al cliente por Wh
 | D9 | La vigencia de la suscripción no se pide: la maneja Facundo en la query. | Decisión de Facundo. |
 | D10 | Branch `feature/alta-clientes`, que sale de `main` y vuelve por PR. Va antes que `feature/mejoras-operativas`. | Decisión de Facundo: hacer esto primero. Ver §4. |
 | D12 | El largo del turno va de 10 a 60 minutos de a 5 (antes, 15/20/30/40/45/60), con una barra en vez de botones. | Decisión de Facundo en la fase 5. `tenant.duracion_slot_minutos` acepta de 1 a 240, y el sistema ya funciona con largos que no dividen la hora (demo usa 50). |
+| D13 | El alta se hace con la skill de proyecto `alta-cliente`: con el id del mail lee y verifica la solicitud, propone credenciales simples (no hay recuperación de PIN), arma la query y, después del alta, la verifica y arma el mensaje de WhatsApp para el cliente (links, credenciales y cómo instalar las apps en el celular). Nunca escribe en la DB: la query la corre Facundo. | Pedido de Facundo en la fase 7: un flujo repetible con las reglas escritas, en lugar de armar la query a mano en cada alta. |
 | D11 | La pausa del mediodía solo parte en dos el horario de los barberos con `'igual_local'`. Un horario a medida puede cubrir la pausa. El front precarga los bloques a medida ya partidos por la pausa (fase 4). | En la DB el local tiene un rango por día: la pausa no es un dato, es un atajo para armar `barbero_horario`. Hay barberos que trabajan de corrido. Decidido en la revisión de la fase 1. |
 
 ## 3. Hechos verificados del código
@@ -201,14 +202,15 @@ Claves de `progreso` que usa el front (fases 3 a 5): `pantalla`, `subdominio_edi
 
 ### 5.8 Plantilla SQL de alta
 
-Va en `docs/onboarding.md` como camino principal. `crearTenant.js` queda como alternativa.
+Vive en la skill `alta-cliente` (`.claude/skills/alta-cliente/plantilla_alta.sql`, D13), y `docs/onboarding.md` la apunta como camino principal. `crearTenant.js` queda como alternativa.
 
 - Orden: `tenant` → `tenant_horario_atencion` → `barbero` → `barbero_horario` → `socio` → `servicio` → `producto` → `categoria_gasto` (las 9 de `CATEGORIAS_GASTO_BASE`) → `UPDATE solicitud_alta SET estado = 'cargada'`.
 - `pin_admin`, `barbero.pin` y `operativo_password_hash` con `extensions.crypt(..., extensions.gen_salt('bf', 10))`.
-- PINs distintos entre sí (barberos y admin): lo controla Claude al armar la query.
+- PINs distintos entre sí (barberos y admin): lo controla `armarQuery.mjs` de la skill.
 - `configuracion` lleva `whatsapp` y `resena_url`.
 - Una sola sentencia con CTEs (`WITH t AS (INSERT INTO tenant ... RETURNING id), ...`). Así es atómica sin `BEGIN`/`COMMIT`, y no hay que copiar el uuid a mano. Comprobarlo en la fase 7.
-- Los textos que vienen del cliente van con las comillas escapadas (un `O'Brien` rompe la query).
+- Los datos del cliente se leen directo de `solicitud_alta.datos` dentro de la query: no se copian ni se escapan a mano (un `O'Brien` no la rompe). A mano van solo los parámetros (id, PINs, usuario, contraseña y vencimiento), que `armarQuery.mjs` valida, escapa y comprueba con `EXPLAIN`.
+- El WhatsApp argentino sin el 9 se carga con el 9 (`onboarding.md` lo pide así para wa.me).
 
 ## 6. Modo de trabajo
 
@@ -230,7 +232,7 @@ Va en `docs/onboarding.md` como camino principal. `crearTenant.js` queda como al
 | 4 | Capítulo "Tu equipo" (pantallas 5–7). | Ejecutor | — |
 | 5 | "Tus servicios", "Contacto", Revisión y Listo (pantallas 8–14), y el envío con errores del backend. | Ejecutor | — |
 | 6 | Pulido: auditoría con `impeccable`, accesibilidad, reduced motion, etiquetas `og:`, `noindex`, `vercel.json`, lint en verde. | Ejecutor | — |
-| 7 | Plantilla SQL (§5.8) y prueba punta a punta con una solicitud de prueba. | Orquestador | Alta de un tenant de prueba y su baja (`activo = false`) |
+| 7 | Plantilla SQL (§5.8), skill `alta-cliente` (D13) y prueba punta a punta: Facundo completa el formulario como cliente con front y backend locales, y le pasa el mail a la skill. | Orquestador | Alta de un tenant de prueba y su baja (`activo = false`) |
 | 8 | Cierre: `decisiones_alta_clientes.md`, `SQL_Schema.md`, `onboarding.md`, `sistema_de_disenio.md` (superficie Alta, prefijo `al-`), `ruta_proyecto.md`, `estado_actual.md`, `README.md` (puerto) y la nota de solapamiento en `plan_mejoras_operativas.md` (§4). | Orquestador | — |
 
 ### 7.1 Pendientes que salieron de las revisiones
@@ -240,6 +242,8 @@ Va en `docs/onboarding.md` como camino principal. `crearTenant.js` queda como al
 - **Fase 6 (hecho):** el resumen de días de la tarjeta puede quedar ambiguo con días sueltos más un tramo ("Lun, mar y jue a sáb"). Foco que cae en la página al tocar "Partir la jornada" o "Trabaja de corrido" (el botón desaparece). Avatares de 24 px en la tarjeta.
 - **Fase 5 (hecho):** después de un envío exitoso se muestra "Listo" sin releer la solicitud.
 - **Fase 6 (hecho, 105,6 kB inicial + 45,9 kB diferido):** el bundle pesa 141 kB con gzip (506 kB sin comprimir) por `libphonenumber-js`: cargarla recién en el capítulo Contacto con `import()` dinámico.
+- **Fase 7 (hecho, 2026-11-11):** prueba punta a punta con front y backend locales: Facundo completó el formulario como cliente ("Pepe Barber", 3 barberos, uno con horario propio, pausa, turnos de 25 min, un dueño que no corta con apóstrofo), le llegó el mail, la skill armó la query, la corrió en el SQL Editor (1 fila: 6 días, 3 barberos, 32 bloques, 2 socios, 3 servicios, 1 producto, 9 categorías), `verificarAlta.mjs` confirmó los PINs y la contraseña con `bcrypt.compare`, y el checklist en el navegador dio OK (login operativo, PIN admin, app del barbero y turnero). Faltaba `booking_url` (el botón "Reservar" del panel): se sumó a la plantilla. Baja con `activo = false`; el caché de prod se limpia con el próximo deploy.
+- **Fase 8:** en `backend/.env.example`, dejar `ALTA_AVISO_EMAIL` con su comentario (Facundo ya agregó la línea). En demo, `booking_url` termina en `\r\n` (opcional: limpiarlo).
 - **Fase 8:** anotar en `estado_actual.md` que `pool.on('error')` de `backend/src/config/db.js` loguea con `console.error` el corte de una conexión ociosa del pooler, y eso llega a Sentry (y a Discord). Es global, no de esta feature.
 - **Fase 6 (hecho, commit 2c3c842):** handler de errores después de `express.json` en `backend/src/index.js` que responda 400/413 en JSON y loguee con `console.warn`. Hoy Express imprime el stack con `console.error` y `captureConsoleIntegration` lo manda a Sentry (y a Discord) con cada JSON mal formado o body de más de 100 kB. Es global, va en su propio commit.
 
