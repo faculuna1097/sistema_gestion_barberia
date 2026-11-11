@@ -1,0 +1,261 @@
+/* /frontend-alta/src/index.css
+   Reset global + carga de fuentes + animaciones reutilizables.
+   No define estilos de componentes — eso vive en los .jsx de /components/ui/.
+   Copia del index.css del panel (sistema_de_disenio.md §8), con los keyframes
+   que usa este front. Excepción: el bloque "Movimiento del formulario de alta"
+   (clases al-), al final, análogo a las tt- del turnero.
+   Los colores de acá replican tokens de theme/tokens.js (el CSS no puede
+   importarlos): si cambia un token, actualizarlo también acá. */
+
+/* ── Geist + Geist Mono, servidas desde /public/fonts ────────── */
+/* Los mismos woff2 (alfabeto latin) del panel: fuentes variables, un solo
+   archivo para todos los pesos. Servirlas desde el propio dominio evita la
+   cadena en serie CSS de Google → fuente (performance_frontends.md). */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/geist-latin.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url('/fonts/geist-mono-latin.woff2') format('woff2');
+}
+
+/* ── Reset moderno mínimo ────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+/* Sin el rebote elástico de iOS ni el pull-to-refresh (igual que el turnero):
+   el rebote hacía asomar el fondo detrás del StickyFooter, y un arrastre
+   accidental hacia abajo recargaba la página a mitad del formulario. */
+html, body {
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: 'Geist', 'DM Sans', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #09090B;        /* theme.ink */
+  background: #FAFAFA;   /* theme.bg */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Quita outline default — cada componente define su focus ring vía boxShadow */
+*:focus { outline: none; }
+*:focus-visible { outline: 2px solid #4F46E5; outline-offset: 2px; }  /* theme.accent */
+
+/* Scrollbar discreto en navegadores webkit */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #E4E4E7; border-radius: 999px; border: 2px solid #FAFAFA; }
+::-webkit-scrollbar-thumb:hover { background: #A1A1AA; }
+
+/* ── Animaciones reutilizables ───────────────────────────────── */
+/* om-shimmer: el brillo de Skeleton. om-pop y om-stroke: la tilde de "Listo"
+   (pantalla 14, fase 5). La tilde entra sin rebote, como en el turnero. */
+@keyframes om-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes om-pop {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes om-stroke {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Con "reducir movimiento", nada entra animado (igual que las al- de abajo):
+   la tilde y los avatares aparecen ya en su lugar, la tilde ya dibujada, y el
+   skeleton queda quieto. Estas animaciones se aplican con `animation` inline
+   (no con una clase), así que no se pueden pisar desde una regla: se
+   redefinen los keyframes, y gana la última definición que aplica. */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes om-pop {
+    from, to { opacity: 1; transform: none; }
+  }
+  @keyframes om-stroke {
+    from, to { stroke-dashoffset: 0; }
+  }
+  @keyframes om-shimmer {
+    from, to { background-position: 0 0; }
+  }
+}
+
+/* ── Movimiento del formulario de alta (clases al-) ───────────────
+   Excepción a "sin clases globales" (sistema_de_disenio.md §4.1), igual que las
+   tt- del turnero (§3.8): los keyframes y los pseudo-estados (`:active`) no se
+   pueden escribir inline. El resto sigue inline.
+
+   - al-pantalla: entrada del contenido de cada pantalla (lo pone Formulario;
+     el encabezado, la tarjeta y el "Seguir" quedan quietos). La dirección la
+     decide el atributo data-al-direccion de un ancestro: "adelante" → entra
+     desde la derecha; "atras" → desde la izquierda; sin atributo (la primera
+     carga) → fundido.
+   - al-presionable: se achica apenas mientras se toca. La transición de
+     `transform` la declara cada componente en su `transition` inline, porque
+     un `transition` inline pisa al de cualquier clase.
+   - al-aparecer: fundido corto del contenido que reemplaza a un skeleton.
+
+   Las entradas usan fill-mode `backwards` (no `both`): al terminar sueltan el
+   `transform`. Si lo retuvieran, pisarían el :active de al-presionable y el
+   contenedor pasaría a ser bloque contenedor de los `position: fixed`.
+
+   - al-crecer: un bloque que aparece y empuja lo de abajo de a poco, en vez de
+     de golpe (plan D7: "una tarjeta que crece"). Lo usan los renglones nuevos
+     de la tarjeta "Tu barbería", el link debajo del nombre y el detalle de un
+     día en la semana. Se anima el alto (grid-template-rows de 0fr a 1fr) junto
+     con un fundido: es el único caso donde se anima el layout, porque lo que
+     tiene que verse es justamente que algo creció. Va en un contenedor con un
+     solo hijo; el hijo recorta lo que sobra mientras crece, con 4 px de margen
+     para que no corte el anillo de foco de lo que tenga adentro.
+
+   Con prefers-reduced-motion: reduce, las pantallas y el contenido entran sin
+   animación (el turnero deja un fundido de 120 ms; acá, nada) y el toque no
+   achica; la pausa de ~150 ms de la elección la pone en 0 utils/movimiento.js. */
+
+@keyframes al-fundido {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes al-entra-derecha {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes al-entra-izquierda {
+  from { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.al-pantalla {
+  animation: al-fundido 240ms cubic-bezier(0.25, 1, 0.5, 1) backwards;
+}
+[data-al-direccion="adelante"] .al-pantalla { animation-name: al-entra-derecha; }
+[data-al-direccion="atras"] .al-pantalla { animation-name: al-entra-izquierda; }
+
+/* Sin el recuadro gris que iOS pinta al tocar: el feedback es el achique. */
+.al-presionable { -webkit-tap-highlight-color: transparent; }
+.al-presionable:active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.98); }
+
+.al-aparecer {
+  animation: al-fundido 180ms ease-out backwards;
+}
+
+@keyframes al-crecer {
+  from { grid-template-rows: 0fr; opacity: 0; }
+  to   { grid-template-rows: 1fr; opacity: 1; }
+}
+.al-crecer {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: al-crecer 220ms cubic-bezier(0.25, 1, 0.5, 1) backwards;
+}
+.al-crecer > * {
+  min-height: 0;
+  overflow: hidden;
+  /* El margen del anillo de foco (2 px de separación + 2 px de trazo), sin
+     cambiar el layout: el padding agranda la zona visible y el margen negativo
+     lo compensa. */
+  padding: 4px;
+  margin: -4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .al-pantalla,
+  [data-al-direccion] .al-pantalla,
+  .al-aparecer,
+  .al-crecer { animation: none; }
+  .al-presionable:active:not(:disabled):not([aria-disabled="true"]) { transform: none; }
+}
+
+/* ── Barra de la comisión (clase al-rango) ───────────────────────
+   Un <input type="range"> nativo (teclado, lector de pantalla y arrastre vienen
+   con él) con el aspecto de Luz. Va acá y no inline porque el riel y la perilla
+   son pseudo-elementos (::-webkit-slider-*, ::-moz-range-*), que no se pueden
+   escribir en un style. La usa SelectorComision.
+   - El input mide 44 px de alto (el toque cómodo); el riel, 6.
+   - Lo lleno del riel sale de --al-relleno (0 a 1), que pone el componente:
+     dos colores con un corte seco (no es un degradado decorativo). El corte va
+     al centro de la perilla, que recorre el riel menos su propio ancho (28 px).
+     Firefox lo dibuja solo con ::-moz-range-progress. */
+.al-rango {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 10px;          /* el anillo de foco sigue el radio de Luz */
+  touch-action: pan-y;          /* arrastrar de costado mueve la barra, no la página */
+}
+.al-rango::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    #4F46E5 calc(14px + (100% - 28px) * var(--al-relleno, 0.5)),   /* theme.accent */
+    #E4E4E7 calc(14px + (100% - 28px) * var(--al-relleno, 0.5))    /* theme.hairline */
+  );
+}
+.al-rango::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -11px;
+  border-radius: 999px;
+  background: #FFFFFF;                       /* theme.surface */
+  border: 2px solid #4F46E5;                 /* theme.accent */
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);    /* theme.shadowSm */
+}
+.al-rango::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: #E4E4E7;                       /* theme.hairline */
+}
+.al-rango::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: #4F46E5;                       /* theme.accent */
+}
+.al-rango::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #FFFFFF;
+  border: 2px solid #4F46E5;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}

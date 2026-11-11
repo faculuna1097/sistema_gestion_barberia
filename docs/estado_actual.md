@@ -21,7 +21,7 @@ Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convencio
 - URL: `https://sistemagestionbarberia-production.up.railway.app`
 - Root Directory: `/backend`
 - Start command: `npm start` (= `node --import ./src/instrument.js src/index.js`; carga Sentry antes de arrancar el server)
-- Variables de entorno: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `NODE_ENV=production`, `PORT=3000`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_EMAIL`, `RESEND_API_KEY`, `MAIL_FROM`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (Storage de imágenes, `config/supabase.js`), `SENTRY_DSN` (shared variable, el DSN del proyecto `barberia-backend-prod` de Sentry). **`PLATFORM_ADMIN_KEY`** (opcional) habilita el endpoint de plataforma `POST /api/plataforma/cache/invalidate`; **sin setear por ahora a propósito** → el endpoint responde 503 (fail-safe). Setearla recién al usar el endpoint en prod (dispara autodeploy; hacerlo en momento de poco tráfico).
+- Variables de entorno: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `NODE_ENV=production`, `PORT=3000`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_EMAIL`, `RESEND_API_KEY`, `MAIL_FROM`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (Storage de imágenes, `config/supabase.js`), `SENTRY_DSN` (shared variable, el DSN del proyecto `barberia-backend-prod` de Sentry), `ALTA_AVISO_EMAIL` (**pendiente de setear** con el deploy del formulario de alta: el mail que recibe el aviso de cada solicitud enviada; en el servicio web, no como shared variable). **`PLATFORM_ADMIN_KEY`** (opcional) habilita el endpoint de plataforma `POST /api/plataforma/cache/invalidate`; **sin setear por ahora a propósito** → el endpoint responde 503 (fail-safe). Setearla recién al usar el endpoint en prod (dispara autodeploy; hacerlo en momento de poco tráfico).
 - **Dos servicios Railway:** el **web service** (esta API) y un **servicio cron** de recordatorios (`node src/jobs/recordatorios.js`), ambos deployando de `main`. `RESEND_API_KEY` + `MAIL_FROM` + `SENTRY_DSN` están como **shared variables** referenciadas en los dos, así que el mailer de Resend y Sentry están activos en ambos.
 - `TENANT_ID` eliminado de Railway — ya no se usa en producción.
 - Las cuatro `GOOGLE_*` corresponden a la cuenta central `turnos.barbermanager@gmail.com` (organizador de eventos del turnero), consumidas por `services/googleCalendar.js`. El refresh token es estable (app publicada en Google Cloud, no expira por inactividad).
@@ -36,6 +36,7 @@ Cuatro proyectos deployados en Vercel, todos auto-deploy en push a `main`.
 | Turnero del cliente | `/frontend-turnero` | `sistema-gestion-barberia-turnero.vercel.app` |
 | App del barbero | `/frontend-barbero` | `sistema-gestion-barberia-barbero.vercel.app` |
 | Landing (marketing) | `/frontend-landing` | `barbermanager.app` (apex, canónico) |
+| Formulario de alta | `/frontend-alta` | `alta.barbermanager.app` (**pendiente de crear**, ver Pendientes) |
 
 **Landing — en producción (2026-06-15).** Página de marketing de BarberManager
 (`/frontend-landing`, commit `53ac14e`), proyecto Vercel propio con auto-deploy
@@ -123,6 +124,7 @@ Para abrir el turnero o la app del barbero desde un celular en la misma WiFi:
 | Kingsai Studio | Producción | `kingsaistudio` | `a1b2c3d4-0000-0000-0000-000000000001` |
 | Demo | Desarrollo | `demo` | `aaaaaaaa-0000-0000-0000-000000000002` |
 | Luxuri BarberClub | Producción (alta 2026-10-19) | `luxuribarberclub` | `d7990463-a5ee-47a4-a276-6dcb722f1189` |
+| Pepe Barber | Prueba del formulario de alta, dada de baja (`activo = false`, 2026-11-11). El subdominio queda ocupado. | `pepe-barber` | `914b6323-6d66-4265-b078-14bd1ac289c4` |
 
 URL de producción: `kingsaistudio.barbermanager.app` ✅ funcionando.
 
@@ -156,7 +158,7 @@ La convención (header `X-Tenant-Subdomain`, fallback `TENANT_ID`, extracción d
 La estructura del panel admin y el scroll global son convenciones: ver [`convenciones_tecnicas.md`](./convenciones_tecnicas.md) §8.
 
 ### RLS activado en todas las tablas (2026-09-30)
-Las 18 tablas de `public` tienen Row Level Security activado y **sin policies**. Supabase expone `public` por su API automática (Data API) y los roles `anon` / `authenticated` tienen todos los permisos sobre las tablas; con RLS activado y sin policies, por esa API no se lee ni se escribe nada. El backend no se ve afectado: se conecta por el pooler como `postgres`, que es el dueño de las tablas, y al dueño RLS no le aplica. Ningún frontend usa Supabase (solo el backend, para Storage, con la `service_role`).
+Las 19 tablas de `public` tienen Row Level Security activado y **sin policies**. Supabase expone `public` por su API automática (Data API) y los roles `anon` / `authenticated` tienen todos los permisos sobre las tablas; con RLS activado y sin policies, por esa API no se lee ni se escribe nada. El backend no se ve afectado: se conecta por el pooler como `postgres`, que es el dueño de las tablas, y al dueño RLS no le aplica. Ningún frontend usa Supabase (solo el backend, para Storage, con la `service_role`).
 
 - Hasta esa fecha solo lo tenían `tenant_feriado`, `tenant_horario_atencion` y `tenant_imagen`; las otras 13 estaban abiertas para quien tuviera la anon key (que no está publicada en ningún front).
 - **Regla:** toda tabla nueva se crea con `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`. El SQL editor no lo activa solo; el editor de tablas de Supabase sí.
@@ -224,6 +226,14 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
 - Planillas: registro de descansos (columna en el Resumen, sección en el modal del barbero, hoja en el Excel) y cortes con/sin turno, también en `MiPlanilla` ✅
 - Decisiones en [`decisiones_descansos.md`](./decisiones_descansos.md).
 
+### Formulario de alta de clientes (terminado el 2026-11-11, pendiente de deploy)
+- `frontend-alta` en `alta.barbermanager.app/<id>`: link privado por solicitud (el id de `solicitud_alta`, vence a los 30 días), sin login ni tenant ✅
+- 15 pantallas en 4 capítulos (Tu local, Tu equipo, Tus servicios, Contacto), Revisión con "Editar" por bloque y "Listo"; una tarjeta "Tu barbería" que crece con cada respuesta ✅
+- Se guarda solo (y sigue desde otro dispositivo); validación en cada campo con los mismos mensajes que el backend; el "atrás" del celular vuelve un paso ✅
+- Backend `/api/alta` (leer, autoguardar, consultar el subdominio y enviar), con rate limit propio, el token enmascarado en logs y Sentry, y un mail de aviso a `ALTA_AVISO_EMAIL` ✅
+- Skill `alta-cliente`: con el id del mail revisa la solicitud, arma la query de alta, la verifica y arma el mensaje de WhatsApp para el cliente. Probado de punta a punta el 2026-11-11 ✅
+- Cómo dar un alta: [`onboarding.md`](./onboarding.md). Decisiones en [`decisiones_alta_clientes.md`](./decisiones_alta_clientes.md).
+
 ### Monitoreo de producción (en producción desde el 2026-11-06)
 - **Avisos al celular**, en el canal `#alertas-prod` del server de Discord `BarberManager prod`. Ninguno usa Claude:
   - **Railway** (webhook del proyecto): deploy fallido o crash, de los dos servicios.
@@ -264,6 +274,18 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
 
 ## Pendientes
 
+- **Formulario de alta de clientes — deploy y lo que queda** (branch `feature/alta-clientes`, terminado el 2026-11-11; decisiones en [`decisiones_alta_clientes.md`](./decisiones_alta_clientes.md)):
+  1. **Deploy** (en este orden; el front nuevo no existe todavía, así que no hay riesgo de orden):
+     - Setear `ALTA_AVISO_EMAIL` en Railway, en el **servicio web** (no como shared variable).
+     - PR de `feature/alta-clientes` a `main` y merge: deploya el backend.
+     - Crear el proyecto de Vercel con root `frontend-alta` y `VITE_API_URL` (la misma URL de Railway que los demás).
+     - Agregar `alta.barbermanager.app` a ese proyecto. Como `www` con la landing, el dominio exacto le gana al wildcard `*.barbermanager.app` del panel.
+     - Después del deploy: `pepe-barber` (tenant de prueba, dado de baja) sale del caché del backend al reiniciar.
+  2. **Probar en celulares reales** (iPhone con Safari y Android con Chrome), con un link de prueba: el "Seguir" visible con el teclado abierto, "reducir movimiento" del sistema, VoiceOver o TalkBack en un par de pantallas, y la **vista previa al pegar el link en WhatsApp** (`og:image`).
+  3. **Al rebasar `feature/mejoras-operativas`:** anotar en `plan_mejoras_operativas.md` (F6) que la plantilla de la skill (`.claude/skills/alta-cliente/plantilla_alta.sql`) pasa a las columnas nuevas (`email_duenio`, `telefono_duenio`, `telefono_local`) y que el formulario ya pide esos datos.
+  4. (opcional) `booking_url` de demo termina en `\r\n` (se pegó así): `UPDATE tenant SET booking_url = 'https://demo.barbermanager.app/turnos' WHERE subdominio = 'demo';`
+  5. (opcional) La app del barbero no tiene `manifest.json`: "Agregar a inicio" crea el ícono, pero se abre con la barra del navegador. Sumarle un manifest (como el del panel) la haría abrir como app.
+- **El log de errores del pool de la DB llega a Sentry (y a Discord)** (visto el 2026-11-11). `pool.on('error')` de `backend/src/config/db.js` loguea con `console.error` el corte de una conexión ociosa que hace el pooler, con el objeto entero del cliente pg. `captureConsoleIntegration` lo manda a Sentry. Es esperable y el pool se recupera solo: pasarlo a `console.warn` con solo el mensaje, en un branch `fix/`.
 - **Rate limiter: `req.ip` es la IP de un proxy de Railway, no la del cliente (bug, anotado 2026-11-06).** `app.set('trust proxy', 1)` (`backend/src/index.js`) supone que Railway agrega un solo salto al `X-Forwarded-For`, pero agrega más de uno: en la prueba de la fase 3 del monitoreo, el borde de Railway registró la IP real del cliente y el limiter vio otra (de un proxy interno), que además cambia entre requests. Consecuencias: los usuarios que entran por el mismo nodo comparten el cupo (10 logins fallidos / 15 min, 300 req/min globales), así que unos PIN mal tipeados en un local pueden bloquearle el login a otro; un atacante reparte sus intentos entre nodos; y la IP del log del 429 no es la del cliente. Arreglo en un branch `fix/` propio: primero ver qué headers manda Railway (cuántos saltos, o si hay uno propio con la IP del cliente) y después ajustar `trust proxy` o la clave del limiter, probándolo contra prod con requests de prueba a demo.
 - **Migrar el backend de Node 22 a 24 o 26 antes del 2027-04-30** (fin de soporte de Node 22). `backend/package.json` fija `"engines": { "node": "22.x" }`. Requisito a mantener: Node ≥ 22, por el WebSocket nativo que pide `@supabase/supabase-js`.
 - **Monitoreo — residuales:**

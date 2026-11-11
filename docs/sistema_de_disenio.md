@@ -61,7 +61,7 @@ son los mismos archivos de `frontend-turnero/src/` más §3.8.
 Lista corta de prohibiciones explícitas. Alinea rápido a cualquier chat nuevo.
 
 - ❌ `alert()`, `confirm()`, `prompt()` nativos. Usar `ConfirmDialog`.
-- ❌ CSS classes globales. Excepción: `index.css` para reset / fonts / keyframes. La landing suma unas pocas clases `om-` porque se pre-renderiza, y el turnero unas `tt-` de movimiento (ver §4.1).
+- ❌ CSS classes globales. Excepción: `index.css` para reset / fonts / keyframes. La landing suma unas pocas clases `om-` porque se pre-renderiza, el turnero unas `tt-` de movimiento y el formulario de alta unas `al-` (ver §4.1).
 - ❌ Múltiples colores de acento. Un solo `theme.accent` por front: indigo en el panel, el barbero y la landing; casi negro en el turnero (§3.8).
 - ❌ Indigo en un monto. El color de la plata sigue §3.1.1.
 - ❌ Sombras pesadas, glow, gradientes. Única excepción: el degradado del hero del turnero, que oscurece la foto para que se lea el texto (§3.8).
@@ -175,12 +175,13 @@ en el panel, el barbero y la landing; el turnero no la tiene (§3.8).
 
 ### 3.6 Densidad por superficie
 
-El producto tiene tres superficies con públicos y objetivos distintos.
+El producto tiene varias superficies con públicos y objetivos distintos.
 La densidad visual debe acompañar.
 
 | Superficie | Público | Densidad | Padding card | Spacing entre bloques |
 |---|---|---|---|---|
 | **Turnero** (cliente final) | Visitante esporádico, mobile-first | **Aireada** | 16–24 | 24–32 |
+| **Alta** (formulario de alta, §3.9) | Dueño de una barbería nueva, una sola vez, desde el celular | **Aireada** (la del turnero) | 16–24 | 24–32 |
 | **Panel barbero** (uso diario) | Empleado, mobile + desktop | **Intermedia** | 12–16 | 16–24 |
 | **Panel gestión** (admin) | Dueño, desktop, sesiones largas | **Compacta** | 8–12 | 12–16 |
 | **Kiosko** (modo operativo, iPad del mostrador) | Barbero o recepción, de pie y a distancia, al cobrar | **Grande** | 16–28 | 16–24 |
@@ -264,6 +265,43 @@ con el mismo trazo (1.5–1.75, `currentColor`); los que se repiten viven en
 propósito del resto. Un front nuevo copia los del panel (§8), nunca los del
 turnero, y un cambio en Luz no se replica en el turnero sin decidirlo.
 
+### 3.9 Formulario de alta: Luz con el movimiento del turnero
+
+Decidido el 2026-11-10 (núcleo de decisiones en
+[`decisiones_alta_clientes.md`](./decisiones_alta_clientes.md)). `frontend-alta` lo
+completa **una sola vez** el dueño de una barbería nueva, casi siempre desde el link de
+WhatsApp en el celular. Viene de la landing y sigue en el panel: por eso es **Luz** (acento
+indigo, tokens e `index.css` copiados del panel, §8), no el blanco y negro del turnero.
+
+**Qué toma del turnero**: la densidad aireada y mobile-first (`PageContainer` de 480), una
+pregunta por pantalla, el "atrás" del celular que vuelve un paso, y el mismo tipo de
+movimiento, con su propio prefijo.
+
+**Tono**: que completarlo no se sienta como trabajo, sin volverse infantil (§0). La respuesta
+está en cada toque: botones grandes, avatares que aparecen, barras que cambian y una tarjeta
+"Tu barbería" que crece. Sin confeti, ilustraciones ni rebotes.
+
+**Movimiento** (clases `al-` de `index.css`, documentadas ahí):
+- `al-pantalla`: entrada del contenido de cada pantalla, 240 ms. La dirección sale del
+  atributo `data-al-direccion` ("adelante" desde la derecha, "atras" desde la izquierda; la
+  primera carga, fundido). El encabezado, la tarjeta y el "Seguir" quedan quietos.
+- `al-presionable`: se achica apenas al tocar (`:active`, no con `aria-disabled`).
+- `al-aparecer`: fundido del contenido que reemplaza a un skeleton.
+- `al-crecer`: un bloque que aparece y empuja lo de abajo de a poco (alto con
+  `grid-template-rows` de 0fr a 1fr, más un fundido). Es la única animación de layout, porque
+  lo que tiene que verse es que algo creció: renglones nuevos de la tarjeta, el link debajo del
+  nombre, el detalle de un día.
+- `al-rango`: el riel y la perilla del `<input type="range">` nativo (comisión y largo del
+  turno), que no se pueden estilar inline.
+- La opción tocada queda marcada ~150 ms antes de avanzar (`useEleccionConPausa`), y la
+  tilde del "Listo" se dibuja con `om-stroke`.
+- Con `prefers-reduced-motion: reduce`: ninguna animación de entrada (a diferencia del
+  turnero, ni el fundido), el toque no achica, sin pausa al elegir y la tilde ya dibujada.
+- Las entradas usan fill-mode `backwards` por la misma razón que en el turnero (§3.8).
+
+**Lo que no se copia**: como el turnero, `frontend-alta` tiene sus propias copias de los
+primitivos (§6.5). Un cambio en Luz no se replica acá sin decidirlo.
+
 ---
 
 ## 4. Convenciones de implementación
@@ -318,7 +356,8 @@ en [`decisiones_landing_ia.md`](./decisiones_landing_ia.md).
 **Excepción del turnero (2026-10-08)**: los keyframes del movimiento y los
 pseudo-estados (`:active`) no se pueden escribir inline. Van en un bloque
 comentado de su `index.css` con prefijo `tt-` (`tt-pantalla`, `tt-presionable`,
-`tt-aparecer`, `tt-escalonado`; ver §3.8). Las animaciones que se aplican con
+`tt-aparecer`, `tt-escalonado`; ver §3.8). El formulario de alta hace lo mismo con el prefijo
+`al-` (§3.9). Las animaciones que se aplican con
 `animation` inline (`om-pop`, `om-stroke`, `om-shimmer`, `om-dialog-in`) no se
 pueden pisar con una regla: para "reducir movimiento" se redefinen sus
 keyframes dentro del `@media`.
@@ -661,6 +700,25 @@ componente se comparte recién cuando un segundo front lo necesita).
 | `TurnoListItem` | Card de turno: hora/cliente/servicio + acciones según estado. |
 | `SearchInput` | Input de búsqueda con lupa + botón limpiar. |
 
+### 6.5 Propias de `frontend-alta`
+
+Copias de los primitivos del panel (§6.1) más estas piezas propias. Viven en
+`frontend-alta/src/components/` y **no se promovieron** (§7.5).
+
+| Componente | Para qué |
+|---|---|
+| `ui/BotonOpcion` | Opción única grande (radio que pasa a tilde). Preguntas de sí/no y elecciones de una pantalla. |
+| `ui/Casilla` | Sí/no con forma de botón: un checkbox nativo invisible con la caja dibujada, toque de 44 px. |
+| `ui/Select` | Copia del `Select` del panel con label asociada, error accesible y opción vacía "sin elegir". |
+| `ui/TextoError` | El texto de error de un control que no es `Field` (`aria-describedby`). |
+| `SelectorDias` | Los 7 días que se prenden y apagan. Local y horario de cada barbero. |
+| `SelectorHora` / `BotonPaso` / `ParDeHoras` | Horas con [−] y [+] de a 30 min, sin teclado. |
+| `SelectorConBarra` | Barra de a pasos con [−] y [+] (comisión, largo del turno). Usa `al-rango`. |
+| `SemanaEnBarras` | La semana dibujada en vivo, con la pausa como corte y varios bloques por día. |
+| `CampoPrecio` | Precio entero con separador de miles mientras se escribe. |
+| `CampoTelefono` | País más número con `libphonenumber-js` (carga diferida), guarda E.164. |
+| `TarjetaBarberia` | La tarjeta "Tu barbería": crece en el formulario y se ve completa en la Revisión y en "Ya enviada". |
+
 ### 6.4 Wizard del modo operativo (iPad del local)
 
 Piezas de la superficie kiosko (los flujos de Corte, Venta y Gasto del iPad del
@@ -774,8 +832,9 @@ la estrategia es duplicar**:
 | **Barbero** | La base de Luz: lo mismo que el panel, sin `neutralSoft`, `overlay` ni `shadowLg`. | Google Fonts. `om-fade` es solo opacidad (con `transform`, los modales se descentraban dentro de `PageContainer`). Su giro se llama `om-spin`. Sin `om-shake` ni `.om-fila-hover`. |
 | **Landing** | La base sin `neutralSoft`, `overlay` ni `maxWidth`. Suma `sizeDisplay`, `sizeSection`, `sizeSubheading`, `maxWidthWide`, `maxWidthText`, `sectionGapMin` y `sectionGapMax`. Tiene su propio `shadowLg` (`0 12px 32px rgba(0,0,0,0.10)`, para las capturas que flotan): mismo nombre que el del panel, otro valor. | Google Fonts, `scroll-behavior: smooth`, `om-reveal` y las clases `om-` de §4.1. Sin `om-stroke`, `om-overlay-in` ni `om-dialog-in`. |
 | **Turnero** | Diverge a propósito (§3.8): `bg`, `accent`, `accentHover`, `accentSoft` y los del hero. No tiene `shadowScroll`. | Diverge a propósito (§3.8): `overscroll-behavior`, los colores de su tema y el movimiento `tt-`. |
+| **Alta** | La base de Luz, sin `neutralSoft`, `overlay` ni `shadowLg` (copia del panel, 2026-11-10). | Geist desde `public/fonts`. `om-shimmer`, `om-pop` y `om-stroke`, con su versión para "reducir movimiento", y el movimiento `al-` (§3.9). |
 
-Los cuatro comparten la escala de tamaños, pesos, spacing (`spacing`), radios,
+Todos comparten la escala de tamaños, pesos, spacing (`spacing`), radios,
 los estados y los neutros de texto (`muted` `#6B6B74` desde el 2026-11-03, §5.3).
 
 **Lo que NO se copia**:

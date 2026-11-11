@@ -1,0 +1,3 @@
+# Cada link del formulario es privado (lleva el token de la solicitud): no se indexa nada.
+User-agent: *
+Disallow: /

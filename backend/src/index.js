@@ -11,7 +11,7 @@ import { verificarToken } from './middlewares/authMiddleware.js';
 import { tenantMiddleware, invalidar } from './middlewares/tenantMiddleware.js';
 import { verificarClavePlataforma } from './middlewares/plataformaAuthMiddleware.js';
 import { limiterGlobal, limiterLogin } from './middlewares/rateLimitMiddleware.js';
-import { sanitizarObjeto, enmascararTokenTurnero } from './utils/sanitizarLogs.js';
+import { sanitizarObjeto, enmascararTokensEnRuta } from './utils/sanitizarLogs.js';
 import { registrarHandlerErrores, vaciarEventos } from './config/sentry.js';
 
 // --- Importación de rutas ---
@@ -29,6 +29,7 @@ import authPanelRoutes  from './routes/authPanel.js';
 import authBarberoRoutes from './routes/authBarbero.js';
 import authOperativoRoutes from './routes/authOperativo.js';
 import turneroRoutes    from './routes/turnero.js';
+import altaRoutes       from './routes/alta.js';
 import turnosOperativoRoutes from './routes/turnosOperativo.js';
 import turnosAdminRoutes   from './routes/turnos.js';
 import horariosAdminRoutes     from './routes/horarios.js';
@@ -103,6 +104,33 @@ app.use(cors({
 // Los límites finos de login y reserva se montan en sus rutas, más abajo.
 app.use(limiterGlobal);
 app.use(express.json());
+
+/**
+ * Errores del parseo del body (handler de errores de Express: 4 parámetros).
+ *
+ * Por qué existe: sin él, un JSON mal formado o un body de más de 100 kB (el
+ * límite por defecto de express.json) llegaba al handler final de Express, que
+ * imprime el stack con console.error. captureConsoleIntegration (instrument.js)
+ * lo manda a Sentry y de ahí a Discord: cualquiera que mandara un body roto
+ * disparaba una alerta en el celular por un error del cliente, no nuestro. Y
+ * la respuesta salía en HTML, sin el { error, codigo } que esperan los fronts.
+ *
+ * Se loguea con console.warn (no llega a Sentry): método y ruta con los tokens
+ * enmascarados. Nunca el body: no se pudo parsear y puede traer datos del cliente.
+ *
+ * Cualquier otro error sigue de largo con next(err).
+ */
+app.use((err, req, res, next) => {
+  let respuesta = null;
+  if (err?.type === 'entity.parse.failed') {
+    respuesta = { status: 400, error: 'Los datos enviados no tienen un formato válido.', codigo: 'json_invalido' };
+  } else if (err?.type === 'entity.too.large') {
+    respuesta = { status: 413, error: 'Los datos enviados son demasiado grandes.', codigo: 'body_demasiado_grande' };
+  }
+  if (!respuesta) return next(err);
+  console.warn(`[index] body rechazado | codigo: ${respuesta.codigo} | ${req.method} ${enmascararTokensEnRuta(req.originalUrl)}`);
+  return res.status(respuesta.status).json({ error: respuesta.error, codigo: respuesta.codigo });
+});
 // En Express 5 req.body queda undefined si no llega body: desestructurarlo tiraría
 // TypeError (500). Con el objeto vacío, cada controller responde su propio 400.
 app.use((req, res, next) => {
@@ -147,6 +175,20 @@ app.post('/api/plataforma/cache/invalidate', verificarClavePlataforma, (req, res
   return res.json({ ok: true, subdominio });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FORMULARIO DE ALTA DE CLIENTES — /api/alta/*, FUERA de la cadena tenant/JWT.
+//
+// Se monta ACÁ a propósito, igual que el endpoint de plataforma:
+//   - Antes de tenantMiddleware: el cliente todavía no tiene tenant. El acceso
+//     es el token del link (el id de la solicitud), que valida el controller.
+//   - Antes del log de acceso global: el body trae nombres, mails y teléfonos
+//     del cliente, y ese log lo escribe. El controller loguea sus propios
+//     eventos con la referencia de la solicitud.
+// El router cierra con un 404 propio, así ninguna ruta de /api/alta sigue de
+// largo hasta el log de acceso. Rate limit por ruta, en routes/alta.js.
+// ─────────────────────────────────────────────────────────────────────────────
+app.use('/api/alta', altaRoutes);
+
 // Log de acceso global — una línea por request que llega al servidor.
 // El body se sanitiza antes de loguear para no filtrar credenciales (PINs,
 // passwords) a los logs de Railway. Ver /utils/sanitizarLogs.js.
@@ -159,8 +201,9 @@ app.use((req, res, next) => {
   const bodyLog = req.body && Object.keys(req.body).length
     ? `— body: ${JSON.stringify(sanitizarObjeto(req.body))}`
     : '';
-  // El token_gestion del turnero va enmascarado: con él se ve y cancela un turno.
-  console.log(`[index] ${req.method} ${enmascararTokenTurnero(req.url)}`, bodyLog);
+  // Los tokens en la ruta van enmascarados (el token_gestion del turnero: con él
+  // se ve y cancela un turno). Ver enmascararTokensEnRuta.
+  console.log(`[index] ${req.method} ${enmascararTokensEnRuta(req.url)}`, bodyLog);
   next();
 });
 

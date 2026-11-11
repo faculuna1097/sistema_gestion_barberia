@@ -12,13 +12,44 @@ Antes de arrancar, tener:
 
 - Repo del backend clonado y dependencias instaladas (`npm install` en `/backend`).
 - Acceso al panel de Supabase del proyecto.
-- Datos del cliente: nombre del negocio, subdominio deseado, PIN inicial de 4 dígitos, y usuario + password del modo operativo (el login del iPad del local; password de 8+ caracteres).
+- Para el camino principal: `ALTA_AVISO_EMAIL` seteada en Railway (servicio web, no como shared variable) y una sesión de Claude en la PC (la skill usa `backend/.env`).
+- Para el camino alternativo, datos del cliente: nombre del negocio, subdominio deseado, PIN inicial de 4 dígitos, y usuario + password del modo operativo (el login del iPad del local; password de 8+ caracteres).
 
 > El `.env` local no necesita configuración especial para correr los scripts. `crearTenant.js` no lee `TENANT_ID`.
 
 ---
 
 ## Flujo completo
+
+**Camino principal (desde el 2026-11-11): el formulario de alta y la skill `alta-cliente`.** El
+cliente carga todo por su cuenta desde un link privado, y la skill arma la query de alta. Decisiones en
+[`decisiones_alta_clientes.md`](./decisiones_alta_clientes.md).
+
+1. **Crear la solicitud** (Supabase → SQL Editor). La referencia es para vos: de quién es.
+   ```sql
+   INSERT INTO solicitud_alta (referencia) VALUES ('Kings — Juan') RETURNING id;
+   ```
+2. **Mandarle el link** por WhatsApp: `https://alta.barbermanager.app/<id>`. Vence a los 30 días;
+   si vence, se crea otra solicitud.
+3. **El cliente lo completa.** Se guarda solo y puede seguir desde otro dispositivo. Al enviarlo, te
+   llega un mail a `ALTA_AVISO_EMAIL` (env var de Railway) con la referencia, el negocio y el id.
+4. **Pasale el mail a Claude** en una sesión en la PC (`/alta-cliente`, o "dale de alta esta
+   solicitud"). La skill lee y verifica la solicitud, te muestra un resumen con lo que conviene
+   confirmar, propone las credenciales (simples: todavía no hay recuperación de PIN) y te da la
+   query. Nunca escribe en la DB.
+5. **Correr la query** en el SQL Editor. Es una sola sentencia (entra todo o nada) y devuelve una
+   fila con lo que cargó. Crea el tenant con su horario, barberos y sus horarios, socios,
+   servicios, productos, las 9 categorías de gasto, el WhatsApp y el link de reseñas, y el
+   `booking_url`; y pasa la solicitud a `cargada`. La plantilla vive en
+   `.claude/skills/alta-cliente/plantilla_alta.sql`.
+6. **Avisale a la skill** que la corriste: verifica el alta (PINs y contraseña con el mismo
+   `bcrypt.compare` de los logins), te da el checklist del navegador (Paso 3) y arma el mensaje de
+   WhatsApp para el cliente con los links, las credenciales y cómo instalar las apps en el celular.
+7. (Opcional, cuando llegue) El logo y las imágenes los sube el cliente desde el panel (Paso 5).
+
+**Camino alternativo: `crearTenant.js`** (Pasos 1 a 5 de abajo), para un alta sin formulario.
+
+### Pasos del camino alternativo
 
 1. El cliente acuerda contratar el sistema y te pasa: nombre del negocio, subdominio deseado, PIN inicial y las credenciales operativas que quiere.
 2. Corrés `crearTenant.js` para dar de alta el tenant en la DB, con sus credenciales del modo operativo.
@@ -150,7 +181,8 @@ va a "Otros".
   cargarlas como gasto las restaría dos veces.
 - El nombre "Productos para venta" tiene que coincidir con `CATEGORIA_PRODUCTOS_VENTA` de
   `frontend/src/screens/flows/FlujoGasto.jsx`: es lo que dispara el recordatorio de stock. La
-  lista vive en `CATEGORIAS_GASTO_BASE` (`crearTenant.js`). Si cambia, actualizar esta tabla y
+  lista vive en `CATEGORIAS_GASTO_BASE` (`crearTenant.js`) y en la plantilla de la skill
+  (`.claude/skills/alta-cliente/plantilla_alta.sql`). Si cambia, actualizar las dos, esta tabla, y
   sumarla a los tenants existentes.
 - Una categoría no se borra: se oculta con `activo = false`. Sus gastos la siguen referenciando.
 

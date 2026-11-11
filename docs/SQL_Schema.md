@@ -14,7 +14,8 @@
 --   - Comisión: siempre un porcentaje sobre el precio del servicio (decisión de
 --     negocio del 2026-09-29). El tipo 'fijo' se sacó del CHECK el 2026-11-03. La
 --     fórmula vive solo en backend/src/utils/comision.js.
---   - Row Level Security ACTIVADO y sin policies en las 18 tablas (desde 2026-09-30).
+--   - Row Level Security ACTIVADO y sin policies en las 19 tablas (desde 2026-09-30;
+--     solicitud_alta se creó con RLS el 2026-11-10).
 --     Cierra la API automática de Supabase (roles anon / authenticated); el backend
 --     entra como owner (postgres) y RLS no le aplica. Toda tabla nueva se crea con
 --     ALTER TABLE ... ENABLE ROW LEVEL SECURITY (el SQL editor no lo activa solo).
@@ -352,6 +353,29 @@ CREATE TABLE public.movimiento_extra (
   CONSTRAINT movimiento_extra_descripcion_otro_ingreso CHECK (
     tipo <> 'otro_ingreso' OR (descripcion IS NOT NULL AND btrim(descripcion) <> '')
   )
+);
+-- Formulario de alta de clientes (frontend-alta, desde el 2026-11-10). Una fila por
+-- cliente nuevo: Facundo la crea con INSERT (referencia) RETURNING id y le manda el
+-- link alta.barbermanager.app/<id>. El id es el token del link (uuid v4). La leen y
+-- escriben solo /api/alta (controllers/alta.js) y la skill alta-cliente (solo lee);
+-- no tiene tenant_id: el tenant todavía no existe. Decisiones en
+-- decisiones_alta_clientes.md.
+CREATE TABLE public.solicitud_alta (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),   -- es el token del link
+  referencia text NOT NULL,                      -- de quién es, para Facundo y los logs
+  -- Todo el formulario, con la forma de plan_alta_clientes.md §5.6 (version 1).
+  -- Al enviar se guarda normalizado por validarSolicitudAlta.
+  datos jsonb NOT NULL DEFAULT '{}'::jsonb,
+  -- borrador (el cliente completa) → enviada (POST /enviar) → cargada (la query de
+  -- alta de la skill). Solo en borrador se puede escribir.
+  estado text NOT NULL DEFAULT 'borrador'
+    CHECK (estado = ANY (ARRAY['borrador'::text, 'enviada'::text, 'cargada'::text])),
+  vence_en timestamp with time zone NOT NULL DEFAULT (now() + interval '30 days'),
+  enviada_en timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  -- Sin trigger: lo setea cada UPDATE (guardar, enviar y la query de alta).
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT solicitud_alta_pkey PRIMARY KEY (id)
 );
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Web de Kingsai (sitio aparte, no es parte de este repo). Vive solo en la DB;

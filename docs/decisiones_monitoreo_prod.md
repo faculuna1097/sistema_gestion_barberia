@@ -41,6 +41,6 @@ Quedaron tres capas:
 ## Lo que apareció en el camino
 
 - **Bug del rate limiter** (pendiente en `estado_actual.md`): `trust proxy` en 1 toma como IP del cliente la de un proxy interno de Railway. Apareció al probar el aviso del 429.
-- **`token_gestion` en los logs:** el log de acceso y el del 429 escribían la URL completa del turnero. Se enmascara (`enmascararTokenTurnero`), porque la sesión de Claude en la nube lee esos logs.
+- **`token_gestion` en los logs:** el log de acceso y el del 429 escribían la URL completa del turnero. Se enmascara (`enmascararTokenTurnero`, desde el 2026-11-10 `enmascararTokensEnRuta`, que tapa también el token del formulario de alta), porque la sesión de Claude en la nube lee esos logs.
 - **Start command:** los docs decían `node src/index.js`, pero Railway corre `npm start`. Se corrigió con el primer arreglo hecho desde el celular (PR #4).
 - **Límite del plan gratis de Sentry:** 5.000 errores por mes. Si un bug genera miles, Sentry deja de registrar hasta el mes siguiente (no cobra); los logs de Railway siguen teniendo todo.
