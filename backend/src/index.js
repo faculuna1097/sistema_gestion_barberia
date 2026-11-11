@@ -104,6 +104,33 @@ app.use(cors({
 // Los límites finos de login y reserva se montan en sus rutas, más abajo.
 app.use(limiterGlobal);
 app.use(express.json());
+
+/**
+ * Errores del parseo del body (handler de errores de Express: 4 parámetros).
+ *
+ * Por qué existe: sin él, un JSON mal formado o un body de más de 100 kB (el
+ * límite por defecto de express.json) llegaba al handler final de Express, que
+ * imprime el stack con console.error. captureConsoleIntegration (instrument.js)
+ * lo manda a Sentry y de ahí a Discord: cualquiera que mandara un body roto
+ * disparaba una alerta en el celular por un error del cliente, no nuestro. Y
+ * la respuesta salía en HTML, sin el { error, codigo } que esperan los fronts.
+ *
+ * Se loguea con console.warn (no llega a Sentry): método y ruta con los tokens
+ * enmascarados. Nunca el body: no se pudo parsear y puede traer datos del cliente.
+ *
+ * Cualquier otro error sigue de largo con next(err).
+ */
+app.use((err, req, res, next) => {
+  let respuesta = null;
+  if (err?.type === 'entity.parse.failed') {
+    respuesta = { status: 400, error: 'Los datos enviados no tienen un formato válido.', codigo: 'json_invalido' };
+  } else if (err?.type === 'entity.too.large') {
+    respuesta = { status: 413, error: 'Los datos enviados son demasiado grandes.', codigo: 'body_demasiado_grande' };
+  }
+  if (!respuesta) return next(err);
+  console.warn(`[index] body rechazado | codigo: ${respuesta.codigo} | ${req.method} ${enmascararTokensEnRuta(req.originalUrl)}`);
+  return res.status(respuesta.status).json({ error: respuesta.error, codigo: respuesta.codigo });
+});
 // En Express 5 req.body queda undefined si no llega body: desestructurarlo tiraría
 // TypeError (500). Con el objeto vacío, cada controller responde su propio 400.
 app.use((req, res, next) => {
