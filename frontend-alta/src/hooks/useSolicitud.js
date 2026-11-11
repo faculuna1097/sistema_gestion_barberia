@@ -149,8 +149,9 @@ export function useSolicitud() {
       console.warn('[useSolicitud] el link venció mientras se completaba');
       setEstado(ESTADOS_LINK.NO_ENCONTRADA);
     } else {
-      // Sin red, servidor caído, 429, 413…: lo cargado queda en memoria y se reintenta.
-      console.error('[useSolicitud] Error en guardar:', falloGuardado.message);
+      // Sin red, servidor caído, 429, 413…: lo cargado queda en memoria y se
+      // reintenta. Es una falla recuperable: va con warn (convenciones).
+      console.warn('[useSolicitud] no se pudo guardar, se reintenta:', falloGuardado.message);
     }
   }, [falloGuardado, cargar]);
 

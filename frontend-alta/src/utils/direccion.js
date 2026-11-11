@@ -104,9 +104,24 @@ export function leerPartesDireccion(datos) {
 }
 
 /**
+ * comparable (interna)
+ * Un texto listo para comparar sin importar mayúsculas, tildes ni espacios de más.
+ * @param {*} texto
+ * @returns {string}
+ */
+const comparable = (texto) => (typeof texto === 'string' ? texto : '')
+  .normalize('NFD')
+  .replace(/[̀-ͯ]/g, '')
+  .toLowerCase()
+  .replace(/\s+/g, ' ')
+  .trim();
+
+/**
  * armarDireccion
  * El texto de la dirección: "Calle Altura, Piso o local, Ciudad, Provincia".
  * Sin número, la altura va como "s/n". Las partes vacías no dejan comas de más.
+ * Si la ciudad es la misma provincia (ej. "caba" con CABA, "Córdoba" con
+ * Córdoba), no se repite.
  * @param {Object} partes
  * @returns {string} Ej.: "Av. Corrientes 1234, Local 5, Palermo, CABA".
  */
@@ -116,7 +131,9 @@ export function armarDireccion(partes) {
   // Sin calle, la altura sola no dice nada: no se pone.
   let primera = '';
   if (calle) primera = numero ? `${calle} ${numero}` : calle;
-  return [primera, partes.piso.trim(), partes.ciudad.trim(), partes.provincia]
+  const ciudad = partes.ciudad.trim();
+  const repiteProvincia = ciudad !== '' && comparable(ciudad) === comparable(partes.provincia);
+  return [primera, partes.piso.trim(), repiteProvincia ? '' : ciudad, partes.provincia]
     .filter(Boolean)
     .join(', ');
 }
