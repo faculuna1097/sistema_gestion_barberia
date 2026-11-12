@@ -5,10 +5,9 @@
 > Las líneas y archivos citados en §3 son del 2026-11-05: confirmalos al escribir cada prompt, porque las fases
 > anteriores los mueven. Aprobar el plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
-> **Estado (2026-11-05):** fase 0 hecha (branch `feature/mejoras-operativas` desde `main`, con el merge de
-> `feature/descansos-agenda` ya desplegado, y este doc commiteado). **En espera:** el usuario decidió ejecutar antes
-> el plan de monitoreo (`feature/monitoreo-prod`). Al retomar: rebasar este branch sobre el `main` que ya tenga el
-> monitoreo, reconfirmar los hechos de §3 y seguir con la fase 1a (F9, agregada el 2026-11-06), después 1b (F11) y 1c (F10), agregadas el 2026-11-11.
+> **Estado (2026-11-12):** **en curso.** Branch rebasado sobre `main` (`3931843`: monitoreo, formulario de alta y
+> fases 0-2 del resguardo de la DB). Próximo: fase 1a (F9), después 1b (F11) y 1c (F10), y recién ahí la fase 1.
+> Antes, 2026-11-05: fase 0 hecha y la tanda en espera del monitoreo (`feature/monitoreo-prod`, ya en producción).
 
 ## 1. Contexto
 
@@ -39,8 +38,19 @@ los dos tenants todos los días es el iPad y el panel: los cambios a esas pantal
   anotados) y solo si le pueden pasar a un usuario real o son riesgo real. Con cada uno: dónde, qué pasa, y si se
   ataca en esta tanda, se pospone o se descarta (lo decide el usuario).
 - **SQL de la DB:** lo corre el usuario, y el orquestador se lo da. Una sola DB (sin staging; demo y kingsai son
-  filas): todo cambio tiene que ser compatible con el backend en producción hasta el deploy. Toda tabla nueva con
-  `ENABLE ROW LEVEL SECURITY`. Cuidado con los triggers `web_deploy_*` de kingsai (`SQL_Schema.md`).
+  filas): todo cambio tiene que ser compatible con el backend en producción hasta el deploy. Cuidado con los
+  triggers `web_deploy_*` de kingsai (`SQL_Schema.md`).
+- **Checklist de tabla nueva** (`turno_traspaso` en F2, la de tokens en F6), por el resguardo de la DB
+  (`plan_resguardo_db.md`, en curso en `chore/resguardo-db`):
+  - `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`, sin policies.
+  - Se crea desde el SQL Editor, que entra como `postgres`: así los default privileges de la fase 1 del resguardo
+    le dan `SELECT` solo a `resguardo_lectura`. Después de crearla, el orquestador lo confirma leyéndola con
+    `node backend/src/scripts/consultar.js`.
+  - Si la fase 5 del resguardo ya se hizo (rol restringido `app_backend` para el backend), confirmar también que
+    `app_backend` tiene `SELECT, INSERT, UPDATE, DELETE` sobre la tabla (vienen por default privileges) y revisar
+    el checklist vigente en el encabezado de `SQL_Schema.md`, que esa fase actualiza.
+- **Leer datos de la DB:** `node backend/src/scripts/consultar.js "<SQL>"` (rol de solo lectura). Las pruebas que
+  escriben siguen con el `.env` normal, contra el tenant demo.
 - Decisiones de UI cerradas antes de cada prompt, salvo la fase 4 (el ejecutor decide el diseño con el usuario).
 - Preguntas al usuario: enumeradas, en texto libre, con la recomendación de senior; nunca selectores ni botones.
 
@@ -130,6 +140,16 @@ prompt y por qué. 4. Cosas vistas de paso (posibles bugs o fallas, con archivo 
     datos; el mail sale por el mailer existente.
 - **Edición:** email y teléfono del dueño y teléfono del local en Gestión → Negocio (admin).
 - `backend/src/scripts/crearTenant.js` y `docs/onboarding.md` piden los datos nuevos.
+- **Cruce con el formulario de alta** (en `main` desde el 2026-11-11, anotado al rebasar el 2026-11-12; ver
+  `decisiones_alta_clientes.md` → "Cruce con `feature/mejoras-operativas`"). Las altas nuevas ya no se hacen con
+  `crearTenant.js` sino con la skill `alta-cliente`, que arma la query desde la solicitud:
+  - La plantilla `.claude/skills/alta-cliente/plantilla_alta.sql` inserta `tenant.telefono` (desde
+    `datos->'local'->>'telefono'`) y `verificarAlta.mjs` lo lee. Pasan a `telefono_local`, y la plantilla suma
+    `email_duenio` y `telefono_duenio`, que el formulario ya pide (bloque `contacto` de `solicitud_alta.datos`,
+    `version: 1`). Revisar también `leerSolicitud.mjs` y `SKILL.md`.
+  - Va en la fase 2, con el `ADD COLUMN`: si no, la primera alta después del `DROP COLUMN telefono` falla.
+  - Los tenants a completar antes del `NOT NULL` son **4**, no 3: `pepe-barber` (prueba del formulario, dado de
+    baja) sigue en la tabla. El SQL con huecos lo incluye, con datos de relleno.
 
 ### F5 — Login de la app del barbero (estética)
 - El ejecutor revisa el login actual, arma **2 direcciones** con capturas (modo celular) dentro del sistema
@@ -275,7 +295,7 @@ prompt y por qué. 4. Cosas vistas de paso (posibles bugs o fallas, con archivo 
 | 1b | F11 turnero apto para compu y iPad (diseño con el usuario → implementación) | Ejecutor | — |
 | 1c | F10 pantalla de éxito del turnero más liviana | Ejecutor | Detalles del usuario sobre cómo la quiere |
 | 1 | F7 comisión con barra (backend + `TabBarberos`) + F8 días con horario y aviso (solo `TabBarberos`) | Ejecutor | SQL de % no múltiplos de 5 |
-| 2 | F6a DB + backend: columnas del dueño y `telefono_local`, tabla de tokens, endpoints y mails de recuperación, Gestión → Negocio (backend), `crearTenant.js` | Ejecutor | SQL de columnas + datos de los 3 tenants + tabla de tokens |
+| 2 | F6a DB + backend: columnas del dueño y `telefono_local`, tabla de tokens, endpoints y mails de recuperación, Gestión → Negocio (backend), `crearTenant.js` y la skill `alta-cliente` | Ejecutor | SQL de columnas + datos de los 4 tenants + tabla de tokens |
 | 3 | F6b fronts: ver contraseña, "¿Olvidaste…?" en los dos logins, pantallas de recuperación, Gestión → Negocio; `telefono_local` en el turnero | Ejecutor | — |
 | 4 | F5 login de la app del barbero (diseño con el usuario → implementación) | Ejecutor | — |
 | 5 | F1a backend: cliente nullable, `LEFT JOIN`, alta sin cliente, asignar cliente | Ejecutor | SQL `cliente_id` nullable |
