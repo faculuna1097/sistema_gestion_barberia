@@ -10,6 +10,7 @@ import { pinColisiona } from '../utils/pin.js';
 import { esUUID } from '../utils/validarUuid.js';
 import { esMontoValido, esEnteroNoNegativo, ENTERO_MAXIMO, mensajeMontoInvalido } from '../utils/validarNumero.js';
 import { invalidar } from '../middlewares/tenantMiddleware.js';
+import { esComisionValida, MENSAJE_COMISION_INVALIDA } from '../utils/comision.js';
 
 const SALT_ROUNDS = 10;
 const MENSAJE_PRECIO_INVALIDO = mensajeMontoInvalido('precio');
@@ -85,7 +86,7 @@ export const getBarberos = async (req, res) => {
  * @param {string} req.tenant_id          - Inyectado por verificarToken
  * @param {string} req.body.nombre        - Nombre del barbero
  * @param {string} req.body.pin           - PIN de 4 dígitos (se hashea antes de guardar)
- * @param {number} req.body.comision_valor - Porcentaje de comisión (0-100)
+ * @param {number} req.body.comision_valor - Porcentaje de comisión (0 a 100, de a 5)
  * @returns {JSON} Barbero creado sin PIN
  */
 export const crearBarbero = async (req, res) => {
@@ -97,10 +98,10 @@ export const crearBarbero = async (req, res) => {
   if (!/^\d{4}$/.test(pin)) {
     return res.status(400).json({ error: 'El PIN debe ser exactamente 4 dígitos numéricos' });
   }
-  const comision = Number(comision_valor);
-  if (!Number.isFinite(comision) || comision < 0 || comision > 100) {
-    return res.status(400).json({ error: 'comision_valor debe ser un número entre 0 y 100' });
+  if (!esComisionValida(comision_valor)) {
+    return res.status(400).json({ error: MENSAJE_COMISION_INVALIDA });
   }
+  const comision = Number(comision_valor);
 
   try {
     // Unicidad de PIN dentro del tenant (vs admin y otros barberos). Pre-requisito
@@ -136,7 +137,7 @@ export const crearBarbero = async (req, res) => {
  * @param {string}  req.params.id          - UUID del barbero
  * @param {string}  req.tenant_id          - Inyectado por verificarToken
  * @param {string}  req.body.nombre        - Nombre del barbero
- * @param {number}  req.body.comision_valor - Porcentaje de comisión
+ * @param {number}  req.body.comision_valor - Porcentaje de comisión (0 a 100, de a 5)
  * @param {boolean} req.body.activo        - Estado activo/inactivo
  * @param {string}  req.body.pin           - Nuevo PIN opcional (4 dígitos)
  * @returns {JSON} Barbero actualizado sin PIN
@@ -151,10 +152,10 @@ export const editarBarbero = async (req, res) => {
   if (!nombre || comision_valor === undefined || activo === undefined) {
     return res.status(400).json({ error: 'nombre, comision_valor y activo son requeridos' });
   }
-  const comision = Number(comision_valor);
-  if (!Number.isFinite(comision) || comision < 0 || comision > 100) {
-    return res.status(400).json({ error: 'comision_valor debe ser un número entre 0 y 100' });
+  if (!esComisionValida(comision_valor)) {
+    return res.status(400).json({ error: MENSAJE_COMISION_INVALIDA });
   }
+  const comision = Number(comision_valor);
 
   try {
     let result;

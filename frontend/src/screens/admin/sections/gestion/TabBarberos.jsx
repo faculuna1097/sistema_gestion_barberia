@@ -1,23 +1,25 @@
 // /frontend/src/screens/admin/sections/gestion/TabBarberos.jsx
 // ABM de barberos. Lista en DataTable (sin eliminación física: se usa activo).
-// Comisión siempre en porcentaje entero (0-100). PIN requerido al crear,
-// opcional al editar (vacío = no cambia).
+// Comisión en porcentaje, de 0 a 100 de a 5, elegida con una barra
+// (SelectorConBarra). PIN requerido al crear, opcional al editar (vacío = no cambia).
 //
 // Arquitectura (Opción C del plan):
 //   - Lista: DataTable. Click en fila → modal chico de datos básicos.
-//   - Columna "Horarios": check si el barbero tiene horarios cargados.
+//   - Columna "Horarios": días con horario sobre días que abre el local (ej. 3/5),
+//     con alerta en 0/x si el barbero está activo. Arriba de la tabla, un cartel
+//     si hay barberos activos sin horario (no se les pueden reservar turnos).
 //   - Acción de fila (BotonIconoFila): abre un modal ancho de "agenda" con
 //     tabs internos Horario / Ausencias (los dos editores pesados).
 //
 // Los horarios de todos los barberos se precargan en el mount (Promise.allSettled,
-// N chico) por dos motivos: (a) alimentar el check de la columna, (b) servir de
-// cache para abrir el modal de Horario sin refetch.
+// N chico) por dos motivos: (a) alimentar la columna "Horarios" y el cartel,
+// (b) servir de cache para abrir el modal de Horario sin refetch.
 //
 // Sistema de diseño: tokens + Geist + Lucide + onClick. Densidad compacta.
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Plus, Users, Check, Clock, CalendarOff, CalendarClock,
+  Plus, Users, Clock, CalendarOff, CalendarClock,
   Trash2, AlertTriangle, RefreshCw,
 } from 'lucide-react';
 
@@ -46,8 +48,12 @@ import {
   AvatarIniciales,
   Toast,
   InputTiempo,
+  SelectorConBarra,
 } from '../../../../components/ui';
 import { toast } from '../../../../utils/toast';
+import {
+  PASO_COMISION, COMISION_MAXIMA, COMISION_POR_DEFECTO, esComisionValida,
+} from '../../../../utils/comision';
 import { errorDeRespuesta, mensajeDeError } from '../../../../utils/errores';
 import { theme } from '../../../../theme/tokens.js';
 
@@ -150,6 +156,46 @@ function construirHorarioLocal(semana) {
     }
   });
   return mapa;
+}
+
+/**
+ * contarDiasConHorario
+ * Cuántos de los días que abre el local tiene cubiertos un barbero con al menos
+ * un bloque de horario. Un bloque en un día que el local cierra no cuenta: ese
+ * día no se reserva igual. Es lo que muestra la columna "Horarios" (ej. 3/5) y
+ * lo que decide el cartel de barberos sin horario. Pura: sin estado ni React.
+ * @param {Array|null|undefined} bloques - [{ dia_semana, ... }] del barbero;
+ *   null si no se pudo leer
+ * @param {Object|null} horarioLocal - { [dia_semana]: { inicio, fin } } con los
+ *   días abiertos (construirHorarioLocal); null si no se pudo leer
+ * @returns {{ conHorario: number, abiertos: number } | null} null si falta uno de
+ *   los dos datos o si el local no abre ningún día (no hay contra qué medir).
+ */
+function contarDiasConHorario(bloques, horarioLocal) {
+  if (!Array.isArray(bloques) || !horarioLocal) return null;
+  const abiertos = Object.keys(horarioLocal).length;
+  if (abiertos === 0) return null;
+  const dias = new Set(
+    bloques
+      .map((b) => String(b.dia_semana))
+      .filter((dia) => Object.hasOwn(horarioLocal, dia)),
+  );
+  return { conHorario: dias.size, abiertos };
+}
+
+/**
+ * textoBarberosSinHorario
+ * El texto del cartel de barberos sin horario, con la lista y el verbo según
+ * cuántos son: "Lucas no tiene…", "Lucas y Tomi no tienen…", "Lucas, Tomi y
+ * Juan no tienen…".
+ * @param {string[]} nombres - Al menos uno
+ * @returns {string}
+ */
+function textoBarberosSinHorario(nombres) {
+  const lista = new Intl.ListFormat('es', { type: 'conjunction' }).format(nombres);
+  return nombres.length === 1
+    ? `${lista} no tiene horario cargado: no se le pueden reservar turnos.`
+    : `${lista} no tienen horario cargado: no se les pueden reservar turnos.`;
 }
 
 /**
@@ -904,7 +950,9 @@ function ModalDatosBarbero({ barbero, onGuardar, onCerrar }) {
 
   const [nombre, setNombre]       = useState(barbero?.nombre ?? '');
   const [pin, setPin]             = useState('');
-  const [comision, setComision]   = useState(barbero?.comision_valor != null ? String(barbero.comision_valor) : '');
+  // Un barbero nuevo arranca en COMISION_POR_DEFECTO. Al editar, el % guardado tal
+  // cual (null si la columna está vacía: la barra muestra "—").
+  const [comision, setComision]   = useState(esEdicion ? barbero.comision_valor : COMISION_POR_DEFECTO);
   const [activo, setActivo]       = useState(barbero?.activo ?? true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState(null);
@@ -912,8 +960,9 @@ function ModalDatosBarbero({ barbero, onGuardar, onCerrar }) {
   const pinValido    = pin === '' || /^\d{4}$/.test(pin);
   const pinRequerido = !esEdicion && pin.length !== 4;
 
-  const comisionNum    = comision === '' ? null : Number(comision);
-  const comisionValida = comisionNum !== null && comisionNum >= 0 && comisionNum <= 100;
+  // Un % viejo fuera de la barra (ej. 37) se muestra, pero no se guarda: el
+  // backend lo rechazaría. Al mover la barra queda en un múltiplo de 5.
+  const comisionValida = esComisionValida(comision);
 
   const puedeGuardar =
     nombre.trim() !== '' &&
@@ -931,7 +980,7 @@ function ModalDatosBarbero({ barbero, onGuardar, onCerrar }) {
 
     const body = {
       nombre: nombre.trim(),
-      comision_valor: Number(comision),
+      comision_valor: comision,
       activo,
     };
     if (pin !== '') body.pin = pin;
@@ -986,14 +1035,17 @@ function ModalDatosBarbero({ barbero, onGuardar, onCerrar }) {
           error={pin !== '' && !pinValido ? 'El PIN debe tener exactamente 4 dígitos.' : undefined}
           helper={!esEdicion && pin === '' ? 'Requerido para crear un barbero.' : undefined}
         />
-        <Field
-          label="Comisión (%)"
-          type="text"
-          inputMode="numeric"
-          value={comision}
-          onChange={(v) => setComision(v.replace(/\D/g, ''))}
-          placeholder="Ej: 40"
-          error={comision !== '' && !comisionValida ? 'La comisión debe estar entre 0 y 100.' : undefined}
+        <SelectorConBarra
+          etiqueta="Comisión"
+          valor={comision}
+          onCambiar={setComision}
+          min={0}
+          max={COMISION_MAXIMA}
+          paso={PASO_COMISION}
+          porDefecto={COMISION_POR_DEFECTO}
+          formatear={(v) => `${v}%`}
+          unidadPaso={`${PASO_COMISION}%`}
+          error={comisionValida ? undefined : `Mové la barra: la comisión va de ${PASO_COMISION} en ${PASO_COMISION}.`}
         />
         {esEdicion && <ToggleEstado value={activo} onChange={setActivo} />}
 
@@ -1131,14 +1183,14 @@ export default function TabBarberos() {
   }
 
   /**
-   * tieneHorarios — true si el barbero tiene al menos un bloque cargado.
+   * diasDe — días con horario sobre días que abre el local, de un barbero.
    * @param {object} b
-   * @returns {boolean}
+   * @returns {{ conHorario: number, abiertos: number } | null} null = no se sabe
    */
-  const tieneHorarios = (b) => {
-    const h = horariosPorBarbero[b.id];
-    return Array.isArray(h) && h.length > 0;
-  };
+  const diasDe = (b) => contarDiasConHorario(horariosPorBarbero[b.id], horarioLocal);
+
+  // Barberos activos en 0/x: no se les puede reservar un turno (el cartel).
+  const activosSinHorario = barberos.filter((b) => b.activo && diasDe(b)?.conHorario === 0);
 
   // ── Columnas del DataTable ────────────────────────────────────────────────
   const columnas = [
@@ -1168,17 +1220,37 @@ export default function TabBarberos() {
       label: 'Horarios',
       sortable: true,
       align: 'center',
-      // "Con horario" primero al ordenar asc.
-      sortAccessor: (row) => (tieneHorarios(row) ? 0 : 1),
+      // Por el numerador; los que no se saben ("—") van antes que el 0.
+      sortAccessor: (row) => diasDe(row)?.conHorario ?? -1,
       // Centrado vía flex (no text-align): un svg no se centra de forma
       // confiable con textAlign en la celda.
-      render: (row) => (
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          {tieneHorarios(row)
-            ? <Check size={18} strokeWidth={2.25} color={theme.success} />
-            : <span style={{ color: theme.muted }}>—</span>}
-        </div>
-      ),
+      render: (row) => {
+        const dias = diasDe(row);
+        if (!dias) {
+          return <div style={{ display: 'flex', justifyContent: 'center', color: theme.muted }}>—</div>;
+        }
+        // Alerta solo en un activo en 0/x (el mismo criterio que el cartel): a un
+        // inactivo no se le reservan turnos igual, así que su 0/x va en neutro.
+        const sinHorario = row.activo && dias.conHorario === 0;
+        return (
+          <div
+            title={`${dias.conHorario} de los ${dias.abiertos} días que abre el local`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+              fontVariantNumeric: 'tabular-nums',
+              color: sinHorario ? theme.warning : theme.ink,
+              fontWeight: sinHorario ? theme.weightMedium : theme.weightRegular,
+            }}
+          >
+            {/* El color no va solo: el ícono también marca el 0. */}
+            {sinHorario && <AlertTriangle size={14} strokeWidth={1.75} aria-hidden="true" />}
+            <span>{dias.conHorario}/{dias.abiertos}</span>
+          </div>
+        );
+      },
     },
     {
       key: 'estado',
@@ -1217,6 +1289,14 @@ export default function TabBarberos() {
           <Plus size={16} strokeWidth={2} /> Nuevo barbero
         </Button>
       </div>
+
+      {/* Nota fija (Toast inline, sistema_de_disenio.md §4.8): se va sola cuando
+          a todos los activos se les carga el horario desde el modal de agenda. */}
+      {activosSinHorario.length > 0 && (
+        <Toast tone="warning">
+          {textoBarberosSinHorario(activosSinHorario.map((b) => b.nombre))}
+        </Toast>
+      )}
 
       {/* Tabla o empty */}
       {barberos.length === 0 ? (

@@ -6,8 +6,8 @@
 > anteriores los mueven. Aprobar el plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
 > **Estado (2026-11-12):** **en curso.** Branch rebasado sobre `main` (`3931843`: monitoreo, formulario de alta y
-> fases 0-2 del resguardo de la DB). Fases 1a (F9), 1b (F11) y 1c (F10) hechas y commiteadas. Próximo: fase 1 (F7 + F8),
-> que espera el SQL de los % no múltiplos de 5.
+> fases 0-2 del resguardo de la DB). Fases 1a (F9), 1b (F11), 1c (F10) y 1 (F7 + F8) hechas y commiteadas. Próximo: fase 2
+> (F6a), que espera el SQL de columnas, datos de los 4 tenants y tabla de tokens.
 > Antes, 2026-11-05: fase 0 hecha y la tanda en espera del monitoreo (`feature/monitoreo-prod`, ya en producción).
 
 ## 1. Contexto
@@ -301,7 +301,7 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
 | 1a | ✅ **Hecha (2026-11-12, commiteada).** F9 arreglo: no cancelar ni reprogramar desde el link un turno que ya empezó (backend + `GestionTurno` del turnero). Con los dos hallazgos de la gestión (carga con mala señal y subtítulo) | Ejecutor | — |
 | 1b | ✅ **Hecha (2026-11-12, commiteada).** F11 turnero apto para compu y iPad. Dirección elegida: desde 768 px, panel fijo del local a la izquierda (`MarcoLocal` + `HeroLocal`) y cada pantalla en su columna de 480 a la derecha; en celular, igual que antes. `TurnoConfirmado`, solo el marco (su contenido es F10). Detalle en `sistema_de_disenio.md` §3.8 y §4.6 | Ejecutor | — |
 | 1c | ✅ **Hecha (2026-11-12, commiteada).** F10 pantalla de éxito del turnero más liviana. El contenido lo definió el usuario: el día y la hora como dato principal, "Agregar al calendario" sin la otra opción, quién atiende con el servicio, la dirección como link al mapa y el aviso del mail (con el link para cambiar o cancelar). Salen "Ver o cambiar mi turno" y "Reservar otro turno" | Ejecutor | — |
-| 1 | F7 comisión con barra (backend + `TabBarberos`) + F8 días con horario y aviso (solo `TabBarberos`) | Ejecutor | SQL de % no múltiplos de 5 |
+| 1 | ✅ **Hecha (2026-11-12, commiteada).** F7 comisión con barra (backend + `TabBarberos`) + F8 días con horario y aviso (solo `TabBarberos`). Requisito: 0 barberos con % no múltiplo de 5 (consultado con el rol de solo lectura). Distinto al diseño, decidido con el usuario: la alerta de `0/x` va solo en barberos activos, como el cartel | Ejecutor | SQL de % no múltiplos de 5 |
 | 2 | F6a DB + backend: columnas del dueño y `telefono_local`, tabla de tokens, endpoints y mails de recuperación, Gestión → Negocio (backend), `crearTenant.js` y la skill `alta-cliente` | Ejecutor | SQL de columnas + datos de los 4 tenants + tabla de tokens |
 | 3 | F6b fronts: ver contraseña, "¿Olvidaste…?" en los dos logins, pantallas de recuperación, Gestión → Negocio; `telefono_local` en el turnero | Ejecutor | — |
 | 4 | F5 login de la app del barbero (diseño con el usuario → implementación) | Ejecutor | — |

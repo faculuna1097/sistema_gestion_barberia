@@ -1,10 +1,12 @@
 // /frontend/src/utils/comision.js
-// Helpers de presentación de la comisión de los barberos (Planillas y Balances).
+// Helpers de presentación de la comisión de los barberos (Planillas y Balances)
+// y el rango de la barra con que se elige (Gestión → Barberos, al final).
 //
 // El front NO calcula comisiones: la comisión de cada corte la manda el backend
 // (backend/src/utils/comision.js, la única fuente), con el % guardado en el corte.
 // Acá solo se suman esos valores y se arma el texto del %.
-// Copia en frontend-barbero/src/utils/comision.js (mismo contrato).
+// Las de presentación tienen copia en frontend-barbero/src/utils/comision.js
+// (mismo contrato); las de la barra son solo del panel.
 
 /**
  * sumarComision
@@ -43,4 +45,27 @@ export function textoPorcentajeComision(porcentajes, porcentajeActual) {
   const minimo = lista[0];
   const maximo = lista[lista.length - 1];
   return minimo === maximo ? `${fmt(minimo)}%` : `${fmt(minimo)}–${fmt(maximo)}%`;
+}
+
+// ─── Rango de la barra de la comisión (Gestión → Barberos) ───────────────────
+// El backend acepta solo múltiplos de 5 entre 0 y 100 (esComisionValida en
+// backend/src/utils/comision.js). Mismos valores que frontend-alta/src/utils/equipo.js.
+
+/** PASO_COMISION: lo que salta la barra de la comisión (y los botones - y +). */
+export const PASO_COMISION = 5;
+
+/** COMISION_MAXIMA: el tope del %. */
+export const COMISION_MAXIMA = 100;
+
+/** COMISION_POR_DEFECTO: con qué % arranca un barbero nuevo (el reparto más común). */
+export const COMISION_POR_DEFECTO = 50;
+
+/**
+ * esComisionValida
+ * Espejo de la validación del backend: múltiplo de PASO_COMISION entre 0 y COMISION_MAXIMA.
+ * @param {number|null} valor - El % elegido
+ * @returns {boolean}
+ */
+export function esComisionValida(valor) {
+  return Number.isInteger(valor) && valor >= 0 && valor <= COMISION_MAXIMA && valor % PASO_COMISION === 0;
 }

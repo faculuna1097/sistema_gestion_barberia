@@ -709,6 +709,13 @@ admin. Entre ellos:
   (`OPCIONES_FORMA_PAGO`, `formatPago`) y los colores en `tonosFormaPago.js`.
 - `Field` acepta `maxLength`; su input va en `sizeInput` y la ayuda y el error
   en `sizeBody`.
+- `SelectorConBarra` (desde el 2026-11-12, F7 de `plan_mejoras_operativas.md`):
+  un valor que se elige con una barra de a pasos (`<input type="range">`
+  nativo) y botones de − y + de 44 px, con el rótulo de `Field` y el valor a la
+  vista. Rango, paso y formato van por props; acepta `error` como `Field`. Lo
+  usa la comisión del barbero (Gestión → Barberos, de 0 a 100 de a 5). Es la
+  copia del de `frontend-alta` (§6.5) con la densidad del panel, y el riel se
+  dibuja con la clase `om-rango` de `index.css`.
 
 **Gráficos, sin librería.** El proyecto no tiene librería de gráficos: las
 barras se hacen con divs de ancho proporcional y los tokens del tema.
@@ -880,7 +887,7 @@ la estrategia es duplicar**:
 
 | | `tokens.js` | `index.css` |
 |---|---|---|
-| **Panel** | La base de Luz más `neutralSoft`, `overlay` y `shadowLg` (`0 20px 40px rgba(0,0,0,0.15)`), solo de este front. | Geist y Geist Mono desde `public/fonts` (desde 2026-11-02). `om-fade` sube 4 px. Suma `om-shake` y `.om-fila-hover` (el hover de las tablas de reporte) y `spin`. |
+| **Panel** | La base de Luz más `neutralSoft`, `overlay` y `shadowLg` (`0 20px 40px rgba(0,0,0,0.15)`), solo de este front. | Geist y Geist Mono desde `public/fonts` (desde 2026-11-02). `om-fade` sube 4 px. Suma `om-shake`, `.om-fila-hover` (el hover de las tablas de reporte), `.om-rango` (el riel de `SelectorConBarra`, desde el 2026-11-12) y `spin`. |
 | **Barbero** | La base de Luz: lo mismo que el panel, sin `neutralSoft`, `overlay` ni `shadowLg`. | Google Fonts. `om-fade` es solo opacidad (con `transform`, los modales se descentraban dentro de `PageContainer`). Su giro se llama `om-spin`. Sin `om-shake` ni `.om-fila-hover`. |
 | **Landing** | La base sin `neutralSoft`, `overlay` ni `maxWidth`. Suma `sizeDisplay`, `sizeSection`, `sizeSubheading`, `maxWidthWide`, `maxWidthText`, `sectionGapMin` y `sectionGapMax`. Tiene su propio `shadowLg` (`0 12px 32px rgba(0,0,0,0.10)`, para las capturas que flotan): mismo nombre que el del panel, otro valor. | Google Fonts, `scroll-behavior: smooth`, `om-reveal` y las clases `om-` de §4.1. Sin `om-stroke`, `om-overlay-in` ni `om-dialog-in`. |
 | **Turnero** | Diverge a propósito (§3.8): `bg`, `accent`, `accentHover`, `accentSoft` y los del hero. No tiene `shadowScroll`. | Diverge a propósito (§3.8): `overscroll-behavior`, los colores de su tema y el movimiento `tt-`. |
@@ -972,7 +979,9 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-11-12 — F10 de mejoras operativas: el éxito de la reserva más liviano. §3.2 suma `sizeDisplay` (turnero), §3.8 `IconoPersona` y §6.2 actualiza `ResumenTurno` y `AgregarAlCalendario` (`conOtraOpcion`).*
+*Última actualización: 2026-11-12 — F7 de mejoras operativas: §6.1 suma `SelectorConBarra` (panel) y §8 la clase `om-rango` en el `index.css` del panel.*
+
+*2026-11-12 — F10 de mejoras operativas: el éxito de la reserva más liviano. §3.2 suma `sizeDisplay` (turnero), §3.8 `IconoPersona` y §6.2 actualiza `ResumenTurno` y `AgregarAlCalendario` (`conOtraOpcion`).*
 
 *2026-11-12 — F11 de mejoras operativas: el turnero en pantallas grandes (§3.8, §4.6), con `MarcoLocal`, `HeroLocal` y `usePantallaAncha` (§6.2).*
 

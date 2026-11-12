@@ -49,5 +49,6 @@ export { default as SelectorSemana }   from './SelectorSemana.jsx';
 export { default as BarraProporcional } from './BarraProporcional.jsx';
 export { default as DesgloseMontos }   from './DesgloseMontos.jsx';
 export { default as GrupoOpciones }    from './GrupoOpciones.jsx';
+export { default as SelectorConBarra } from './SelectorConBarra.jsx';
 export { TONOS_FORMA_PAGO, OPCIONES_FORMA_PAGO_TONO } from './tonosFormaPago.js';
 export { estiloEtiquetaCampo }         from './estilos.js';
