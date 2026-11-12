@@ -25,14 +25,16 @@ import { useState } from 'react';
 import { theme } from '../theme/tokens.js';
 import { fmtPesos } from '../utils/formato.js';
 import { fechaLocalISO } from '../utils/fecha.js';
-import { fmtTelefono, linkWhatsApp } from '../utils/telefono.js';
+import { fmtTelefono, linkTelefono, linkWhatsApp } from '../utils/telefono.js';
 import { rutaResena } from '../utils/rutas.js';
 import { linkMapa } from '../utils/mapa.js';
 import { useEleccionConPausa } from '../hooks/useEleccionConPausa.js';
 import { useHover, PUEDE_HOVER } from '../hooks/useHover.js';
 import {
   PageContainer, Button, StickyFooter, Skeleton, EmptyState, AvatarIniciales, IconoAlerta, IconoPin,
+  IconoTelefono, IconoMensaje, LineaContacto,
 } from '../components/ui';
+import { estiloLineaInfo, estiloIconoInfo } from '../components/ui/estilos.js';
 
 /**
  * NOMBRES_DIA
@@ -242,7 +244,7 @@ function Landing({
             )}
             {tenant.telefono && (
               <LineaContacto
-                href={`tel:${tenant.telefono.replace(/[^\d+]/g, '')}`}
+                href={linkTelefono(tenant.telefono)}
                 icono={<IconoTelefono />}
                 texto={fmtTelefono(tenant.telefono)}
               />
@@ -780,29 +782,6 @@ function EquipoSkeleton() {
 }
 
 /**
- * estiloLineaInfo
- * Fila de la sección de info (horario, dirección, teléfono, reseña): ícono +
- * texto, 44 px de alto mínimo (touch target).
- */
-const estiloLineaInfo = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  minHeight: 44,
-  padding: '4px 0',
-  fontFamily: theme.body,
-  fontSize: theme.sizeBody,
-  color: theme.inkSoft,
-  borderRadius: theme.radiusSm,
-};
-
-/**
- * estiloIconoInfo
- * Caja del ícono de una fila de info: 16 px, en `muted`.
- */
-const estiloIconoInfo = { display: 'flex', flexShrink: 0, color: theme.muted };
-
-/**
  * HorarioSemanal
  * Fila "Horario de atención" que despliega u oculta la grilla de los 7 días,
  * con el día de hoy resaltado. El estado abierto/cerrado de ahora va en el hero.
@@ -883,42 +862,6 @@ function HorarioSemanal({ horarioAtencion = [], feriados = [] }) {
 }
 
 /**
- * ALTO_RENGLON_INFO
- * Alto de un renglón de texto de la sección de info (14 px × 1,5).
- */
-const ALTO_RENGLON_INFO = 21;
-
-/**
- * LineaContacto
- * Fila de contacto clickable: ícono + texto, renderizada como `<a>`.
- * Cumple el touch target mínimo de 44 px; el foco por teclado lo dibuja
- * el :focus-visible global de index.css.
- * Ícono y texto van juntos en un bloque centrado en la fila; adentro, el
- * ícono queda a la altura del primer renglón. Con un renglón se ve igual que
- * centrado; con dos (una dirección larga), el ícono acompaña al principio del
- * texto en vez de quedar entre los dos renglones.
- * @param {string} props.href - Destino del link (`tel:`, mapa, reseñas)
- * @param {boolean} [props.externo=false] - True si el link abre en otra pestaña
- * @param {JSX.Element} props.icono - Ícono a la izquierda
- * @param {string} props.texto - Texto visible
- */
-function LineaContacto({ href, externo = false, icono, texto }) {
-  return (
-    <a
-      href={href}
-      target={externo ? '_blank' : undefined}
-      rel={externo ? 'noopener noreferrer' : undefined}
-      style={{ ...estiloLineaInfo, textDecoration: 'none' }}
-    >
-      <span style={{ display: 'flex', alignItems: 'flex-start', gap: estiloLineaInfo.gap }}>
-        <span style={{ ...estiloIconoInfo, height: ALTO_RENGLON_INFO, alignItems: 'center' }}>{icono}</span>
-        <span>{texto}</span>
-      </span>
-    </a>
-  );
-}
-
-/**
  * ChevronDerecha
  * Flecha derecha de las filas de servicio: indica que la fila avanza.
  */
@@ -964,41 +907,6 @@ function IconoReloj() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5"/>
       <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-
-/**
- * IconoTelefono
- * SVG inline de un teléfono, para la línea de contacto telefónico.
- */
-function IconoTelefono() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M6.5 3h3l1.5 4-2 1.5a12 12 0 0 0 5 5l1.5-2 4 1.5v3a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.5 5.2 2 2 0 0 1 6.5 3z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-/**
- * IconoMensaje
- * SVG inline de un globo de conversación, para el botón de WhatsApp.
- * Neutro (sin el logo ni el verde de la marca): el turnero tiene un solo acento.
- */
-function IconoMensaje() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M4 20l1.3-3.9A8 8 0 1 1 8 19.1L4 20z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
     </svg>
   );
 }

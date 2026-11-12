@@ -75,6 +75,19 @@ export const upsertCliente = async (tenantId, { nombre, telefono, email }) => {
 // y turnos.js). Lo lee el cliente en el turnero: sin la palabra "slot".
 export const MENSAJE_SLOT_OCUPADO = 'Ese horario ya no está disponible. Elegí otro.';
 
+// 409 cuando el cliente quiere cancelar o reprogramar desde el turnero un turno
+// que ya empezó (cancelarTurno y reprogramarTurno de controllers/turnero.js). Un
+// turno se completa recién al registrar su corte: uno que ya empezó y todavía no
+// se cobró sigue 'reservado', y el cliente no lo puede tocar. El turnero usa el
+// código para dejar de ofrecer las acciones y mostrar el contacto del local.
+export const MENSAJE_TURNO_YA_EMPEZO =
+  'Este turno ya pasó, así que no se puede cancelar ni reprogramar. Si necesitás algo, comunicate con el local.';
+export const CODIGO_TURNO_YA_EMPEZO = 'turno_ya_empezo';
+export const CUERPO_409_TURNO_YA_EMPEZO = Object.freeze({
+  error: MENSAJE_TURNO_YA_EMPEZO,
+  codigo: CODIGO_TURNO_YA_EMPEZO,
+});
+
 /**
  * Arma el error tipado que los controllers mapean a 409.
  * @returns {Error} error con code 'SLOT_OCUPADO'

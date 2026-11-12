@@ -6,7 +6,8 @@
 > anteriores los mueven. Aprobar el plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
 > **Estado (2026-11-12):** **en curso.** Branch rebasado sobre `main` (`3931843`: monitoreo, formulario de alta y
-> fases 0-2 del resguardo de la DB). Próximo: fase 1a (F9), después 1b (F11) y 1c (F10), y recién ahí la fase 1.
+> fases 0-2 del resguardo de la DB). Fase 1a (F9) hecha y commiteada. Próximo: 1b (F11), después 1c (F10), y recién
+> ahí la fase 1.
 > Antes, 2026-11-05: fase 0 hecha y la tanda en espera del monitoreo (`feature/monitoreo-prod`, ya en producción).
 
 ## 1. Contexto
@@ -63,6 +64,11 @@ preguntas numeradas antes de avanzar; cómo se verifica; formato del reporte.
 
 **Reporte del ejecutor:** 1. Qué se hizo. 2. Verificación (qué corrió y qué dio). 3. Lo que quedó distinto al
 prompt y por qué. 4. Cosas vistas de paso (posibles bugs o fallas, con archivo y línea). 5. Archivos tocados.
+
+**Fallas menores en el chat del ejecutor** (usuario, 2026-11-12): si el ejecutor encuentra una falla chica que
+corresponde a su contexto (la pantalla o los archivos que está tocando, un arreglo de pocas líneas), se la plantea
+al usuario en ese chat y la resuelven ahí. En el reporte va en el punto 3, no en el 4. Al punto 4 solo llega lo que
+es de otro contexto o es grande: el orquestador no se carga con cosas menores. Todo prompt de ejecutor lo dice.
 
 ## 3. Hechos verificados del código (2026-11-05)
 
@@ -291,7 +297,7 @@ prompt y por qué. 4. Cosas vistas de paso (posibles bugs o fallas, con archivo 
 | # | Fase | Quién | Requisito previo (usuario) |
 |---|---|---|---|
 | 0 | ✅ **Hecha (2026-11-05).** Branch `feature/mejoras-operativas` desde `main` + este plan a `docs/plan_mejoras_operativas.md` (commit) | Chat de planificación | — |
-| 1a | F9 arreglo: no cancelar ni reprogramar desde el link un turno que ya empezó (backend + `GestionTurno` del turnero) | Ejecutor | — |
+| 1a | ✅ **Hecha (2026-11-12, commiteada).** F9 arreglo: no cancelar ni reprogramar desde el link un turno que ya empezó (backend + `GestionTurno` del turnero). Con los dos hallazgos de la gestión (carga con mala señal y subtítulo) | Ejecutor | — |
 | 1b | F11 turnero apto para compu y iPad (diseño con el usuario → implementación) | Ejecutor | — |
 | 1c | F10 pantalla de éxito del turnero más liviana | Ejecutor | Detalles del usuario sobre cómo la quiere |
 | 1 | F7 comisión con barra (backend + `TabBarberos`) + F8 días con horario y aviso (solo `TabBarberos`) | Ejecutor | SQL de % no múltiplos de 5 |
@@ -333,3 +339,16 @@ _(Los completa el orquestador durante la tanda.)_
 - **(2026-11-06, usuario) El cliente puede cancelar o reprogramar desde el link del mail un turno que ya pasó.**
   `backend/src/controllers/turnero.js` (`cancelarTurno`, `reprogramarTurno`) y
   `frontend-turnero/src/screens/GestionTurno.jsx`. **Se ataca en esta tanda:** F9, fase 1a.
+- **(2026-11-12, ejecutor de la fase 1a) Con mala señal, la gestión del turno dice que el link está vencido.**
+  `getTurnoPorToken` (`frontend-turnero/src/services/api.js`, ~línea 172) tira el mismo error sin `status` ante
+  cualquier falla (sin red, 500, 429), y `GestionTurno` muestra siempre "No encontramos tu turno. El link puede
+  estar vencido o ser inválido.", con "Ir al inicio" como única salida. Un cliente que abre el link del mail con
+  mala señal cree que su turno no existe y puede reservar otro. **Resuelto con la fase 1a** (decisión del
+  usuario): `getTurnoPorToken` pasa a `fetchConDiagnostico` y a un error con `status` y `codigo`
+  (`errorDeLectura`, compartido con `getTenant`); un 404 sin código muestra el texto de siempre, y cualquier otra
+  falla, la causa (`mensajeDeCargaDelLocal`) con "Reintentar". Solo pasa si el local cargó y el turno no: sin red
+  desde el principio, ya falla antes la carga del local, que tenía su "Reintentar".
+- **(2026-11-12, ejecutor de la fase 1a) El subtítulo de la gestión ofrece acciones que no hay.** `GestionTurno`
+  muestra "Revisá los datos, reprogramá o cancelá tu reserva." también en un turno cancelado, completado o (desde
+  F9) ya empezado. **Resuelto con la fase 1a** (decisión del usuario): con las acciones a la vista, el texto de
+  hoy; si no, "Revisá los datos de tu reserva."

@@ -24,6 +24,30 @@ export const estiloEyebrow = {
 };
 
 /**
+ * estiloLineaInfo
+ * Fila de info del local (horario, dirección, teléfono, reseña): ícono +
+ * texto, 44 px de alto mínimo (touch target). La usan LineaContacto y el
+ * botón del horario semanal de la landing.
+ */
+export const estiloLineaInfo = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  minHeight: 44,
+  padding: '4px 0',
+  fontFamily: theme.body,
+  fontSize: theme.sizeBody,
+  color: theme.inkSoft,
+  borderRadius: theme.radiusSm,
+};
+
+/**
+ * estiloIconoInfo
+ * Caja del ícono de una fila de info: 16 px, en `muted`.
+ */
+export const estiloIconoInfo = { display: 'flex', flexShrink: 0, color: theme.muted };
+
+/**
  * MARGEN_SCROLL_CAMPO
  * `scroll-margin-bottom` del input de un campo (Field, CampoTelefono): cuando
  * el navegador lo trae a la vista al enfocarlo (Tab, el "siguiente" del

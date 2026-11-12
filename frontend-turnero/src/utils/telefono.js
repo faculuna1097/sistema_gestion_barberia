@@ -152,6 +152,17 @@ export function fmtTelefono(tel) {
 }
 
 /**
+ * linkTelefono
+ * Arma el link `tel:` para llamar a un número desde el celular: solo dígitos y
+ * el "+", sin espacios ni guiones.
+ * @param {string} tel - Teléfono como está guardado (ej. "11 3311-1686" o "+541133111686")
+ * @returns {string} Ej: "tel:+541133111686"
+ */
+export function linkTelefono(tel) {
+  return `tel:${tel.replace(/[^\d+]/g, '')}`;
+}
+
+/**
  * linkWhatsApp
  * Arma el link para abrir un chat de WhatsApp con un número.
  * @param {string} e164 - Número en formato E.164 (ej. "+5491133111686")

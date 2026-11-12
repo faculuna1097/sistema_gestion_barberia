@@ -1,25 +1,71 @@
 // /frontend-turnero/src/screens/GestionTurno.jsx
 // Gestión del turno desde el link del mail (fuera del flujo de reserva).
 // Carga el turno por token y permite: ver, agregarlo al calendario, cancelar
-// (con confirm dialog) o reprogramar.
+// (con confirm dialog) o reprogramar. Un turno reservado que ya empezó no se
+// puede cancelar ni reprogramar: en lugar de las acciones va un aviso con el
+// contacto del local.
 
 import { useState, useEffect, useRef } from 'react';
 import { getTurnoPorToken, cancelarTurno, reprogramarTurno } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { estiloEyebrow } from '../components/ui/estilos.js';
 import { fmtPesos } from '../utils/formato.js';
-import { mensajeDeError } from '../utils/errores.js';
+import { mensajeDeError, mensajeDeCargaDelLocal } from '../utils/errores.js';
 import {
   fmtFechaLarga, fmtHora, fmtFechaHora, fechaDeISO, DIAS_RESERVABLES,
 } from '../utils/fecha.js';
 import { RUTA_TURNERO, urlGestion } from '../utils/rutas.js';
 import { eventoDeTurno } from '../utils/calendario.js';
+import { fmtTelefono, linkTelefono, linkWhatsApp } from '../utils/telefono.js';
 import { useDisponibilidad } from '../hooks/useDisponibilidad.js';
 import {
   PageContainer, ScreenHeader, Button, EmptyState, Skeleton,
   StatusPill, SummaryRow, AvatarIniciales, ConfirmDialog,
   SelectorDiaHorario, IconoAlerta, AgregarAlCalendario,
+  LineaContacto, IconoTelefono, IconoMensaje,
 } from '../components/ui';
+
+/**
+ * CODIGO_TURNO_YA_EMPEZO
+ * `codigo` del 409 que devuelve el backend al cancelar o reprogramar un turno
+ * que ya empezó (CODIGO_TURNO_YA_EMPEZO de backend/src/services/turnosService.js).
+ */
+const CODIGO_TURNO_YA_EMPEZO = 'turno_ya_empezo';
+
+/**
+ * TEXTO_TURNO_YA_EMPEZO
+ * Aviso de un turno que ya empezó cuando la pantalla lo detecta sola (al
+ * abrirla después de la hora). Es el mismo texto que manda el backend en el
+ * 409; si el 409 llega, se muestra el del servidor.
+ */
+const TEXTO_TURNO_YA_EMPEZO =
+  'Este turno ya pasó, así que no se puede cancelar ni reprogramar. Si necesitás algo, comunicate con el local.';
+
+/**
+ * errorDeCargaDelTurno
+ * Decide qué ver cuando no se pudo cargar el turno. Un 404 sin `codigo` es el
+ * del turno (token que no existe): el link está mal o vencido, y reintentar no
+ * sirve. Cualquier otra falla (sin red, servidor caído, 500, 429) es pasajera:
+ * se dice la causa con el texto de la carga del local y se ofrece reintentar,
+ * así el cliente no cree que perdió su turno.
+ * @param {Error} err - Error de getTurnoPorToken (`status` y `codigo` si el
+ *   pedido llegó; ErrorSinRespuesta con su `causa` si no)
+ * @returns {{ titulo: string, texto: string, reintentable: boolean }}
+ */
+function errorDeCargaDelTurno(err) {
+  if (err.status === 404 && !err.codigo) {
+    return {
+      titulo: 'No encontramos tu turno',
+      texto: 'No pudimos cargar tu turno. El link puede estar vencido o ser inválido.',
+      reintentable: false,
+    };
+  }
+  return {
+    titulo: 'No pudimos cargar tu turno',
+    texto: mensajeDeCargaDelLocal(err, 'No pudimos cargar tu turno. Probá de nuevo en unos minutos.'),
+    reintentable: true,
+  };
+}
 
 /**
  * GestionTurno
@@ -38,8 +84,16 @@ function GestionTurno({ token, tenant }) {
   const [procesando, setProcesando] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
 
+  // Texto del 409 'turno_ya_empezo' del servidor (null si no llegó): con la
+  // pantalla abierta desde antes de la hora, el reloj del celular puede no
+  // haberse enterado, pero el backend sí.
+  const [avisoYaEmpezo, setAvisoYaEmpezo] = useState(null);
+
   // ── Sub-flow de reprogramación (los días y horarios los maneja el panel) ──
   const [reprogramando, setReprogramando] = useState(false);
+
+  // Sube con "Reintentar" después de una falla de carga: vuelve a pedir el turno.
+  const [intentoCarga, setIntentoCarga] = useState(0);
 
   useEffect(() => {
     async function cargar() {
@@ -47,18 +101,43 @@ function GestionTurno({ token, tenant }) {
         const data = await getTurnoPorToken(token);
         setDatos(data);
       } catch (err) {
-        console.error('[GestionTurno] Error:', err.message);
-        setErrorCarga('No pudimos cargar tu turno. El link puede estar vencido o ser inválido.');
+        console.error('[GestionTurno] Error:', err.message, '| status:', err.status);
+        setErrorCarga(errorDeCargaDelTurno(err));
       } finally {
         setCargando(false);
       }
     }
     cargar();
-  }, [token]);
+  }, [token, intentoCarga]);
+
+  /**
+   * reintentarCarga
+   * Vuelve a pedir el turno después de una falla de red o del servidor. La
+   * pantalla pasa al skeleton mientras tanto.
+   */
+  const reintentarCarga = () => {
+    setErrorCarga(null);
+    setCargando(true);
+    setIntentoCarga((n) => n + 1);
+  };
+
+  /**
+   * marcarYaEmpezo
+   * Pasa la pantalla al aviso de turno ya empezado con el texto del servidor
+   * (un 409 'turno_ya_empezo'). Borra el banner de arriba: el aviso ya dice lo
+   * que pasó, y así no quedan dos mensajes repetidos.
+   * @param {Error} err - Error del 409, con el `error` del backend como mensaje
+   */
+  const marcarYaEmpezo = (err) => {
+    setAvisoYaEmpezo(mensajeDeError(err));
+    setMensaje(null);
+  };
 
   /**
    * handleCancelar
-   * Cancela el turno. Disparado desde el ConfirmDialog.
+   * Cancela el turno. Disparado desde el ConfirmDialog, que se cierra al
+   * terminar, salga bien o mal. Si el turno ya empezó (409 'turno_ya_empezo'),
+   * la pantalla pasa al aviso con el contacto del local.
    */
   const handleCancelar = async () => {
     setProcesando(true);
@@ -67,8 +146,12 @@ function GestionTurno({ token, tenant }) {
       setDatos(prev => ({ ...prev, turno: { ...prev.turno, estado: 'cancelado' } }));
       setMensaje({ kind: 'ok', text: 'Turno cancelado. Te llegará un email de confirmación.' });
     } catch (err) {
-      console.error('[GestionTurno] Error cancelando:', err.message);
-      setMensaje({ kind: 'err', text: mensajeDeError(err) });
+      if (err.codigo === CODIGO_TURNO_YA_EMPEZO) {
+        marcarYaEmpezo(err);
+      } else {
+        console.error('[GestionTurno] Error cancelando:', err.message);
+        setMensaje({ kind: 'err', text: mensajeDeError(err) });
+      }
     } finally {
       setProcesando(false);
       setConfirmCancel(false);
@@ -79,10 +162,13 @@ function GestionTurno({ token, tenant }) {
    * handleConfirmarReprogramacion
    * Reprograma el turno al horario elegido en el panel. Solo se llama desde
    * su botón de confirmar. Si sale bien, cierra el panel y avisa arriba. Si
-   * falla, relanza el error: lo muestra el panel, junto a su botón, que es
-   * donde está mirando el cliente.
+   * el turno ya empezó (409 'turno_ya_empezo'), cierra el panel y la pantalla
+   * pasa al aviso con el contacto del local: elegir otro horario no lo
+   * arregla. Cualquier otro error se relanza: lo muestra el panel, junto a su
+   * botón, que es donde está mirando el cliente.
    * @param {string} inicio - ISO del horario nuevo
-   * @throws {Error} El error de reprogramarTurno (con `status` si llegó al backend)
+   * @throws {Error} El error de reprogramarTurno (con `status` si llegó al
+   *   backend), salvo el 409 'turno_ya_empezo'
    */
   const handleConfirmarReprogramacion = async (inicio) => {
     setProcesando(true);
@@ -95,6 +181,10 @@ function GestionTurno({ token, tenant }) {
       }));
       cerrarReprogramacion();
       setMensaje({ kind: 'ok', text: 'Turno reprogramado correctamente.' });
+    } catch (err) {
+      if (err.codigo !== CODIGO_TURNO_YA_EMPEZO) throw err;
+      cerrarReprogramacion();
+      marcarYaEmpezo(err);
     } finally {
       setProcesando(false);
     }
@@ -141,9 +231,11 @@ function GestionTurno({ token, tenant }) {
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <EmptyState
             glyph={<IconoAlerta/>}
-            title="No encontramos tu turno"
-            body={errorCarga}
-            action={<Button variant="secondary" onClick={irAHome} full={false}>Ir al inicio</Button>}
+            title={errorCarga.titulo}
+            body={errorCarga.texto}
+            action={errorCarga.reintentable
+              ? <Button variant="secondary" onClick={reintentarCarga} full={false}>Reintentar</Button>
+              : <Button variant="secondary" onClick={irAHome} full={false}>Ir al inicio</Button>}
           />
         </div>
       </PageContainer>
@@ -153,6 +245,10 @@ function GestionTurno({ token, tenant }) {
   // ── Render normal ─────────────────────────────────────────
   const { turno, barbero, servicio, cliente } = datos;
   const esReservado = turno.estado === 'reservado';
+  // Ya empezó: reservado y con la hora pasada según el reloj del celular, o el
+  // backend lo dijo con un 409. Sin acciones ni calendario: va el aviso.
+  const yaEmpezo = esReservado && (avisoYaEmpezo !== null || new Date(turno.inicio) <= new Date());
+  const puedeGestionar = esReservado && !yaEmpezo;
 
   // Evento para "Agregar al calendario": el mismo contenido que en el éxito de
   // la reserva y el mismo UID (turno.id), así agregarlo de nuevo después de
@@ -173,7 +269,9 @@ function GestionTurno({ token, tenant }) {
       <ScreenHeader
         eyebrow="Tu turno"
         title={tenant?.nombre || 'Gestioná tu reserva'}
-        subtitle="Revisá los datos, reprogramá o cancelá tu reserva."
+        subtitle={puedeGestionar
+          ? 'Revisá los datos, reprogramá o cancelá tu reserva.'
+          : 'Revisá los datos de tu reserva.'}
       />
 
       {/* tt-aparecer: el contenido reemplaza al skeleton con un fundido corto */}
@@ -251,7 +349,7 @@ function GestionTurno({ token, tenant }) {
         </div>
 
         {/* ── Agregar al calendario (solo si el turno sigue en pie) ── */}
-        {esReservado && !reprogramando && (
+        {puedeGestionar && !reprogramando && (
           <div style={{ marginTop: 12 }}>
             <AgregarAlCalendario evento={evento} variant="secondary"/>
           </div>
@@ -262,8 +360,8 @@ function GestionTurno({ token, tenant }) {
           <SummaryRow label="A nombre de" value={cliente.nombre}/>
         </div>
 
-        {/* ── Acciones (si está reservado y no en reprog) ── */}
-        {esReservado && !reprogramando && (
+        {/* ── Acciones (si está reservado, no empezó y no en reprog) ── */}
+        {puedeGestionar && !reprogramando && (
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
             <Button variant="secondary" onClick={() => setReprogramando(true)} disabled={procesando}>
               Reprogramar
@@ -272,6 +370,18 @@ function GestionTurno({ token, tenant }) {
               Cancelar turno
             </Button>
           </div>
+        )}
+
+        {/* ── Turno ya empezado: aviso + contacto, en lugar de las acciones ──
+            Con el panel de reprogramar abierto no se muestra: si la hora pasa
+            mientras el cliente elige, se entera al confirmar (el 409 cierra
+            el panel y trae este aviso). */}
+        {yaEmpezo && !reprogramando && (
+          <AvisoTurnoYaEmpezo
+            texto={avisoYaEmpezo ?? TEXTO_TURNO_YA_EMPEZO}
+            telefono={tenant?.telefono}
+            whatsapp={tenant?.whatsapp}
+          />
         )}
 
         {/* ── Sub-flow de reprogramación ───────────────────── */}
@@ -465,6 +575,55 @@ function ReprogramarPanel({ barbero, servicio, procesando, onConfirmar, onCerrar
 }
 
 // ─── Subcomponentes ──────────────────────────────────────────
+
+/**
+ * AvisoTurnoYaEmpezo
+ * Lo que ve el cliente en lugar de Reprogramar y Cancelar cuando el turno ya
+ * empezó: el aviso y, si el local los tiene cargados, su teléfono (link `tel:`)
+ * y su WhatsApp, como en la sección de contacto de la landing. Sin teléfono ni
+ * WhatsApp, solo el texto. Es una región `status`: si aparece por un 409 con
+ * la pantalla abierta, el lector de pantalla la anuncia.
+ * @param {string} props.texto - El aviso (el del servidor si llegó el 409)
+ * @param {string|null} [props.telefono] - Teléfono del local, como está guardado
+ * @param {string|null} [props.whatsapp] - WhatsApp del local, en E.164
+ */
+function AvisoTurnoYaEmpezo({ texto, telefono, whatsapp }) {
+  return (
+    <div role="status" style={{
+      marginTop: 16,
+      padding: 16,
+      background: theme.surfaceAlt,
+      borderRadius: theme.radiusLg,
+    }}>
+      <p style={{
+        margin: 0,
+        fontFamily: theme.body,
+        fontSize: theme.sizeBody,
+        color: theme.ink,
+        lineHeight: 1.5,
+      }}>{texto}</p>
+
+      {telefono && (
+        <div style={{ marginTop: 8 }}>
+          <LineaContacto
+            href={linkTelefono(telefono)}
+            icono={<IconoTelefono />}
+            texto={fmtTelefono(telefono)}
+          />
+        </div>
+      )}
+
+      {whatsapp && (
+        <div style={{ marginTop: telefono ? 8 : 12 }}>
+          <Button variant="secondary" href={linkWhatsApp(whatsapp)} externo>
+            <IconoMensaje />
+            Escribinos por WhatsApp
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * BannerMensaje
