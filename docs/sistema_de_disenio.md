@@ -144,6 +144,7 @@ fuera verde, el verde dejaría de avisar algo.
   - `sizeHeading` (18) — h2/h3, títulos de card.
   - `sizeBody` (14) — texto base.
   - `sizeMicro` (11) — eyebrows, helper text en mono uppercase.
+- `sizeDisplay` (44), solo en el turnero: la hora del turno en el éxito de la reserva (`TurnoConfirmado`). Es el dato que el cliente tiene que llevarse de esa pantalla; no se usa para títulos.
 - `sizeInput` (16) es funcional, no de jerarquía: el texto de los inputs. Con menos de 16 px, Safari hace zoom al enfocar un campo en el iPad o el iPhone. Está en los cuatro fronts (en el panel, desde el 2026-11-02).
 - 3 pesos: regular (400), medium (500), heading (600). Nada de 700+.
 
@@ -271,7 +272,7 @@ cada pantalla se diseña una sola vez para el celular y la compu. Detalle en
 
 **Íconos**: el turnero no usa Lucide (§3.7). Sus pocos íconos son SVG inline
 con el mismo trazo (1.5–1.75, `currentColor`); los que se repiten viven en
-`components/ui/` (`IconoAlerta`, `IconoPin`).
+`components/ui/` (`IconoAlerta`, `IconoPin`, `IconoPersona`).
 
 **Lo que no se copia**: `tokens.js` e `index.css` del turnero divergen a
 propósito del resto. Un front nuevo copia los del panel (§8), nunca los del
@@ -726,8 +727,8 @@ series temporales), se evalúa una librería cargada solo al usarla, como `xlsx`
 | `Progress` | Barra fina de 3 tramos (`role="progressbar"`, "Paso N de 3: X"). Tiene sentido en un flujo lineal corto, no en dashboards. |
 | `SelectorDiaHorario` | Grilla semanal de los próximos días (lunes a domingo, sin scroll) + los horarios del día elegido en una sola grilla. Solo dibuja: los datos los trae el hook `useDisponibilidad`. Lo usan "¿Cuándo?" y la reprogramación. Para gestión hace falta otro picker (navegación de mes, multi-selección). Reemplazó a `MiniCalendario` el 2026-10-08. |
 | `SlotChip` | Chip de horario, de alto fijo (`ALTO_SLOT`, 48) para que el skeleton no salte. |
-| `ResumenTurno` | Tarjeta del turno (día y hora, servicio, quién atiende, dirección). La comparten la confirmación y el éxito. |
-| `AgregarAlCalendario` | Botón "Agregar al calendario": `.ics` en iPhone/iPad/Mac y Google Calendar en el resto, con la otra opción como link. Lo usan el éxito y la gestión del turno. |
+| `ResumenTurno` | Tarjeta del turno (día y hora, servicio, quién atiende, dirección). La usa la confirmación. El éxito tiene su propio detalle (quién atiende, con el servicio debajo, y la dirección subrayada con una ↗, que abre el mapa desde toda la fila), con el mismo `textoBarbero` de `utils/formato.js`. |
+| `AgregarAlCalendario` | Botón "Agregar al calendario": `.ics` en iPhone/iPad/Mac y Google Calendar en el resto, con la otra opción como link. Lo usan el éxito y la gestión del turno. El éxito pasa `conOtraOpcion={false}` (solo el calendario del celular o Google, decidido el 2026-11-12); la gestión deja el link como camino de respaldo. |
 | `HeroLocal` | Foto del local, logo, nombre y abierto/cerrado. Hero de la landing en el celular y, con `lleno`, el panel de la pantalla ancha (§4.6). |
 | `MarcoLocal` | Marco del turnero en pantalla ancha: panel fijo del local a la izquierda y la pantalla a la derecha. Lo monta `App` una sola vez (§4.6). |
 
@@ -971,7 +972,9 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-11-12 — F11 de mejoras operativas: el turnero en pantallas grandes (§3.8, §4.6), con `MarcoLocal`, `HeroLocal` y `usePantallaAncha` (§6.2).*
+*Última actualización: 2026-11-12 — F10 de mejoras operativas: el éxito de la reserva más liviano. §3.2 suma `sizeDisplay` (turnero), §3.8 `IconoPersona` y §6.2 actualiza `ResumenTurno` y `AgregarAlCalendario` (`conOtraOpcion`).*
+
+*2026-11-12 — F11 de mejoras operativas: el turnero en pantallas grandes (§3.8, §4.6), con `MarcoLocal`, `HeroLocal` y `usePantallaAncha` (§6.2).*
 
 *2026-11-03 — §3.7 suma la excepción de los logos de marcas (`IconoWhatsApp` en la landing).*
 

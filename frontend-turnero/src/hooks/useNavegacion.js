@@ -57,7 +57,6 @@ function marcarInicio(flujo) {
  *   irA: (pantalla: string) => void,
  *   volver: () => void,
  *   cerrarFlujo: (pantalla: string) => void,
- *   volverAlInicio: () => void,
  * }} `pantalla` es la de arriba de la pila; `profundidad`, el largo de la
  *   pila; `direccion`, la del último movimiento (null en la primera carga)
  */
@@ -103,7 +102,7 @@ export function useNavegacion({ activa = true, alReiniciar } = {}) {
 
       if (tt && tt.flujo === flujoRef.current) {
         setNav((prev) => {
-          // Misma pantalla (ej. la llegada a la landing tras volverAlInicio): sin cambios.
+          // Misma pantalla que la de arriba de la pila: sin cambios.
           if (prev.pila.length === tt.pila.length
             && prev.pila[prev.pila.length - 1] === tt.pila[tt.pila.length - 1]) {
             return prev;
@@ -172,17 +171,6 @@ export function useNavegacion({ activa = true, alReiniciar } = {}) {
     setNav({ pila, direccion: 'adelante' });
   };
 
-  /**
-   * volverAlInicio
-   * Vuelve a la landing rebobinando el historial (no apila una landing nueva).
-   * El caller descarta la reserva en memoria si corresponde.
-   */
-  const volverAlInicio = () => {
-    const distancia = nav.pila.length - 1;
-    if (distancia > 0) history.go(-distancia);
-    setNav({ pila: [PANTALLA_INICIO], direccion: 'atras' });
-  };
-
   return {
     pantalla: nav.pila[nav.pila.length - 1],
     profundidad: nav.pila.length,
@@ -190,6 +178,5 @@ export function useNavegacion({ activa = true, alReiniciar } = {}) {
     irA,
     volver,
     cerrarFlujo,
-    volverAlInicio,
   };
 }

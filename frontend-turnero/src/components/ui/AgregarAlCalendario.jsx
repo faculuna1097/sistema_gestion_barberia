@@ -30,8 +30,11 @@ const estiloOtraOpcion = {
  * calendario).
  * @param {Object} props.evento - De `eventoDeTurno` (utils/calendario.js)
  * @param {'primary'|'secondary'} [props.variant='primary'] - Variante del botón
+ * @param {boolean} [props.conOtraOpcion=true] - Muestra el link a la otra
+ *   opción. El éxito de la reserva lo apaga (solo el calendario del celular o
+ *   Google); la gestión del turno lo deja, como camino de respaldo.
  */
-function AgregarAlCalendario({ evento, variant = 'primary' }) {
+function AgregarAlCalendario({ evento, variant = 'primary', conOtraOpcion = true }) {
   // El dispositivo no cambia durante la visita: se decide una vez.
   const [apple] = useState(() => esDispositivoApple());
   const linkGoogle = linkGoogleCalendar(evento);
@@ -59,7 +62,7 @@ function AgregarAlCalendario({ evento, variant = 'primary' }) {
       )}
 
       {/* La otra opción, en segundo plano */}
-      {apple ? (
+      {conOtraOpcion && (apple ? (
         <Button variant="ghost" href={linkGoogle} externo full={false} style={estiloOtraOpcion}>
           Usar Google Calendar
         </Button>
@@ -67,7 +70,7 @@ function AgregarAlCalendario({ evento, variant = 'primary' }) {
         <Button variant="ghost" onClick={descargar} full={false} style={estiloOtraOpcion}>
           Usar otro calendario (.ics)
         </Button>
-      )}
+      ))}
     </div>
   );
 }

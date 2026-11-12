@@ -20,6 +20,7 @@ export { default as SelectorDiaHorario } from './SelectorDiaHorario.jsx';
 export { default as SlotChip }        from './SlotChip.jsx';
 export { default as IconoAlerta }     from './IconoAlerta.jsx';
 export { default as IconoPin }        from './IconoPin.jsx';
+export { default as IconoPersona }    from './IconoPersona.jsx';
 export { default as IconoTelefono }   from './IconoTelefono.jsx';
 export { default as IconoMensaje }    from './IconoMensaje.jsx';
 export { default as LineaContacto }   from './LineaContacto.jsx';

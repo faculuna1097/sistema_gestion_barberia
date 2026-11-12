@@ -61,6 +61,8 @@ export const theme = {
   sizeHeading: 18,  // h3, títulos de card
   sizeBody:    14,  // texto base
   sizeMicro:   11,  // eyebrows, micro-labels en mayúsculas
+  // Número destacado: la hora del turno en el éxito de la reserva. Solo ahí.
+  sizeDisplay: 44,
 
   // Tamaño funcional (no de jerarquía): los inputs deben ser ≥16px para
   // evitar el auto-zoom de iOS Safari al enfocar un campo de texto.

@@ -359,7 +359,6 @@ function App() {
             cliente={cliente}
             tenant={tenant}
             resultado={resultado}
-            onNuevaReserva={() => { reiniciarReserva(); nav.volverAlInicio(); }}
           />
         );
       default:
