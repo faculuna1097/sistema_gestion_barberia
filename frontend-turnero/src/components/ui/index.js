@@ -25,3 +25,5 @@ export { default as IconoMensaje }    from './IconoMensaje.jsx';
 export { default as LineaContacto }   from './LineaContacto.jsx';
 export { default as ResumenTurno }    from './ResumenTurno.jsx';
 export { default as AgregarAlCalendario } from './AgregarAlCalendario.jsx';
+export { default as HeroLocal }       from './HeroLocal.jsx';
+export { default as MarcoLocal }      from './MarcoLocal.jsx';

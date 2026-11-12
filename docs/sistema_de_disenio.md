@@ -257,6 +257,18 @@ aunque la foto sea blanca (peor caso medido: título 7:1, estado 6,8:1).
   `transform`, el contenedor pasaría a ser bloque contenedor de los
   `position: fixed` y el overlay de `ConfirmDialog` quedaría atado a la columna.
 
+**En pantallas grandes** (iPad, compu y celular acostado; decidido el
+2026-11-12, F11 de `plan_mejoras_operativas.md`): desde 768 px de ancho, el
+turnero deja de ser una columna de celular sobre gris. A la izquierda va un
+panel fijo con el local (`MarcoLocal` con `HeroLocal`: la foto a todo el alto,
+el logo, el nombre y si está abierto o cerrado; solo identidad, sin dirección
+ni horario, que ya están en la landing). A la derecha, cada pantalla en su
+columna de 480 de siempre, sobre blanco. Por qué así y no rediseñar cada
+pantalla a lo ancho: la reserva es un flujo angosto por naturaleza (como
+Calendly o Booksy), la "vidriera" del local queda a la vista en todo el flujo, y
+cada pantalla se diseña una sola vez para el celular y la compu. Detalle en
+§4.6.
+
 **Íconos**: el turnero no usa Lucide (§3.7). Sus pocos íconos son SVG inline
 con el mismo trazo (1.5–1.75, `currentColor`); los que se repiten viven en
 `components/ui/` (`IconoAlerta`, `IconoPin`).
@@ -483,6 +495,42 @@ bloquearla).
   angosto (sus 6 pestañas con ícono miden 650 px).
 - Desde 1024 px (el iPad horizontal) el panel se ve como en escritorio.
 
+**Turnero: pantalla ancha (desde el 2026-11-12, §3.8).** Antes, en compu y en
+el iPad todo vivía en la columna de 480 con gris a los costados, y con el
+celular acostado (812×375) la foto se comía 260 px de 375. El corte es la
+ventana de **768 px o más** (`theme.anchoPantallaAncha`, hook
+`usePantallaAncha` en `frontend-turnero/src/hooks/`): mira el ancho, no la
+orientación, así que el iPad en las dos posiciones y el celular acostado
+entran. Debajo de 768, todo igual que antes (comparado píxel a píxel contra la
+versión anterior en 375 px, en todas las pantallas).
+- **`MarcoLocal`** (`components/ui/`): lo monta `App` en todas sus salidas, por
+  fuera de las pantallas. En lo ancho dibuja el panel del local, pegado arriba
+  (`position: sticky`, alto `100dvh`, ancho `theme.anchoPanelLocal` =
+  `clamp(300px, 42vw, 600px)`), y al lado el contenido. Como está afuera de la
+  pila de pantallas, el panel no se vuelve a montar al navegar ni entra con
+  `tt-pantalla`: solo la columna se desliza. Mientras carga el local, el panel
+  es el bloque oscuro de `accent`. El árbol es el mismo en lo angosto y en lo
+  ancho (el contenido siempre es el segundo hijo), así al rotar el celular la
+  pantalla no se vuelve a montar ni pierde lo elegido.
+- **`HeroLocal`** (`components/ui/`): el hero de la landing (foto, logo, nombre,
+  abierto/cerrado), que se mudó de `Landing.jsx` porque ahora lo usan dos
+  lugares. Normal, es el hero del celular; con `lleno`, ocupa todo el alto del
+  panel. El estado sale de `calcularEstadoNegocio` (`utils/estadoNegocio.js`).
+  El nombre sigue siendo el `h1`.
+- **`PageContainer`**: en lo ancho, la columna de 480 se centra en lo que deja el
+  panel, sobre blanco y con 24 px a los costados (en 768 mide ~400).
+- **Landing:** en lo ancho no dibuja el hero (es el panel) y suma 24 px arriba;
+  su skeleton, igual.
+- El resto de las pantallas (flujo, éxito, gestión) no cambió: `StickyFooter`
+  sigue pegado abajo de la columna, y el overlay de `ConfirmDialog` cubre toda
+  la ventana, panel incluido. El panel no tiene nada enfocable: Tab va directo a
+  la columna.
+- **Hook y no CSS** (a diferencia de la landing de marketing, §4.1): el turnero
+  no se pre-renderiza, los estilos son inline y lo que cambia es qué se dibuja
+  (el hero en la columna o en el panel), no solo cómo se ve. Se lee al montar,
+  sin salto. El costo: un re-render al cruzar el corte. No se sumaron clases
+  `tt-`.
+
 ### 4.7 Comentarios obligatorios
 
 Cada función, componente y helper lleva JSDoc explicando **qué hace, qué
@@ -642,7 +690,7 @@ pantalla.
 | `EmptyState` | Glyph + title + body + acción opcional. |
 | `Skeleton` | Bloque con shimmer. |
 | `StatusPill` | Pill chiquito con dot + label de estado. |
-| `PageContainer` | Wrapper raíz, max-width responsive, fondo lateral. |
+| `PageContainer` | Wrapper raíz, max-width responsive, fondo lateral. En el turnero, en pantalla ancha la columna va a la derecha del panel del local, sobre blanco (§4.6). |
 | `ConfirmDialog` | Modal de confirmación (ESC + click fuera + loading state). |
 | `AvatarIniciales` | Círculo con iniciales y tono determinístico por nombre (en el turnero, un tono neutro único). |
 | `SummaryRow` | Fila label/value con border-bottom sutil. |
@@ -680,12 +728,15 @@ series temporales), se evalúa una librería cargada solo al usarla, como `xlsx`
 | `SlotChip` | Chip de horario, de alto fijo (`ALTO_SLOT`, 48) para que el skeleton no salte. |
 | `ResumenTurno` | Tarjeta del turno (día y hora, servicio, quién atiende, dirección). La comparten la confirmación y el éxito. |
 | `AgregarAlCalendario` | Botón "Agregar al calendario": `.ics` en iPhone/iPad/Mac y Google Calendar en el resto, con la otra opción como link. Lo usan el éxito y la gestión del turno. |
+| `HeroLocal` | Foto del local, logo, nombre y abierto/cerrado. Hero de la landing en el celular y, con `lleno`, el panel de la pantalla ancha (§4.6). |
+| `MarcoLocal` | Marco del turnero en pantalla ancha: panel fijo del local a la izquierda y la pantalla a la derecha. Lo monta `App` una sola vez (§4.6). |
 
 Hooks del flujo (`frontend-turnero/src/hooks/`): `useNavegacion` (pila de
 pantallas integrada al historial, así el "atrás" del celular vuelve un paso),
 `useListaRemota` (servicios y barberos, cargados una vez en `App`),
-`useDisponibilidad` (días y horarios, descarta respuestas viejas) y
-`useEleccionConPausa` (la pausa de ~150 ms al elegir).
+`useDisponibilidad` (días y horarios, descarta respuestas viejas),
+`useEleccionConPausa` (la pausa de ~150 ms al elegir) y `usePantallaAncha`
+(la pantalla ancha de §4.6).
 
 ### 6.3 Propias de `frontend-barbero` (todavía no compartidas)
 
@@ -920,7 +971,9 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-11-03 — §3.7 suma la excepción de los logos de marcas (`IconoWhatsApp` en la landing).*
+*Última actualización: 2026-11-12 — F11 de mejoras operativas: el turnero en pantallas grandes (§3.8, §4.6), con `MarcoLocal`, `HeroLocal` y `usePantallaAncha` (§6.2).*
+
+*2026-11-03 — §3.7 suma la excepción de los logos de marcas (`IconoWhatsApp` en la landing).*
 
 *2026-11-03 — tanda 7b de deudas: `muted` pasa a `#6B6B74` en los cuatro fronts (§3.1, §5.3 con la tabla de contraste y qué queda en `mutedSoft`, §8); `fmtPesos` igual en los cuatro (§8); deuda #9 resuelta para los grises.*
 

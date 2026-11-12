@@ -6,8 +6,8 @@
 > anteriores los mueven. Aprobar el plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
 > **Estado (2026-11-12):** **en curso.** Branch rebasado sobre `main` (`3931843`: monitoreo, formulario de alta y
-> fases 0-2 del resguardo de la DB). Fase 1a (F9) hecha y commiteada. Próximo: 1b (F11), después 1c (F10), y recién
-> ahí la fase 1.
+> fases 0-2 del resguardo de la DB). Fases 1a (F9) y 1b (F11) hechas y commiteadas. Próximo: 1c (F10, espera los
+> detalles del usuario), y recién ahí la fase 1.
 > Antes, 2026-11-05: fase 0 hecha y la tanda en espera del monitoreo (`feature/monitoreo-prod`, ya en producción).
 
 ## 1. Contexto
@@ -298,7 +298,7 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
 |---|---|---|---|
 | 0 | ✅ **Hecha (2026-11-05).** Branch `feature/mejoras-operativas` desde `main` + este plan a `docs/plan_mejoras_operativas.md` (commit) | Chat de planificación | — |
 | 1a | ✅ **Hecha (2026-11-12, commiteada).** F9 arreglo: no cancelar ni reprogramar desde el link un turno que ya empezó (backend + `GestionTurno` del turnero). Con los dos hallazgos de la gestión (carga con mala señal y subtítulo) | Ejecutor | — |
-| 1b | F11 turnero apto para compu y iPad (diseño con el usuario → implementación) | Ejecutor | — |
+| 1b | ✅ **Hecha (2026-11-12, commiteada).** F11 turnero apto para compu y iPad. Dirección elegida: desde 768 px, panel fijo del local a la izquierda (`MarcoLocal` + `HeroLocal`) y cada pantalla en su columna de 480 a la derecha; en celular, igual que antes. `TurnoConfirmado`, solo el marco (su contenido es F10). Detalle en `sistema_de_disenio.md` §3.8 y §4.6 | Ejecutor | — |
 | 1c | F10 pantalla de éxito del turnero más liviana | Ejecutor | Detalles del usuario sobre cómo la quiere |
 | 1 | F7 comisión con barra (backend + `TabBarberos`) + F8 días con horario y aviso (solo `TabBarberos`) | Ejecutor | SQL de % no múltiplos de 5 |
 | 2 | F6a DB + backend: columnas del dueño y `telefono_local`, tabla de tokens, endpoints y mails de recuperación, Gestión → Negocio (backend), `crearTenant.js` y la skill `alta-cliente` | Ejecutor | SQL de columnas + datos de los 4 tenants + tabla de tokens |

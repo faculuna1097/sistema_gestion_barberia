@@ -1,17 +1,16 @@
 // /frontend-turnero/src/screens/Landing.jsx
 // Pantalla de inicio del turnero: la "vidriera" de la barbería.
 // Una columna con el CTA "Reservar turno" fijo abajo, y cuatro bloques:
-//   1. Hero: foto del local de borde a borde, con logo, nombre y estado
-//      abierto/cerrado encima (sobre un degradado oscuro).
+//   1. Hero (HeroLocal): foto del local de borde a borde, con logo, nombre y
+//      estado abierto/cerrado encima (sobre un degradado oscuro). En pantalla
+//      ancha no va en la columna: es el panel de la izquierda (MarcoLocal).
 //   2. Servicios: filas tocables; preeligen el servicio.
 //   3. Equipo: barberos tocables; preeligen el barbero.
 //   4. Horarios y contacto: horario semanal desplegable, dirección (→ Maps),
 //      teléfono, WhatsApp y link para dejar una reseña en Google.
 //
 // Las imágenes (logo, foto del local) llegan en el prop `imagenes`, que viene
-// de GET /api/negocio/imagenes. Cada imagen es { id, tipo, orden, url }:
-//   - tipo 'logo'  orden 1 → círculo del hero (sin logo: iniciales).
-//   - tipo 'local' orden 1 → foto del hero (sin foto: bloque liso oscuro).
+// de GET /api/negocio/imagenes, y las usa HeroLocal.
 //
 // Servicios y barberos los carga App (useListaRemota) y bajan con su estado
 // de carga y error: la landing muestra skeleton, error con reintento o vacío
@@ -28,20 +27,16 @@ import { fechaLocalISO } from '../utils/fecha.js';
 import { fmtTelefono, linkTelefono, linkWhatsApp } from '../utils/telefono.js';
 import { rutaResena } from '../utils/rutas.js';
 import { linkMapa } from '../utils/mapa.js';
+import { NOMBRES_DIA } from '../utils/estadoNegocio.js';
 import { useEleccionConPausa } from '../hooks/useEleccionConPausa.js';
 import { useHover, PUEDE_HOVER } from '../hooks/useHover.js';
+import { usePantallaAncha } from '../hooks/usePantallaAncha.js';
 import {
   PageContainer, Button, StickyFooter, Skeleton, EmptyState, AvatarIniciales, IconoAlerta, IconoPin,
-  IconoTelefono, IconoMensaje, LineaContacto,
+  IconoTelefono, IconoMensaje, LineaContacto, HeroLocal,
 } from '../components/ui';
+import { HeroLocalSkeleton } from '../components/ui/HeroLocal.jsx';
 import { estiloLineaInfo, estiloIconoInfo } from '../components/ui/estilos.js';
-
-/**
- * NOMBRES_DIA
- * Nombres de día de semana en español, indexados 0..6 (0=domingo),
- * misma convención que `dia_semana` del backend.
- */
-const NOMBRES_DIA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 
 /**
  * ORDEN_SEMANA
@@ -49,85 +44,6 @@ const NOMBRES_DIA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'vier
  * la grilla semanal en el orden natural de un negocio.
  */
 const ORDEN_SEMANA = [1, 2, 3, 4, 5, 6, 0];
-
-/**
- * ALTO_HERO
- * Alto del hero con foto: ~45 % de la pantalla, con topes para pantallas muy
- * bajas o muy altas. `svh` (alto con las barras del navegador visibles) no
- * cambia al scrollear, a diferencia de `dvh`: así el hero no se redimensiona
- * cuando Safari o el navegador de Instagram esconden sus barras. Si un
- * navegador viejo no entiende `svh`, ignora ese alto y queda el mínimo.
- * Lo comparten el hero y su skeleton.
- */
-const ALTO_HERO = { height: '45svh', minHeight: 260, maxHeight: 440 };
-
-/**
- * buscarProximaApertura
- * Recorre los próximos 7 días buscando el primer día/hora en que el negocio
- * abre. Saltea feriados. Para el día de hoy, solo cuenta si la apertura
- * todavía no pasó.
- * @param {Array<Object>} horarioAtencion - días abiertos [{ dia_semana, hora_inicio, hora_fin }]
- * @param {Array<Object>} feriados - feriados del tenant [{ fecha }]
- * @param {Date} ahora - Momento de referencia
- * @param {string} horaActual - Hora actual en 'HH:MM'
- * @returns {string|null} Ej: "hoy 14:00", "mañana 10:00", "el martes 10:00"; null si no abre en 7 días
- */
-function buscarProximaApertura(horarioAtencion, feriados, ahora, horaActual) {
-  for (let offset = 0; offset <= 7; offset++) {
-    const fecha = new Date(ahora);
-    fecha.setDate(ahora.getDate() + offset);
-
-    if (feriados.some((f) => f.fecha === fechaLocalISO(fecha))) continue;
-
-    const dia = horarioAtencion.find((h) => h.dia_semana === fecha.getDay());
-    if (!dia) continue;
-
-    // El día de hoy solo cuenta si la apertura todavía no pasó.
-    if (offset === 0 && horaActual >= dia.hora_inicio) continue;
-
-    let cuando;
-    if (offset === 0) cuando = 'hoy';
-    else if (offset === 1) cuando = 'mañana';
-    else cuando = `el ${NOMBRES_DIA[fecha.getDay()]}`;
-
-    return `${cuando} ${dia.hora_inicio}`;
-  }
-  return null;
-}
-
-/**
- * calcularEstadoNegocio
- * Determina si el negocio está abierto en este momento, según su horario
- * de atención semanal y sus feriados. Si está cerrado, calcula cuándo abre.
- * Función pura: usa la hora local del navegador.
- * @param {Array<Object>} horarioAtencion - días abiertos [{ dia_semana, hora_inicio, hora_fin }]
- * @param {Array<Object>} feriados - feriados del tenant [{ fecha }]
- * @returns {{ abierto: boolean, texto: string }} estado + label a mostrar
- */
-function calcularEstadoNegocio(horarioAtencion = [], feriados = []) {
-  const ahora = new Date();
-
-  // Hora actual en 'HH:MM' para comparar como string contra el rango.
-  const horaActual = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
-
-  // Horario de hoy — null si hoy es feriado o el negocio no atiende ese día.
-  const hoyEsFeriado = feriados.some((f) => f.fecha === fechaLocalISO(ahora));
-  const diaHoy = hoyEsFeriado
-    ? null
-    : horarioAtencion.find((h) => h.dia_semana === ahora.getDay());
-
-  // Abierto: hay horario hoy y la hora actual cae dentro del rango.
-  if (diaHoy && horaActual >= diaHoy.hora_inicio && horaActual < diaHoy.hora_fin) {
-    return { abierto: true, texto: `Abierto · cierra ${diaHoy.hora_fin}` };
-  }
-
-  // Cerrado: buscar la próxima apertura en los próximos 7 días.
-  const proxima = buscarProximaApertura(horarioAtencion, feriados, ahora, horaActual);
-  return {
-    abierto: false,
-    texto: proxima ? `Cerrado · abre ${proxima}` : 'Cerrado',
-  };
-}
 
 /**
  * Landing
@@ -147,12 +63,8 @@ function Landing({
   tenant, imagenes = [], servicios, barberos, entradaInicial,
   onReservar, onElegirServicio, onElegirBarbero,
 }) {
-  // Logo y foto del local.
-  const logoUrl = imagenes.find((img) => img.tipo === 'logo' && img.orden === 1)?.url || null;
-  const fotoLocalUrl = imagenes.find((img) => img.tipo === 'local' && img.orden === 1)?.url || null;
-
-  // Estado "abierto/cerrado" calculado desde el horario del tenant.
-  const estado = calcularEstadoNegocio(tenant.horario_atencion, tenant.feriados);
+  // En pantalla ancha el hero es el panel de la izquierda (MarcoLocal).
+  const ancha = usePantallaAncha();
 
   // Una sola elección en curso para servicios y barberos: la fila tocada se
   // marca ~150 ms y recién ahí se avanza; un segundo toque en ese lapso
@@ -171,13 +83,8 @@ function Landing({
 
   return (
     <PageContainer>
-      <div style={{ flex: 1 }}>
-        <Hero
-          nombre={tenant.nombre}
-          estado={estado}
-          logoUrl={logoUrl}
-          fotoUrl={fotoLocalUrl}
-        />
+      <div style={estiloCuerpo(ancha)}>
+        {!ancha && <HeroLocal tenant={tenant} imagenes={imagenes} />}
 
         <Secciones>
           <Seccion id="landing-servicios" titulo="Servicios">
@@ -290,12 +197,16 @@ function Landing({
  * real (oscuro, como queda antes de que pinte la foto), los títulos de
  * sección (son fijos, se muestran tal cual) y las filas en skeleton. Usa los
  * mismos bloques que la landing, así nada salta cuando llegan los datos.
+ * En pantalla ancha va sin hero: ahí el hero es el panel (MarcoLocal), que
+ * mientras carga es un bloque oscuro.
  */
 export function LandingSkeleton() {
+  const ancha = usePantallaAncha();
+
   return (
     <PageContainer>
-      <div style={{ flex: 1 }}>
-        <div aria-hidden="true" style={{ ...ALTO_HERO, background: theme.accent }} />
+      <div style={estiloCuerpo(ancha)}>
+        {!ancha && <HeroLocalSkeleton />}
 
         <Secciones>
           <Seccion id="landing-servicios" titulo="Servicios">
@@ -324,158 +235,20 @@ export function LandingSkeleton() {
   );
 }
 
+/**
+ * estiloCuerpo
+ * Estilo del cuerpo de la landing (y de su skeleton). En pantalla ancha, sin
+ * el hero arriba, suma 24 px de aire antes de la primera sección.
+ * @param {boolean} ancha - De usePantallaAncha
+ * @returns {Object} Estilo inline
+ */
+function estiloCuerpo(ancha) {
+  return ancha ? { flex: 1, paddingTop: 24 } : { flex: 1 };
+}
+
 // ─── Subcomponentes locales ──────────────────────────────────
 // Específicos de la landing. Si otra pantalla los necesita, se mueven a
 // /components/ui/.
-
-/**
- * Hero
- * Cabecera de la landing. Con foto: la foto de borde a borde (ALTO_HERO,
- * `object-fit: cover`) y encima, abajo, el logo, el nombre y el estado sobre
- * un degradado oscuro. Sin foto (o si no carga): un bloque liso oscuro con lo
- * mismo, al alto de su contenido.
- * @param {string} props.nombre - Nombre del local (h1)
- * @param {{ abierto: boolean, texto: string }} props.estado - De calcularEstadoNegocio
- * @param {string|null} props.logoUrl - URL del logo, o null (iniciales)
- * @param {string|null} props.fotoUrl - URL de la foto del local, o null
- */
-function Hero({ nombre, estado, logoUrl, fotoUrl }) {
-  // Si la foto o el logo no cargan, se cae a la variante sin imagen.
-  const [fotoFallo, setFotoFallo] = useState(false);
-  const [logoFallo, setLogoFallo] = useState(false);
-  const conFoto = Boolean(fotoUrl) && !fotoFallo;
-
-  return (
-    <header style={{
-      ...(conFoto ? ALTO_HERO : {}),
-      position: 'relative',
-      // Fondo oscuro también con foto: es lo que se ve hasta que la foto pinta,
-      // y el texto blanco ya se lee encima.
-      background: theme.accent,
-      overflow: 'hidden',
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'flex-end',
-    }}>
-      {conFoto && (
-        <img
-          src={fotoUrl}
-          alt={`Local de ${nombre}`}
-          fetchPriority="high"
-          onError={() => {
-            console.warn('[Landing] La foto del local no cargó: se muestra el hero sin foto');
-            setFotoFallo(true);
-          }}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            display: 'block',
-          }}
-        />
-      )}
-
-      {/* Franja del texto. Con foto lleva el degradado y 48 px de transición
-          arriba; sin foto, el fondo liso alcanza. */}
-      <div style={{
-        position: 'relative',
-        padding: conFoto ? '48px 16px 20px' : '32px 16px 20px',
-        background: conFoto ? theme.heroScrim : 'none',
-      }}>
-        <LogoHero
-          src={logoFallo ? null : logoUrl}
-          nombre={nombre}
-          onError={() => {
-            console.warn('[Landing] El logo no cargó: se muestran las iniciales');
-            setLogoFallo(true);
-          }}
-        />
-
-        <h1 style={{
-          margin: '12px 0 0',
-          fontFamily: theme.body,
-          fontWeight: theme.weightHeading,
-          fontSize: theme.sizeTitle,
-          letterSpacing: '-0.02em',
-          lineHeight: 1.2,
-          color: theme.accentInk,
-          textWrap: 'balance',
-          overflowWrap: 'anywhere',
-        }}>{nombre}</h1>
-
-        <p style={{
-          margin: '4px 0 0',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          fontFamily: theme.body,
-          fontSize: theme.sizeBody,
-          color: theme.heroInkSoft,
-        }}>
-          <DotEstado abierto={estado.abierto} />
-          {estado.texto}
-        </p>
-      </div>
-    </header>
-  );
-}
-
-/**
- * LogoHero
- * Círculo de 64 px con el logo del local y un aro blanco. Sin logo, las
- * iniciales del nombre (AvatarIniciales).
- * @param {string|null} props.src - URL del logo, o null
- * @param {string} props.nombre - Nombre del local (alt y fallback de iniciales)
- * @param {Function} props.onError - Se llama si la imagen no carga
- */
-function LogoHero({ src, nombre, onError }) {
-  return (
-    <div style={{
-      width: 64,
-      height: 64,
-      borderRadius: 999,
-      overflow: 'hidden',
-      background: theme.surface,
-      border: `2px solid ${theme.bg}`,
-      flexShrink: 0,
-    }}>
-      {src ? (
-        <img
-          src={src}
-          alt={`Logo de ${nombre}`}
-          onError={onError}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-        />
-      ) : (
-        <AvatarIniciales nombre={nombre} size={60} />
-      )}
-    </div>
-  );
-}
-
-/**
- * DotEstado
- * Punto de estado del negocio en el hero: verde cuando está abierto, gris
- * cuando está cerrado. Acompaña al texto (que dice lo mismo), no lo reemplaza.
- * Colores pensados para el fondo oscuro del hero.
- * @param {boolean} props.abierto - True si el negocio está abierto ahora
- */
-function DotEstado({ abierto }) {
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        width: 8,
-        height: 8,
-        borderRadius: 999,
-        flexShrink: 0,
-        background: abierto ? theme.heroSuccess : theme.mutedSoft,
-      }}
-    />
-  );
-}
 
 /**
  * Secciones

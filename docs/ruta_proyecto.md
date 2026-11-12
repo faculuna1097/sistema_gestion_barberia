@@ -1,6 +1,6 @@
 # Ruta del proyecto - Sistema de Gestion de Barberia
 
-Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y comparado de nuevo contra `git ls-files` el 2026-11-11 (resguardo de la base, fases 1 y 2: `backend/.env.lectura.example`, en `backend/src/scripts/` `conexionLectura.js` y `consultar.js`, y `.github/workflows/backup-db.yml` con `.github/scripts/backup-db.sh`; antes, ese mismo día, formulario de alta de clientes: `frontend-alta/` completo, en `backend/src/` `controllers/alta.js`, `routes/alta.js`, `utils/subdominio.js` y `utils/validarSolicitudAlta.js`, la skill `.claude/skills/alta-cliente/` y `docs/decisiones_alta_clientes.md` y `plan_alta_clientes.md`). Antes, el 2026-11-06 (monitoreo de producción: `backend/src/instrument.js`, `backend/src/config/sentry.js`, `.claude/settings.json`, las skills `.claude/skills/salud-prod/` y `arreglo-prod/`, y `docs/decisiones_monitoreo_prod.md`). Antes, el 2026-11-04 (se sumaron `frontend/src/utils/pantalla.js` y `frontend-landing/src/components/ui/IconoWhatsApp.jsx`, que faltaban). Antes, el 2026-11-03 (en `frontend-turnero/src/`: `components/ui/estilos.js`, `hooks/useHover.js` y `utils/errores.js`; y `frontend/src/hooks/usePantallaAngosta.js`). Antes, el 2026-11-02 (en `frontend/src/`: `components/ui/GrupoOpciones.jsx`, `ToastProvider.jsx`, `tonosFormaPago.js`, `estilos.js`, `utils/errores.js` y `utils/toast.js`). Antes, el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
+Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y completado el 2026-11-12 (mejoras operativas, F9 y F11, en `frontend-turnero/src/`: `components/ui/` `HeroLocal.jsx`, `IconoMensaje.jsx`, `IconoTelefono.jsx`, `LineaContacto.jsx` y `MarcoLocal.jsx`, `hooks/usePantallaAncha.js` y `utils/estadoNegocio.js`). Antes, comparado de nuevo contra `git ls-files` el 2026-11-11 (resguardo de la base, fases 1 y 2: `backend/.env.lectura.example`, en `backend/src/scripts/` `conexionLectura.js` y `consultar.js`, y `.github/workflows/backup-db.yml` con `.github/scripts/backup-db.sh`; antes, ese mismo día, formulario de alta de clientes: `frontend-alta/` completo, en `backend/src/` `controllers/alta.js`, `routes/alta.js`, `utils/subdominio.js` y `utils/validarSolicitudAlta.js`, la skill `.claude/skills/alta-cliente/` y `docs/decisiones_alta_clientes.md` y `plan_alta_clientes.md`). Antes, el 2026-11-06 (monitoreo de producción: `backend/src/instrument.js`, `backend/src/config/sentry.js`, `.claude/settings.json`, las skills `.claude/skills/salud-prod/` y `arreglo-prod/`, y `docs/decisiones_monitoreo_prod.md`). Antes, el 2026-11-04 (se sumaron `frontend/src/utils/pantalla.js` y `frontend-landing/src/components/ui/IconoWhatsApp.jsx`, que faltaban). Antes, el 2026-11-03 (en `frontend-turnero/src/`: `components/ui/estilos.js`, `hooks/useHover.js` y `utils/errores.js`; y `frontend/src/hooks/usePantallaAngosta.js`). Antes, el 2026-11-02 (en `frontend/src/`: `components/ui/GrupoOpciones.jsx`, `ToastProvider.jsx`, `tonosFormaPago.js`, `estilos.js`, `utils/errores.js` y `utils/toast.js`). Antes, el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
 
 Este documento lista las carpetas y archivos del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP. Para mantenerlo, regenerar los arboles desde `git ls-files` en vez de parchearlos a mano.
 
@@ -459,11 +459,16 @@ frontend-turnero/
     |       |-- Card.jsx
     |       |-- ConfirmDialog.jsx
     |       |-- EmptyState.jsx
-    |       |-- estilos.js           estiloEyebrow y MARGEN_SCROLL_CAMPO
+    |       |-- estilos.js           estiloEyebrow, MARGEN_SCROLL_CAMPO y las filas de info del local
     |       |-- Field.jsx
+    |       |-- HeroLocal.jsx        foto, logo, nombre y abierto/cerrado del local
     |       |-- IconoAlerta.jsx
+    |       |-- IconoMensaje.jsx
     |       |-- IconoPin.jsx
+    |       |-- IconoTelefono.jsx
     |       |-- index.js
+    |       |-- LineaContacto.jsx    fila de contacto del local (landing y gestión del turno)
+    |       |-- MarcoLocal.jsx       panel del local a la izquierda en pantalla ancha
     |       |-- PageContainer.jsx
     |       |-- Progress.jsx
     |       |-- ResumenTurno.jsx
@@ -480,7 +485,8 @@ frontend-turnero/
     |   |-- useEleccionConPausa.js
     |   |-- useHover.js          hover solo con mouse (copia del de frontend-barbero)
     |   |-- useListaRemota.js
-    |   `-- useNavegacion.js
+    |   |-- useNavegacion.js
+    |   `-- usePantallaAncha.js  ventana de 768 px o más (iPad, compu, celular acostado)
     |-- screens/
     |   |-- ConfirmarTurno.jsx
     |   |-- GestionTurno.jsx
@@ -495,6 +501,7 @@ frontend-turnero/
     `-- utils/
         |-- calendario.js
         |-- errores.js           textos de error de la API (sin conexión, 429)
+        |-- estadoNegocio.js     si el local está abierto y cuándo abre
         |-- fecha.js
         |-- formato.js
         |-- mapa.js

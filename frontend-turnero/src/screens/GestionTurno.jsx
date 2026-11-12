@@ -26,6 +26,14 @@ import {
 } from '../components/ui';
 
 /**
+ * estiloAireArriba
+ * Aire arriba del encabezado: esta pantalla no tiene la barra de "Volver" que
+ * en el resto deja espacio, y el "TU TURNO" quedaba pegado al borde (a 4 px).
+ * Lo comparten la carga y la pantalla cargada, así no salta.
+ */
+const estiloAireArriba = { paddingTop: 24 };
+
+/**
  * CODIGO_TURNO_YA_EMPEZO
  * `codigo` del 409 que devuelve el backend al cancelar o reprogramar un turno
  * que ya empezó (CODIGO_TURNO_YA_EMPEZO de backend/src/services/turnosService.js).
@@ -212,11 +220,13 @@ function GestionTurno({ token, tenant }) {
   if (cargando) {
     return (
       <PageContainer>
-        <ScreenHeader
-          eyebrow="Tu turno"
-          title={tenant?.nombre || 'Cargando…'}
-          subtitle="Gestioná tu reserva."
-        />
+        <div style={estiloAireArriba}>
+          <ScreenHeader
+            eyebrow="Tu turno"
+            title={tenant?.nombre || 'Cargando…'}
+            subtitle="Gestioná tu reserva."
+          />
+        </div>
         <div style={{ flex: 1, padding: '0 16px 24px' }}>
           <SkeletonGestion/>
         </div>
@@ -266,13 +276,15 @@ function GestionTurno({ token, tenant }) {
 
   return (
     <PageContainer>
-      <ScreenHeader
-        eyebrow="Tu turno"
-        title={tenant?.nombre || 'Gestioná tu reserva'}
-        subtitle={puedeGestionar
-          ? 'Revisá los datos, reprogramá o cancelá tu reserva.'
-          : 'Revisá los datos de tu reserva.'}
-      />
+      <div style={estiloAireArriba}>
+        <ScreenHeader
+          eyebrow="Tu turno"
+          title={tenant?.nombre || 'Gestioná tu reserva'}
+          subtitle={puedeGestionar
+            ? 'Revisá los datos, reprogramá o cancelá tu reserva.'
+            : 'Revisá los datos de tu reserva.'}
+        />
+      </div>
 
       {/* tt-aparecer: el contenido reemplaza al skeleton con un fundido corto */}
       <div className="tt-aparecer" style={{ flex: 1, padding: '0 16px 24px' }}>
