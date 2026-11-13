@@ -73,6 +73,7 @@ Nada más. **Sin trace de navegación, sin "paso N — X seleccionado", sin "com
 2. Si recorre tenants, cada vuelta corre dentro de `conEtiquetas({ tenant, tenant_id }, async () => { ... })`, así sus errores dicen de qué local son.
 3. Antes del `process.exit`, `await vaciarEventos(2000)`: Sentry manda en segundo plano y, sin vaciar la cola, los eventos se pierden.
 4. En Railway, el servicio nuevo referencia la shared variable `SENTRY_DSN` (`${{shared.SENTRY_DSN}}`): crearla a nivel proyecto no alcanza.
+5. **Monitor de latido:** el trabajo del job corre dentro de `conMonitorCron(process.env.MONITOR_<JOB>_URL, fn, { describir })` (`backend/src/config/monitorCron.js`). Avisa el arranque y el resultado a healthchecks.io, que avisa a Discord si el job no corrió, se colgó o falló entero (Sentry no ve los dos primeros). "Falla" es solo el fallo del job entero: un error aislado que el job tolera va a Sentry y no cuenta. `describir` arma el body del ping de éxito, **solo con conteos**. Cada job tiene su propio check en healthchecks.io (con el mismo horario cron que en Railway, en UTC) y su variable, cargada **solo en su servicio cron** (no como shared variable: la URL de ping es un secreto). Sin la variable, el helper no hace nada.
 
 Cómo se diagnostica y se resuelve un problema de producción (avisos en Discord, skills `salud-prod` y `arreglo-prod`): [`decisiones_monitoreo_prod.md`](decisiones_monitoreo_prod.md).
 
