@@ -5,9 +5,9 @@
 > Las líneas y archivos citados en §3 son del 2026-11-05: confirmalos al escribir cada prompt, porque las fases
 > anteriores los mueven. Aprobar el plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
-> **Estado (2026-11-12):** **en curso.** Branch rebasado sobre `main` (`3931843`: monitoreo, formulario de alta y
-> fases 0-2 del resguardo de la DB). Fases 1a (F9), 1b (F11), 1c (F10) y 1 (F7 + F8) hechas y commiteadas. Próximo: fase 2
-> (F6a), que espera el SQL de columnas, datos de los 4 tenants y tabla de tokens.
+> **Estado (2026-11-13):** **en curso.** Branch rebasado sobre `main` (`3931843`: monitoreo, formulario de alta y
+> fases 0-2 del resguardo de la DB). Fases 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8) y 2 (F6a) hechas y commiteadas.
+> Próximo: fase 3 (F6b fronts).
 > Antes, 2026-11-05: fase 0 hecha y la tanda en espera del monitoreo (`feature/monitoreo-prod`, ya en producción).
 
 ## 1. Contexto
@@ -154,8 +154,21 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
     `email_duenio` y `telefono_duenio`, que el formulario ya pide (bloque `contacto` de `solicitud_alta.datos`,
     `version: 1`). Revisar también `leerSolicitud.mjs` y `SKILL.md`.
   - Va en la fase 2, con el `ADD COLUMN`: si no, la primera alta después del `DROP COLUMN telefono` falla.
-  - Los tenants a completar antes del `NOT NULL` son **4**, no 3: `pepe-barber` (prueba del formulario, dado de
-    baja) sigue en la tabla. El SQL con huecos lo incluye, con datos de relleno.
+  - Los tenants a completar antes del `NOT NULL` son **5**: además de kingsai, demo y luxuri, `pepe-barber`
+    (prueba del formulario, dado de baja) y `monte-sinai` (cliente dado de alta con el formulario el 2026-11-11).
+- **Decidido al arrancar la fase 2 (2026-11-12/13, SQL ya corrido por el usuario):**
+  - Columnas `telefono_local`, `email_duenio` y `telefono_duenio`, nullables, con `CHECK` de formato de mail y de
+    E.164 para el celular. `telefono_local` copiado de `telefono`. Los datos del dueño de `pepe-barber` y
+    `monte-sinai` salieron del bloque `contacto` de su `solicitud_alta`; de kingsai, solo el mail. Faltan: el
+    celular de kingsai, y mail y celular de luxuri y demo (los carga el usuario con un `UPDATE` con huecos).
+  - **El `NOT NULL` va después del deploy**, no antes: la query de alta de la skill (la de `main`) inserta
+    tenants sin esas columnas. Paso post-deploy: completar lo vacío y recién ahí el `NOT NULL`, junto con
+    recopiar `telefono` → `telefono_local` y el `DROP COLUMN telefono`.
+  - Tabla `token_recuperacion` (`tenant_id`, `tipo` `operativo`/`pin_admin`, `token_hash` único con el SHA-256
+    del token, `vence_en` con default de 1 h, `usado_en`, `created_at`), con RLS y lectura de `resguardo_lectura`
+    verificada.
+  - Un tenant con `activo = false` ya no entra a nada (`tenantMiddleware`), y la recuperación queda cubierta por
+    lo mismo. La demora de la baja por el caché del middleware queda fuera de esta tanda.
 
 ### F5 — Login de la app del barbero (estética)
 - El ejecutor revisa el login actual, arma **2 direcciones** con capturas (modo celular) dentro del sistema
@@ -302,7 +315,7 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
 | 1b | ✅ **Hecha (2026-11-12, commiteada).** F11 turnero apto para compu y iPad. Dirección elegida: desde 768 px, panel fijo del local a la izquierda (`MarcoLocal` + `HeroLocal`) y cada pantalla en su columna de 480 a la derecha; en celular, igual que antes. `TurnoConfirmado`, solo el marco (su contenido es F10). Detalle en `sistema_de_disenio.md` §3.8 y §4.6 | Ejecutor | — |
 | 1c | ✅ **Hecha (2026-11-12, commiteada).** F10 pantalla de éxito del turnero más liviana. El contenido lo definió el usuario: el día y la hora como dato principal, "Agregar al calendario" sin la otra opción, quién atiende con el servicio, la dirección como link al mapa y el aviso del mail (con el link para cambiar o cancelar). Salen "Ver o cambiar mi turno" y "Reservar otro turno" | Ejecutor | — |
 | 1 | ✅ **Hecha (2026-11-12, commiteada).** F7 comisión con barra (backend + `TabBarberos`) + F8 días con horario y aviso (solo `TabBarberos`). Requisito: 0 barberos con % no múltiplo de 5 (consultado con el rol de solo lectura). Distinto al diseño, decidido con el usuario: la alerta de `0/x` va solo en barberos activos, como el cartel | Ejecutor | SQL de % no múltiplos de 5 |
-| 2 | F6a DB + backend: columnas del dueño y `telefono_local`, tabla de tokens, endpoints y mails de recuperación, Gestión → Negocio (backend), `crearTenant.js` y la skill `alta-cliente` | Ejecutor | SQL de columnas + datos de los 4 tenants + tabla de tokens |
+| 2 | ✅ **Hecha (2026-11-13, commiteada).** F6a DB + backend: columnas del dueño y `telefono_local`, tabla `token_recuperacion`, `/api/auth/recuperar/{solicitar,validar,usar}` y el mail de recuperación, `GET`/`PUT /api/admin/negocio[/contacto]`, `crearTenant.js` (con `--dry-run`) y la skill `alta-cliente`. Distinto al prompt, decidido con el usuario: si el mail no sale, `solicitar` responde igual (el error va a Sentry); el PIN que choca da 409 sin consumir el token; el mail del dueño se guarda en minúsculas | Ejecutor | SQL de columnas + datos de los 5 tenants + tabla de tokens |
 | 3 | F6b fronts: ver contraseña, "¿Olvidaste…?" en los dos logins, pantallas de recuperación, Gestión → Negocio; `telefono_local` en el turnero | Ejecutor | — |
 | 4 | F5 login de la app del barbero (diseño con el usuario → implementación) | Ejecutor | — |
 | 5 | F1a backend: cliente nullable, `LEFT JOIN`, alta sin cliente, asignar cliente | Ejecutor | SQL `cliente_id` nullable |
@@ -311,7 +324,7 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
 | 8 | F4 socios | Ejecutor | — |
 | 9 | F2a traspasos: backend | Ejecutor | SQL `turno_traspaso` |
 | 10 | F2b traspasos: app del barbero | Ejecutor | — |
-| 11 | Cierre: `decisiones_mejoras_operativas.md`, `estado_actual.md` (estado, pendientes resueltos, pasos de deploy y post-deploy: drop de `telefono`, cron nuevo, conteo de históricos), `SQL_Schema.md`, `onboarding.md`, `ruta_proyecto.md`, `plan_app_barbero.md`, mapa del `CLAUDE.md`; resumen | Orquestador | — |
+| 11 | Cierre: `decisiones_mejoras_operativas.md`, `estado_actual.md` (estado, pendientes resueltos, pasos de deploy y post-deploy: los de F6 de §6, cron nuevo, conteo de históricos), `SQL_Schema.md`, `onboarding.md`, `decisiones_alta_clientes.md` D13 (ya hay recuperación de PIN), `ruta_proyecto.md`, `plan_app_barbero.md`, mapa del `CLAUDE.md`; resumen | Orquestador | — |
 
 Después: merge de este branch a `main` + deploy siguiendo `estado_actual.md` (el monitoreo ya está en `main` desde
 antes de esta tanda).
@@ -320,8 +333,19 @@ antes de esta tanda).
 
 Los cambios de DB de cada fase se aplican antes de que su ejecutor verifique (el backend local usa la misma DB) y
 son compatibles con el backend en producción: columnas nuevas nullables o con default, `cliente_id` nullable,
-tablas nuevas. `NOT NULL` de `email_duenio`/`telefono_duenio` solo después de completar los 3 tenants (el backend
-viejo no inserta tenants). Post-deploy: drop de `tenant.telefono` y alta del cron de cierre diario.
+tablas nuevas. Post-deploy: lo de abajo y el alta del cron de cierre diario.
+
+**Post-deploy de F6** (pasa a `estado_actual.md` en el cierre), en este orden:
+1. Completar el contacto del dueño que falta (al 2026-11-13: el celular de kingsai, y mail y celular de luxuri y
+   demo; más cualquier tenant dado de alta desde `main` mientras tanto), con un `UPDATE` con huecos que llena el
+   usuario.
+2. `UPDATE tenant SET telefono_local = telefono WHERE telefono_local IS NULL AND telefono IS NOT NULL` (cubre un
+   alta hecha con la plantilla de `main`, que escribe solo `telefono`).
+3. `ALTER TABLE tenant ALTER COLUMN email_duenio SET NOT NULL, ALTER COLUMN telefono_duenio SET NOT NULL`.
+4. Sacar `telefono` del `INSERT` de `plantilla_alta.sql` y de `crearTenant.js` (hasta acá escriben las dos
+   columnas para que el backend de `main` siga mostrando el teléfono de un alta nueva) y la nota de transición
+   del `SKILL.md` ("Mientras mejoras-operativas no esté en producción…"). Commit por PR.
+5. Recién con eso en `main`: `ALTER TABLE tenant DROP COLUMN telefono`, y actualizar `SQL_Schema.md`.
 
 ## 7. Verificación
 
@@ -353,3 +377,22 @@ _(Los completa el orquestador durante la tanda.)_
   muestra "Revisá los datos, reprogramá o cancelá tu reserva." también en un turno cancelado, completado o (desde
   F9) ya empezado. **Resuelto con la fase 1a** (decisión del usuario): con las acciones a la vista, el texto de
   hoy; si no, "Revisá los datos de tu reserva."
+- **(2026-11-13, ejecutor de la fase 2) El contacto del dueño iba a quedar público.** `getNegocio` atiende también
+  el `GET /api/negocio` público (el nombre antes del login); sumarle el mail y el celular los exponía. **Resuelto
+  en la fase 2:** handler aparte `getNegocioAdmin` para `GET /api/admin/negocio`.
+- **(2026-11-13, ejecutor de la fase 2) El token y la credencial nueva iban a quedar en los logs de Railway.** El
+  log de acceso global escribe el body y solo tapaba PINs y `password`. **Resuelto en la fase 2:** `token`,
+  `nueva`, `email_duenio` y `telefono_duenio` en `KEYS_SENSIBLES` (`utils/sanitizarLogs.js`), y el mail de
+  recuperación se loguea enmascarado (`destinoLog` en `enviarMail`).
+- **(2026-11-13, orquestador al revisar la fase 2) Un alta hecha desde este branch antes del deploy quedaba sin
+  teléfono en el turnero.** La plantilla de la skill y `crearTenant.js` escribían solo `telefono_local`, y el
+  backend de `main` (producción) lee `telefono`. Como la skill corre desde la carpeta del usuario, que está en
+  este branch, la próxima alta caía en esto. **Resuelto en la fase 2:** escriben las dos columnas hasta el
+  post-deploy (§6, paso 4). Por lo mismo, el `SKILL.md` lleva una nota: hasta el deploy, sin la línea del
+  "¿Olvidaste…?" en el mensaje al cliente.
+- **(2026-11-13, usuario vía el ejecutor de la fase 2) No hay aviso si el cron de recordatorios no corre.** Los
+  mails fallidos y un fallo del lote ya llegan a Sentry; falta el aviso de que Railway no lanzó el job o se
+  colgó. Propuesta: Sentry Crons (check-in al empezar y al terminar, con un helper reusable en
+  `config/sentry.js` que después usa el cierre diario de F3), o un heartbeat de UptimeRobot si el plan gratis
+  de Sentry no incluye monitores de cron. **Fuera de esta tanda** (decisión del usuario): chat ejecutor aparte,
+  branch propio desde `main` (`chore/monitor-cron`), después del commit de la fase 2.

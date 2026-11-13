@@ -62,7 +62,8 @@ async function main(query) {
 
   const tenant = (await query(
     `SELECT id, nombre_negocio, subdominio, activo, suscripcion_vigente_hasta::text AS suscripcion_vigente_hasta, duracion_slot_minutos,
-            operativo_usuario, operativo_password_hash, pin_admin, configuracion, booking_url, telefono, direccion
+            operativo_usuario, operativo_password_hash, pin_admin, configuracion, booking_url, telefono_local, direccion,
+            email_duenio, telefono_duenio
      FROM tenant WHERE subdominio = $1`,
     [solicitud.subdominio]
   )).rows[0];
@@ -106,8 +107,10 @@ async function main(query) {
       usuario_operativo: tenant.operativo_usuario,
       configuracion: tenant.configuracion,
       booking_url: tenant.booking_url,
-      telefono: tenant.telefono,
+      telefono_local: tenant.telefono_local,
       direccion: tenant.direccion,
+      email_duenio: tenant.email_duenio,
+      telefono_duenio: tenant.telefono_duenio,
     },
     filas: {
       horario_local: await cuenta('tenant_horario_atencion'),

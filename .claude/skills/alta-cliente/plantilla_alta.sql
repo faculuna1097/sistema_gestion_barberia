@@ -11,6 +11,11 @@
 -- tenant_id NULL). Si falta un PIN de barbero, falla entera (pin NOT NULL).
 -- PINs y contraseña se hashean acá con pgcrypto (bcrypt $2a$10$, lo acepta el
 -- bcrypt.compare de los logins: plan_alta_clientes.md D3).
+-- El contacto del dueño (datos->'contacto') va a tenant.email_duenio (recortado y en
+-- minúsculas, como lo guarda Gestión → Negocio) y tenant.telefono_duenio (E.164): a
+-- ese mail llega la recuperación de la contraseña del iPad y del PIN admin.
+-- El teléfono del local va a telefono_local y, hasta el DROP COLUMN post-deploy de
+-- mejoras-operativas, también a telefono (el backend de main lee esa columna).
 WITH p AS (
   SELECT
     '<SOLICITUD_ID>'::uuid           AS solicitud_id,
@@ -37,7 +42,8 @@ t AS (
   INSERT INTO tenant (
     nombre_negocio, subdominio, pin_admin, suscripcion_vigente_hasta,
     duracion_slot_minutos, operativo_usuario, operativo_password_hash,
-    telefono, direccion, configuracion, booking_url, activo
+    telefono_local, telefono, email_duenio, telefono_duenio,
+    direccion, configuracion, booking_url, activo
   )
   SELECT
     s.datos->'local'->>'nombre',
@@ -48,6 +54,9 @@ t AS (
     p.operativo_usuario,
     extensions.crypt(p.operativo_password, extensions.gen_salt('bf', 10)),
     s.datos->'local'->>'telefono',
+    s.datos->'local'->>'telefono',
+    lower(trim(s.datos->'contacto'->>'email')),
+    trim(s.datos->'contacto'->>'celular'),
     s.datos->'local'->>'direccion',
     jsonb_strip_nulls(jsonb_build_object(
       'whatsapp', wa.whatsapp,

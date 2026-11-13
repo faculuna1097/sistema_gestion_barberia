@@ -28,6 +28,7 @@ import inicioRoutes     from './routes/inicio.js';
 import authPanelRoutes  from './routes/authPanel.js';
 import authBarberoRoutes from './routes/authBarbero.js';
 import authOperativoRoutes from './routes/authOperativo.js';
+import authRecuperarRoutes from './routes/authRecuperar.js';
 import turneroRoutes    from './routes/turnero.js';
 import altaRoutes       from './routes/alta.js';
 import turnosOperativoRoutes from './routes/turnosOperativo.js';
@@ -241,6 +242,10 @@ app.use('/api/auth/operativo', limiterLogin, authOperativoRoutes);
 app.use('/api/auth/barbero',   limiterLogin, authBarberoRoutes);
 // Login unificado del panel (resuelve rol admin/barbero según el PIN).
 app.use('/api/auth/panel',     limiterLogin, authPanelRoutes);
+// Recuperación por mail de la contraseña del iPad y del PIN admin. Mismo limiter:
+// los tokens inválidos cuentan como intentos fallidos. El pedido del mail siempre
+// responde 200 (no consume cupo): lo frena el anti-spam de 2 minutos por tenant y tipo.
+app.use('/api/auth/recuperar', limiterLogin, authRecuperarRoutes);
 app.use('/api/turnero',    turneroRoutes);
 // GET /api/negocio — datos públicos del negocio (nombre, booking_url).
 // Lo consume App.jsx antes del login para el nombre; el logo viene de /negocio/imagenes.

@@ -11,11 +11,13 @@
 --   - corte: UNIQUE corte_turno_unico (turno_id) WHERE turno_id IS NOT NULL
 --     (un turno se vincula a un solo corte; violación → 23505).
 --   - barbero_suspension: índice (barbero_id, desde, hasta).
+--   - token_recuperacion: índice token_recuperacion_tenant_tipo (tenant_id, tipo,
+--     created_at), para el freno anti-spam de 2 minutos.
 --   - Comisión: siempre un porcentaje sobre el precio del servicio (decisión de
 --     negocio del 2026-09-29). El tipo 'fijo' se sacó del CHECK el 2026-11-03. La
 --     fórmula vive solo en backend/src/utils/comision.js.
---   - Row Level Security ACTIVADO y sin policies en las 19 tablas (desde 2026-09-30;
---     solicitud_alta se creó con RLS el 2026-11-10).
+--   - Row Level Security ACTIVADO y sin policies en las 20 tablas (desde 2026-09-30;
+--     solicitud_alta se creó con RLS el 2026-11-10 y token_recuperacion el 2026-11-13).
 --     Cierra la API automática de Supabase (roles anon / authenticated); el backend
 --     entra como owner (postgres) y RLS no le aplica. Toda tabla nueva se crea con
 --     ALTER TABLE ... ENABLE ROW LEVEL SECURITY (el SQL editor no lo activa solo).
@@ -47,8 +49,22 @@ CREATE TABLE public.tenant (
   operativo_password_hash text,
   operativo_token_version integer NOT NULL DEFAULT 0,
   admin_token_version integer NOT NULL DEFAULT 0,
+  -- telefono: columna vieja, reemplazada por telefono_local (2026-11-13). La lee el
+  -- backend de main hasta el deploy de mejoras-operativas; después se borra (pasos
+  -- post-deploy en plan_mejoras_operativas.md). Hasta entonces el alta escribe las dos.
   telefono text,
   direccion text,
+  -- Teléfono público del local, texto libre (hasta 30, lo valida el backend): el
+  -- `tel:` del turnero, que lo expone con la clave `telefono`.
+  telefono_local text,
+  -- Contacto del dueño (2026-11-13): a email_duenio llega la recuperación de la
+  -- contraseña del iPad y del PIN admin. Se guarda en minúsculas. Nullable hasta
+  -- completar los tenants viejos; NOT NULL post-deploy (plan_mejoras_operativas.md).
+  -- Las reglas completas viven en backend/src/utils/contactoNegocio.js.
+  email_duenio text CONSTRAINT tenant_email_duenio_formato
+    CHECK (email_duenio ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'::text),
+  telefono_duenio text CONSTRAINT tenant_telefono_duenio_e164
+    CHECK (telefono_duenio ~ '^\+[1-9][0-9]{7,14}$'::text),
   CONSTRAINT tenant_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.barbero (
@@ -60,7 +76,8 @@ CREATE TABLE public.barbero (
   -- filas). Ningún front publicado la usa desde el deploy del 2026-11-05; se puede
   -- borrar sacándola antes del backend (gestion.js la lee y la escribe).
   comision_tipo text DEFAULT 'porcentaje'::text CONSTRAINT barbero_comision_tipo_check CHECK (comision_tipo = 'porcentaje'::text),
-  -- comision_valor: % actual del barbero (0 a 100, lo valida el backend). Vale para
+  -- comision_valor: % actual del barbero (múltiplo de 5 entre 0 y 100, lo valida el
+  -- backend con utils/comision.js desde el 2026-11-12). Vale para
   -- los cortes nuevos: cada corte guarda el suyo en corte.comision_porcentaje.
   comision_valor numeric(10,2) DEFAULT 0,
   -- activo y created_at: NOT NULL desde el 2026-11-03 (no había NULLs).
@@ -376,6 +393,25 @@ CREATE TABLE public.solicitud_alta (
   -- Sin trigger: lo setea cada UPDATE (guardar, enviar y la query de alta).
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT solicitud_alta_pkey PRIMARY KEY (id)
+);
+-- Links de recuperación de la contraseña del iPad ('operativo') y del PIN admin
+-- ('pin_admin'), que llegan al tenant.email_duenio (2026-11-13). Solo se guarda el
+-- SHA-256 del token; el token viaja en el fragmento del link (#recuperar=…). Un
+-- link nuevo anula los anteriores sin usar del mismo tipo (vence_en = now(): se
+-- conservan). Lo escriben solo controllers/authRecuperar.js y
+-- services/recuperacionService.js.
+CREATE TABLE public.token_recuperacion (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tenant_id uuid NOT NULL,
+  tipo text NOT NULL CONSTRAINT token_recuperacion_tipo_check
+    CHECK (tipo = ANY (ARRAY['operativo'::text, 'pin_admin'::text])),
+  token_hash text NOT NULL,
+  vence_en timestamp with time zone NOT NULL DEFAULT (now() + '01:00:00'::interval),
+  usado_en timestamp with time zone,              -- NULL = sin usar
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT token_recuperacion_pkey PRIMARY KEY (id),
+  CONSTRAINT token_recuperacion_hash_unico UNIQUE (token_hash),
+  CONSTRAINT token_recuperacion_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
 );
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Web de Kingsai (sitio aparte, no es parte de este repo). Vive solo en la DB;

@@ -84,6 +84,7 @@ backend/
     |   |-- authBarbero.js
     |   |-- authOperativo.js
     |   |-- authPanel.js
+    |   |-- authRecuperar.js     recuperación por mail de la contraseña del iPad y del PIN admin
     |   |-- balances.js
     |   |-- barberos.js
     |   |-- caja.js
@@ -132,6 +133,7 @@ backend/
     |   |-- authBarbero.js
     |   |-- authOperativo.js
     |   |-- authPanel.js
+    |   |-- authRecuperar.js
     |   |-- balances.js
     |   |-- barberos.js
     |   |-- caja.js
@@ -174,6 +176,7 @@ backend/
     |   |-- movimientosService.js
     |   |-- planillaService.js
     |   |-- recordatoriosService.js
+    |   |-- recuperacionService.js  token, link y queries de la recuperación por mail
     |   |-- sociosService.js
     |   |-- sqlTurnoEnriquecido.js
     |   |-- storageService.js
@@ -186,6 +189,7 @@ backend/
     `-- utils/
         |-- comision.js          fórmula de la comisión de un corte (única fuente)
         |-- constantes.js
+        |-- contactoNegocio.js   reglas del mail y celular del dueño y del teléfono del local
         |-- credencialesOperativas.js
         |-- errores422.js
         |-- movimientos.js
@@ -212,6 +216,7 @@ backend/src/routes/
 |-- authPanel.js              login unificado admin/barbero
 |-- authBarbero.js            login barbero
 |-- authOperativo.js          login operativo
+|-- authRecuperar.js          recuperación por mail (contraseña del iPad y PIN admin)
 |-- barberos.js               barberos para operacion
 |-- servicios.js              servicios para operacion
 |-- productos.js              productos para operacion

@@ -77,15 +77,23 @@ cuando la feature se archive) y `docs/onboarding.md`.
    - **Servicios y productos:** nombre, precio y duración (`cantidad_slots` ×
      largo del turno, en minutos); productos con stock.
    - **Contacto:** WhatsApp y teléfono del local, link de reseñas, y el
-     contacto del dueño (nombre, celular, mail).
+     contacto del dueño (nombre, celular, mail). El mail del dueño es a dónde le
+     llega la recuperación de la contraseña del iPad y del PIN de admin: que sea
+     uno que lea.
 5. Mostrá las **alertas** del script tal cual, como "para confirmar con el
    cliente". No son errores: Facundo decide si sigue.
 
 ## Paso 2 — Credenciales
 
-El sistema todavía **no tiene recuperación de PIN ni de contraseña**: se
-priorizan credenciales **simples, fáciles de recordar**. Proponé y que Facundo
-confirme o cambie:
+Son credenciales iniciales: se priorizan **simples, fáciles de recordar**. Si
+el dueño se olvida la contraseña del iPad o el PIN de admin, los recupera solo
+desde cada login ("¿Olvidaste…?"): le llega un mail a `contacto.email` (queda en
+`tenant.email_duenio`). Proponé y que Facundo confirme o cambie:
+
+> **Mientras mejoras-operativas no esté en producción** (el "¿Olvidaste…?" llega
+> con su deploy): todavía no hay recuperación. Avisale a Facundo y sacá del
+> mensaje al cliente la línea del "¿Olvidaste…?". Esta nota se borra en el cierre
+> de la tanda.
 
 - **PIN de cada barbero:** 4 dígitos repetidos, en el orden del formulario:
   `1111`, `2222`, `3333`… (hasta `9999`; con más de 9 barberos, pedile a
@@ -120,7 +128,9 @@ barbero, usuario de 3+ caracteres y contraseña de 8+.
      `enviada`: no se cargó nada.
    - Que te avise cuando la haya corrido (o te pegue la fila).
 
-Qué hace la query (por si pregunta): crea el tenant (con `configuracion`
+Qué hace la query (por si pregunta): crea el tenant (con el contacto del dueño
+en `email_duenio`, en minúsculas, y `telefono_duenio`; el teléfono del local en
+`telefono_local`; `configuracion`
 `whatsapp` y `resena_url`; el WhatsApp argentino sin el 9 se carga **con** el
 9; y `booking_url` con su turnero, `https://<subdominio>.barbermanager.app/turnos`,
 que es el botón "Reservar" del panel), el horario del local, los barberos (PIN hasheado con `crypt`, comisión,
@@ -137,7 +147,8 @@ Cuando Facundo avisa que la corrió:
 1. Corré `verificarAlta.mjs --solicitud <id> --pin-admin … --pines … --password …`
    con las mismas credenciales.
 2. Tiene que dar: `solicitud` = `cargada`, `tenant.activo` = true,
-   `tenant.booking_url` = su turnero,
+   `tenant.booking_url` = su turnero, `tenant.email_duenio` y
+   `tenant.telefono_duenio` = el contacto de la solicitud (el mail en minúsculas),
    `barberos` = `barberos_pedidos`, `categorias_gasto` = 9, y todas las
    `verificaciones` en true (cada PIN de barbero con el nombre que le
    corresponde). Si algo no cierra, decilo y no armes el mensaje.
@@ -186,6 +197,8 @@ Queda un ícono en la pantalla y se abre directo, sin buscar el link.
 Los barberos que tienen mail van a recibir una invitación de Google Calendar por cada turno, de turnos.barbermanager@gmail.com. Que las acepten, así los turnos les aparecen en el calendario.
 
 Desde la gestión podés subir el logo y fotos del local (Gestión → Negocio): se ven en el turnero. Y si querés cambiar un PIN, también se hace desde ahí.
+
+Si te olvidás la contraseña del iPad o tu PIN, tocá "¿Olvidaste…?" en la pantalla de entrada y te llega un mail a {mail del contacto} para elegir uno nuevo.
 
 Cualquier duda, escribime.
 ```

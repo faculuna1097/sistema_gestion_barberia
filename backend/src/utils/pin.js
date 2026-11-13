@@ -9,6 +9,22 @@ import bcrypt from 'bcrypt';
 import { query } from '../config/db.js';
 
 /**
+ * esPinValido
+ * Formato de un PIN (admin o barbero): exactamente 4 dígitos.
+ * @param {*} pin - PIN en texto plano.
+ * @returns {boolean} true si es un string de 4 dígitos.
+ */
+export const esPinValido = (pin) => typeof pin === 'string' && /^\d{4}$/.test(pin);
+
+/**
+ * hashearPin
+ * Hashea un PIN con bcrypt (10 rondas, como el resto de los PINs del sistema).
+ * @param {string} pin - PIN en texto plano, ya validado.
+ * @returns {Promise<string>} El hash para guardar en tenant.pin_admin o barbero.pin.
+ */
+export const hashearPin = (pin) => bcrypt.hash(pin, 10);
+
+/**
  * pinColisiona
  * Determina si un PIN en texto plano ya está en uso dentro de un tenant,
  * comparándolo contra el PIN del admin y el de cada barbero (activos e

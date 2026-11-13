@@ -46,13 +46,17 @@ import { cuerpoError422, CUERPO_422_FERIADO } from '../utils/errores422.js';
  * reseñas" del Perfil de Empresa de Google, también por SQL): solo viaja si es
  * una URL https; si no, `null` y el turnero no muestra el link de reseñas.
  *
+ * `telefono` sale de `tenant.telefono_local` (el teléfono público del local, para
+ * el `tel:`). La clave de la respuesta sigue siendo `telefono`: el contrato no cambió
+ * cuando la columna pasó de `telefono` a `telefono_local`.
+ *
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
  * @returns {JSON} { id, nombre, telefono, whatsapp, resena_url, direccion, horario_atencion, feriados }
  */
 export const getTenant = async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, nombre_negocio, telefono, direccion, configuracion
+      `SELECT id, nombre_negocio, telefono_local, direccion, configuracion
        FROM tenant
        WHERE id = $1 AND activo = true`,
       [req.tenant_id]
@@ -76,7 +80,7 @@ export const getTenant = async (req, res) => {
     res.json({
       id: row.id,
       nombre: row.nombre_negocio,
-      telefono: row.telefono,
+      telefono: row.telefono_local,
       whatsapp: esTelefonoE164(whatsapp) ? whatsapp.trim() : null,
       resena_url: esUrlHttps(resenaUrl) ? resenaUrl.trim() : null,
       direccion: row.direccion,

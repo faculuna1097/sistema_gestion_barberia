@@ -11,6 +11,7 @@ import { esUUID } from '../utils/validarUuid.js';
 import { esMontoValido, esEnteroNoNegativo, ENTERO_MAXIMO, mensajeMontoInvalido } from '../utils/validarNumero.js';
 import { invalidar } from '../middlewares/tenantMiddleware.js';
 import { esComisionValida, MENSAJE_COMISION_INVALIDA } from '../utils/comision.js';
+import { validarContactoNegocio } from '../utils/contactoNegocio.js';
 
 const SALT_ROUNDS = 10;
 const MENSAJE_PRECIO_INVALIDO = mensajeMontoInvalido('precio');
@@ -466,6 +467,73 @@ export const getNegocio = async (req, res) => {
   } catch (err) {
     console.error('[gestion] Error en getNegocio:', err);
     res.status(500).json({ error: 'Error al obtener datos del negocio' });
+  }
+};
+
+/**
+ * getNegocioAdmin
+ * Datos del negocio para Gestión → Negocio (solo admin): lo mismo que getNegocio
+ * más el contacto (mail y celular del dueño, teléfono del local). Es un handler
+ * aparte a propósito: getNegocio también atiende GET /api/negocio, que es público,
+ * y el contacto del dueño no tiene que salir de ahí.
+ * @param {string} req.tenant_id - Inyectado por verificarToken
+ * @returns {JSON} { nombre_negocio, booking_url, email_duenio, telefono_duenio, telefono_local }
+ *   (los tres del contacto pueden venir null) | 404 si el tenant no existe
+ */
+export const getNegocioAdmin = async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT nombre_negocio, booking_url, email_duenio, telefono_duenio, telefono_local
+       FROM tenant WHERE id = $1`,
+      [req.tenant_id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Tenant no encontrado' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('[gestion] Error en getNegocioAdmin:', err);
+    res.status(500).json({ error: 'Error al obtener datos del negocio' });
+  }
+};
+
+/**
+ * editarContactoNegocio
+ * Guarda el contacto del negocio: mail y celular del dueño (a dónde llega la
+ * recuperación de la contraseña del iPad y del PIN admin) y teléfono del local
+ * (el `tel:` del turnero). Endpoint aparte del PUT de nombre y booking_url para no
+ * cambiar su contrato. Las reglas viven en utils/contactoNegocio.js.
+ * El log no lleva los datos (son personales): solo el tenant.
+ * @param {string}  req.tenant_id              - Inyectado por verificarToken
+ * @param {string}  req.body.email_duenio      - Obligatorio; se guarda recortado y en minúsculas
+ * @param {string}  req.body.telefono_duenio   - Obligatorio, E.164
+ * @param {string} [req.body.telefono_local]   - Opcional, hasta 30 caracteres (vacío → null)
+ * @returns {JSON} { email_duenio, telefono_duenio, telefono_local }
+ *   | 400 { error, campo } | 404 si el tenant no existe
+ */
+export const editarContactoNegocio = async (req, res) => {
+  const resultado = validarContactoNegocio(req.body ?? {});
+  if (resultado.error) {
+    return res.status(400).json({ error: resultado.error, campo: resultado.campo });
+  }
+  const { email_duenio, telefono_duenio, telefono_local } = resultado.valores;
+
+  try {
+    const result = await query(
+      `UPDATE tenant
+       SET email_duenio = $1, telefono_duenio = $2, telefono_local = $3
+       WHERE id = $4
+       RETURNING email_duenio, telefono_duenio, telefono_local`,
+      [email_duenio, telefono_duenio, telefono_local, req.tenant_id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Tenant no encontrado' });
+    }
+    console.log('[gestion] editarContactoNegocio completado | tenant:', req.tenant_id);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('[gestion] Error en editarContactoNegocio:', err);
+    res.status(500).json({ error: 'Error al guardar el contacto del negocio' });
   }
 };
 

@@ -5,9 +5,14 @@
 // a los logs de Railway en texto plano.
 
 // Lista de keys cuyo valor se reemplaza por '***' al sanitizar un objeto.
-// Comparación case-insensitive. Agregar acá nuevas keys cuando aparezcan
-// (ej: 'token', 'secret', si alguna vez viajan en body).
-const KEYS_SENSIBLES = ['pin', 'pin_admin', 'pin_actual', 'pin_nuevo', 'password'];
+// Comparación case-insensitive. Agregar acá nuevas keys cuando aparezcan.
+//   - token y nueva: la recuperación por mail (POST /api/auth/recuperar/*) manda el
+//     token del link y la credencial nueva en el body.
+//   - email_duenio y telefono_duenio: datos personales del dueño (Gestión → Negocio).
+const KEYS_SENSIBLES = [
+  'pin', 'pin_admin', 'pin_actual', 'pin_nuevo', 'password',
+  'token', 'nueva', 'email_duenio', 'telefono_duenio',
+];
 
 /**
  * sanitizarObjeto

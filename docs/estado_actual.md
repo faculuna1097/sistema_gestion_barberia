@@ -136,6 +136,7 @@ Para abrir el turnero o la app del barbero desde un celular en la misma WiFi:
 | Demo | Desarrollo | `demo` | `aaaaaaaa-0000-0000-0000-000000000002` |
 | Luxuri BarberClub | Producción (alta 2026-10-19) | `luxuribarberclub` | `d7990463-a5ee-47a4-a276-6dcb722f1189` |
 | Pepe Barber | Prueba del formulario de alta, dada de baja (`activo = false`, 2026-11-11). El subdominio queda ocupado. | `pepe-barber` | `914b6323-6d66-4265-b078-14bd1ac289c4` |
+| Monte Sinaí | Alta por el formulario (2026-11-11), activo | `monte-sinai` | `ce0b924e-78e1-4527-96b3-a7a2ea895734` |
 
 URL de producción: `kingsaistudio.barbermanager.app` ✅ funcionando.
 
