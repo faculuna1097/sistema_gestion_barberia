@@ -23,3 +23,5 @@ export { default as BottomNav }       from './BottomNav.jsx';
 export { default as KPI }             from './KPI.jsx';
 export { default as TurnoListItem }   from './TurnoListItem.jsx';
 export { default as SearchInput }     from './SearchInput.jsx';
+export { default as FondoLocal }      from './FondoLocal.jsx';
+export { default as MarcoAcceso, EncabezadoAcceso } from './MarcoAcceso.jsx';

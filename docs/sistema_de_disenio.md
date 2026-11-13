@@ -408,6 +408,9 @@ const [hover, eventosHover] = useHover();
   `eventosHover.onMouseLeave?.()`.
 - Un componente nuevo del barbero o del turnero con hover usa el hook. El
   panel sigue con el `useState` (es de escritorio).
+- **`useHoverPresion`** (mismo archivo del barbero, desde el 2026-11-13): el
+  hover más el "apretado" de un botón, que sí se prende en táctil (es el
+  feedback del toque). Lo usan las teclas del PIN y los barberos del login.
 - **En el turnero (desde el 2026-11-03)** está la misma copia
   (`frontend-turnero/src/hooks/useHover.js`), en `Card`, `SlotChip`, `Button` y
   las filas de servicio y de barbero de la landing. La fila del equipo de la
@@ -784,6 +787,30 @@ componente se comparte recién cuando un segundo front lo necesita).
 | `KPI` | Tarjeta de métrica (label + valor grande + tono semántico). |
 | `TurnoListItem` | Card de turno: hora/cliente/servicio + acciones según estado. |
 | `SearchInput` | Input de búsqueda con lupa + botón limpiar. |
+| `FondoLocal` | Fondo a pantalla completa con la foto del local desenfocada y con velo (sin foto, `surfaceAlt`). Copia del panel (§6.1) sin el "telón" de `esperarImagen`. |
+| `MarcoAcceso` / `EncabezadoAcceso` | Marco del login: `FondoLocal`, un overlay con scroll propio y la card centrada (380), con `esquina` para el "Volver". Copia del panel sin `onSubmit`; la bajada de `EncabezadoAcceso` es `aria-live`, así se anuncia "PIN incorrecto". |
+
+**Login (desde el 2026-11-13, F5 de `plan_mejoras_operativas.md`).** Las dos
+fases del login comparten `MarcoAcceso`: la misma "puerta" que el login del
+iPad y el del panel, con la foto del local de fondo.
+- **Selector:** la marca del local (logo de 72 y el nombre; skeletons del mismo
+  tamaño mientras `App` la carga, así no salta) y los barberos en una grilla de
+  avatares con el nombre completo debajo, en hasta dos renglones. Las columnas
+  dependen de la cantidad (`medidasGrilla` en `Login.jsx`): con 2, dos
+  columnas; con 3, una fila de 3; con 4, 2×2; desde 5, tres columnas con la
+  última fila centrada. Avatar de 64 hasta 4 barberos y de 56 desde 5. Con 9
+  entra sin scroll en un celular de 667 px; con más, la card scrollea sobre la
+  foto. El último barbero que entró desde ese celular va primero
+  (`utils/sesion.js`).
+- **PIN:** "Volver" en la esquina, el avatar, el nombre, los puntos y un teclado
+  de teclas de 56 en `surfaceAlt` (la de borrar, sin fondo), con la línea
+  "¿Olvidaste tu PIN? Pedile uno nuevo al dueño." debajo: el barbero no tiene
+  recuperación por mail.
+- Al cambiar de fase, el foco va al título de la fase nueva.
+- **La sesión queda guardada en el celular** (`utils/sesion.js`, `localStorage`,
+  como el token del iPad en el panel): al abrir la app con una sesión vigente
+  se entra sin PIN, hasta los 30 días del token. Un 401 o "Cerrar sesión" la
+  borran.
 
 ### 6.5 Propias de `frontend-alta`
 
@@ -914,7 +941,7 @@ la estrategia es duplicar**:
 | | `tokens.js` | `index.css` |
 |---|---|---|
 | **Panel** | La base de Luz más `neutralSoft`, `overlay` y `shadowLg` (`0 20px 40px rgba(0,0,0,0.15)`), solo de este front. | Geist y Geist Mono desde `public/fonts` (desde 2026-11-02). `om-fade` sube 4 px. Suma `om-shake`, `.om-fila-hover` (el hover de las tablas de reporte), `.om-rango` (el riel de `SelectorConBarra`, desde el 2026-11-12) y `spin`. |
-| **Barbero** | La base de Luz: lo mismo que el panel, sin `neutralSoft`, `overlay` ni `shadowLg`. | Google Fonts. `om-fade` es solo opacidad (con `transform`, los modales se descentraban dentro de `PageContainer`). Su giro se llama `om-spin`. Sin `om-shake` ni `.om-fila-hover`. |
+| **Barbero** | La base de Luz: lo mismo que el panel, sin `neutralSoft`, `overlay` ni `shadowLg`. | Google Fonts. `om-fade` es solo opacidad (con `transform`, los modales se descentraban dentro de `PageContainer`). Su giro se llama `om-spin`. `om-shake` (los puntos del PIN, desde el 2026-11-13; antes era un `<style>` del login). Sin `.om-fila-hover`. |
 | **Landing** | La base sin `neutralSoft`, `overlay` ni `maxWidth`. Suma `sizeDisplay`, `sizeSection`, `sizeSubheading`, `maxWidthWide`, `maxWidthText`, `sectionGapMin` y `sectionGapMax`. Tiene su propio `shadowLg` (`0 12px 32px rgba(0,0,0,0.10)`, para las capturas que flotan): mismo nombre que el del panel, otro valor. | Google Fonts, `scroll-behavior: smooth`, `om-reveal` y las clases `om-` de §4.1. Sin `om-stroke`, `om-overlay-in` ni `om-dialog-in`. |
 | **Turnero** | Diverge a propósito (§3.8): `bg`, `accent`, `accentHover`, `accentSoft` y los del hero. No tiene `shadowScroll`. | Diverge a propósito (§3.8): `overscroll-behavior`, los colores de su tema y el movimiento `tt-`. |
 | **Alta** | La base de Luz, sin `neutralSoft`, `overlay` ni `shadowLg` (copia del panel, 2026-11-10). | Geist desde `public/fonts`. `om-shimmer`, `om-pop` y `om-stroke`, con su versión para "reducir movimiento", y el movimiento `al-` (§3.9). |
@@ -1005,7 +1032,9 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-11-13 — F6 de mejoras operativas (fase 3): §5.2 suma el ojo de `Field` (`revelable`) y la label con `htmlFor` en el panel; §6.1 suma `MarcoAcceso`, `EncabezadoAcceso`, `BotonEnlace`, `FilaAjuste`, `PillSinConfigurar` y `ariaLabel` en `Button`.*
+*Última actualización: 2026-11-13 — F5 de mejoras operativas (fase 4): el login de la app del barbero con `FondoLocal` y `MarcoAcceso` (§6.3), la grilla de barberos, la sesión guardada en el celular, `useHoverPresion` (§4.2) y `om-shake` en el `index.css` del barbero (§8).*
+
+*2026-11-13 — F6 de mejoras operativas (fase 3): §5.2 suma el ojo de `Field` (`revelable`) y la label con `htmlFor` en el panel; §6.1 suma `MarcoAcceso`, `EncabezadoAcceso`, `BotonEnlace`, `FilaAjuste`, `PillSinConfigurar` y `ariaLabel` en `Button`.*
 
 *2026-11-12 — F7 de mejoras operativas: §6.1 suma `SelectorConBarra` (panel) y §8 la clase `om-rango` en el `index.css` del panel.*
 

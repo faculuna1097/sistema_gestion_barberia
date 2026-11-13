@@ -11,7 +11,7 @@ Para convenciones de código, ver [`/docs/convenciones_tecnicas.md`](./convencio
 - **Frontend:** React + Vite, inline styles + módulo `theme` (design tokens), fuente Geist. Gestión, barbero y landing usan el sistema de diseño "Luz", con acento indigo (ver `docs/sistema_de_disenio.md`). El turnero parte de Luz con identidad propia en blanco y negro desde su rediseño de 2026-10 (§3.8 del mismo doc). El verde `#1a7a4a` + DM Sans del scaffold original quedaron deprecados con el rediseño.
 - **Backend:** Node.js + Express, ES Modules (`import/export`).
 - **DB:** PostgreSQL via Supabase Session Pooler.
-- **Auth:** bcrypt + JWT. Token del panel (admin o barbero) en memoria (`let authToken` en `frontend/src/services/api.js`; `App.jsx` lo setea con `setAuthToken`). Token operativo en `localStorage` con clave `token_operativo` (sobrevive al reload del iPad). Token barbero **en memoria** (módulo `api.js` de `frontend-barbero`, `let authToken`) — no persiste en `localStorage`, así que un reload obliga a re-loguear por PIN. Único token en `localStorage`: el operativo.
+- **Auth:** bcrypt + JWT. Token del panel (admin o barbero) en memoria (`let authToken` en `frontend/src/services/api.js`; `App.jsx` lo setea con `setAuthToken`). Token operativo en `localStorage` con clave `token_operativo` (sobrevive al reload del iPad). Token barbero en `localStorage` (clave `barbero_sesion`, con el `{ id, nombre }` del barbero; `frontend-barbero/src/utils/sesion.js`) desde la F5 de mejoras operativas (2026-11-13, sin deploy): el barbero entra sin PIN mientras el token esté vigente (30 días); un 401 o "Cerrar sesión" la borran. Antes vivía solo en memoria. El token del panel sigue en memoria (el iPad es compartido).
 
 ---
 

@@ -6,8 +6,8 @@
 > anteriores los mueven. Aprobar el plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
 > **Estado (2026-11-13):** **en curso.** Branch rebasado sobre `main` (`3931843`: monitoreo, formulario de alta y
-> fases 0-2 del resguardo de la DB). Fases 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8), 2 (F6a) y 3 (F6b) hechas y commiteadas.
-> Próximo: fase 4 (F5, login de la app del barbero).
+> fases 0-2 del resguardo de la DB). Fases 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8), 2 (F6a), 3 (F6b) y 4 (F5) hechas y
+> commiteadas. Próximo: fase 5 (F1a backend), que espera el SQL de `cliente_id` nullable.
 > Antes, 2026-11-05: fase 0 hecha y la tanda en espera del monitoreo (`feature/monitoreo-prod`, ya en producción).
 
 ## 1. Contexto
@@ -326,7 +326,7 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
 | 1 | ✅ **Hecha (2026-11-12, commiteada).** F7 comisión con barra (backend + `TabBarberos`) + F8 días con horario y aviso (solo `TabBarberos`). Requisito: 0 barberos con % no múltiplo de 5 (consultado con el rol de solo lectura). Distinto al diseño, decidido con el usuario: la alerta de `0/x` va solo en barberos activos, como el cartel | Ejecutor | SQL de % no múltiplos de 5 |
 | 2 | ✅ **Hecha (2026-11-13, commiteada).** F6a DB + backend: columnas del dueño y `telefono_local`, tabla `token_recuperacion`, `/api/auth/recuperar/{solicitar,validar,usar}` y el mail de recuperación, `GET`/`PUT /api/admin/negocio[/contacto]`, `crearTenant.js` (con `--dry-run`) y la skill `alta-cliente`. Distinto al prompt, decidido con el usuario: si el mail no sale, `solicitar` responde igual (el error va a Sentry); el PIN que choca da 409 sin consumir el token; el mail del dueño se guarda en minúsculas | Ejecutor | SQL de columnas + datos de los 5 tenants + tabla de tokens |
 | 3 | ✅ **Hecha (2026-11-13, commiteada).** F6b fronts: ojo en `Field` (`revelable`), "¿Olvidaste…?" en los dos logins (`SolicitudRecuperacion`, con paso intermedio), `PantallaRecuperacion` (el `#recuperar=` se lee antes que todo en `App.jsx` y se saca de la URL), Gestión → Negocio → Contacto (`BloqueContacto`, pide el PIN de admin) y Gestión → Seguridad rediseñada. El turnero no cambió (sigue la clave `telefono`). Distinto al prompt, decidido con el usuario: PIN de admin incorrecto → 403 (antes 401, que cerraba la sesión) también en credenciales y PIN; la recuperación deja volver a elegir el mismo PIN; celular argentino por defecto; aviso de sesión cerrada en el login del panel | Ejecutor | — |
-| 4 | F5 login de la app del barbero (diseño con el usuario → implementación) | Ejecutor | — |
+| 4 | ✅ **Hecha (2026-11-13, commiteada).** F5 login de la app del barbero. Dirección elegida: "Marco del local" (`FondoLocal` + `MarcoAcceso`, copias adaptadas de las del panel), selector en grilla de avatares con el último barbero del celular primero, teclado de PIN con "¿Olvidaste tu PIN? Pedile uno nuevo al dueño". Distinto al prompt, decidido con el usuario: la sesión del barbero queda guardada en el celular (`utils/sesion.js`, 30 días como el token; 401 o "Cerrar sesión" la borran), sin tocar el backend. Arreglado de paso: salían dos POST de login por PIN | Ejecutor | — |
 | 5 | F1a backend: cliente nullable, `LEFT JOIN`, alta sin cliente, asignar cliente | Ejecutor | SQL `cliente_id` nullable |
 | 6 | F1b fronts: wizard, atajo en la Agenda, refresco de la Agenda, asignar cliente (app y panel), "Sin datos" en el iPad | Ejecutor | — |
 | 7 | F3 backend (endpoint, `no_asistio_por`, `cierreDiario.js`) + avisos en el iPad y el Inicio | Ejecutor | SQL `no_asistio_por` |
