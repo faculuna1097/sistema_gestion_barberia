@@ -73,6 +73,7 @@ backend/
     |-- config/
     |   |-- db.js
     |   |-- jwt.js
+    |   |-- monitorCron.js   ping de latido de los jobs de cron a healthchecks.io (conMonitorCron)
     |   |-- sentry.js        helper central de Sentry (el resto del backend no importa @sentry/node)
     |   |-- supabase-ca.crt
     |   `-- supabase.js
@@ -721,6 +722,7 @@ frontend-alta/
 - Servicios reutilizables: `backend/src/services/`
 - Cron de recordatorios: `backend/src/jobs/recordatorios.js`
 - Sentry: `backend/src/instrument.js` + `backend/src/config/sentry.js`
+- Aviso si un cron no corre: `backend/src/config/monitorCron.js` (healthchecks.io)
 - Skills de producción (diagnóstico y arreglo desde el celular): `.claude/skills/salud-prod/`, `.claude/skills/arreglo-prod/`
 - Panel principal: `frontend/src/App.jsx`
 - Panel admin: `frontend/src/screens/admin/PanelAdmin.jsx`
