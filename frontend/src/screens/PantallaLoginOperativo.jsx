@@ -5,21 +5,16 @@
 //   1. Alguien presione el botón de logout en MainScreen, o
 //   2. El backend devuelva 401 (token expirado a los 30d, o credenciales rotadas).
 //
-// Layout: fondo full-screen con la foto del local vía `FondoLocal` (el mismo
-// fondo compartido por MainScreen, los flujos y el login admin), con un blur
-// MÁS fuerte (10px) que el resto para reforzar la sensación de "bloqueo /
-// todavía no ingresaste al sistema". Card sólida centrada con shadowMd; el logo
-// del tenant va dentro de un círculo arriba de la card. Sin foto, FondoLocal
-// cae a `surfaceAlt` liso.
+// Layout: `MarcoAcceso` (components/ui), el marco compartido con el login del
+// panel y la recuperación: la foto del local con un blur MÁS fuerte (10px) que el
+// resto, para reforzar la sensación de "bloqueo / todavía no ingresaste al
+// sistema", y la card clara centrada con el logo arriba. El overlay del marco
+// scrollea: si sube el teclado del iPad, el form scrollea en vez de recortarse.
 //
-// La card vive dentro de un overlay scrollable (overflowY:auto): FondoLocal es
-// overflow:hidden, así que el scroll propio garantiza que, si sube el teclado
-// del iPad y achica el viewport, el form scrollee en vez de recortarse.
-//
-// Al montar este login, FondoLocal precarga la foto (`new Image()`): así, cuando
-// el operativo entra a MainScreen, la foto ya está en cache y entra al instante.
-// No se gatea el contenido (sin `esperarImagen`): el formulario debe ser usable
-// de entrada; FondoLocal igual hace fade-in del fondo (mata el snap).
+// La contraseña tiene el botón ojo de `Field` (`revelable`). Debajo de
+// "Ingresar", "¿Olvidaste tu contraseña?" cambia el contenido de la card por
+// `SolicitudRecuperacion`, que manda el link al mail del dueño (F6 de
+// plan_mejoras_operativas.md).
 //
 // Props:
 //   onAcceso     — callback(token) tras login exitoso. App.jsx lo usa para
@@ -33,9 +28,10 @@
 //                  hasta la primera respuesta del login.
 
 import { useState } from "react";
-import { theme } from "../theme/tokens.js";
-import { Field, Button, LogoCirculo, ContactoSoporte } from "../components/ui";
-import FondoLocal from "../components/ui/FondoLocal.jsx";
+import {
+  Field, Button, LogoCirculo, ContactoSoporte, MarcoAcceso, EncabezadoAcceso, BotonEnlace,
+} from "../components/ui";
+import SolicitudRecuperacion from "./SolicitudRecuperacion.jsx";
 import { loginOperativo } from "../services/api";
 import { fallaDeLogin } from "../utils/errores";
 
@@ -54,6 +50,8 @@ export default function PantallaLoginOperativo({ onAcceso, imagenLogo, imagenLoc
   // huboRespuesta: ya se intentó un login, así que el aviso de la carga inicial
   // (avisoAcceso) deja de aplicar: manda lo que respondió el login.
   const [huboRespuesta, setHuboRespuesta] = useState(false);
+  // olvido: se está pidiendo el link de recuperación (la card muestra SolicitudRecuperacion).
+  const [olvido, setOlvido] = useState(false);
 
   /**
    * submit — valida que los campos no estén vacíos, llama a loginOperativo y
@@ -87,100 +85,69 @@ export default function PantallaLoginOperativo({ onAcceso, imagenLogo, imagenLoc
   // ninguno, la falla que se detectó al abrir el sistema.
   const errorVisible = error ?? (huboRespuesta ? null : avisoAcceso);
 
+  if (olvido) {
+    return (
+      <MarcoAcceso imagenLocal={imagenLocal} blurPx={10}>
+        <LogoCirculo imagenLogo={imagenLogo} />
+        <SolicitudRecuperacion tipo="operativo" onVolver={() => setOlvido(false)} />
+      </MarcoAcceso>
+    );
+  }
+
   return (
     // blurPx 10: más desenfoque que MainScreen (4) → sensación de "bloqueo".
-    // El velo y el fade los aporta FondoLocal (mismo fondo que el resto).
-    <FondoLocal imagenLocal={imagenLocal} blurPx={10}>
-      {/* Overlay scrollable: restaura el scroll que el login tenía antes
-          (FondoLocal es overflow:hidden). Si sube el teclado del iPad y achica
-          el viewport, el form scrollea en vez de recortarse. `margin:auto` en el
-          form lo centra cuando sobra espacio y permite scroll cuando no. */}
+    <MarcoAcceso imagenLocal={imagenLocal} blurPx={10} onSubmit={submit}>
+      <LogoCirculo imagenLogo={imagenLogo} />
+
+      <EncabezadoAcceso
+        titulo="Modo operativo"
+        bajada={errorVisible?.mensaje ?? "Ingresá las credenciales del local"}
+        error={Boolean(errorVisible)}
+      />
+
       <div style={{
-        position: 'absolute',
-        inset: 0,
-        overflowY: 'auto',
+        width: '100%',
         display: 'flex',
-        padding: 24,
-        boxSizing: 'border-box',
+        flexDirection: 'column',
+        gap: 16,
       }}>
-        <form
-          onSubmit={submit}
-          style={{
-            margin: 'auto',
-            width: '100%',
-            maxWidth: 380,
-            background: theme.surface,
-            border: `1px solid ${theme.hairline}`,
-            borderRadius: theme.radiusLg,
-            boxShadow: theme.shadowMd,
-            padding: 32,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 20,
-            animation: 'om-fade .26s ease-out both',
-          }}
-        >
-          <LogoCirculo imagenLogo={imagenLogo} />
-
-          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <h1 style={{
-              fontFamily: theme.body,
-              fontWeight: theme.weightHeading,
-              fontSize: theme.sizeTitle,
-              color: theme.ink,
-              letterSpacing: '-0.02em',
-              margin: 0,
-            }}>
-              Modo operativo
-            </h1>
-            <p style={{
-              fontFamily: theme.body,
-              fontSize: theme.sizeBody,
-              fontWeight: errorVisible ? theme.weightMedium : theme.weightRegular,
-              color: errorVisible ? theme.danger : theme.muted,
-              margin: 0,
-              minHeight: 22,
-              transition: `color ${theme.transitionFast}`,
-            }}>
-              {errorVisible?.mensaje ?? "Ingresá las credenciales del local"}
-            </p>
-          </div>
-
-          <div style={{
-            width: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 16,
-          }}>
-            <Field
-              label="Usuario"
-              value={usuario}
-              onChange={(v) => { setUsuario(v); setError(null); }}
-              placeholder="usuario"
-              autoComplete="username"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              disabled={enviando}
-            />
-            <Field
-              label="Contraseña"
-              value={password}
-              onChange={(v) => { setPassword(v); setError(null); }}
-              placeholder="contraseña"
-              type="password"
-              autoComplete="current-password"
-              disabled={enviando}
-            />
-            <Button type="submit" disabled={enviando}>
-              {enviando ? 'Ingresando…' : 'Ingresar'}
-            </Button>
-          </div>
-
-          {errorVisible?.conContacto && <ContactoSoporte />}
-        </form>
+        <Field
+          label="Usuario"
+          name="username"
+          value={usuario}
+          onChange={(v) => { setUsuario(v); setError(null); }}
+          placeholder="usuario"
+          autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          disabled={enviando}
+        />
+        <Field
+          label="Contraseña"
+          name="password"
+          value={password}
+          onChange={(v) => { setPassword(v); setError(null); }}
+          placeholder="contraseña"
+          type="password"
+          revelable
+          autoComplete="current-password"
+          disabled={enviando}
+        />
+        <Button type="submit" disabled={enviando}>
+          {enviando ? 'Ingresando…' : 'Ingresar'}
+        </Button>
       </div>
-    </FondoLocal>
+
+      {errorVisible?.conContacto && <ContactoSoporte />}
+
+      {/* Margen negativo: el botón mide 44 de alto (touch target), pero el texto
+          queda a la distancia de un renglón del botón de arriba. */}
+      <div style={{ marginTop: -12 }}>
+        <BotonEnlace onClick={() => setOlvido(true)} disabled={enviando}>
+          ¿Olvidaste tu contraseña?
+        </BotonEnlace>
+      </div>
+    </MarcoAcceso>
   );
 }

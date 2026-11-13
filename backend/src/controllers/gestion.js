@@ -6,7 +6,7 @@
 
 import { query } from '../config/db.js';
 import bcrypt from 'bcrypt';
-import { pinColisiona } from '../utils/pin.js';
+import { pinColisiona, verificarPinAdmin, CODIGO_PIN_ADMIN_INCORRECTO } from '../utils/pin.js';
 import { esUUID } from '../utils/validarUuid.js';
 import { esMontoValido, esEnteroNoNegativo, ENTERO_MAXIMO, mensajeMontoInvalido } from '../utils/validarNumero.js';
 import { invalidar } from '../middlewares/tenantMiddleware.js';
@@ -503,22 +503,39 @@ export const getNegocioAdmin = async (req, res) => {
  * recuperación de la contraseña del iPad y del PIN admin) y teléfono del local
  * (el `tel:` del turnero). Endpoint aparte del PUT de nombre y booking_url para no
  * cambiar su contrato. Las reglas viven en utils/contactoNegocio.js.
- * El log no lleva los datos (son personales): solo el tenant.
+ * Pide el PIN de administrador siempre (re-autenticación, como las credenciales
+ * operativas): quien cambia este mail decide a dónde llega la recuperación de las
+ * credenciales. El log no lleva los datos (son personales): solo el tenant.
  * @param {string}  req.tenant_id              - Inyectado por verificarToken
+ * @param {string}  req.body.pin_admin         - PIN de administrador, para confirmar
  * @param {string}  req.body.email_duenio      - Obligatorio; se guarda recortado y en minúsculas
  * @param {string}  req.body.telefono_duenio   - Obligatorio, E.164
  * @param {string} [req.body.telefono_local]   - Opcional, hasta 30 caracteres (vacío → null)
  * @returns {JSON} { email_duenio, telefono_duenio, telefono_local }
- *   | 400 { error, campo } | 404 si el tenant no existe
+ *   | 400 { error, campo } | 403 { error, codigo, campo } (PIN admin incorrecto)
+ *   | 404 si el tenant no existe
  */
 export const editarContactoNegocio = async (req, res) => {
   const resultado = validarContactoNegocio(req.body ?? {});
   if (resultado.error) {
     return res.status(400).json({ error: resultado.error, campo: resultado.campo });
   }
+  const { pin_admin } = req.body;
+  if (!pin_admin || typeof pin_admin !== 'string') {
+    return res.status(400).json({ error: 'El PIN de administrador es requerido', campo: 'pin_admin' });
+  }
   const { email_duenio, telefono_duenio, telefono_local } = resultado.valores;
 
   try {
+    const pinCorrecto = await verificarPinAdmin(req.tenant_id, pin_admin);
+    if (pinCorrecto === null) {
+      return res.status(404).json({ error: 'Tenant no encontrado' });
+    }
+    if (!pinCorrecto) {
+      console.warn('[gestion] editarContactoNegocio — PIN admin incorrecto | cambio rechazado | tenant:', req.tenant_id);
+      return res.status(403).json({ error: 'El PIN de administrador es incorrecto', codigo: CODIGO_PIN_ADMIN_INCORRECTO, campo: 'pin_admin' });
+    }
+
     const result = await query(
       `UPDATE tenant
        SET email_duenio = $1, telefono_duenio = $2, telefono_local = $3
@@ -588,7 +605,7 @@ export const editarNegocio = async (req, res) => {
  * @param {string} req.tenant_id        - Inyectado por verificarToken
  * @param {string} req.body.pin_actual  - PIN actual para verificación
  * @param {string} req.body.pin_nuevo   - Nuevo PIN de 4 dígitos
- * @returns {JSON} { ok: true }
+ * @returns {JSON} { ok: true } | 400 | 403 (PIN actual incorrecto) | 404 | 409 (PIN en uso)
  */
 export const cambiarPinAdmin = async (req, res) => {
   const { pin_actual, pin_nuevo } = req.body;
@@ -601,18 +618,14 @@ export const cambiarPinAdmin = async (req, res) => {
   }
 
   try {
-    const tenantResult = await query(
-      `SELECT pin_admin FROM tenant WHERE id = $1`,
-      [req.tenant_id]
-    );
-    if (tenantResult.rows.length === 0) {
+    // 403 y no 401 si no coincide: la sesión sigue válida (ver utils/pin.js).
+    const pinCorrecto = await verificarPinAdmin(req.tenant_id, pin_actual);
+    if (pinCorrecto === null) {
       return res.status(404).json({ error: 'Tenant no encontrado' });
     }
-
-    const pinCorrecto = await bcrypt.compare(pin_actual, tenantResult.rows[0].pin_admin);
     if (!pinCorrecto) {
       console.warn('[gestion] cambiarPinAdmin — PIN actual incorrecto | cambio rechazado');
-      return res.status(401).json({ error: 'El PIN actual es incorrecto' });
+      return res.status(403).json({ error: 'El PIN actual es incorrecto', codigo: CODIGO_PIN_ADMIN_INCORRECTO, campo: 'pin_actual' });
     }
 
     // Unicidad: el nuevo PIN del admin no puede chocar con el de ningún barbero

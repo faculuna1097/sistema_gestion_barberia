@@ -15,6 +15,9 @@ import { theme } from '../../theme/tokens.js';
  * @param {boolean} [props.full=true] - Si ocupa el 100% del ancho del padre
  * @param {string} [props.type='button'] - type del <button> nativo
  * @param {Object} [props.style] - Override de estilos puntuales
+ * @param {string} [props.ariaLabel] - Nombre accesible cuando el texto visible no
+ *   alcanza (ej. "Cambiar" en una fila → "Cambiar el PIN de administrador").
+ *   Tiene que empezar con el texto visible.
  */
 function Button({
   children,
@@ -24,6 +27,7 @@ function Button({
   full = true,
   type = 'button',
   style,
+  ariaLabel,
 }) {
   const [hover, setHover] = useState(false);
 
@@ -75,6 +79,7 @@ function Button({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       disabled={disabled}
+      aria-label={ariaLabel}
       style={{ ...base, ...variants[variant], ...style }}
     >
       {children}

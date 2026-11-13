@@ -6,8 +6,8 @@
 > anteriores los mueven. Aprobar el plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
 > **Estado (2026-11-13):** **en curso.** Branch rebasado sobre `main` (`3931843`: monitoreo, formulario de alta y
-> fases 0-2 del resguardo de la DB). Fases 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8) y 2 (F6a) hechas y commiteadas.
-> Próximo: fase 3 (F6b fronts).
+> fases 0-2 del resguardo de la DB). Fases 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8), 2 (F6a) y 3 (F6b) hechas y commiteadas.
+> Próximo: fase 4 (F5, login de la app del barbero).
 > Antes, 2026-11-05: fase 0 hecha y la tanda en espera del monitoreo (`feature/monitoreo-prod`, ya en producción).
 
 ## 1. Contexto
@@ -168,7 +168,16 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
     del token, `vence_en` con default de 1 h, `usado_en`, `created_at`), con RLS y lectura de `resguardo_lectura`
     verificada.
   - Un tenant con `activo = false` ya no entra a nada (`tenantMiddleware`), y la recuperación queda cubierta por
-    lo mismo. La demora de la baja por el caché del middleware queda fuera de esta tanda.
+    lo mismo. La demora de la baja por el caché del middleware queda fuera de esta tanda: la baja se completa
+    reiniciando el servicio web en Railway (decisión del usuario, 2026-11-13; no se hace el vencimiento del caché).
+- **Decidido en la fase 3 (2026-11-13):**
+  - Cambiar el contacto del dueño pide el PIN de admin (cambiar ese mail equivale a cambiar las credenciales).
+  - Un PIN de admin de confirmación incorrecto responde **403** con `codigo: 'pin_admin_incorrecto'` y `campo`
+    (`verificarPinAdmin` en `utils/pin.js`), en contacto, credenciales operativas y PIN: con 401, `apiFetch`
+    cerraba la sesión del panel.
+  - El 400 de link inválido lleva `codigo: 'token_invalido'`.
+  - La recuperación del PIN no compara contra el PIN actual del admin (`pinColisiona` con `incluirAdmin:
+    false`): se puede volver a elegir el mismo, como con la contraseña.
 
 ### F5 — Login de la app del barbero (estética)
 - El ejecutor revisa el login actual, arma **2 direcciones** con capturas (modo celular) dentro del sistema
@@ -316,7 +325,7 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
 | 1c | ✅ **Hecha (2026-11-12, commiteada).** F10 pantalla de éxito del turnero más liviana. El contenido lo definió el usuario: el día y la hora como dato principal, "Agregar al calendario" sin la otra opción, quién atiende con el servicio, la dirección como link al mapa y el aviso del mail (con el link para cambiar o cancelar). Salen "Ver o cambiar mi turno" y "Reservar otro turno" | Ejecutor | — |
 | 1 | ✅ **Hecha (2026-11-12, commiteada).** F7 comisión con barra (backend + `TabBarberos`) + F8 días con horario y aviso (solo `TabBarberos`). Requisito: 0 barberos con % no múltiplo de 5 (consultado con el rol de solo lectura). Distinto al diseño, decidido con el usuario: la alerta de `0/x` va solo en barberos activos, como el cartel | Ejecutor | SQL de % no múltiplos de 5 |
 | 2 | ✅ **Hecha (2026-11-13, commiteada).** F6a DB + backend: columnas del dueño y `telefono_local`, tabla `token_recuperacion`, `/api/auth/recuperar/{solicitar,validar,usar}` y el mail de recuperación, `GET`/`PUT /api/admin/negocio[/contacto]`, `crearTenant.js` (con `--dry-run`) y la skill `alta-cliente`. Distinto al prompt, decidido con el usuario: si el mail no sale, `solicitar` responde igual (el error va a Sentry); el PIN que choca da 409 sin consumir el token; el mail del dueño se guarda en minúsculas | Ejecutor | SQL de columnas + datos de los 5 tenants + tabla de tokens |
-| 3 | F6b fronts: ver contraseña, "¿Olvidaste…?" en los dos logins, pantallas de recuperación, Gestión → Negocio; `telefono_local` en el turnero | Ejecutor | — |
+| 3 | ✅ **Hecha (2026-11-13, commiteada).** F6b fronts: ojo en `Field` (`revelable`), "¿Olvidaste…?" en los dos logins (`SolicitudRecuperacion`, con paso intermedio), `PantallaRecuperacion` (el `#recuperar=` se lee antes que todo en `App.jsx` y se saca de la URL), Gestión → Negocio → Contacto (`BloqueContacto`, pide el PIN de admin) y Gestión → Seguridad rediseñada. El turnero no cambió (sigue la clave `telefono`). Distinto al prompt, decidido con el usuario: PIN de admin incorrecto → 403 (antes 401, que cerraba la sesión) también en credenciales y PIN; la recuperación deja volver a elegir el mismo PIN; celular argentino por defecto; aviso de sesión cerrada en el login del panel | Ejecutor | — |
 | 4 | F5 login de la app del barbero (diseño con el usuario → implementación) | Ejecutor | — |
 | 5 | F1a backend: cliente nullable, `LEFT JOIN`, alta sin cliente, asignar cliente | Ejecutor | SQL `cliente_id` nullable |
 | 6 | F1b fronts: wizard, atajo en la Agenda, refresco de la Agenda, asignar cliente (app y panel), "Sin datos" en el iPad | Ejecutor | — |
@@ -396,3 +405,10 @@ _(Los completa el orquestador durante la tanda.)_
   `config/sentry.js` que después usa el cierre diario de F3), o un heartbeat de UptimeRobot si el plan gratis
   de Sentry no incluye monitores de cron. **Fuera de esta tanda** (decisión del usuario): chat ejecutor aparte,
   branch propio desde `main` (`chore/monitor-cron`), después del commit de la fase 2.
+- **(2026-11-13, ejecutor de la fase 3) Después de cambiar el PIN desde Gestión → Seguridad, el panel se entera
+  de que la sesión se cerró recién en la acción siguiente.** El cambio sube `admin_token_version` y el token
+  propio queda revocado; la próxima llamada da 401 y lleva al login con "Tu sesión se cerró…". **Aceptado**: el
+  aviso ya explica qué pasó. Si molesta, el modal podría cerrar la sesión al confirmar.
+- **(2026-11-13, orquestador al revisar la fase 3) Sin verificar en pantalla:** los modales de Gestión →
+  Seguridad, los anchos nuevos de Seguridad y Turnero y el aviso de sesión cerrada (hacía falta la contraseña
+  del iPad de demo). Los endpoints sí se probaron por API. Va a la prueba del usuario antes del merge.

@@ -425,6 +425,65 @@ export const loginOperativo = async (usuario, password) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RECUPERACIÓN POR MAIL — públicas, de la contraseña del iPad y del PIN admin
+// ─────────────────────────────────────────────────────────────────────────────
+// Las tres comparten el limitador de los logins en el backend (429 tras 10
+// intentos fallidos en 15 min). Van con fetchConDiagnostico, como los logins: sin
+// respuesta, la pantalla dice si es la red o el servidor.
+
+// `codigo` del 400 de un link vencido, usado o inexistente (validar y usar).
+export const CODIGO_TOKEN_INVALIDO = 'token_invalido';
+
+/**
+ * pedirRecuperacion (interna)
+ * POST a /auth/recuperar/<accion> con el body dado.
+ * @param {string} accion - 'solicitar' | 'validar' | 'usar'
+ * @param {Object} cuerpo
+ * @returns {Promise<Object>} El JSON de la respuesta.
+ * @throws {ErrorServidor|ErrorSinRespuesta}
+ */
+const pedirRecuperacion = async (accion, cuerpo) => {
+  const response = await fetchConDiagnostico(`${BASE_URL}/auth/recuperar/${accion}`, {
+    method: 'POST',
+    headers: publicHeaders,
+    body: JSON.stringify(cuerpo),
+  }, URL_HEALTH);
+  if (!response.ok) throw await errorDeRespuesta(response);
+  return response.json();
+};
+
+/**
+ * solicitarRecuperacion
+ * Pide que le manden al dueño el link para cambiar la contraseña del iPad o el
+ * PIN de administrador.
+ * @param {'operativo'|'pin_admin'} tipo
+ * @returns {Promise<{ enviado: boolean, email?: string }>} enviado: false si el
+ *   local no tiene mail del dueño cargado; si no, el mail enmascarado (ej.
+ *   'fa•••@gmail.com').
+ */
+export const solicitarRecuperacion = (tipo) => pedirRecuperacion('solicitar', { tipo });
+
+/**
+ * validarRecuperacion
+ * Dice si el token del link sirve, sin usarlo.
+ * @param {string} token - El token del fragmento #recuperar=.
+ * @returns {Promise<{ tipo: 'operativo'|'pin_admin' }>}
+ * @throws {ErrorServidor} con codigo CODIGO_TOKEN_INVALIDO si venció o ya se usó.
+ */
+export const validarRecuperacion = (token) => pedirRecuperacion('validar', { token });
+
+/**
+ * usarRecuperacion
+ * Cambia la credencial con el link y lo da por usado.
+ * @param {string} token
+ * @param {string} nueva - Contraseña (8+ caracteres) o PIN (4 dígitos), según el tipo.
+ * @returns {Promise<{ ok: true }>}
+ * @throws {ErrorServidor} 400 con codigo CODIGO_TOKEN_INVALIDO (link inválido), 400
+ *   sin código (`nueva` no cumple; el link sigue valiendo) o 409 (PIN en uso).
+ */
+export const usarRecuperacion = (token, nueva) => pedirRecuperacion('usar', { token, nueva });
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ADMIN — Turnero (gestión de turnos)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -691,7 +750,7 @@ export const getCredencialesOperativas = async () => {
  * actualizarCredencialesOperativas
  * Actualiza usuario y/o password del modo operativo. Cualquiera de los dos
  * campos es opcional; enviar solo lo que se quiere cambiar.
- * @param {Object} datos - { usuario?: string, password?: string }
+ * @param {Object} datos - { usuario?: string, password?: string, pin_admin: string }
  * @returns {Promise<void>}
  * @throws {ErrorServidor} con el mensaje del servidor (para `mensajeDeError`)
  */
@@ -701,6 +760,43 @@ export const actualizarCredencialesOperativas = async (datos) => {
     body: JSON.stringify(datos),
   });
   if (!res.ok) throw await errorDeRespuesta(res);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN — Datos del negocio y contacto del dueño
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * getNegocioAdmin
+ * Datos del negocio para Gestión, con el contacto del dueño (el GET público
+ * /negocio no lo trae).
+ * @returns {Promise<{ nombre_negocio: string, booking_url: string|null,
+ *   email_duenio: string|null, telefono_duenio: string|null, telefono_local: string|null }>}
+ * @throws {ErrorServidor}
+ */
+export const getNegocioAdmin = async () => {
+  const res = await apiFetch('/admin/negocio');
+  if (!res.ok) throw await errorDeRespuesta(res);
+  return res.json();
+};
+
+/**
+ * guardarContactoNegocio
+ * Guarda el mail y el celular del dueño y el teléfono del local. Pide el PIN de
+ * administrador (re-autenticación).
+ * @param {Object} datos - { email_duenio, telefono_duenio, telefono_local, pin_admin }
+ * @returns {Promise<{ email_duenio: string, telefono_duenio: string, telefono_local: string|null }>}
+ *   Lo que quedó guardado.
+ * @throws {ErrorServidor} 400 con `campo` (dato inválido) o 403 con codigo
+ *   'pin_admin_incorrecto'. El campo al que va el error viene en `err.campo`.
+ */
+export const guardarContactoNegocio = async (datos) => {
+  const res = await apiFetch('/admin/negocio/contacto', {
+    method: 'PUT',
+    body: JSON.stringify(datos),
+  });
+  if (!res.ok) throw await errorDeRespuesta(res);
+  return res.json();
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

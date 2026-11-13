@@ -612,8 +612,17 @@ El primitivo `Field` debe garantizar:
 Si construís un input que no usa `Field`, replicá estas tres reglas.
 
 El `Field` del turnero las cumple desde el 2026-10-08 (con `useId`), y
-`CampoTelefono` (local de `ConfirmarTurno`) también. En el panel y el barbero,
-sin verificar.
+`CampoTelefono` (local de `ConfirmarTurno`) también. El del panel, desde el
+2026-11-13 (F6 de `plan_mejoras_operativas.md`): la label pasó de envolver al
+input a `htmlFor`/`id`, porque el botón ojo vive dentro de la caja del campo. En
+el barbero, sin verificar.
+
+**Ver contraseña (panel, desde el 2026-11-13):** `Field` con `revelable` y
+`type="password"` suma un botón ojo dentro de la caja, a la derecha: 44 × 44,
+`aria-label` "Mostrar contraseña" / "Ocultar contraseña", `aria-pressed` y
+`aria-controls`. Con un texto (`revelable="PIN"`) nombra eso en vez de
+"contraseña". No toca el `autoComplete`. Lo usan los logins, la recuperación y
+los modales de Gestión → Seguridad.
 
 ### 5.3 Contraste
 
@@ -716,6 +725,23 @@ admin. Entre ellos:
   usa la comisión del barbero (Gestión → Barberos, de 0 a 100 de a 5). Es la
   copia del de `frontend-alta` (§6.5) con la densidad del panel, y el riel se
   dibuja con la clase `om-rango` de `index.css`.
+- Pantallas de acceso (desde el 2026-11-13, F6 de `plan_mejoras_operativas.md`):
+  `MarcoAcceso` es el marco del login del iPad, el login del panel y la
+  recuperación por mail (`FondoLocal`, un overlay con scroll para cuando sube el
+  teclado y la card centrada; con `onSubmit` la card es un `<form>`, con
+  `esquina` lleva el botón de arriba a la izquierda). `EncabezadoAcceso` (mismo
+  archivo) es el título y la bajada, que pasa a `danger` en un error; el título
+  es enfocable por código para anunciar un paso nuevo dentro de la misma card.
+- `BotonEnlace`: acción secundaria con forma de link, sin caja, de 44 px de
+  alto. Hoy, el "¿Olvidaste…?" de los dos logins.
+- Pantallas de ajustes: `FilaAjuste` es la fila "qué es (con una línea que lo
+  explica) · valor actual · acción", que baja el valor debajo del rótulo en lo
+  angosto (flex-wrap). La usan Gestión → Seguridad (una tarjeta por tema, con
+  ícono, descripción y un pie que dice cómo se recupera la credencial) y
+  Gestión → Negocio → Contacto. `PillSinConfigurar` marca un dato vacío, en
+  tono warning, con su texto ("Sin configurar", "Sin cargar").
+- `Button` acepta `ariaLabel` cuando el texto visible no alcanza (ej. "Cambiar"
+  en una fila → "Cambiar el PIN de administrador"); empieza con el texto visible.
 
 **Gráficos, sin librería.** El proyecto no tiene librería de gráficos: las
 barras se hacen con divs de ancho proporcional y los tokens del tema.
@@ -979,7 +1005,9 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-11-12 — F7 de mejoras operativas: §6.1 suma `SelectorConBarra` (panel) y §8 la clase `om-rango` en el `index.css` del panel.*
+*Última actualización: 2026-11-13 — F6 de mejoras operativas (fase 3): §5.2 suma el ojo de `Field` (`revelable`) y la label con `htmlFor` en el panel; §6.1 suma `MarcoAcceso`, `EncabezadoAcceso`, `BotonEnlace`, `FilaAjuste`, `PillSinConfigurar` y `ariaLabel` en `Button`.*
+
+*2026-11-12 — F7 de mejoras operativas: §6.1 suma `SelectorConBarra` (panel) y §8 la clase `om-rango` en el `index.css` del panel.*
 
 *2026-11-12 — F10 de mejoras operativas: el éxito de la reserva más liviano. §3.2 suma `sizeDisplay` (turnero), §3.8 `IconoPersona` y §6.2 actualiza `ResumenTurno` y `AgregarAlCalendario` (`conOtraOpcion`).*
 

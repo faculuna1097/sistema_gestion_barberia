@@ -39,10 +39,13 @@ import { esPinValido, hashearPin, pinColisiona } from '../utils/pin.js';
 // Mismo mensaje para todo token que no sirve (inexistente, de otro tenant, usado o
 // vencido): no se le dice a nadie cuál de los casos es.
 const MENSAJE_TOKEN_INVALIDO = 'El link venció o ya se usó. Pedí uno nuevo.';
+// Para que el front distinga este 400 del de `nueva` sin comparar textos.
+const CODIGO_TOKEN_INVALIDO = 'token_invalido';
 
 /**
  * rechazarToken (interna)
- * Responde el 400 genérico de token inválido y deja el warn de seguridad.
+ * Responde el 400 genérico de token inválido (con codigo 'token_invalido') y deja
+ * el warn de seguridad.
  * @param {Response} res
  * @param {string} nombreFuncion - Para el log.
  * @param {string} tenantId - Para el log.
@@ -50,7 +53,7 @@ const MENSAJE_TOKEN_INVALIDO = 'El link venció o ya se usó. Pedí uno nuevo.';
  */
 const rechazarToken = (res, nombreFuncion, tenantId) => {
   console.warn(`[authRecuperar] ${nombreFuncion} — token inválido, vencido o usado | tenant:`, tenantId);
-  return res.status(400).json({ error: MENSAJE_TOKEN_INVALIDO });
+  return res.status(400).json({ error: MENSAJE_TOKEN_INVALIDO, codigo: CODIGO_TOKEN_INVALIDO });
 };
 
 /**
@@ -124,7 +127,7 @@ export async function solicitarRecuperacion(req, res) {
  * para que el front muestre la pantalla que corresponde.
  *
  * @param {Request}  req - body: { token }; tenant_id de tenantMiddleware.
- * @param {Response} res - 200 { tipo } | 400 { error } genérico | 500.
+ * @param {Response} res - 200 { tipo } | 400 { error, codigo: 'token_invalido' } | 500.
  */
 export async function validarRecuperacion(req, res) {
   const { token } = req.body ?? {};
@@ -160,8 +163,10 @@ export async function validarRecuperacion(req, res) {
  *
  * @param {Request}  req - body: { token, nueva }; tenant_id de tenantMiddleware.
  *   'operativo': nueva = contraseña con las reglas de la operativa (8+ caracteres).
- *   'pin_admin': nueva = 4 dígitos que no choquen con el PIN de un barbero.
- * @param {Response} res - 200 { ok: true } | 400 { error } | 409 { error } (PIN en uso) | 500.
+ *   'pin_admin': nueva = 4 dígitos que no choquen con el PIN de un barbero (puede
+ *                ser el mismo PIN que tenía el admin).
+ * @param {Response} res - 200 { ok: true } | 400 { error, codigo: 'token_invalido' } (token)
+ *   | 400 { error } (`nueva` no cumple) | 409 { error } (PIN en uso) | 500.
  */
 export async function usarRecuperacion(req, res) {
   const { token, nueva } = req.body ?? {};
@@ -189,9 +194,11 @@ export async function usarRecuperacion(req, res) {
         return res.status(400).json({ error: 'El PIN tiene que tener 4 números' });
       }
       // Unicidad: el PIN del admin no puede chocar con el de un barbero (si chocara,
-      // ese barbero entraría como admin). Mismo 409 que cambiarPinAdmin.
-      if (await pinColisiona(nueva, { tenantId })) {
-        return res.status(409).json({ error: 'Ese PIN ya está en uso por otro barbero o por el admin' });
+      // ese barbero entraría como admin). Contra el PIN actual del admin no se
+      // compara: quien lo olvidó puede volver a elegir el mismo, como con la
+      // contraseña del iPad (decidido con el usuario el 2026-11-13).
+      if (await pinColisiona(nueva, { tenantId, incluirAdmin: false })) {
+        return res.status(409).json({ error: 'Ese PIN ya lo usa un barbero del local. Elegí otro.' });
       }
       hashNuevo = await hashearPin(nueva);
     }

@@ -164,7 +164,6 @@ export default function TabTurnero() {
       display: 'flex',
       flexDirection: 'column',
       gap: 16,
-      maxWidth: 600,
     }}>
 
       <div style={{
@@ -197,16 +196,20 @@ export default function TabTurnero() {
           </div>
         </div>
 
-        <Field
-          label="Minutos por slot"
-          type="text"
-          inputMode="numeric"
-          value={duracion}
-          onChange={onChangeDuracion}
-          placeholder="Ej: 30"
-          helper="Entre 1 y 240."
-          invalid={duracion !== '' && !valorValido}
-        />
+        {/* La card ocupa todo el ancho, como el resto de Gestión; el campo no:
+            es un número de 1 a 3 cifras. */}
+        <div style={{ maxWidth: 320 }}>
+          <Field
+            label="Minutos por slot"
+            type="text"
+            inputMode="numeric"
+            value={duracion}
+            onChange={onChangeDuracion}
+            placeholder="Ej: 30"
+            helper="Entre 1 y 240."
+            invalid={duracion !== '' && !valorValido}
+          />
+        </div>
 
         {feedback && (
           <MensajeFeedback tipo={feedback.tipo}>{feedback.texto}</MensajeFeedback>

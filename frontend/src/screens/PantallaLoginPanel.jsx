@@ -5,9 +5,15 @@
 // Si la suscripción del tenant está vencida (solo path admin), muestra pantalla
 // de acceso suspendido.
 //
-// Layout: full-screen con fondo surfaceAlt, card centrada (~480 px) con
-// shadowMd. Estilo Stripe/Clerk auth. Botón "Cancelar"/"Volver" en la esquina
-// superior izquierda de la card (ghost button con flecha).
+// Layout: `MarcoAcceso` (components/ui), el marco compartido con el login del
+// iPad y la recuperación: la foto del local de fondo y la card centrada (480 px).
+// Botón "Cancelar"/"Volver" en la esquina superior izquierda de la card (ghost
+// button con flecha).
+//
+// Debajo del teclado, "¿Olvidaste el PIN de administrador?" cambia el contenido
+// de la card por `SolicitudRecuperacion` (F6 de plan_mejoras_operativas.md).
+// Mientras se ve, el teclado físico no carga dígitos. No aparece en la pantalla
+// de acceso suspendido.
 //
 // Props:
 //   onAcceso     — función llamada con (token, { rol, aviso_pago, barbero }) cuando
@@ -20,16 +26,23 @@
 //                  abrir el sistema (subdominio que no existe, servidor caído;
 //                  ver `problemaDeAcceso`). Se muestra antes de que tipeen nada,
 //                  hasta la primera respuesta del login.
+//   sesionCerrada — true si se llegó acá porque el backend cerró la sesión del
+//                  panel (401: cambió el PIN del admin, el barbero quedó
+//                  desactivado o el token venció). La bajada lo dice hasta el
+//                  primer intento, así la vuelta al login no parece un error.
 
 import { useState, useEffect, useCallback } from "react";
 import { Delete, ArrowLeft } from "lucide-react";
 import { theme } from "../theme/tokens.js";
-import { EmptyState, IconoAlerta, LogoCirculo, ContactoSoporte } from "../components/ui";
-import FondoLocal from "../components/ui/FondoLocal.jsx";
+import {
+  EmptyState, IconoAlerta, LogoCirculo, ContactoSoporte, MarcoAcceso, EncabezadoAcceso, BotonEnlace,
+} from "../components/ui";
+import SolicitudRecuperacion from "./SolicitudRecuperacion.jsx";
 import { loginPanel } from "../services/api";
 import { fallaDeLogin } from "../utils/errores";
 
 const MENSAJE_PIN_INCORRECTO = "PIN incorrecto. Intentá de nuevo.";
+const MENSAJE_SESION_CERRADA = "Tu sesión se cerró. Ingresá de nuevo con tu PIN.";
 
 /**
  * BotonCancelarEsquina
@@ -72,40 +85,25 @@ function BotonCancelarEsquina({ label, onClick }) {
 
 /**
  * ShellLoginPanel
- * Wrapper full-screen con la card de PIN centrada. El fondo es `FondoLocal` (la
- * foto del local con blur + velo, el mismo de MainScreen y los 3 flujos), así el
- * ambiente del local no se corta al entrar al login. Sin foto, FondoLocal cae a
- * `surfaceAlt` (el look Stripe/Clerk de antes). La card opaca (`surface`) hace de
- * "panel claro" sobre el fondo, idéntico patrón al de los flujos.
- *
- * Lo comparten la pantalla normal de ingreso de PIN y la de acceso suspendido.
- * El cancel button va en la esquina superior izquierda de la card.
+ * `MarcoAcceso` con la card de 480 y el botón de la esquina. Lo comparten la
+ * pantalla normal de ingreso de PIN, la del "¿Olvidaste…?" y la de acceso
+ * suspendido.
+ * @param {Object} props
+ * @param {React.ReactNode} props.children
+ * @param {Function} [props.onCancelar] - Sin él, no hay botón en la esquina.
+ * @param {string} [props.labelCancelar='Cancelar']
+ * @param {string|null} [props.imagenLocal]
+ * @returns {JSX.Element}
  */
-function ShellLoginPanel({ children, onCancelar, labelCancelar = 'Cancelar', maxWidth = 480, imagenLocal }) {
+function ShellLoginPanel({ children, onCancelar, labelCancelar = 'Cancelar', imagenLocal }) {
   return (
-    <FondoLocal imagenLocal={imagenLocal}>
-      <div style={{
-        position: 'relative',
-        width: '100%',
-        maxWidth,
-        // Margen para que la card no toque los bordes en pantallas angostas
-        // (reemplaza el padding del contenedor anterior; FondoLocal va al borde).
-        margin: 24,
-        background: theme.surface,
-        border: `1px solid ${theme.hairline}`,
-        borderRadius: theme.radiusLg,
-        boxShadow: theme.shadowMd,
-        padding: '40px 32px 32px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 20,
-        animation: 'om-fade .26s ease-out both',
-      }}>
-        {onCancelar && <BotonCancelarEsquina label={labelCancelar} onClick={onCancelar} />}
-        {children}
-      </div>
-    </FondoLocal>
+    <MarcoAcceso
+      imagenLocal={imagenLocal}
+      maxAncho={480}
+      esquina={onCancelar ? <BotonCancelarEsquina label={labelCancelar} onClick={onCancelar} /> : null}
+    >
+      {children}
+    </MarcoAcceso>
   );
 }
 
@@ -179,7 +177,7 @@ function TeclaNum({ children, ariaLabel, onClick }) {
  * Componente principal. Maneja el flujo de ingreso de PIN, validación y
  * el estado bloqueado por suscripción vencida.
  */
-export default function PantallaLoginPanel({ onAcceso, onCancelar, imagenLogo, imagenLocal, avisoAcceso = null }) {
+export default function PantallaLoginPanel({ onAcceso, onCancelar, imagenLogo, imagenLocal, avisoAcceso = null, sesionCerrada = false }) {
   const [pin, setPin]             = useState("");
   // "idle" | "error" (PIN incorrecto) | "exito"
   const [estado, setEstado]       = useState("idle");
@@ -192,6 +190,9 @@ export default function PantallaLoginPanel({ onAcceso, onCancelar, imagenLogo, i
   // huboRespuesta: ya se intentó un login, así que el aviso de la carga inicial
   // (avisoAcceso) deja de aplicar: manda lo que respondió el login.
   const [huboRespuesta, setHuboRespuesta] = useState(false);
+  // olvido: se está pidiendo el link de recuperación del PIN (la card muestra
+  // SolicitudRecuperacion y el teclado físico no carga dígitos).
+  const [olvido, setOlvido] = useState(false);
 
   /**
    * validarPin — envía el PIN al backend. Si vuelve 402 (suscripción vencida)
@@ -248,13 +249,14 @@ export default function PantallaLoginPanel({ onAcceso, onCancelar, imagenLogo, i
 
   // Soporte de teclado físico (útil en desktop / iPad con teclado bluetooth).
   useEffect(() => {
+    if (olvido) return undefined;
     const manejarTeclado = (e) => {
       if (e.key >= "0" && e.key <= "9") agregarDigito(e.key);
       if (e.key === "Backspace") borrarDigito();
     };
     window.addEventListener("keydown", manejarTeclado);
     return () => window.removeEventListener("keydown", manejarTeclado);
-  }, [agregarDigito, borrarDigito]);
+  }, [agregarDigito, borrarDigito, olvido]);
 
   // ── Pantalla bloqueada (suscripción vencida) ──────────────────────────────
   if (bloqueado) {
@@ -271,6 +273,16 @@ export default function PantallaLoginPanel({ onAcceso, onCancelar, imagenLogo, i
     );
   }
 
+  // ── "¿Olvidaste el PIN?" ──────────────────────────────────────────────────
+  if (olvido) {
+    return (
+      <ShellLoginPanel imagenLocal={imagenLocal}>
+        <LogoCirculo imagenLogo={imagenLogo} />
+        <SolicitudRecuperacion tipo="pin_admin" onVolver={() => setOlvido(false)} />
+      </ShellLoginPanel>
+    );
+  }
+
   // Falla que se muestra ahora: la del último login, o si todavía no hubo
   // ninguno, la que se detectó al abrir el sistema.
   const fallaVisible = falla ?? (huboRespuesta ? null : avisoAcceso);
@@ -281,36 +293,14 @@ export default function PantallaLoginPanel({ onAcceso, onCancelar, imagenLogo, i
 
   const subtituloTexto = estado === 'error'
     ? MENSAJE_PIN_INCORRECTO
-    : (fallaVisible?.mensaje ?? "Ingresá tu PIN de 4 dígitos");
-
-  const subtituloColor = hayError ? theme.danger : theme.muted;
+    : (fallaVisible?.mensaje
+      ?? (sesionCerrada && !huboRespuesta ? MENSAJE_SESION_CERRADA : "Ingresá tu PIN de 4 dígitos"));
 
   return (
     <ShellLoginPanel onCancelar={onCancelar} labelCancelar="Cancelar" imagenLocal={imagenLocal}>
       <LogoCirculo imagenLogo={imagenLogo} fallbackColor={iconoColor} />
 
-      <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <h1 style={{
-          fontFamily: theme.body,
-          fontWeight: theme.weightHeading,
-          fontSize: theme.sizeTitle,
-          color: theme.ink,
-          letterSpacing: '-0.02em',
-          margin: 0,
-        }}>
-          Acceso al panel
-        </h1>
-        <p style={{
-          fontFamily: theme.body,
-          fontSize: theme.sizeBody,
-          color: subtituloColor,
-          margin: 0,
-          minHeight: 22,
-          transition: `color ${theme.transitionFast}`,
-        }}>
-          {subtituloTexto}
-        </p>
-      </div>
+      <EncabezadoAcceso titulo="Acceso al panel" bajada={subtituloTexto} error={hayError} />
 
       <IndicadoresPin pin={pin} estado={estado} shake={shake} />
 
@@ -335,6 +325,10 @@ export default function PantallaLoginPanel({ onAcceso, onCancelar, imagenLogo, i
       </div>
 
       {fallaVisible?.conContacto && <ContactoSoporte />}
+
+      <BotonEnlace onClick={() => { setPin(""); setOlvido(true); }} disabled={estado === "exito"}>
+        ¿Olvidaste el PIN de administrador?
+      </BotonEnlace>
     </ShellLoginPanel>
   );
 }
