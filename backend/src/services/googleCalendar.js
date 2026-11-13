@@ -29,6 +29,11 @@ if (credencialesCargadas) {
   console.warn('[googleCalendar] credenciales NO cargadas — la integración queda inactiva en este proceso');
 }
 
+// Nombre que lleva el evento de un turno sin cliente (turno.cliente_id NULL, el
+// turno rápido "Sin datos" de F1). Es el único lugar del backend que inventa este
+// texto: la API devuelve el cliente en null y cada front muestra su propio "Sin datos".
+const NOMBRE_SIN_CLIENTE = 'Sin datos';
+
 /**
  * Arma el cuerpo del evento de Google Calendar a partir de los datos del turno.
  * Función interna, no exportada.
@@ -36,21 +41,23 @@ if (credencialesCargadas) {
  * @param {Object} turno - { inicio, fin } (timestamps ISO o Date)
  * @param {Object} barbero - { email }
  * @param {Object} servicio - { nombre }
- * @param {Object} cliente - { nombre, telefono?, email? }
+ * @param {Object} cliente - { nombre, telefono?, email? }. En un turno sin cliente
+ *   llegan todos en null y el evento sale como NOMBRE_SIN_CLIENTE.
  * @returns {Object} cuerpo del evento listo para enviar a la API
  */
 const armarCuerpoEvento = (turno, barbero, servicio, cliente) => {
+  const nombreCliente = cliente?.nombre ?? NOMBRE_SIN_CLIENTE;
   const lineasDescripcion = [
-    `Cliente: ${cliente.nombre}`,
+    `Cliente: ${nombreCliente}`,
     `Servicio: ${servicio.nombre}`,
-    cliente.telefono ? `Teléfono: ${cliente.telefono}` : null,
-    cliente.email ? `Email: ${cliente.email}` : null,
+    cliente?.telefono ? `Teléfono: ${cliente.telefono}` : null,
+    cliente?.email ? `Email: ${cliente.email}` : null,
     '',
     'Turno gestionado desde BarberManager.',
   ].filter(linea => linea !== null);
 
   return {
-    summary: cliente.nombre,
+    summary: nombreCliente,
     description: lineasDescripcion.join('\n'),
     start: {
       dateTime: new Date(turno.inicio).toISOString(),

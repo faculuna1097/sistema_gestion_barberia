@@ -265,7 +265,9 @@ CREATE TABLE public.barbero_suspension (
 CREATE TABLE public.turno (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   tenant_id uuid NOT NULL,
-  cliente_id uuid NOT NULL,
+  -- NULL = cliente "Sin datos" (turno rápido, F1): se le puede asignar uno después
+  -- (PATCH /api/admin/turnos/:id/cliente). Nullable desde el 2026-11-13.
+  cliente_id uuid,
   barbero_id uuid NOT NULL,
   servicio_id uuid NOT NULL,
   inicio timestamp with time zone NOT NULL,

@@ -32,6 +32,9 @@ export const getMisClientes = async (req, res) => {
   }
 
   try {
+    // "Cliente del barbero" = tuvo un turno reservado o completado con él. El mismo
+    // criterio usa asignarClienteATurno (sqlClienteDelBarbero, turnosService.js):
+    // si cambia uno, cambia el otro.
     const result = await query(
       `SELECT c.id, c.nombre, c.email, c.telefono,
               COUNT(t.id)::int AS total_visitas,

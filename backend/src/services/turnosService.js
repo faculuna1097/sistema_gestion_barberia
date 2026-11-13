@@ -7,7 +7,7 @@
 import crypto from 'crypto';
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
-import { crearEvento, cancelarEvento } from './googleCalendar.js';
+import { crearEvento, cancelarEvento, actualizarEvento } from './googleCalendar.js';
 import { enviarConfirmacion, enviarCancelacion, construirContextoMail } from './mail/mailer.js';
 import { TZ, ANTELACION_MINIMA_MINUTOS, DIAS_RESERVABLES } from '../utils/constantes.js';
 import { esUUID } from '../utils/validarUuid.js';
@@ -305,6 +305,8 @@ export const listarTurnos = async ({ tenantId, fecha, desde, hasta, barberoId })
   // del que salen la forma de pago y el monto cobrado (deuda #32). El UNIQUE parcial
   // en corte.turno_id garantiza ≤1 corte por turno → no multiplica filas. Turnos no
   // completados (o completados sin corte) devuelven forma_pago/monto_total = null.
+  // LEFT JOIN cliente: un turno "Sin datos" (cliente_id NULL, F1) trae cliente_id,
+  // cliente_nombre, cliente_email y cliente_telefono en null; el front muestra "Sin datos".
   const result = await query(
     `SELECT t.id, t.inicio, t.fin, t.estado, t.origen_creacion,
             b.id AS barbero_id, b.nombre AS barbero_nombre,
@@ -315,7 +317,7 @@ export const listarTurnos = async ({ tenantId, fecha, desde, hasta, barberoId })
      FROM turno t
      JOIN barbero  b ON b.id = t.barbero_id
      JOIN servicio s ON s.id = t.servicio_id
-     JOIN cliente  c ON c.id = t.cliente_id
+     LEFT JOIN cliente c ON c.id = t.cliente_id
      LEFT JOIN corte co ON co.turno_id = t.id
      WHERE ${where}
      ORDER BY t.inicio ASC`,
@@ -329,14 +331,15 @@ export const listarTurnos = async ({ tenantId, fecha, desde, hasta, barberoId })
  * mínimos para el flujo operativo público (registrar corte desde el iPad).
  * No expone email ni teléfono del cliente — solo lo que la pantalla necesita.
  * @param {Object} filtros - { tenantId, barberoId, fecha (YYYY-MM-DD) }
- * @returns {Promise<Array>} [{ id, inicio, cliente_nombre, servicio_id }]
+ * @returns {Promise<Array>} [{ id, inicio, cliente_nombre, servicio_id }];
+ *   cliente_nombre es null en un turno "Sin datos" (cliente_id NULL, F1)
  */
 export const listarTurnosOperativos = async ({ tenantId, barberoId, fecha }) => {
   const result = await query(
     `SELECT t.id, t.inicio, t.servicio_id,
             c.nombre AS cliente_nombre
      FROM turno t
-     JOIN cliente c ON c.id = t.cliente_id
+     LEFT JOIN cliente c ON c.id = t.cliente_id
      WHERE t.tenant_id = $1
        AND t.barbero_id = $2
        AND t.estado = 'reservado'
@@ -581,4 +584,182 @@ export const cancelarTurnoPorId = async (turnoId, canceladoPor, tenantId, barber
   await enviarCancelacion(turno, barbero, servicio, cliente, canceladoPor, tenant);
 
   return { id: turnoId, estado: 'cancelado' };
+};
+
+// ─── Asignar un cliente a un turno "Sin datos" (F1) ──────────────────────────
+
+// Estados en los que un turno sin cliente puede recibir uno: reservado (todavía no
+// vino) y completado (se anota al cliente después de cobrar). Un turno cancelado o
+// con "no asistió" ya no se toca.
+const ESTADOS_ASIGNABLES = ['reservado', 'completado'];
+
+/**
+ * Fragmento SQL que dice si un cliente es "del barbero": tuvo al menos un turno
+ * reservado o completado con él. Es el mismo criterio que getMisClientes
+ * (controllers/clientes.js): si cambia uno, cambia el otro.
+ * @param {string} aliasCliente - alias de la tabla cliente en la query (ej. 'c')
+ * @param {string} paramBarbero - placeholder del barbero_id (ej. '$3')
+ * @returns {string} condición EXISTS lista para un WHERE
+ */
+const sqlClienteDelBarbero = (aliasCliente, paramBarbero) =>
+  `EXISTS (
+     SELECT 1 FROM turno tb
+     WHERE tb.cliente_id = ${aliasCliente}.id
+       AND tb.tenant_id  = ${aliasCliente}.tenant_id
+       AND tb.barbero_id = ${paramBarbero}
+       AND tb.estado IN ('completado', 'reservado')
+   )`;
+
+/**
+ * Arma un error tipado de la asignación de cliente, que el controller mapea a su status.
+ * @param {string} code    - 'NO_ENCONTRADO' | 'CLIENTE_NO_ENCONTRADO' | 'TURNO_CON_CLIENTE' | 'ESTADO_INVALIDO'
+ * @param {string} mensaje - texto para el usuario
+ * @returns {Error}
+ */
+const errorAsignacion = (code, mensaje) => {
+  const err = new Error(mensaje);
+  err.code = code;
+  return err;
+};
+
+/**
+ * Lee un turno con el scoping del rol y, si no admite que se le asigne un cliente,
+ * tira el error que corresponde.
+ * @param {string} turnoId
+ * @param {string} tenantId
+ * @param {string|null} barberoId - con rol barbero, solo sus turnos (uno ajeno = no encontrado)
+ * @returns {Promise<void>}
+ * @throws {{ code: 'NO_ENCONTRADO' | 'TURNO_CON_CLIENTE' | 'ESTADO_INVALIDO' }}
+ */
+const verificarTurnoAsignable = async (turnoId, tenantId, barberoId) => {
+  const params = [turnoId, tenantId];
+  let where = 't.id = $1 AND t.tenant_id = $2';
+  if (barberoId) {
+    where += ' AND t.barbero_id = $3';
+    params.push(barberoId);
+  }
+  const res = await query(`SELECT t.estado, t.cliente_id FROM turno t WHERE ${where}`, params);
+  if (res.rows.length === 0) {
+    throw errorAsignacion('NO_ENCONTRADO', 'Turno no encontrado');
+  }
+  const { estado, cliente_id } = res.rows[0];
+  if (cliente_id !== null) {
+    throw errorAsignacion('TURNO_CON_CLIENTE', 'El turno ya tiene un cliente asignado');
+  }
+  if (!ESTADOS_ASIGNABLES.includes(estado)) {
+    throw errorAsignacion('ESTADO_INVALIDO', `El turno está en estado "${estado}" y no se le puede asignar un cliente`);
+  }
+};
+
+/**
+ * Asigna un cliente a un turno que no tiene (turno "Sin datos", cliente_id NULL).
+ * El cliente es uno existente (clienteId) o uno nuevo (contacto, que pasa por
+ * upsertCliente como en el alta: con un email que ya existe en el local, devuelve
+ * ese cliente).
+ *
+ * Scoping: todo por tenant. Con rol barbero, solo turnos propios y, si el cliente
+ * es existente, solo uno "suyo" (sqlClienteDelBarbero); uno ajeno responde igual
+ * que uno inexistente.
+ *
+ * La asignación es una sola sentencia (UPDATE ... FROM cliente) con todas las
+ * reglas en el WHERE, incluido cliente_id IS NULL: si dos asignaciones llegan a la
+ * vez, la segunda espera a la primera, vuelve a evaluar la fila y no la pisa. La
+ * lectura previa solo sirve para devolver el error justo; si el UPDATE no toca
+ * nada (perdió una carrera), se relee para elegir el error. Si en ese caso se había
+ * creado un cliente sin email (siempre es una fila nueva), se borra: cleanup manual
+ * en vez de transacción (Session Pooler, convenciones §6).
+ *
+ * @param {Object} datos
+ * @param {string} datos.turnoId
+ * @param {string} datos.tenantId
+ * @param {string|null} datos.barberoId - id del barbero si el rol es barbero; null = admin
+ * @param {string} [datos.clienteId] - cliente existente (UUID ya validado)
+ * @param {Object} [datos.contacto] - cliente nuevo, ya normalizado por validarContacto
+ * @returns {Promise<{ id, cliente_id, cliente_nombre, cliente_email, cliente_telefono }>}
+ * @throws {{ code: 'NO_ENCONTRADO' | 'CLIENTE_NO_ENCONTRADO' | 'TURNO_CON_CLIENTE' | 'ESTADO_INVALIDO' }}
+ */
+export const asignarClienteATurno = async ({ turnoId, tenantId, barberoId, clienteId, contacto }) => {
+  await verificarTurnoAsignable(turnoId, tenantId, barberoId);
+
+  // El filtro de "cliente suyo" se aplica solo a un cliente existente que elige un
+  // barbero: uno nuevo lo está cargando él.
+  const filtrarClienteDelBarbero = Boolean(barberoId && clienteId);
+
+  if (clienteId) {
+    const params = [clienteId, tenantId];
+    let where = 'c.id = $1 AND c.tenant_id = $2';
+    if (filtrarClienteDelBarbero) {
+      where += ` AND ${sqlClienteDelBarbero('c', '$3')}`;
+      params.push(barberoId);
+    }
+    const res = await query(`SELECT 1 FROM cliente c WHERE ${where}`, params);
+    if (res.rows.length === 0) {
+      throw errorAsignacion('CLIENTE_NO_ENCONTRADO', 'Cliente no encontrado');
+    }
+  }
+
+  let idCliente = clienteId;
+  let clienteCreadoAca = false;
+  if (contacto) {
+    idCliente = await upsertCliente(tenantId, contacto);
+    clienteCreadoAca = !contacto.email;
+  }
+
+  const params = [turnoId, tenantId, idCliente, ESTADOS_ASIGNABLES];
+  let filtros = '';
+  if (barberoId) {
+    params.push(barberoId);
+    filtros += ` AND t.barbero_id = $${params.length}`;
+    if (filtrarClienteDelBarbero) {
+      filtros += ` AND ${sqlClienteDelBarbero('c', `$${params.length}`)}`;
+    }
+  }
+
+  const updateRes = await query(
+    `UPDATE turno t
+        SET cliente_id = c.id
+       FROM cliente c
+      WHERE t.id = $1 AND t.tenant_id = $2
+        AND c.id = $3 AND c.tenant_id = $2
+        AND t.cliente_id IS NULL
+        AND t.estado = ANY($4::text[])${filtros}
+     RETURNING t.id, c.id AS cliente_id, c.nombre AS cliente_nombre,
+               c.email AS cliente_email, c.telefono AS cliente_telefono`,
+    params
+  );
+  if (updateRes.rows.length > 0) {
+    return updateRes.rows[0];
+  }
+
+  // Perdió una carrera: el turno cambió entre la lectura y el UPDATE.
+  console.warn('[turnosService] asignarClienteATurno — el turno cambió antes del UPDATE | turno_id:', turnoId);
+  if (clienteCreadoAca) {
+    try {
+      await query(
+        `DELETE FROM cliente c
+          WHERE c.id = $1 AND c.tenant_id = $2
+            AND NOT EXISTS (SELECT 1 FROM turno t WHERE t.cliente_id = c.id)`,
+        [idCliente, tenantId]
+      );
+    } catch (err) {
+      console.error('[turnosService] asignarClienteATurno — falló el cleanup del cliente creado:', err);
+    }
+  }
+  await verificarTurnoAsignable(turnoId, tenantId, barberoId);
+  // El turno sigue asignable: lo que dejó de valer es el cliente.
+  throw errorAsignacion('CLIENTE_NO_ENCONTRADO', 'Cliente no encontrado');
+};
+
+/**
+ * Best-effort: después de asignarle un cliente a un turno, actualiza su evento de
+ * Google Calendar (el título pasa de "Sin datos" al nombre del cliente). Si el turno
+ * no tiene evento, no hace nada. actualizarEvento no propaga errores.
+ * @param {string} turnoId
+ * @returns {Promise<void>}
+ */
+export const sincronizarCalendarCliente = async (turnoId) => {
+  const enriquecido = await enriquecerTurno(turnoId);
+  if (!enriquecido?.google_event_id) return;
+  const { turno, barbero, servicio, cliente } = construirContextoMail(enriquecido);
+  await actualizarEvento(enriquecido.google_event_id, turno, barbero, servicio, cliente);
 };

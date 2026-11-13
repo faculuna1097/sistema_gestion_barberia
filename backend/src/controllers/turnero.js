@@ -412,7 +412,8 @@ export const crearTurno = async (req, res) => {
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @param {string} req.params.token
  * @returns {JSON} { turno: { id, inicio, fin, estado }, barbero: { id, nombre },
- *   servicio: { id, nombre, precio: number, duracion_minutos }, cliente: { nombre } }
+ *   servicio: { id, nombre, precio: number, duracion_minutos }, cliente: { nombre } };
+ *   cliente.nombre es null en un turno "Sin datos" (cliente_id NULL, F1)
  */
 export const getTurnoPorToken = async (req, res) => {
   try {
@@ -426,7 +427,7 @@ export const getTurnoPorToken = async (req, res) => {
        JOIN barbero  b  ON b.id  = t.barbero_id
        JOIN servicio s  ON s.id  = t.servicio_id
        JOIN tenant   tn ON tn.id = t.tenant_id
-       JOIN cliente  c  ON c.id  = t.cliente_id
+       LEFT JOIN cliente c ON c.id = t.cliente_id
        WHERE t.token_gestion = $1 AND t.tenant_id = $2`,
       [req.params.token, req.tenant_id]
     );
