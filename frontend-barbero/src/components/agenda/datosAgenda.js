@@ -278,3 +278,23 @@ export function aplicarEstadoDeTurno(agenda, { id, estado }) {
 
   return { ...agenda, turnos, slots };
 }
+
+/**
+ * aplicarClienteDeTurno
+ * Le pone a un turno de la agenda ya preparada el cliente que devolvió el
+ * servidor al asignárselo (PATCH /admin/turnos/:id/cliente). Así el nombre se ve
+ * al instante, sin esperar la recarga, que después lo confirma. Función pura.
+ * @param {Object} agenda - de prepararAgenda
+ * @param {{ id: string, cliente_id: string, cliente_nombre: string,
+ *   cliente_email: string|null, cliente_telefono: string|null }} respuesta
+ * @returns {Object} la agenda nueva (no muta la recibida)
+ */
+export function aplicarClienteDeTurno(agenda, respuesta) {
+  const { id, cliente_id, cliente_nombre, cliente_email, cliente_telefono } = respuesta;
+  return {
+    ...agenda,
+    turnos: agenda.turnos.map((t) => (
+      t.id === id ? { ...t, cliente_id, cliente_nombre, cliente_email, cliente_telefono } : t
+    )),
+  };
+}

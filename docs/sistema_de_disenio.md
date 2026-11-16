@@ -789,6 +789,21 @@ componente se comparte recién cuando un segundo front lo necesita).
 | `SearchInput` | Input de búsqueda con lupa + botón limpiar. |
 | `FondoLocal` | Fondo a pantalla completa con la foto del local desenfocada y con velo (sin foto, `surfaceAlt`). Copia del panel (§6.1) sin el "telón" de `esperarImagen`. |
 | `MarcoAcceso` / `EncabezadoAcceso` | Marco del login: `FondoLocal`, un overlay con scroll propio y la card centrada (380), con `esquina` para el "Volver". Copia del panel sin `onSubmit`; la bajada de `EncabezadoAcceso` es `aria-live`, así se anuncia "PIN incorrecto". |
+| `HojaInferior` | Hoja que sube desde abajo (ancho de la columna, hasta 90 % del alto) para una tarea corta sin salir de la pantalla: encabezado con título, subtítulo y X; cuerpo con scroll propio; `pie` fijo con el error y el botón, que queda a la vista aunque suba el teclado. Cierra con Escape, la X o tocando afuera, salvo `bloqueada`; lleva el foco a la hoja y lo devuelve al cerrar. Entra con `om-hoja-in`. La usan el atajo "Reservar turno" y "Asignar cliente" de la Agenda (desde el 2026-11-16, F1 de `plan_mejoras_operativas.md`). |
+| `AvisoError` | Caja de error en línea (`dangerSoft`, borde y texto `danger`, `role="alert"`). La usan el wizard de turno, las hojas y los avisos de la Agenda. |
+
+`AvatarIniciales` sin nombre (un turno "Sin datos") dibuja el ícono de persona
+sobre `accentSoft`, el mismo del botón "Sin datos".
+
+**Cliente de un turno (desde el 2026-11-16, F1 de `plan_mejoras_operativas.md`).**
+Piezas de dominio en `components/cliente/`, no en `ui/`: `SelectorCliente`
+(buscar entre los clientes del barbero o cargar uno nuevo; controlado, con el
+valor y su conversión para la API en `utils/clienteTurno.js`), `BotonSinDatos`
+(reservar sin cliente, en el acento suave, confirma en el acto) y `Separador`
+("o cargá el cliente"). La búsqueda con espera entre teclas es el hook
+`useBusquedaClientes`. Las comparten el wizard de turno, la hoja del atajo y
+"Asignar cliente". El texto de un turno sin cliente es siempre "Sin datos"
+(`textoCliente` en `utils/formato.js`).
 
 **Login (desde el 2026-11-13, F5 de `plan_mejoras_operativas.md`).** Las dos
 fases del login comparten `MarcoAcceso`: la misma "puerta" que el login del
@@ -941,7 +956,7 @@ la estrategia es duplicar**:
 | | `tokens.js` | `index.css` |
 |---|---|---|
 | **Panel** | La base de Luz más `neutralSoft`, `overlay` y `shadowLg` (`0 20px 40px rgba(0,0,0,0.15)`), solo de este front. | Geist y Geist Mono desde `public/fonts` (desde 2026-11-02). `om-fade` sube 4 px. Suma `om-shake`, `.om-fila-hover` (el hover de las tablas de reporte), `.om-rango` (el riel de `SelectorConBarra`, desde el 2026-11-12) y `spin`. |
-| **Barbero** | La base de Luz: lo mismo que el panel, sin `neutralSoft`, `overlay` ni `shadowLg`. | Google Fonts. `om-fade` es solo opacidad (con `transform`, los modales se descentraban dentro de `PageContainer`). Su giro se llama `om-spin`. `om-shake` (los puntos del PIN, desde el 2026-11-13; antes era un `<style>` del login). Sin `.om-fila-hover`. |
+| **Barbero** | La base de Luz: lo mismo que el panel, sin `neutralSoft`, `overlay` ni `shadowLg`. | Google Fonts. `om-fade` es solo opacidad (con `transform`, los modales se descentraban dentro de `PageContainer`). Su giro se llama `om-spin`. `om-shake` (los puntos del PIN, desde el 2026-11-13; antes era un `<style>` del login). `om-hoja-in` (la entrada de `HojaInferior`, con su versión para "reducir movimiento", desde el 2026-11-16). Sin `.om-fila-hover`. |
 | **Landing** | La base sin `neutralSoft`, `overlay` ni `maxWidth`. Suma `sizeDisplay`, `sizeSection`, `sizeSubheading`, `maxWidthWide`, `maxWidthText`, `sectionGapMin` y `sectionGapMax`. Tiene su propio `shadowLg` (`0 12px 32px rgba(0,0,0,0.10)`, para las capturas que flotan): mismo nombre que el del panel, otro valor. | Google Fonts, `scroll-behavior: smooth`, `om-reveal` y las clases `om-` de §4.1. Sin `om-stroke`, `om-overlay-in` ni `om-dialog-in`. |
 | **Turnero** | Diverge a propósito (§3.8): `bg`, `accent`, `accentHover`, `accentSoft` y los del hero. No tiene `shadowScroll`. | Diverge a propósito (§3.8): `overscroll-behavior`, los colores de su tema y el movimiento `tt-`. |
 | **Alta** | La base de Luz, sin `neutralSoft`, `overlay` ni `shadowLg` (copia del panel, 2026-11-10). | Geist desde `public/fonts`. `om-shimmer`, `om-pop` y `om-stroke`, con su versión para "reducir movimiento", y el movimiento `al-` (§3.9). |
@@ -1032,7 +1047,9 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-11-13 — F5 de mejoras operativas (fase 4): el login de la app del barbero con `FondoLocal` y `MarcoAcceso` (§6.3), la grilla de barberos, la sesión guardada en el celular, `useHoverPresion` (§4.2) y `om-shake` en el `index.css` del barbero (§8).*
+*Última actualización: 2026-11-16 — F1 de mejoras operativas (fase 6): §6.3 suma `HojaInferior`, `AvisoError`, `AvatarIniciales` sin nombre y las piezas del cliente de un turno (`components/cliente/`); §8, `om-hoja-in` en el `index.css` del barbero.*
+
+*2026-11-13 — F5 de mejoras operativas (fase 4): el login de la app del barbero con `FondoLocal` y `MarcoAcceso` (§6.3), la grilla de barberos, la sesión guardada en el celular, `useHoverPresion` (§4.2) y `om-shake` en el `index.css` del barbero (§8).*
 
 *2026-11-13 — F6 de mejoras operativas (fase 3): §5.2 suma el ojo de `Field` (`revelable`) y la label con `htmlFor` en el panel; §6.1 suma `MarcoAcceso`, `EncabezadoAcceso`, `BotonEnlace`, `FilaAjuste`, `PillSinConfigurar` y `ariaLabel` en `Button`.*
 

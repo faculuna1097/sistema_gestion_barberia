@@ -1,10 +1,12 @@
 // /frontend-barbero/src/components/agenda/DetalleTurnoModal.jsx
-// Detalle de un turno de la Agenda, con sus acciones si está reservado.
+// Detalle de un turno de la Agenda, con sus acciones si está reservado, y
+// "Asignar cliente" si es un turno "Sin datos".
 
-import { UserX } from 'lucide-react';
+import { UserX, UserPlus } from 'lucide-react';
 
 import { theme } from '../../theme/tokens.js';
 import { fmtHora } from '../../utils/fecha.js';
+import { textoCliente } from '../../utils/formato.js';
 import { Button, StatusPill } from '../ui';
 import { ModalDetalle, DatoDetalle } from './ModalDetalle.jsx';
 
@@ -15,8 +17,10 @@ import { ModalDetalle, DatoDetalle } from './ModalDetalle.jsx';
  * @param {Object|null} props.turno
  * @param {() => void} props.onCerrar
  * @param {(turno, accion) => void} props.onAccion
+ * @param {(turno) => void} props.onAsignarCliente - abre la hoja de "Asignar cliente"
+ * @returns {JSX.Element|null}
  */
-export default function DetalleTurnoModal({ turno, onCerrar, onAccion }) {
+export default function DetalleTurnoModal({ turno, onCerrar, onAccion, onAsignarCliente }) {
   if (!turno) return null;
 
   const esReservado = turno.estado === 'reservado';
@@ -26,6 +30,9 @@ export default function DetalleTurnoModal({ turno, onCerrar, onAccion }) {
   // Completar no está acá: un turno se completa al registrar su corte, desde el
   // iPad o el panel.
   const esFuturo = new Date(turno.inicio) > new Date();
+  // Un turno "Sin datos" recibe un cliente si está reservado o completado (se
+  // anota después de cobrar); cancelado o "no asistió" ya no se toca.
+  const puedeAsignar = !turno.cliente_id && (esReservado || turno.estado === 'completado');
 
   return (
     <ModalDetalle
@@ -36,7 +43,7 @@ export default function DetalleTurnoModal({ turno, onCerrar, onAccion }) {
     >
       {/* Datos del turno */}
       <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <DatoDetalle label="Cliente" valor={turno.cliente_nombre || 'Sin nombre'} />
+        <DatoDetalle label="Cliente" valor={textoCliente(turno.cliente_nombre)} />
         {turno.servicio_nombre && <DatoDetalle label="Servicio" valor={turno.servicio_nombre} />}
         {turno.cliente_telefono && (
           <DatoDetalle
@@ -53,8 +60,17 @@ export default function DetalleTurnoModal({ turno, onCerrar, onAccion }) {
       </div>
 
       {/* Acción — solo si está reservado: cancelar si no empezó, "no asistió" si ya empezó. */}
-      {esReservado && (
+      {puedeAsignar && (
         <div style={{ marginTop: 20 }}>
+          <Button variant="secondary" onClick={() => onAsignarCliente(turno)}>
+            <UserPlus size={16} strokeWidth={1.75} aria-hidden="true" />
+            Asignar cliente
+          </Button>
+        </div>
+      )}
+
+      {esReservado && (
+        <div style={{ marginTop: puedeAsignar ? 8 : 20 }}>
           {esFuturo ? (
             <Button variant="danger" onClick={() => onAccion(turno, 'cancelar')}>Cancelar</Button>
           ) : (

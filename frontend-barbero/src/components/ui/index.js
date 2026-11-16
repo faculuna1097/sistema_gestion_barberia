@@ -25,3 +25,5 @@ export { default as TurnoListItem }   from './TurnoListItem.jsx';
 export { default as SearchInput }     from './SearchInput.jsx';
 export { default as FondoLocal }      from './FondoLocal.jsx';
 export { default as MarcoAcceso, EncabezadoAcceso } from './MarcoAcceso.jsx';
+export { default as HojaInferior }    from './HojaInferior.jsx';
+export { default as AvisoError }      from './AvisoError.jsx';

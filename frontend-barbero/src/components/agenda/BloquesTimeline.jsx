@@ -7,6 +7,7 @@ import { Check, Coffee, CalendarOff } from 'lucide-react';
 
 import { theme } from '../../theme/tokens.js';
 import { fmtHora } from '../../utils/fecha.js';
+import { textoCliente } from '../../utils/formato.js';
 import { useHover } from '../../hooks/useHover.js';
 import { OFFSET_IZQ, cajaVertical } from './geometria.js';
 
@@ -230,7 +231,7 @@ export function BloqueTurno({ turno, origen, pxPorHora, onClick }) {
         textOverflow: 'ellipsis',
         whiteSpace: 'nowrap',
       }}>
-        {turno.cliente_nombre || 'Sin nombre'}
+        {textoCliente(turno.cliente_nombre)}
         {turno.servicio_nombre && ` · ${turno.servicio_nombre}`}
       </div>
     </div>

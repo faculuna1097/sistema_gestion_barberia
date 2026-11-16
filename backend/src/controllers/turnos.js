@@ -8,6 +8,7 @@ import {
   enriquecerTurno, armarLinkGestion, sincronizarCalendarCreacion,
   notificarConfirmacion, cambiarEstado, completarTurnoConCorte,
   cancelarTurnoPorId, inicioPosteriorAhora, asignarClienteATurno, sincronizarCalendarCliente,
+  clienteUsable, borrarClienteSinTurnos,
 } from '../services/turnosService.js';
 import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { validarTurnoEnHorario } from '../services/horarioAtencionService.js';
@@ -83,20 +84,25 @@ const hayDatoDeContacto = (body) =>
 
 /**
  * POST /api/admin/turnos
- * Reserva manual desde backoffice. Email y teléfono opcionales.
- * Con `sin_cliente: true` el turno queda sin cliente (cliente "Sin datos",
- * turno.cliente_id NULL): no se manda nombre ni contacto, y no sale mail. El cliente
- * se le puede asignar después (PATCH /:id/cliente).
+ * Reserva manual desde backoffice. El cliente es uno de tres:
+ * - nuevo: `nombre` y, opcionales, `telefono` y `email` (upsertCliente);
+ * - existente: `cliente_id` (sin nombre ni contacto). Con rol barbero, uno suyo
+ *   (clienteUsable); uno ajeno responde 404, igual que uno inexistente. Así elegir
+ *   un cliente del buscador no crea otro igual;
+ * - ninguno: `sin_cliente: true` (cliente "Sin datos", turno.cliente_id NULL). No
+ *   sale mail. El cliente se le puede asignar después (PATCH /:id/cliente).
  * Si rol=barbero, barbero_id del body se ignora y se usa req.barbero_id.
  * origen_creacion se setea según el rol.
- * @param {Object} req.body - { servicio_id, barbero_id, inicio, nombre, telefono?, email? }
- *   o { servicio_id, barbero_id, inicio, sin_cliente: true }
- * @returns {JSON} 201 { turno_id, token_gestion }; 400 si sin_cliente viene con
- *   nombre, teléfono o email
+ * @param {Object} req.body - { servicio_id, barbero_id, inicio } más
+ *   { nombre, telefono?, email? }, { cliente_id } o { sin_cliente: true }
+ * @returns {JSON} 201 { turno_id, token_gestion }; 400 si se combinan dos formas de
+ *   cliente (sin_cliente o cliente_id con nombre o contacto, o sin_cliente con
+ *   cliente_id); 404 si el cliente_id no existe o no es del local (o del barbero)
  */
 export const crearTurnoAdmin = async (req, res) => {
-  const { servicio_id, inicio } = req.body;
+  const { servicio_id, inicio, cliente_id: clienteIdBody } = req.body;
   const sinCliente = req.body.sin_cliente === true;
+  const traeClienteId = clienteIdBody !== undefined && clienteIdBody !== null && clienteIdBody !== '';
 
   // barbero_id: si es barbero, forzar el propio (anti escalada horizontal)
   const barbero_id = barberoSegunRol(req, req.body.barbero_id);
@@ -114,9 +120,19 @@ export const crearTurnoAdmin = async (req, res) => {
   //    "Sin datos" no lleva contacto: si igual viene alguno, es un error del
   //    front y se rechaza en vez de descartarlo callado. ──────────────────────
   let contacto = null;
-  if (sinCliente) {
+  if (sinCliente && traeClienteId) {
+    return res.status(400).json({ error: 'sin_cliente no admite cliente_id' });
+  }
+  if (sinCliente || traeClienteId) {
     if (hayDatoDeContacto(req.body)) {
-      return res.status(400).json({ error: 'sin_cliente no admite nombre, telefono ni email' });
+      return res.status(400).json({
+        error: sinCliente
+          ? 'sin_cliente no admite nombre, telefono ni email'
+          : 'Mandá cliente_id o los datos de un cliente nuevo, no los dos',
+      });
+    }
+    if (traeClienteId && !esUUID(clienteIdBody)) {
+      return res.status(404).json({ error: MENSAJE_CLIENTE_NO_ENCONTRADO });
     }
   } else {
     contacto = validarContacto(req.body, false);
@@ -165,9 +181,25 @@ export const crearTurnoAdmin = async (req, res) => {
       return res.status(422).json(CUERPO_422_FERIADO);
     }
 
-    // ── Upsert cliente (datos ya normalizados por validarContacto). Un turno
-    //    "Sin datos" va sin cliente (cliente_id NULL). ──────────────────────
-    const cliente_id = sinCliente ? null : await upsertCliente(req.tenant_id, contacto);
+    // ── Cliente: uno existente (del local y, con rol barbero, suyo), uno nuevo
+    //    (upsert, datos ya normalizados por validarContacto) o ninguno ("Sin
+    //    datos", cliente_id NULL). ──────────────────────────────────────────
+    let cliente_id = null;
+    // Un cliente sin email siempre es una fila nueva (upsertCliente): si el turno
+    // no se inserta, se borra para no dejar clientes sin turnos (uno por reintento).
+    let clienteCreadoAca = false;
+    if (traeClienteId) {
+      const usable = await clienteUsable({
+        clienteId: clienteIdBody, tenantId: req.tenant_id, barberoId: barberoSegunRol(req, null),
+      });
+      if (!usable) {
+        return res.status(404).json({ error: MENSAJE_CLIENTE_NO_ENCONTRADO });
+      }
+      cliente_id = clienteIdBody;
+    } else if (!sinCliente) {
+      cliente_id = await upsertCliente(req.tenant_id, contacto);
+      clienteCreadoAca = !contacto.email;
+    }
 
     // ── INSERT turno ────────────────────────────────────────────────────────
     let resultado;
@@ -177,6 +209,7 @@ export const crearTurnoAdmin = async (req, res) => {
         servicioId: servicio_id, inicioDT, finDT, origenCreacion: origen_creacion,
       });
     } catch (err) {
+      if (clienteCreadoAca) await borrarClienteSinTurnos(cliente_id, req.tenant_id, 'crearTurnoAdmin');
       if (err.code === 'SLOT_OCUPADO') {
         console.warn('[turnos] crearTurnoAdmin — slot ocupado (turno o suspensión)');
         return res.status(409).json({ error: err.message });

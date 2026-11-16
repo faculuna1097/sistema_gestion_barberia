@@ -18,6 +18,7 @@ import {
 } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { fmtFechaHora, fmtHora, fechaDeISO } from '../utils/fecha.js';
+import { textoCliente } from '../utils/formato.js';
 
 import {
   TopBar,
@@ -804,7 +805,7 @@ function TabSuspensiones({ barbero }) {
                     fontSize: theme.sizeBody,
                     color: theme.inkSoft,
                   }}>
-                    {fmtFechaHora(t.inicio)} · {t.cliente_nombre || 'Sin nombre'}
+                    {fmtFechaHora(t.inicio)} · {textoCliente(t.cliente_nombre)}
                   </li>
                 ))}
               </ul>

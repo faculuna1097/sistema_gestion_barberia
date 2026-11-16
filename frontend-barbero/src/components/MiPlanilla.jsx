@@ -14,7 +14,7 @@ import { ChevronLeft, ChevronRight, ChevronDown, ClipboardX, TrendingUp, Trendin
 
 import { getPlanilla, getResumenPlanilla } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
-import { fmtPesos, capitalizar } from '../utils/formato.js';
+import { fmtPesos, capitalizar, textoCliente } from '../utils/formato.js';
 import { sumarComision, textoPorcentajeComision } from '../utils/comision.js';
 import { colorResultado } from '../utils/colorMonto.js';
 import { useHover } from '../hooks/useHover.js';
@@ -701,7 +701,7 @@ function CorteFila({ corte, ultimo }) {
         }}>
           {corte.servicio_nombre || 'Servicio'}
         </div>
-        {(corte.forma_pago || corte.cliente_nombre || corte.con_turno === false) && (
+        {(corte.forma_pago || corte.cliente_nombre || corte.con_turno === false || corte.con_turno === true) && (
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -712,9 +712,10 @@ function CorteFila({ corte, ultimo }) {
             {corte.forma_pago && <PillFormaPago forma={corte.forma_pago} />}
             {/* Comparación estricta: un backend sin `con_turno` (ej. el front
                 desplegado antes que el backend) no debe rotular todos los
-                cortes como "Sin turno". Los con turno ya muestran el cliente. */}
+                cortes como "Sin turno". Los con turno muestran el cliente, o
+                "Sin datos" si el turno no tiene. */}
             {corte.con_turno === false && <PillSinTurno />}
-            {corte.cliente_nombre && (
+            {(corte.cliente_nombre || corte.con_turno === true) && (
               <span style={{
                 fontFamily: theme.body,
                 fontSize: theme.sizeBody,
@@ -724,7 +725,7 @@ function CorteFila({ corte, ultimo }) {
                 whiteSpace: 'nowrap',
                 minWidth: 0,
               }}>
-                {corte.cliente_nombre}
+                {textoCliente(corte.cliente_nombre)}
               </span>
             )}
           </div>

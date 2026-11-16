@@ -1,0 +1,64 @@
+// /frontend/src/hooks/useBusquedaClientes.js
+// Búsqueda de clientes del local con espera entre teclas. La usa "Asignar
+// cliente" del Turnero. Copia adaptada de la del barbero
+// (frontend-barbero/src/hooks/useBusquedaClientes.js): los fronts no comparten código.
+
+import { useEffect, useRef, useState } from 'react';
+import { buscarClientesAdmin } from '../services/api';
+
+// Cuánto se espera después de la última tecla antes de buscar.
+const ESPERA_MS = 300;
+// Desde cuántas letras se busca (el servidor pide al menos 2).
+const MINIMO_LETRAS = 2;
+
+/**
+ * useBusquedaClientes
+ * Busca clientes del local (con rol barbero, el servidor devuelve solo los suyos)
+ * a medida que se escribe. Espera ESPERA_MS sin teclas antes de pedir, y descarta
+ * la respuesta de una búsqueda vieja que llega después de una nueva.
+ * @param {string} texto - lo escrito en el buscador
+ * @returns {{ resultados: Array, buscando: boolean, error: boolean, buscado: boolean }}
+ *   `buscado` dice si los resultados corresponden al texto actual (para mostrar
+ *   "sin resultados" solo cuando de verdad no hubo).
+ */
+export function useBusquedaClientes(texto) {
+  const [resultados, setResultados] = useState([]);
+  const [buscando, setBuscando] = useState(false);
+  const [error, setError] = useState(false);
+  const [buscado, setBuscado] = useState(false);
+  const refPedido = useRef(0);
+
+  useEffect(() => {
+    const limpio = texto.trim();
+    const pedido = ++refPedido.current;
+    setBuscado(false);
+    if (limpio.length < MINIMO_LETRAS) {
+      setResultados([]);
+      setBuscando(false);
+      setError(false);
+      return undefined;
+    }
+    setBuscando(true);
+    const timer = setTimeout(async () => {
+      try {
+        const data = await buscarClientesAdmin(limpio);
+        if (pedido !== refPedido.current) return;
+        setResultados(data);
+        setError(false);
+      } catch (err) {
+        if (pedido !== refPedido.current) return;
+        console.error('[useBusquedaClientes] Error buscando clientes:', err.message);
+        setResultados([]);
+        setError(true);
+      } finally {
+        if (pedido === refPedido.current) {
+          setBuscando(false);
+          setBuscado(true);
+        }
+      }
+    }, ESPERA_MS);
+    return () => clearTimeout(timer);
+  }, [texto]);
+
+  return { resultados, buscando, error, buscado };
+}

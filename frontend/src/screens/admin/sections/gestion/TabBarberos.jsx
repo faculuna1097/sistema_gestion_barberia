@@ -56,6 +56,7 @@ import {
 } from '../../../../utils/comision';
 import { errorDeRespuesta, mensajeDeError } from '../../../../utils/errores';
 import { theme } from '../../../../theme/tokens.js';
+import { textoCliente } from '../../../../utils/formato';
 
 // Orden de presentación de los días: Lun→Sáb, Dom al final (índices de DIAS).
 const ORDEN_DIAS = [1, 2, 3, 4, 5, 6, 0];
@@ -735,7 +736,7 @@ function SubPanelAusencias({ barbero }) {
               gap: 2,
             }}>
               {conflicto.turnos_afectados?.map((t, i) => (
-                <li key={i}>{fmtFechaHora(t.inicio)} — {t.cliente_nombre || 'Sin nombre'}</li>
+                <li key={i}>{fmtFechaHora(t.inicio)} — {textoCliente(t.cliente_nombre)}</li>
               ))}
             </ul>
             <div style={{ display: 'flex', gap: 8 }}>

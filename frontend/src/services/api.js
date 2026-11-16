@@ -588,6 +588,40 @@ export const cancelarAdminTurno = async (turnoId) => {
   return res.json();
 };
 
+/**
+ * asignarClienteAdminTurno
+ * Le asigna un cliente a un turno "Sin datos" (reservado o completado): uno
+ * existente ({ cliente_id }) o uno nuevo ({ nombre, telefono?, email? }).
+ * @param {string} turnoId
+ * @param {Object} datos - { cliente_id } o { nombre, telefono?, email? }
+ * @returns {Promise<Object>} { id, cliente_id, cliente_nombre, cliente_email, cliente_telefono }
+ * @throws {ErrorServidor} con `status` y `codigo`: 409 'turno_con_cliente' si
+ *   otro ya le asignó uno; 409 sin código si el estado ya no lo permite; 404
+ *   turno o cliente; 400 contacto inválido
+ */
+export const asignarClienteAdminTurno = async (turnoId, datos) => {
+  const res = await apiFetch(`/admin/turnos/${turnoId}/cliente`, {
+    method: 'PATCH',
+    body: JSON.stringify(datos),
+  });
+  if (!res.ok) throw await errorDeRespuesta(res);
+  return res.json();
+};
+
+/**
+ * buscarClientesAdmin
+ * Busca clientes del local por nombre, email o teléfono (hasta 50). Con rol
+ * barbero, el servidor devuelve solo los suyos.
+ * @param {string} busqueda - al menos 2 caracteres
+ * @returns {Promise<Array>} [{ id, nombre, email, telefono }]
+ * @throws {ErrorServidor}
+ */
+export const buscarClientesAdmin = async (busqueda) => {
+  const res = await apiFetch(`/admin/clientes?busqueda=${encodeURIComponent(busqueda)}`);
+  if (!res.ok) throw await errorDeRespuesta(res);
+  return res.json();
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ADMIN — Horarios (gestión de horarios por barbero)
 // ─────────────────────────────────────────────────────────────────────────────

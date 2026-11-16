@@ -611,6 +611,51 @@ const sqlClienteDelBarbero = (aliasCliente, paramBarbero) =>
    )`;
 
 /**
+ * Dice si un cliente existente se puede usar en un turno: es del local y, si quien
+ * lo elige es un barbero, es "suyo" (sqlClienteDelBarbero). Lo usan el alta del
+ * turno con `cliente_id` y la asignación de un cliente a un turno "Sin datos".
+ * @param {Object} datos
+ * @param {string} datos.clienteId - id ya validado como UUID
+ * @param {string} datos.tenantId
+ * @param {string|null} datos.barberoId - el barbero del token con rol barbero; null para admin
+ * @returns {Promise<boolean>} true si el cliente se puede usar
+ */
+export const clienteUsable = async ({ clienteId, tenantId, barberoId }) => {
+  const params = [clienteId, tenantId];
+  let where = 'c.id = $1 AND c.tenant_id = $2';
+  if (barberoId) {
+    where += ` AND ${sqlClienteDelBarbero('c', '$3')}`;
+    params.push(barberoId);
+  }
+  const res = await query(`SELECT 1 FROM cliente c WHERE ${where}`, params);
+  return res.rows.length > 0;
+};
+
+/**
+ * Cleanup manual (sin transacción, convenciones §6): borra un cliente recién
+ * creado que se quedó sin turno porque lo que venía después falló (el insert del
+ * turno dio 409, o la asignación perdió una carrera). Solo si no tiene ningún
+ * turno: nunca toca un cliente en uso. No propaga errores: si falla, queda un
+ * cliente sin turnos y se avisa a Sentry.
+ * @param {string} clienteId
+ * @param {string} tenantId
+ * @param {string} origen - quién llama, para el log (ej. 'crearTurnoAdmin')
+ * @returns {Promise<void>}
+ */
+export const borrarClienteSinTurnos = async (clienteId, tenantId, origen) => {
+  try {
+    await query(
+      `DELETE FROM cliente c
+        WHERE c.id = $1 AND c.tenant_id = $2
+          AND NOT EXISTS (SELECT 1 FROM turno t WHERE t.cliente_id = c.id)`,
+      [clienteId, tenantId]
+    );
+  } catch (err) {
+    console.error(`[turnosService] ${origen} — falló el cleanup del cliente creado:`, err);
+  }
+};
+
+/**
  * Arma un error tipado de la asignación de cliente, que el controller mapea a su status.
  * @param {string} code    - 'NO_ENCONTRADO' | 'CLIENTE_NO_ENCONTRADO' | 'TURNO_CON_CLIENTE' | 'ESTADO_INVALIDO'
  * @param {string} mensaje - texto para el usuario
@@ -685,17 +730,8 @@ export const asignarClienteATurno = async ({ turnoId, tenantId, barberoId, clien
   // barbero: uno nuevo lo está cargando él.
   const filtrarClienteDelBarbero = Boolean(barberoId && clienteId);
 
-  if (clienteId) {
-    const params = [clienteId, tenantId];
-    let where = 'c.id = $1 AND c.tenant_id = $2';
-    if (filtrarClienteDelBarbero) {
-      where += ` AND ${sqlClienteDelBarbero('c', '$3')}`;
-      params.push(barberoId);
-    }
-    const res = await query(`SELECT 1 FROM cliente c WHERE ${where}`, params);
-    if (res.rows.length === 0) {
-      throw errorAsignacion('CLIENTE_NO_ENCONTRADO', 'Cliente no encontrado');
-    }
+  if (clienteId && !(await clienteUsable({ clienteId, tenantId, barberoId }))) {
+    throw errorAsignacion('CLIENTE_NO_ENCONTRADO', 'Cliente no encontrado');
   }
 
   let idCliente = clienteId;
@@ -734,16 +770,7 @@ export const asignarClienteATurno = async ({ turnoId, tenantId, barberoId, clien
   // Perdió una carrera: el turno cambió entre la lectura y el UPDATE.
   console.warn('[turnosService] asignarClienteATurno — el turno cambió antes del UPDATE | turno_id:', turnoId);
   if (clienteCreadoAca) {
-    try {
-      await query(
-        `DELETE FROM cliente c
-          WHERE c.id = $1 AND c.tenant_id = $2
-            AND NOT EXISTS (SELECT 1 FROM turno t WHERE t.cliente_id = c.id)`,
-        [idCliente, tenantId]
-      );
-    } catch (err) {
-      console.error('[turnosService] asignarClienteATurno — falló el cleanup del cliente creado:', err);
-    }
+    await borrarClienteSinTurnos(idCliente, tenantId, 'asignarClienteATurno');
   }
   await verificarTurnoAsignable(turnoId, tenantId, barberoId);
   // El turno sigue asignable: lo que dejó de valer es el cliente.

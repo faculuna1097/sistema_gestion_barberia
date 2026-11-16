@@ -6,8 +6,8 @@
 > anteriores los mueven. Aprobar el plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
 > **Estado (2026-11-13):** **en curso.** Branch rebasado sobre `main` (`3931843`: monitoreo, formulario de alta y
-> fases 0-2 del resguardo de la DB). Fases 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8), 2 (F6a), 3 (F6b), 4 (F5) y 5 (F1a)
-> hechas y commiteadas. Próximo: fase 6 (F1b fronts).
+> fases 0-2 del resguardo de la DB). Fases 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8), 2 (F6a), 3 (F6b), 4 (F5), 5 (F1a) y 6
+> (F1b) hechas y commiteadas. Próximo: fase 7 (F3), que espera el SQL de `no_asistio_por`.
 > Antes, 2026-11-05: fase 0 hecha y la tanda en espera del monitoreo (`feature/monitoreo-prod`, ya en producción).
 
 ## 1. Contexto
@@ -328,7 +328,7 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
 | 3 | ✅ **Hecha (2026-11-13, commiteada).** F6b fronts: ojo en `Field` (`revelable`), "¿Olvidaste…?" en los dos logins (`SolicitudRecuperacion`, con paso intermedio), `PantallaRecuperacion` (el `#recuperar=` se lee antes que todo en `App.jsx` y se saca de la URL), Gestión → Negocio → Contacto (`BloqueContacto`, pide el PIN de admin) y Gestión → Seguridad rediseñada. El turnero no cambió (sigue la clave `telefono`). Distinto al prompt, decidido con el usuario: PIN de admin incorrecto → 403 (antes 401, que cerraba la sesión) también en credenciales y PIN; la recuperación deja volver a elegir el mismo PIN; celular argentino por defecto; aviso de sesión cerrada en el login del panel | Ejecutor | — |
 | 4 | ✅ **Hecha (2026-11-13, commiteada).** F5 login de la app del barbero. Dirección elegida: "Marco del local" (`FondoLocal` + `MarcoAcceso`, copias adaptadas de las del panel), selector en grilla de avatares con el último barbero del celular primero, teclado de PIN con "¿Olvidaste tu PIN? Pedile uno nuevo al dueño". Distinto al prompt, decidido con el usuario: la sesión del barbero queda guardada en el celular (`utils/sesion.js`, 30 días como el token; 401 o "Cerrar sesión" la borran), sin tocar el backend. Arreglado de paso: salían dos POST de login por PIN | Ejecutor | — |
 | 5 | ✅ **Hecha (2026-11-13, commiteada).** F1a backend. SQL corrido por el usuario: `turno.cliente_id` nullable. `POST /api/admin/turnos` con `sin_cliente: true` (400 si además trae nombre o contacto); `LEFT JOIN cliente` en `getTurnoPorToken`, `sqlTurnoEnriquecido`, `listarTurnos` y `listarTurnosOperativos` (`planillaService` ya lo era); Calendar nombra "Sin datos" (`NOMBRE_SIN_CLIENTE`), la API devuelve el cliente en `null`. Nuevo `PATCH /api/admin/turnos/:id/cliente` con `{ cliente_id }` o `{ nombre, telefono?, email? }` → 200 `{ id, cliente_id, cliente_nombre, cliente_email, cliente_telefono }`; 400 (ninguno, los dos o contacto inválido); 404 turno o cliente (inexistente, de otro local o, con rol barbero, ajeno); 409 `codigo: 'turno_con_cliente'`; 409 si el estado no es `reservado` ni `completado`. Una sola sentencia, no pisa un cliente ya asignado; sin mail; Calendar best-effort | Ejecutor | SQL `cliente_id` nullable |
-| 6 | F1b fronts: wizard, atajo en la Agenda, refresco de la Agenda, asignar cliente (app y panel), "Sin datos" en el iPad | Ejecutor | — |
+| 6 | ✅ **Hecha (2026-11-16, commiteada).** F1b fronts. App del barbero: `textoCliente` ("Sin datos" en toda la app), wizard de 3 pasos (servicio · día en chips de 14 días con los que no tienen lugar en gris + "Otra fecha" y horario · cliente con "Sin datos" destacado), atajo "Reservar turno" en la Agenda (`HojaReservar`), "Asignar cliente" en el detalle (`HojaAsignarCliente`) y refresco cada 30 s y al volver al primer plano; centralizado en `components/cliente/`, `HojaInferior`, `AvisoError`, `useBusquedaClientes` y `utils/clienteTurno.js`. Panel: "Sin datos" en Turnero, Planillas y Gestión → Barberos, y "Asignar" en el detalle del turno (`turnero/AsignarCliente.jsx`, también en modo barbero). iPad: "Sin datos" en el selector y el resumen de `FlujoCorte`. Distinto al prompt, decidido con el usuario: `POST /api/admin/turnos` acepta `{ cliente_id }` (antes, elegir un cliente del buscador creaba otro igual; con rol barbero, uno suyo o 404) y borra el cliente sin mail recién creado si el alta falla (`borrarClienteSinTurnos`) | Ejecutor | — |
 | 7 | F3 backend (endpoint, `no_asistio_por`, `cierreDiario.js`) + avisos en el iPad y el Inicio | Ejecutor | SQL `no_asistio_por` |
 | 8 | F4 socios | Ejecutor | — |
 | 9 | F2a traspasos: backend | Ejecutor | SQL `turno_traspaso` |
@@ -412,3 +412,25 @@ _(Los completa el orquestador durante la tanda.)_
 - **(2026-11-13, orquestador al revisar la fase 3) Sin verificar en pantalla:** los modales de Gestión →
   Seguridad, los anchos nuevos de Seguridad y Turnero y el aviso de sesión cerrada (hacía falta la contraseña
   del iPad de demo). Los endpoints sí se probaron por API. Va a la prueba del usuario antes del merge.
+- **(2026-11-13, usuario + diagnóstico con `salud-prod`) Las pruebas de este branch dejaron a demo sin poder
+  entrar en producción.** Síntoma: en `demo.barbermanager.app` el login (panel o iPad) da 200 y el pedido
+  siguiente da 401, y vuelve a la pantalla de login. Causa: la caché de `tenantMiddleware` guarda por subdominio
+  `admin_token_version` y `operativo_token_version`, y solo se renueva al reiniciar el proceso o con
+  `invalidar()` *en el mismo proceso*. Las pruebas de F6 (links de recuperación, ~13:16 ARG) y las
+  restauraciones posteriores cambiaron esas versiones de demo en la DB compartida desde backends locales, así
+  que el backend de producción (sin reinicios desde el 2026-11-11 20:19 ARG) siguió con las versiones viejas, y
+  `authMiddleware` rechaza todo token nuevo con 401 **sin loguear nada** (no aparece "firma inválida"). Lo que
+  se vio en los logs: a las 17:59 ARG, tres logins admin con 200 seguidos de 401 en `/api/inicio/*`; a las 18:02
+  el admin ya entraba (alguien volvió `admin_token_version` al valor de la caché, 5, sin pasar por prod); a las
+  18:05 el iPad seguía con 200 en el login y 401 después (`operativo_token_version` = 7 en la DB, otro valor en
+  la caché). Los demás locales no se vieron afectados (sus versiones no cambiaron). **Arreglo:** reiniciar el
+  servicio web en Railway (la caché se rearma desde la DB); sin código ni SQL. El proceso se renovó con el deploy
+  de un PR a las 19:53 ARG del 2026-11-13 (arrancó limpio, una sola vez). **Pendiente:** confirmar en los logs
+  que demo entra al panel y al iPad (login 200 y pedidos siguientes 200). **Regla para lo que queda de la tanda:** si una prueba local
+  cambia las versiones de token de demo (cambio de PIN o contraseña, link de recuperación, restauración a mano),
+  reiniciar el servicio web de prod al terminar. **Para decidir:** loguear un `console.warn` en el 401 por
+  versión de token de `authMiddleware` (hoy es invisible en los logs y costó encontrarlo).
+- **(2026-11-16, orquestador al revisar la fase 6) Sin ver en pantalla:** "Sin datos" en Planillas del panel y en
+  la lista de Gestión → Barberos (hacía falta cobrar un turno "Sin datos" en demo); revisado en el código. Va a
+  la prueba del usuario antes del merge. Quedaron en demo, por pedido del usuario, turnos de prueba de Alejo
+  (13/11, 17/11 y 4/12) y clientes "Prueba F6…": borrarlos cuando ya no sirvan.

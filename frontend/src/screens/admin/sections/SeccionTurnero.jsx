@@ -63,7 +63,7 @@ import {
   getFechaHoy, formatHora, aHoraCorta, TZ,
   fechaDeInstante, formatInstante, formatDuracion, formatAntelacion,
 } from '../../../utils/fecha';
-import { fmtPesos } from '../../../utils/formato';
+import { fmtPesos, textoCliente } from '../../../utils/formato';
 import { textoEstadoBloque } from '../../../utils/descansos';
 import { theme } from '../../../theme/tokens.js';
 import {
@@ -76,6 +76,7 @@ import {
   ChipFiltro,
   Modal,
   DetalleRecurso,
+  BotonEnlace,
   AvatarIniciales,
   BadgeFormaPago,
   Toast,
@@ -85,6 +86,7 @@ import {
   estiloEtiquetaCampo,
 } from '../../../components/ui';
 import { toast } from '../../../utils/toast';
+import AsignarCliente from './turnero/AsignarCliente.jsx';
 import { mensajeDeError } from '../../../utils/errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -482,7 +484,7 @@ function BloqueAgenda({ turno, rangoInicio, onClick }) {
           textOverflow: 'ellipsis',
         }}
       >
-        {turno.cliente_nombre}
+        {textoCliente(turno.cliente_nombre)}
       </div>
       {fin - ini >= MIN_DURACION_CON_SERVICIO && (
         <div
@@ -915,7 +917,7 @@ function ListaVista({ turnos, mostrarBarbero, onTurnoClick }) {
                   </span>
                 </Td>
               )}
-              <Td bold>{t.cliente_nombre}</Td>
+              <Td bold>{textoCliente(t.cliente_nombre)}</Td>
               <Td>{t.servicio_nombre}</Td>
               <Td><EstadoTurnoPill estado={t.estado} /></Td>
             </tr>
@@ -1083,15 +1085,25 @@ const totalValorStyle = {
  *     = el del turno) y el precio lo sigue. Reemplaza al viejo "marcar
  *     completado" directo, que cambiaba el estado sin dejar registro financiero.
  *   - 'confirmando': vista de confirmación para cancelar (sin anidar modales).
+ *   - 'asignando': "Asignar cliente" a un turno "Sin datos" (AsignarCliente).
+ *     Está también en modo barbero: el servidor lo scopea a sus turnos y clientes.
  * @param {Array} servicios - catálogo de servicios del tenant ({ id, nombre,
  *   precio, activo }). Fuente del selector de servicio y del precio. Si está
  *   vacío (no cargó), el form degrada a precio editable a mano.
  * @param {boolean} [readonly=false] - Si true (modo barbero, D1), el modal es de
  *   solo lectura: oculta las acciones (completar/no asistió/cancelar) y, por ende,
- *   los modos 'completando'/'confirmando' quedan inalcanzables.
+ *   los modos 'completando'/'confirmando' quedan inalcanzables. "Asignar cliente"
+ *   sí se ofrece (decisión del usuario, 2026-11-16).
+ * @param {(respuesta: Object) => void} onClienteAsignado - con la respuesta del PATCH
+ * @param {(err: Error) => void} onConflictoCliente - el 409 al asignar
  */
-function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCancelar, accionando, servicios, readonly = false }) {
+function ModalDetalleTurno({
+  turno, onCerrar, onCambiarEstado, onCompletar, onCancelar, accionando, servicios, readonly = false,
+  onClienteAsignado, onConflictoCliente,
+}) {
   const [modo, setModo] = useState('detalle');
+  // Asignando un cliente: bloquea el cierre del Modal mientras responde el servidor.
+  const [asignandoCliente, setAsignandoCliente] = useState(false);
 
   // Estado del form de "completar" (local al modal, como el modo confirmando).
   const [formaPago, setFormaPago]       = useState(null);
@@ -1137,6 +1149,7 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
     detalle: 'Detalle del turno',
     completando: 'Completar turno',
     confirmando: 'Cancelar este turno',
+    asignando: 'Asignar cliente',
   }[modo];
 
   const esReservado = turno.estado === 'reservado';
@@ -1151,6 +1164,9 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
   // Antes de que empiece, al revés: "No asistió" no aparece (el servidor
   // rechaza marcarlo en un turno que no empezó).
   const yaComenzo = new Date(turno.inicio) <= new Date();
+  // Un turno "Sin datos" recibe un cliente si está reservado o completado (se
+  // anota después de cobrar); cancelado o "no asistió" ya no se toca.
+  const puedeAsignar = !turno.cliente_id && (esReservado || turno.estado === 'completado');
 
   // Filas estáticas del DetalleRecurso (label/valor simples).
   const filasBase = [
@@ -1159,7 +1175,17 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
     { label: 'Duración',  valor: formatDuracion(duracionMinutos(turno)) },
     { label: 'Servicio',  valor: turno.servicio_nombre },
     { label: 'Barbero',   valor: turno.barbero_nombre },
-    { label: 'Cliente',   valor: turno.cliente_nombre },
+    {
+      label: 'Cliente',
+      valor: puedeAsignar ? (
+        // El margen negativo compensa el alto del BotonEnlace (44 px, el
+        // área táctil): así la fila mide lo mismo que las otras y no se desalinea.
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, margin: '-12px -8px -12px 0' }}>
+          {textoCliente(turno.cliente_nombre)}
+          <BotonEnlace onClick={() => setModo('asignando')} disabled={accionando}>Asignar</BotonEnlace>
+        </span>
+      ) : textoCliente(turno.cliente_nombre),
+    },
     // Solo para turnos completados con corte vinculado (forma_pago/monto_total
     // son null para reservado/cancelado/no_asistio o completado sin corte).
     ...(turno.estado === 'completado' && turno.forma_pago
@@ -1175,10 +1201,18 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
       open
       title={titulo}
       onClose={onCerrar}
-      loading={accionando}
+      loading={accionando || asignandoCliente}
       maxWidth={460}
     >
-      {modo === 'detalle' ? (
+      {modo === 'asignando' ? (
+        <AsignarCliente
+          turno={turno}
+          onVolver={() => setModo('detalle')}
+          onEnviando={setAsignandoCliente}
+          onAsignado={(respuesta) => { onClienteAsignado(respuesta); setModo('detalle'); }}
+          onConflicto={onConflictoCliente}
+        />
+      ) : modo === 'detalle' ? (
         <>
           <DetalleRecurso filas={filasBase} />
 
@@ -1276,7 +1310,7 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
               Estaba marcado como “no asistió”. Al completarlo se registra el cobro y el turno pasa a completado.
             </p>
           )}
-          <DetalleRecurso filas={[{ label: 'Cliente', valor: turno.cliente_nombre }]} />
+          <DetalleRecurso filas={[{ label: 'Cliente', valor: textoCliente(turno.cliente_nombre) }]} />
 
           {/* Servicio — editable. Default = el del turno; el precio lo sigue.
               Sin catálogo (raro) no se muestra el selector y el servicio queda
@@ -1379,7 +1413,7 @@ function ModalDetalleTurno({ turno, onCerrar, onCambiarEstado, onCompletar, onCa
           <DetalleRecurso
             filas={[
               { label: 'Hora',     valor: formatHora(turno.inicio) },
-              { label: 'Cliente',  valor: turno.cliente_nombre },
+              { label: 'Cliente',  valor: textoCliente(turno.cliente_nombre) },
               { label: 'Servicio', valor: turno.servicio_nombre },
               { label: 'Barbero',  valor: turno.barbero_nombre },
             ]}
@@ -1621,6 +1655,48 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
     }
   };
 
+  /**
+   * recargarTurnosEnSilencio
+   * Vuelve a traer los turnos del día sin el spinner de carga, para mostrar cómo
+   * quedó un turno que cambió por otro lado. Si falla, deja lo que se ve.
+   */
+  const recargarTurnosEnSilencio = async () => {
+    try {
+      const barberoIdFetch = modoBarbero ? barberoSesion?.id : barberoActivo;
+      setTurnos(await getAdminTurnos(fecha, barberoIdFetch));
+    } catch (err) {
+      console.warn('[seccionTurnero] No se pudieron recargar los turnos:', err.message);
+    }
+  };
+
+  /**
+   * clienteAsignado
+   * Dibuja el cliente asignado con lo que devolvió el servidor, en la agenda y en
+   * el detalle abierto (convenciones §8).
+   * @param {Object} respuesta - { id, cliente_id, cliente_nombre, cliente_email, cliente_telefono }
+   */
+  const clienteAsignado = (respuesta) => {
+    const { id, cliente_id, cliente_nombre, cliente_email, cliente_telefono } = respuesta;
+    const cliente = { cliente_id, cliente_nombre, cliente_email, cliente_telefono };
+    setTurnos((prev) => prev.map((t) => (t.id === id ? { ...t, ...cliente } : t)));
+    setTurnoSeleccionado((prev) => (prev && prev.id === id ? { ...prev, ...cliente } : prev));
+    toast.exito('Cliente asignado.');
+  };
+
+  /**
+   * conflictoAlAsignar
+   * El turno cambió mientras se elegía el cliente (409): cierra el detalle, avisa
+   * y recarga para mostrar cómo quedó.
+   * @param {Error & { codigo?: string }} err
+   */
+  const conflictoAlAsignar = (err) => {
+    setTurnoSeleccionado(null);
+    mostrarErrorAccion(err.codigo === 'turno_con_cliente'
+      ? 'Otro ya le cargó el cliente a este turno.'
+      : textoErrorAccion('No se pudo asignar el cliente', err));
+    recargarTurnosEnSilencio();
+  };
+
   // ── Derivados ───────────────────────────────────────────────────────────
   // Dataset visible del día: excluye cancelados. Los turnos cancelados no se
   // muestran (agenda/lista) ni se cuentan (KPIs) en esta sección. El estado
@@ -1795,6 +1871,8 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
           accionando={accionando === turnoSeleccionado.id}
           servicios={servicios}
           readonly={modoBarbero}
+          onClienteAsignado={clienteAsignado}
+          onConflictoCliente={conflictoAlAsignar}
         />
       )}
 

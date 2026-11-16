@@ -207,7 +207,7 @@ function App() {
           />
         );
       case SECCION.AGENDA:
-        return <Agenda />;
+        return <Agenda barbero={barbero} />;
       case SECCION.PLANILLA:
         return <MiPlanilla />;
       case SECCION.MAS:

@@ -19,6 +19,7 @@ import { Plus, RefreshCw, CalendarX } from 'lucide-react';
 
 import { getTurnos, patchEstadoTurno, cancelarTurno } from '../services/api.js';
 import { fmtHora, fmtFechaLarga, fechaHoyISO } from '../utils/fecha.js';
+import { textoCliente } from '../utils/formato.js';
 import { theme } from '../theme/tokens.js';
 
 import {
@@ -213,7 +214,7 @@ export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
             Próximo turno
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <AvatarIniciales nombre={proximo.cliente_nombre || '?'} size={44} />
+            <AvatarIniciales nombre={proximo.cliente_nombre} size={44} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
                 fontFamily: theme.body,
@@ -234,7 +235,7 @@ export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
               }}>
-                {proximo.cliente_nombre || 'Sin nombre'}
+                {textoCliente(proximo.cliente_nombre)}
                 {proximo.servicio_nombre && (
                   <span style={{ color: theme.muted }}> · {proximo.servicio_nombre}</span>
                 )}

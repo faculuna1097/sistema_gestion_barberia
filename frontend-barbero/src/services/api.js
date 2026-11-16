@@ -170,6 +170,29 @@ export const getDisponibilidad = async (barberoId, servicioId, fecha) => {
 };
 
 /**
+ * getDiasDisponibles
+ * Días de un rango con al menos un horario libre para un (barbero, servicio).
+ * El rango tiene un tope de 62 días (el servidor responde 400 si es más largo).
+ * @param {string} barberoId
+ * @param {string} servicioId
+ * @param {string} desde - 'YYYY-MM-DD' (inclusive)
+ * @param {string} hasta - 'YYYY-MM-DD' (inclusive)
+ * @returns {Promise<string[]>} ['YYYY-MM-DD', ...]
+ */
+export const getDiasDisponibles = async (barberoId, servicioId, desde, hasta) => {
+  const params = new URLSearchParams({
+    barbero_id: barberoId,
+    servicio_id: servicioId,
+    desde,
+    hasta,
+  });
+  const res = await fetch(`${BASE_URL}/turnero/dias-disponibles?${params}`, { headers: publicHeaders });
+  if (!res.ok) throw new Error('Error al obtener los días disponibles');
+  const data = await res.json();
+  return data.dias || [];
+};
+
+/**
  * getTenant
  * Obtiene los datos públicos del negocio, incluido el horario de atención
  * semanal. Se usa para validar los bloques del barbero contra el horario
@@ -227,9 +250,12 @@ export const getAgenda = async (fecha) => {
 
 /**
  * crearTurnoAdmin
- * Crea un turno manual desde la app del barbero.
- * @param {Object} datos - { servicio_id, barbero_id, inicio, nombre, telefono?, email? }
+ * Crea un turno manual desde la app del barbero. El cliente va de una de tres
+ * formas: uno nuevo ({ nombre, telefono?, email? }), uno existente
+ * ({ cliente_id }) o ninguno ({ sin_cliente: true }, turno "Sin datos").
+ * @param {Object} datos - { servicio_id, barbero_id, inicio } más una de las tres
  * @returns {Promise<Object>} { turno_id, token_gestion }
+ * @throws {Error} con `status` (409 horario ocupado, 422 fuera de horario o feriado)
  */
 export const crearTurnoAdmin = async (datos) => {
   const res = await apiFetch('/admin/turnos', {
@@ -240,6 +266,31 @@ export const crearTurnoAdmin = async (datos) => {
     const body = await res.json().catch(() => ({}));
     const err = new Error(body.error || 'Error al crear turno');
     err.status = res.status;
+    throw err;
+  }
+  return res.json();
+};
+
+/**
+ * asignarClienteTurno
+ * Le asigna un cliente a un turno "Sin datos" (reservado o completado): uno
+ * existente ({ cliente_id }) o uno nuevo ({ nombre, telefono?, email? }).
+ * @param {string} turnoId
+ * @param {Object} datos - { cliente_id } o { nombre, telefono?, email? }
+ * @returns {Promise<Object>} { id, cliente_id, cliente_nombre, cliente_email, cliente_telefono }
+ * @throws {Error} con `status` y `codigo`: 409 'turno_con_cliente' si otro ya le
+ *   asignó uno; 409 sin código si el estado ya no lo permite; 404 turno o cliente
+ */
+export const asignarClienteTurno = async (turnoId, datos) => {
+  const res = await apiFetch(`/admin/turnos/${turnoId}/cliente`, {
+    method: 'PATCH',
+    body: JSON.stringify(datos),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(body.error || 'Error al asignar el cliente');
+    err.status = res.status;
+    err.codigo = body.codigo;
     throw err;
   }
   return res.json();
