@@ -280,6 +280,12 @@ escapado al mail de sus clientes y solo le falta un tope de largo.
   Recomendado: 1 y 2 ya, en un `fix/` desde `main`; 3 después. El limiter por IP solo no alcanza mientras siga
   abierta la deuda de `trust proxy` (el cupo se comparte y un atacante lo reparte entre nodos): el tope por
   turno es el que no depende de la IP.
+- **Cuota de Resend (confirmado por el usuario, 2026-11-16):** la cuenta está en el plan gratuito, con un tope
+  diario de envíos compartido por todos los locales. Por este camino el tope se agota en menos de un minuto.
+  Ojo al medir el arreglo: el límite de la reserva (10 por hora por IP) también deja pasar más mails por día
+  que ese tope, así que los puntos 1 y 2 llevan reprogramar al mismo nivel que la reserva, no más abajo. Eso
+  es la deuda diferida 4 de julio (anti-abuso del turnero), que con el plan gratuito pesa más de lo que se
+  anotó.
 - **Novedad:** nuevo. Corrige el "Verificado correcto" de la fase 3 de julio ("reprogramar y cancelar exigen
   el token, así que no son abusables masivamente"): el token se le entrega a quien reserva.
 
