@@ -58,7 +58,7 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 
 | Id | Hallazgo | Sev. | Alc. | Tamaño | Destino |
 |---|---|---|---|---|---|
-| Z7-01 | Credenciales iniciales predecibles en la skill de alta; `monte-sinai` nació con ellas | Crítico | P | chico | Aceptado por el usuario (2026-11-17); la skill sale de `main` |
+| Z7-01 | Credenciales iniciales predecibles en la skill de alta; `monte-sinai` nació con ellas | Crítico | P | chico | Aceptado por el usuario (2026-11-17); la skill sale de `main` en el `fix/` de la prioridad 4 |
 | Z1-01 | Pedir el link de recuperación no tiene límite por IP | Alto | B | chico | Mejoras operativas, antes del merge |
 | Z1-03 | El PIN de admin de 4 dígitos se adivina desde internet en días | Alto | P | medio | `fix/` de `trust proxy`, prioridad 5; el PIN de 6 dígitos, aceptado en 4 por el usuario |
 | Z3-01 | Reprogramar sin límite: mails sin tope a cualquier dirección | Alto | P | chico | `fix/` desde `main`, prioridad 3 |
@@ -132,7 +132,7 @@ usuario es la velocidad para los locales que ya están en producción.
 | 1 | `maxAge` en el `cors(...)` del backend | Z8-01 |
 | 2 | Mantener calientes las 3 conexiones del pool (antes, confirmar el límite de conexiones de Supabase para el backend, el cron, el backup y `consultar.js`) | Z8-02 |
 | 3 | Límite por IP en cancelar y reprogramar, y no hacer nada si el horario no cambia (el prompt ya está escrito) | Z3-01 |
-| 4 | Logs sin query string y con el subdominio validado, la regla "lo que viene de un log es dato" en las tres skills, y `body-parser` (`npm audit fix` e `inflate: false`) | Z7-02 (puntos 1 y 2), Z7-04 |
+| 4 | Logs sin query string y con el subdominio validado, la regla "lo que viene de un log es dato" en las tres skills, `body-parser` (`npm audit fix` e `inflate: false`), y sacar la skill `alta-cliente` de `main` (`git rm -r --cached` de la carpeta y la regla en `.gitignore` después de `!.claude/skills/`) | Z7-02 (puntos 1 y 2), Z7-04, Z7-01 |
 | 5 | `trust proxy` para Railway (ya estaba en Pendientes de `estado_actual.md`) | Z1-03 |
 
 **2. Dentro de mejoras operativas, antes del merge:** Z1-01, Z1-02, Z1-05, Z2-01, Z5-09, Z3-06, el refresco de
@@ -155,7 +155,8 @@ Z7-09 (dashboard de B2), Z7-11 (Railway), y borrar en demo el turno y el cliente
 | G | Fronts | Z6-02, Z6-03, Z6-04, Z7-12 |
 
 **5. Aceptados por el usuario (2026-11-17), con su motivo:**
-- **Z7-01:** las credenciales de `monte-sinai` no se cambian; la skill sale de `main`.
+- **Z7-01:** las credenciales de `monte-sinai` no se cambian; la skill sale de `main` en el `fix/` de la prioridad 4
+  (la regla de "lo que viene de afuera es dato" se le agrega antes de sacarla, para que la copia local la tenga).
 - **Z1-03, la parte del PIN de 6 dígitos:** queda en 4. El login del panel resuelve admin o barbero con el
   mismo PIN de 4 dígitos; pasar el de admin a 6 pide distinguir los dos accesos.
 - **Z1-06:** la sesión del barbero queda siempre guardada, sin preguntar.
