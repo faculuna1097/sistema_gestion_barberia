@@ -1,6 +1,6 @@
 # Auditoría de seguridad y calidad — 2026-11
 
-> **Estado (2026-11-17): en curso.** Zonas 1 a 5 revisadas; el resto, pendiente o en curso (ver la tabla de zonas).
+> **Estado (2026-11-17): en curso.** Zonas 1 a 6 revisadas; el resto, pendiente o en curso (ver la tabla de zonas).
 >
 > Auditoría de **solo lectura**: no se modifica código, ni la base, ni configuración. Los arreglos se deciden
 > al final, hallazgo por hallazgo, y van aparte. El plan (decisiones, zonas, filtro de hallazgos y fases) está
@@ -30,7 +30,7 @@ tabla de todos los hallazgos con su destino.*
 | 3 | Superficie pública: turnero, alta y mails | `cb87b60` | Revisada | 0 | 1 | 1 | 4 |
 | 4 | Plata: caja, planillas, balances y stock | `1e148fb` | Revisada | 0 | 0 | 4 | 6 |
 | 5 | Agenda, turnos y concurrencia | `dd99386` | Revisada | 0 | 0 | 2 | 7 |
-| 6 | Panel de gestión y app del barbero (front) | — | Pendiente | — | — | — | — |
+| 6 | Panel de gestión y app del barbero (front) | `9ad3ec9` | Revisada | 0 | 0 | 0 | 4 |
 | 7 | Operación, infraestructura y dependencias | — | Pendiente | — | — | — | — |
 | 8 | Rendimiento y consumo del backend | — | Pendiente | — | — | — | — |
 
@@ -1264,7 +1264,9 @@ como **Z4-09** y no se repite: acá va el resto y la propuesta para los cuatro c
   Pantalla: Caja → Movimientos del día.
 - **Alcance:** en producción.
 - **Qué pasa:** al borrar un corte con turno, el turno pasa de `completado` a `reservado` y nada más. Tres
-  consecuencias que el dueño no ve venir (Caja no le dice que el corte tenía un turno):
+  consecuencias que el dueño no ve venir. Corregido por la zona 6: el diálogo de Caja sí avisa que el turno
+  vuelve a "Reservado" (`SeccionCaja.jsx:629-642`); lo que no dice es de qué turno se trata (hora y cliente) ni
+  que, si es de un día anterior, queda pendiente en el pasado:
   1. **Turno de un día anterior:** queda un `reservado` en el pasado. Tiene salida (se puede volver a
      completar desde el Turnero del panel, o marcar "no asistió"), pero no desde el iPad, que lista solo los
      de hoy, y nadie avisa que quedó pendiente. Con el cierre nocturno de F3, esa misma noche pasaría a "no
@@ -1503,11 +1505,259 @@ slots se revisaron leyendo, sin casos de prueba.
 
 ## Zona 6. Panel de gestión y app del barbero (front)
 
+**Commit auditado:** `9ad3ec9` (`feature/mejoras-operativas`), 2026-11-17. Solo lectura: código de los tres fronts
+y del backend donde hizo falta, y la DB con el rol `resguardo_lectura` (solo conteos). No se levantó nada ni se
+abrió ningún front: todo lo que depende de cómo se ve queda **sin confirmar en pantalla**.
+
+**Resumen:** 4 hallazgos (0 críticos, 0 altos, 0 medios, 4 bajos), los cuatro en producción. Las dos preguntas
+de la zona tienen respuesta corta:
+
+- **¿El front expone tokens o datos?** No encontré ningún sink nuevo: el único sigue siendo el de Z3-06 (ver
+  "Cruce con Z3-06"). Los tokens viven donde se decidió, no viajan en URLs ni en la consola, y el modo barbero
+  del panel no pide nada de admin. Lo único que el front oculta y el backend permite es completar un turno con
+  rol barbero (Z6-01).
+- **¿Qué fallas ve un usuario?** Ninguna grave. Una carga que falla en silencio y deja un mensaje falso
+  (Z6-02), textos técnicos en inglés en la app del barbero sin señal (Z6-03) y una carrera al cambiar de
+  semana en MiPlanilla (Z6-04).
+
+**Revisión del orquestador (2026-11-17):** Z6-01 se confirmó leyendo el camino completo (`routes/turnos.js:22`,
+`index.js:291`, `completarTurno` con `barberoSegunRol`, y D1 de `decisiones_acceso_barberos.md`), también en
+`main`. De los demás se revisaron Z6-03 (`Dashboard.jsx:144`) y Z6-04 (`MiPlanilla.jsx`, `cargar` sin descartar
+respuestas viejas). No se sacó ninguno ni cambió ninguna severidad. De paso se corrigió una frase de Z5-04 con
+la nota de esta zona.
+
+**Inyección de fórmulas en los Excel: no pasa.** SheetJS 0.20.3 escribe todo `string` como celda de texto, no
+como fórmula (ver "Verificado correcto"), y en la base hay 0 textos que empiecen con `=`, `+`, `-` o `@`.
+
+**Cruce con Z3-06** (el sink de `booking_url`), lado del front:
+
+- `frontend/src/App.jsx:255` toma `booking_url` de `GET /api/negocio` (público) tal cual llega, y
+  `frontend/src/screens/MainScreen.jsx:455` lo abre con `window.open(bookingUrl, "_blank")`: sin chequear el
+  esquema y sin `noopener`. React 19 bloquea `javascript:` en un `href`, pero no en `window.open`: el front no
+  agrega ninguna defensa.
+- Sigue siendo el **único** sink de los tres fronts (barrido abajo). Los otros `window.open` y
+  `location.href` son constantes (Spotify, YouTube).
+- **Safari del iPad:** no lo pude confirmar con documentación en esta sesión. Según el estándar HTML, una
+  ventana nueva abierta por `window.open` nace en `about:blank` con el origen de quien la abrió, y una
+  navegación `javascript:` corre si el origen coincide; o sea que el script correría con el origen del panel y
+  con `window.opener` apuntando al panel. Queda **sin confirmar** en WebKit y sin probar.
+- El criterio de la zona 1 se mantiene: en ese origen están `token_operativo` y, si un barbero entró a
+  `/barbero` desde el iPad, `barbero_sesion`. La severidad de Z3-06 no cambia; el arreglo del front que propone
+  Z3-06 (abrir solo `https://`) sigue siendo el que corresponde, y conviene sumar `noopener,noreferrer`.
+
 ### Hallazgos
+
+#### Z6-01 [BAJO] El backend deja que un barbero cobre sus propios turnos, con el precio que él elija; ninguna pantalla se lo ofrece
+
+- **Dónde:** `backend/src/routes/turnos.js:22` (`POST /api/admin/turnos/:id/completar`, montado con
+  `requiereRol('admin', 'barbero')` en `index.js:291`) y `backend/src/controllers/turnos.js` (`completarTurno`,
+  "barbero solo completa los suyos"). En el front: `SeccionTurnero.jsx:1247` y `:1290` (`!readonly`: el modo
+  barbero no muestra "Completar"), y la app del barbero no tiene esa acción.
+- **Alcance:** en producción (la ruta y el scoping son iguales en `main`).
+- **Qué pasa:** la decisión D1 de `decisiones_acceso_barberos.md` dice que el barbero no completa turnos
+  ("completar = registrar corte" va por el iPad), y el front lo respeta. El backend no: con su propio token (el
+  de la app, que queda guardado 30 días en su celular), un barbero puede mandar el pedido a mano y cobrar un
+  turno suyo con el `precio`, el `servicio_id`, la `propina` y la forma de pago que quiera (el backend valida
+  el rango, no el catálogo; Z4-04). Ejemplo: cobra en efectivo un corte de $ 15.000 y lo registra a $ 0. En
+  Caja el turno figura cobrado, en su planilla queda un corte "con turno", y el aviso de "turnos sin cobrar"
+  que trae F3 no lo va a mostrar. No registrarlo ya era posible; lo que agrega este camino es que el control
+  queda tapado. Necesita saber armar un pedido HTTP: por eso es bajo.
+- **Severidad (revisada por el orquestador):** queda en bajo, aunque por la guía una escalada que toca plata
+  sería alto. Lo que este camino agrega es poco: el mismo barbero ya puede sacar un turno suyo de "sin cobrar"
+  desde su app, sin saber nada técnico, marcándolo "no asistió" (permitido a propósito). La diferencia es que
+  acá el turno queda "cobrado" en vez de "faltó". El arreglo es igual de chico y conviene hacerlo: deja el
+  backend alineado con D1.
+- **Evidencia:** leído (ruta → `verificarToken` → `requiereRol('admin', 'barbero')` → `completarTurno` →
+  `barberoSegunRol`). Lo mismo ya lo anotó la zona 5 en su tabla de transiciones, sin abrirlo como hallazgo.
+- **Arreglo propuesto** (chico): que `completarTurno` responda 403 con rol barbero (o un `requiereRol('admin')`
+  propio en esa línea del router). Ninguna pantalla se rompe. No marcar "no asistió" ni cancelar: esas sí las
+  usa la app del barbero.
+- **Novedad:** nuevo (permiso que solo existía en el front).
+
+#### Z6-02 [BAJO] Si falla la carga de barberos, el Turnero del panel dice "Sin barberos cargados" y "Reintentar" no lo arregla
+
+- **Dónde:** `frontend/src/screens/admin/sections/SeccionTurnero.jsx:1503-1514` (el `catch` solo loguea) y
+  `:1813-1819` (el `EmptyState`). Pantalla: Turnero del panel, con rol admin. Mismo patrón en
+  `SeccionCaja.jsx:493-507` (socios).
+- **Alcance:** en producción (las dos cargas están en `main`).
+- **Qué pasa:** el dueño abre Turnero con mala señal o justo cuando el backend responde un 500. Los turnos
+  cargan, pero `GET /barberos` falla: `barberos` queda vacío y la pantalla dice "Sin barberos cargados. No hay
+  barberos activos para mostrar la agenda. Cargá al menos uno desde Gestión." No hay botón de reintentar
+  (`error` es `null`, porque los turnos sí cargaron), y cambiar de día no lo arregla: el efecto de los barberos
+  depende solo de `modoBarbero`. La única salida es ir a otra sección y volver. El dueño lee que no tiene
+  barberos cuando tiene.
+  En Caja, si falla `GET /admin/socios`, el modal "Registrar movimiento" con "Retiro" o "Aporte" muestra
+  "Dueño" sin opciones y "Guardar" queda deshabilitado, sin decir por qué.
+- **Evidencia:** leído. Sin confirmar en pantalla.
+- **Arreglo propuesto** (chico): en Turnero, guardar el error de los barberos y mostrar el `EmptyState` de
+  error con "Reintentar" (que vuelva a pedir barberos y turnos); en Caja, un aviso dentro del modal ("No se
+  pudieron cargar los dueños") cuando el tipo elegido necesita socio y la lista vino vacía por error.
+- **Novedad:** nuevo.
+
+#### Z6-03 [BAJO] La app del barbero muestra el texto técnico del error ("Load failed") en varias acciones
+
+- **Dónde:** `frontend-barbero/src/components/Dashboard.jsx:144` (`Error: ${err.message}`), `CrearTurno.jsx:160`
+  (`setErrorConfirm(err.message)`), `Gestion.jsx:288` (`Error al guardar: ${err.message}`) y `:665` (`No se
+  pudo liberar: ${err.message}`). Pantallas: Inicio (cancelar / no asistió), alta de turno, Gestión → Horarios
+  y Ausencias.
+- **Alcance:** en producción (Dashboard y Gestión son iguales en `main`; CrearTurno cambió en F1 y mantiene el
+  patrón).
+- **Qué pasa:** estas acciones usan `apiFetch`, que es un `fetch` sin diagnóstico. Sin señal, `fetch` tira un
+  `TypeError` cuyo texto es "Load failed" en Safari y "Failed to fetch" en Chrome, y la pantalla muestra eso:
+  "Error: Load failed" arriba de la lista de turnos, o "Error al guardar: Load failed". Con un 5xx que no trae
+  `error`, se ve el genérico de `api.js` (en castellano). Es el mismo problema que `utils/errores.js` ya
+  resolvió en el panel, y la app del barbero tiene la misma `mensajeDeError`: la usan `HojaReservar` y
+  `HojaAsignarCliente`, pero no estas cuatro.
+- **Evidencia:** leído (`api.js:308-332`, `:356-363`, `:418-426` y `:260-269` arman el `Error`; los cuatro
+  `catch` lo muestran crudo). Sin confirmar en pantalla.
+- **Arreglo propuesto** (chico): pasar los cuatro a `mensajeDeError(err, '<genérico en castellano>')`, que ya
+  existe. Como la app todavía no tiene usuarios, conviene hacerlo antes de que empiecen.
+- **Novedad:** nuevo.
+
+#### Z6-04 [BAJO] MiPlanilla: tocar dos veces seguidas la flecha de semana puede dejar en pantalla los números de otra semana
+
+- **Dónde:** `frontend-barbero/src/components/MiPlanilla.jsx:123-155` (`cargar`, sin descartar respuestas
+  viejas) y `:178-179` (las flechas siguen activas mientras carga: el esqueleto reemplaza solo el contenido).
+  Pantalla: Planilla de la app del barbero.
+- **Alcance:** en producción.
+- **Qué pasa:** el barbero quiere ver lo que cobró hace dos semanas y toca "anterior" dos veces rápido. Salen
+  los pedidos de la semana −1 y de la −2. Con señal de celular el orden de llegada no está garantizado: si la −1
+  llega última, el título dice la semana −2 y los números (cortes, comisión, "a cobrar") son de la −1. Además,
+  la que llega primero apaga el esqueleto antes de tiempo. La Agenda y el alta de turno del barbero, y todas las
+  secciones del panel, ya descartan la respuesta vieja (`refPedido` o `cancelado`); esta pantalla no.
+- **Evidencia:** leído. Sin confirmar en pantalla (depende del orden de llegada).
+- **Arreglo propuesto** (chico): el mismo `refPedido` que usa `Agenda.jsx:180` (o el `cancelado` del efecto,
+  como el panel).
+- **Novedad:** nuevo.
 
 ### Verificado correcto
 
+**Barrido de sinks** (grep, además de la lectura): `dangerouslySetInnerHTML`, `innerHTML`, `outerHTML`,
+`insertAdjacentHTML`, `eval(`, `new Function`, `document.write`, `srcdoc` y `createContextualFragment` en
+`frontend/src`, `frontend-barbero/src`, `frontend-landing/src` y los tres `index.html`: **0 resultados**.
+`window.open`, `location.href/assign/replace` y `.href =`: 6 usos; solo `booking_url` lleva un dato (Z3-06).
+
+- `href` con datos: `tel:${...}` y `mailto:${...}` del cliente en la app del barbero (`DetalleTurnoModal.jsx:51`
+  y `:57`, `Clientes.jsx:233` y `:236`). El esquema es fijo, así que un teléfono o un mail no pueden convertirse
+  en `javascript:`.
+- `src` con datos: el logo, la foto del local y las imágenes de Gestión salen de la URL que arma el backend
+  sobre Supabase Storage; lo mismo el favicon (`link.href` en los dos `App.jsx`).
+- Los nombres de clientes, servicios y barberos, los motivos y las notas se dibujan siempre como texto (React
+  los escapa). Ni el panel ni la app del barbero cargan scripts de terceros: sus `index.html` traen solo el
+  módulo propio y la fuente.
+
+**Tokens**
+
+| Token | Dónde vive | Cómo viaja | 401 |
+|---|---|---|---|
+| Admin y barbero del panel | Memoria del módulo (`api.js`, `authToken`) | Header `Authorization` de `apiFetch` | `apiFetch` lo limpia y `App.jsx` vuelve al login con el aviso de sesión cerrada |
+| Operativo (iPad) | Memoria + `localStorage.token_operativo` | `apiFetchOperativo` | Lo limpia y vuelve al login del iPad |
+| Barbero (app) | Memoria + `localStorage.barbero_sesion` (`{ token, barbero: { id, nombre } }`) y `barbero_ultimo_id` | `apiFetch` de la app | Borra la sesión guardada y vuelve al login |
+
+- Coincide con lo decidido (julio 7.3 y F5). Ningún token va en una URL: los query params llevan fechas, ids y
+  la búsqueda (con `encodeURIComponent`). Los `console.*` escriben el path, el status y `err.message`, nunca un
+  token, un PIN ni el body.
+- `fetch` directos: los del panel (`/negocio`, `/negocio/imagenes`, los tres logins y `/auth/recuperar/*`) y los
+  de la app del barbero (`/turnero/*`, `/negocio/imagenes`) son públicos y no llevan token; los de
+  `utils/errores.js` son el diagnóstico contra `/health`. Todo lo que lleva token pasa por un wrapper que
+  maneja el 401.
+- **402:** solo lo emite el login del admin (Z1-08) y `loginPanel` lo convierte en la pantalla bloqueada.
+- **Cerrar sesión:** el panel limpia el token, el rol y el barbero, y desmonta `PanelAdmin` (las secciones
+  pierden su estado); el iPad borra `token_operativo`; la app del barbero borra `barbero_sesion` y el token del
+  módulo. Los catálogos del iPad que quedan en memoria son del mismo local (un subdominio es un origen).
+- **Recuperación:** el `#recuperar=` se lee al cargar el módulo y se saca de la URL con `replaceState` antes
+  del primer render (`App.jsx:57-69`). El token viaja en el body y no se loguea.
+- `localStorage` no guarda datos de clientes. Lo único personal es el nombre del barbero, en su propio
+  dispositivo. Un subdominio no lee lo de otro.
+
+**Modo barbero del panel: qué pide cada sección**
+
+| Sección | Admin | Barbero |
+|---|---|---|
+| Inicio, Caja, Balances, Ventas, Gastos, Gestión | Sus endpoints (todos solo admin en el backend) | No se dibujan ni se piden (`SECCIONES_BARBERO`) |
+| Planillas | `/admin/planilla`, `/resumen`, `/descansos` | Los mismos, el backend los limita a los suyos; sin chips de barbero |
+| Turnero | `/barberos`, `/admin/servicios`, `/admin/horario-atencion`, `/admin/turnos`, `/admin/descansos`, `/admin/suspensiones` | No pide `/barberos` ni `/admin/servicios` (usa `[barberoSesion]`); lo demás, limitado a lo suyo; detalle de solo lectura salvo "Asignar" (F1, a propósito) |
+
+Con rol barbero el panel no hace ningún pedido que el backend niegue, así que no hay 403 que mostrar. Lo único
+oculto en el front y abierto en el backend es completar (Z6-01); marcar "no asistió", cancelar, cambiar su
+horario, ausencias y descansos los ofrece la app del barbero, a propósito.
+
+**Excel: inyección de fórmulas**
+
+- Los 7 Excel del panel (Caja, Planillas Detalle y Resumen con la hoja de Descansos, Gastos, Ventas, Balances
+  mensual e histórico) usan `XLSX.utils.json_to_sheet`. En SheetJS 0.20.3, `sheet_add_json` marca todo valor
+  `string` como celda de texto (`t = 's'`, `xlsx.mjs:27719`) y el escritor solo emite una fórmula si la celda
+  trae `cell.f` (`xlsx.mjs:16159`). Un `=HYPERLINK(...)` en la descripción de un gasto o en el nombre de un
+  cliente se abre en Excel como texto, no se evalúa.
+- En la base (consultado): 0 nombres de cliente, 0 descripciones de gasto, 0 de movimientos extra y 0 nombres
+  de servicios o productos que empiecen con `=`, `+`, `-` o `@`.
+- **La descripción de solo espacios** (nota de la zona 4): el iPad no la deja avanzar (`descripcion.trim()`),
+  y el modal de edición del panel manda el texto recortado, así que un texto vacío vuelve 400 y el modal
+  muestra el mensaje del servidor. Solo se llega por API con el token del iPad. En la base: 0 gastos con
+  descripción vacía o nula.
+
+**Validaciones espejo (front contra backend)**
+
+- `contactoNegocio`: mismo regex de mail, mismo E.164, mismo tope de 254 y de 30 caracteres; el front normaliza
+  el celular argentino antes y marca todos los campos a la vez.
+- Credenciales: usuario de 3 o más, contraseña de 8 o más y PIN de 4 dígitos en los dos lados.
+- Comisión: múltiplo de 5 entre 0 y 100 en `utils/comision.js` de los dos lados.
+- Montos: `fmtPesos` igual en los cuatro fronts (ya anotado). Dos diferencias chicas, sin hallazgo: el modal de
+  edición de un gasto no tiene `maxLength` (un texto largo vuelve con el 400 del servidor, que se muestra), y el
+  de una venta exige precio mayor que 0 aunque el backend acepta 0 (solo molesta con un producto cargado a
+  $ 0).
+
+**Fallas que ve el usuario**
+
+- **"Cargando" para siempre:** ninguna pantalla. Todas las cargas apagan el estado en un `finally` y tienen su
+  estado de error con "Reintentar" (panel) o el aviso de la app del barbero.
+- **Respuestas fuera de orden:** Turnero, Caja, Planillas, Gastos, Ventas, Balances, Inicio y los bloques de
+  Gestión descartan la respuesta vieja (`cancelado` o `vivoRef`); la Agenda, el alta de turno y la búsqueda de
+  clientes del barbero, con `refPedido`. La excepción es MiPlanilla (Z6-04).
+- **Doble toque:** el PIN del panel no acepta un quinto dígito mientras valida; los logins, la recuperación,
+  los tres flujos del iPad, Caja (alta y borrado), Gastos y Ventas (editar y borrar), completar y cancelar en el
+  Turnero, Asignar cliente, Gestión (barberos, servicios, productos, contacto, seguridad, feriados, horario,
+  imágenes) y las acciones de la app del barbero deshabilitan el botón mientras responde el servidor.
+- **Formularios que pierden lo cargado:** los modales con error del servidor (contacto, seguridad, barberos,
+  servicios, productos, asignar cliente, movimiento extra) muestran el error adentro y conservan lo escrito.
+  En contacto y seguridad, un PIN de confirmación incorrecto borra solo el PIN.
+- **Listas viejas después de una acción:** completar, cancelar, "no asistió" y asignar cliente en el Turnero,
+  y editar o borrar en Caja, Gastos y Ventas, dibujan el cambio con la respuesta del servidor. Liberar una
+  ausencia la dibuja y recarga por detrás.
+
+**Pendientes que dejaron otras zonas**
+
+- **"Completar" en días futuros (Z5-05):** confirmado del lado del front. `SeccionTurnero.jsx:1247` lo muestra
+  en todo turno `reservado`, sin mirar la fecha, y el `SelectorDia` tiene `permitirFuturo`. El arreglo ya está
+  en Z5-05 (punto 1).
+- **El borrado de un corte con turno en Caja (Z5-04):** el diálogo **sí** avisa que hay un turno:
+  `SeccionCaja.jsx:629-645` muestra "El turno asociado volverá a estado Reservado" cuando el corte trae
+  `turno_id` (lo devuelve `caja.js:55`). Lo que no dice es de qué turno se trata (hora, cliente) ni que, si es
+  de un día anterior, queda un reservado en el pasado. Z5-04 dice "Caja no le dice que el corte tenía un
+  turno": hay que corregir esa frase; la propuesta de Z5-04 (un texto con la hora y el cliente) sigue en pie.
+- **Render de recuperación, `BloqueContacto` y `TabSeguridad` (zona 1):** leídos. La validación del front es
+  la del backend; los errores van al campo (`campo` del 400 o `pin_admin_incorrecto`); un link vencido o usado
+  pasa a su pantalla final sin perder nada; sin red se distingue de "servidor caído"; los botones se
+  deshabilitan mientras responde. Un 403 de PIN incorrecto ya no cierra la sesión (F6).
+
+**Landing (pasada corta):** sin sinks (barrido de arriba). Los `href` salen de `config/landing.js`
+(`linkWhatsApp`, `linkEmail`) o son anclas internas; los externos llevan `rel="noopener noreferrer"`; el video
+usa `youtube-nocookie` con un id fijo. Lo de `null` en `linkWhatsApp()` y `linkEmail()` ya está anotado.
+
+**Sin revisar:** el render completo de `TabBarberos` (se leyeron el guardado, las ausencias y la carga),
+`BloqueFeriados`, `BloqueImagenes`, `BloqueHorarioAtencion` y `TabTurnero` (sus `catch` y botones, no el
+resto), y de la app del barbero `Agenda`, `CrearTurno`, `Gestion` y `Login` (sus cargas, guardas y `catch`). No
+corrí `eslint`. Nada se confirmó en pantalla.
+
 ### Para otra zona
+
+- **Zona 2:** Z6-01 es un permiso abierto en el backend (`POST /api/admin/turnos/:id/completar` con rol
+  barbero) que solo el front cerraba.
+- **Zona 5 (corrección de Z5-04):** el diálogo de borrado de Caja sí dice que el turno vuelve a "Reservado"
+  (`SeccionCaja.jsx:629-645`); le falta la hora, el cliente y el caso del turno pasado.
+- **Docs:** tres comentarios del panel dicen que con rol barbero el buscador devuelve "solo los suyos"
+  (`frontend/src/services/api.js:613-614`, `hooks/useBusquedaClientes.js:17` y la cabecera de
+  `turnero/AsignarCliente.jsx`). Con la decisión de Z2-01 deja de ser cierto: actualizarlos con ese arreglo.
 
 ---
 
