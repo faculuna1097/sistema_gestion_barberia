@@ -1,6 +1,6 @@
 # Auditoría de seguridad y calidad — 2026-11
 
-> **Estado (2026-11-17): en curso.** Zonas 1 a 7 revisadas; el resto, pendiente o en curso (ver la tabla de zonas).
+> **Estado (2026-11-17): en curso.** Las 8 zonas revisadas; falta la consolidación (fase 9).
 >
 > Auditoría de **solo lectura**: no se modifica código, ni la base, ni configuración. Los arreglos se deciden
 > al final, hallazgo por hallazgo, y van aparte. El plan (decisiones, zonas, filtro de hallazgos y fases) está
@@ -32,7 +32,7 @@ tabla de todos los hallazgos con su destino.*
 | 5 | Agenda, turnos y concurrencia | `dd99386` | Revisada | 0 | 0 | 2 | 7 |
 | 6 | Panel de gestión y app del barbero (front) | `9ad3ec9` | Revisada | 0 | 0 | 0 | 4 |
 | 7 | Operación, infraestructura y dependencias | `b4b21b3` | Revisada | 1 | 1 | 2 | 8 |
-| 8 | Rendimiento y consumo del backend | — | Pendiente | — | — | — | — |
+| 8 | Rendimiento y consumo del backend | `f986081` | Revisada | 0 | 1 | 5 | 2 |
 
 Estados: **Pendiente** (sin empezar), **Escrita** (el ejecutor terminó su sección) y **Revisada** (el
 orquestador la revisó contra el código y la commiteó).
@@ -2223,11 +2223,551 @@ en Z7-01, ver la nota del orquestador dentro del hallazgo.
 
 ## Zona 8. Rendimiento y consumo del backend
 
+**Commit auditado:** `f986081` (`feature/mejoras-operativas`), 2026-11-17. Solo lectura: código, historial de git,
+docs y la DB con el rol `resguardo_lectura` (catálogo, `pg_indexes`, `pg_stat_user_tables`,
+`pg_stat_user_indexes`, conteos por tenant y `EXPLAIN` sin `ANALYZE`). No se hizo ningún request a producción ni
+se levantó ningún servidor. Se midieron en local, aislados (sin base, sin red y sin servidor), tres cosas:
+`bcrypt.compare`, una copia del cálculo de slots con datos inventados y la memoria de cargar las dependencias
+del backend. Los scripts quedaron fuera del repo. Los milisegundos de CPU son de esta PC (8 núcleos, Node 24);
+el vCPU de Railway puede ser más lento (ver "A medir").
+
+**Segunda tanda de mediciones (pedida por el usuario, mismo día):** contra la base real, siempre con el rol
+`resguardo_lectura` (cualquier escritura falla) y sin servidor: abrir una conexión contra hacer una query, los
+handlers `GET` reales de las pantallas diarias contra el tenant demo (`req`/`res` simulados, contando queries y
+conexiones), y el costo en Postgres de los filtros sin índice. Detalle en "Mediciones".
+
+**Tercera tanda, en producción (autorizada por el usuario, mismo día):** la región del servicio web la pasó el
+usuario (US West, California). Se leyeron los logs HTTP del borde de Railway (`railway logs --http`, solo
+lectura, como la skill `salud-prod`): la duración real del backend en cada request de los últimos días, sin
+copiar IPs, user agents ni cuerpos. Y se hicieron 6 rondas de `GET` públicos al turnero de demo, con 70 s de
+espera entre rondas. Por último, con autorización del usuario, una reserva de prueba en demo (y su
+cancelación) para medir Google Calendar. Con esto, "A medir" quedó vacío.
+
+**Contexto (métricas de Railway de los últimos 30 días, las pasó el usuario):** costo total de $ 1,47, casi todo
+memoria ($ 1,46, unos 146 MB en promedio); CPU $ 0,001 y red de salida $ 0,003 (0,05 GB). Hoy ni la CPU, ni la
+memoria, ni la red pesan en la factura: la severidad sale de la espera que ve el usuario y de lo que crece.
+
+**Cómo leer los costos:** casi todo el tiempo de un request se va en viajes a la base (Railway en EE. UU. →
+Supabase en `us-west-2`). Este documento los cuenta en **viajes** (el tiempo de un `SELECT 1` sobre una
+conexión abierta). Con un pool de 3 conexiones, un `Promise.all` de 7 queries son 3 tandas, no una. Para pasar
+a milisegundos: viajes × 30 ms, lo que dura un viaje desde Railway a la base, medido en producción (ver
+"Mediciones").
+
+**Resumen:** 8 hallazgos (0 críticos, 1 alto, 5 medios, 2 bajos), nada pendiente de medir. Nada deja hoy a un local sin operar: ningún camino retiene una conexión del
+pool mientras espera a Google o al mail, y el `statement_timeout` de 5 s sigue puesto. Lo que más pesa hoy, medido
+en producción, es Z8-01: el 98 % de los pedidos paga antes un preflight de CORS, un viaje entero del celular a
+California (~230 ms desde Argentina), y se arregla con una línea. Después, Z8-02: cada pantalla que pide en
+paralelo abre conexiones nuevas cuando el backend estuvo quieto 30 s (de 150 a 270 ms más, con el viaje de
+~30 ms a la base medido en producción). Lo que más va a pesar cuando un local use el turnero es Z8-06 (CPU
+del cálculo de días). Todos están en producción salvo el refresco de la Agenda cada 30 s (Z8-04), que está
+solo en el branch.
+
+**Revisión del orquestador (2026-11-17):** Z8-01 se confirmó en el código: el `cors(...)` de `index.js` no
+fija `maxAge`. De los demás se revisaron Z8-02 (`idleTimeoutMillis: 30000` y un solo `SELECT 1` periódico en
+`config/db.js`), Z8-06 (`.plus()` de luxon dentro del bucle de slots de `disponibilidadService.js`; el CHECK de
+`tenant.duracion_slot_minutos` acepta de 1 a 240) y Z8-08 (`googleapis` entero importado en
+`googleCalendar.js`). No se sacó ninguno ni cambió ninguna severidad. Z8-06 queda en medio porque hoy ningún
+local usa el turnero propio; sube a alto cuando un local con varios barberos llene la agenda por ahí, porque
+con el límite global por IP un solo cliente alcanza a frenar el backend de todos los locales.
+
+**Excepción a las reglas de la zona:** el ejecutor midió contra producción con autorización del usuario en su
+chat (logs de Railway, pedidos públicos al turnero de demo y una reserva de prueba en demo, ya cancelada).
+Quedan en demo el turno cancelado y el cliente "Prueba auditoría Z8" (1 y 1, consultado): borrarlos cuando el
+usuario quiera.
+
+### Mediciones
+
+**Abrir una conexión** (`pg` con el mismo SSL que el backend, 5 conexiones y 40 `SELECT 1`, dos corridas): desde
+esta PC un viaje dura de 235 a 306 ms (Argentina → Oregón). Abrir una conexión (TCP, SSL, login SCRAM contra el
+pooler y el `SET statement_timeout` de `onConnect`) cuesta **7 a 7,7 viajes**. La proporción depende de la
+cantidad de idas y vueltas del protocolo, no de la distancia, así que vale igual desde Railway.
+
+**Pantallas diarias** (handlers reales, tenant demo, tres corridas, mediana). "Frío" es como queda el backend
+después de 30 s sin uso: una conexión abierta (la del keep-alive). "Caliente", con las tres abiertas. Las
+queries en frío incluyen los `SET` de las conexiones nuevas.
+
+| Pantalla | Queries | Conexiones nuevas en frío | Viajes en caliente | Viajes en frío |
+|---|---|---|---|---|
+| Inicio del panel (3 pedidos a la vez) | 11 | 2 | 4,1 | 13 |
+| Caja del día | 4 | 2 | 1,8 | 8,3 |
+| Agenda del barbero (con `verificarToken`) | 10 | 2 | 4,0 | 8,8 |
+| Landing del turnero (`/tenant`) | 3 | 1 | 2,0 | 9,6 |
+| Días con lugar, "Cualquier barbero" | 8 | 2 | 5,0 | 10,7 |
+| Días con lugar, un barbero | 7 | 2 | 3,2 | 11,5 |
+| Horarios del día, "Cualquier barbero" | 8 | 2 | 4,1 | 9,7 |
+
+Pasado a milisegundos de Railway, el Inicio en frío son 13 viajes: 260 ms si un viaje dura 20 ms, 910 ms si
+dura 70. En caliente, 80 y 290. La agenda de demo está casi vacía, así que en los días con lugar la CPU no pesa
+(el peor caso de CPU está en Z8-06).
+
+**Filtros por fecha en Postgres** (la consulta corrida 200 veces dentro de una sola sentencia, para que el
+tiempo del servidor supere al ruido de la red; tres corridas sobre los 3.311 cortes de la tabla):
+
+| Filtro | Hoy, por query | Por fila | Con 50.000 filas | Con 100.000 | Con 300.000 |
+|---|---|---|---|---|---|
+| Día, `DATE(timestamp AT TIME ZONE …) = …` | ~2 ms | ~0,6 µs | ~30 ms | ~60 ms | ~175 ms |
+| Mes, `TO_CHAR(… 'YYYY-MM') = …` | ~4,4 ms | ~1,3 µs | ~65 ms | ~130 ms | ~400 ms |
+| Día por rango sobre la columna (usa `idx_corte_timestamp`) | ~0 ms | — | ~0 | ~0 | ~0 |
+
+Las proyecciones son lineales: el recorrido es completo y crece igual que la tabla. Con el tenant demo
+(5 % de las filas) Postgres usa el índice por `tenant_id` y lee solo sus 173 cortes; el recorrido completo lo
+paga el local grande. Por eso se midió sobre la tabla entera, sin filtrar por tenant y sin leer datos de ningún
+local.
+
+**En producción.** Región del servicio web: US West, California (`us-west2`, confirmada por el campo
+`edgeRegion` de los logs). Del log HTTP del borde de Railway, el tiempo del backend (`upstreamRqDuration`) del
+deployment vigente (13 al 17/11, 1.415 pedidos, 1.041 de ellos del monitor a `/api/health`):
+
+| Pedido | Cantidad | Mediana | p90 |
+|---|---|---|---|
+| `GET /api/barberos` (y servicios, productos, categorías: 1 query) | 23 a 25 c/u | 32-43 ms | 219-276 ms |
+| `GET /api/turnos` (iPad, turnos del día) | 32 | 91 ms | 118 ms |
+| `POST /api/cortes` (cobrar en el iPad) | 26 | 180 ms | 242 ms |
+| `GET /api/inicio/resumen-dia` | 15 | 222 ms | 480 ms |
+| `GET /api/inicio/comparativo-mes` | 15 | 254 ms | 484 ms |
+| `GET /api/caja/movimientos-dia` | 4 | 216 ms | 487 ms |
+| `GET /api/admin/planilla` | 19 | 88 ms | 226 ms |
+| `POST /api/auth/panel/login` | 17 | 130 ms | 513 ms |
+| `GET /api/turnero/tenant` (landing) | 9 | 301 ms | 380 ms |
+| `GET /api/turnero/dias-disponibles` | 3 | 108 ms | 134 ms |
+| `POST /api/turnero/turnos` (reserva, sin Calendar) | 1 | 428 ms | — |
+| `OPTIONS` (preflight de CORS, todas las rutas) | 365 | 2 ms | 3 ms |
+
+Cómo se lee:
+- **Un viaje desde Railway a la base dura ~30 ms.** Es lo que tarda un endpoint de una sola query con la
+  conexión abierta (las medianas de 32 a 43 ms). Con eso, todos los "viajes" de esta sección se pasan a
+  milisegundos multiplicando por 30.
+- **Abrir conexión se ve en el p90:** esos mismos endpoints de una query llegan a 219-276 ms cuando les toca una
+  conexión nueva (7,5 viajes, como se midió desde acá).
+- **El CPU de Railway es parecido al de esta PC:** el login del barbero por su app (1 comparación `bcrypt` y
+  una query) tarda 88 ms, y el p90 del login del panel (513 ms) es el de un barbero de kingsaistudio, con 5
+  comparaciones. Unos 55 a 90 ms por comparación, contra 65 acá.
+- **Preflights:** 365 `OPTIONS` para unos 374 pedidos a la API (Z8-01).
+
+Rondas en vivo contra el turnero de demo (`GET` públicos, sin login; 70 s de espera entre rondas para que el
+pool vuelva a una conexión; el tiempo del backend sale de restar `/api/health`, pedido justo antes por la misma
+conexión HTTP). El viaje desde esta PC hasta Railway fue de 226 a 307 ms.
+
+| Pedido | En frío | En caliente |
+|---|---|---|
+| Landing (`/api/turnero/tenant`) | 204-243 ms | 52-109 ms |
+| Días con lugar, "Cualquier barbero" | 186-390 ms | 67-235 ms |
+
+**Reserva de prueba con Calendar** (autorizada por el usuario). En demo, con el único barbero activo con mail
+(así pasa por Google Calendar), un horario libre del 20/11, el nombre "Prueba auditoría Z8", un teléfono
+ficticio y la casilla de prueba de Resend (`delivered@resend.dev`, que simula la entrega sin mandarle nada a
+nadie ni dañar la reputación del dominio). Se canceló a los 5 s con el token que devolvió la reserva (lo mismo
+que hace el link del mail). Los logs muestran los pasos completos (evento creado, mail, evento borrado, mail
+de cancelación) y ningún error.
+
+| Pedido | Backend (log del borde) | Cliente, desde Argentina |
+|---|---|---|
+| Reserva, con Calendar | 1.021 ms | 1.342 ms |
+| Reserva, sin Calendar (la del 16/11, de los logs) | 428 ms | — |
+| Cancelación, con Calendar | 616 ms | 944 ms |
+
+Quedó en demo: el turno en estado `cancelado` (origen `auditoria`) y su cliente "Prueba auditoría Z8". El evento
+de Google se borró, y el barbero de demo recibió el aviso de cancelación de Calendar.
+
+Con días con lugar las rondas se pisan: el ruido de la red desde acá (±80 ms) es del tamaño de la diferencia. La
+landing, que en frío abre una sola conexión, la muestra limpia: unos 160 ms más en frío.
+
 ### Hallazgos
+
+#### Z8-01 [ALTO] Casi cada pedido de los fronts paga antes un viaje extra al backend (el preflight de CORS), porque la API no deja que el navegador lo recuerde
+
+- **Dónde:** `backend/src/index.js:84-100` (`cors({ origin, credentials })`, sin `maxAge`). Los cuatro fronts mandan
+  `X-Tenant-Subdomain` en todos los pedidos (y `Authorization` y `Content-Type: application/json` los que
+  corresponden): con esos headers el navegador no puede mandar el pedido directo y antes pregunta con un
+  `OPTIONS` si el backend lo permite.
+- **Alcance:** en producción.
+- **Costo:** tiempo de espera del usuario en **cada** pedido de todas las pantallas: el iPad, el panel, la app del
+  barbero y el turnero. El navegador guarda la respuesta del `OPTIONS` solo el tiempo que diga
+  `Access-Control-Max-Age`; como el backend no lo manda, la guarda 5 segundos (el valor por defecto) y casi
+  todo pedido vuelve a preguntar. En los logs del borde de Railway de los últimos 4 días hubo **365 `OPTIONS`
+  contra unos 374 pedidos a la API** (sin contar el `/api/health` del monitor): el 98 %. El `OPTIONS` en sí lo
+  contesta el backend en 2 ms, pero es un viaje entero celular → Railway (California) → celular antes del
+  pedido real. Medido desde esta PC (Argentina), ese viaje son ~230 ms; desde el wifi de un local o un celular
+  con 4G, parecido o más. Los pedidos que salen juntos (los 3 del Inicio) pagan sus preflights en paralelo:
+  uno por tanda de pedidos del front. Es probablemente lo que más espera agrega hoy: más que todo el trabajo
+  del backend en la mayoría de las pantallas (el Inicio tarda ~250 ms en el backend).
+- **Evidencia:** consultado en los logs HTTP de Railway (`railway logs --http`, conteo por método y ruta) y leído
+  (`cors` 2.8.6: `Access-Control-Max-Age` solo sale si se pasa `maxAge`). Viaje desde acá, medido contra
+  `/api/health` en producción.
+- **Arreglo propuesto** (chico). Opciones:
+  1. **`maxAge: 7200`** en `cors(...)`: cada navegador lo recorta a su tope (Chrome 2 horas, Safari 10 minutos,
+     Firefox 24 horas). Ojo: el navegador guarda el permiso **por URL**, así que una URL con otra fecha o
+     barbero en el query string vuelve a preguntar la primera vez; igual saca la gran mayoría (los pedidos
+     repetidos del iPad, el panel y el refresco de la Agenda). Riesgo: si se cambia la política de CORS
+     (orígenes o headers permitidos), los navegadores que ya la guardaron tardan hasta ese tope en enterarse.
+     Es la recomendada.
+  2. Servir la API desde el mismo dominio de cada front (un rewrite de `/api` en Vercel hacia Railway): sin
+     orígenes cruzados no hay preflight nunca. Riesgo y tamaño: medio; suma un salto por Vercel en cada pedido
+     y cambia la configuración de los cuatro fronts. Solo si después de 1 sigue pesando.
+- **Novedad:** nuevo.
+
+#### Z8-02 [MEDIO] El keep-alive mantiene caliente una sola de las 3 conexiones: cada pantalla que pide en paralelo abre conexiones nuevas después de 30 s sin uso
+
+- **Dónde:** `backend/src/config/db.js:61` (`idleTimeoutMillis: 30000`), `:198-209` (`iniciarKeepAlive`, un
+  `SELECT 1` cada 20 s), `:45-51` (`onConnect`: un `SET statement_timeout` por conexión nueva);
+  `backend/node_modules/pg-pool/index.js:157-167` (toma la conexión ociosa más reciente y, si no hay, abre una
+  nueva hasta llegar a 3).
+- **Alcance:** en producción.
+- **Costo:** el `SELECT 1` del keep-alive toma siempre la última conexión liberada, así que esa es la única que
+  sobrevive. Las otras dos se cierran a los 30 s de su último uso. Entonces, cada pantalla que larga varias
+  queries a la vez después de 30 s sin tráfico (el caso normal en un local: el dueño abre el panel, el barbero
+  abre la Agenda, un cliente entra al turnero) usa la conexión caliente para la primera y **abre dos conexiones
+  nuevas** para las otras. Abrir una conexión son unos 6 a 8 viajes antes de la primera query: TCP, el pedido
+  de SSL de Postgres, el saludo TLS, el inicio de sesión con SCRAM contra el pooler y el `SET` de `onConnect`.
+  Las pantallas afectadas son las que piden en paralelo: el Inicio y la Caja del panel, la Agenda del barbero,
+  y la disponibilidad y la landing del turnero. Un local normal las abre decenas de veces por día, y casi
+  siempre después de un rato quieto. Con la Agenda refrescándose cada 30 s (Z8-04), el refresco cae justo
+  cuando vencen las dos conexiones frías, así que puede abrirlas en casi cada vuelta.
+- **Evidencia:** leído (`db.js` → `pg-pool` 3.13.0, `_pulseQueue`: `this._idle.pop()` y `newClient` mientras no
+  esté lleno) y **medido** (ver "Mediciones"): abrir una conexión cuesta 7 a 7,7 viajes, y las seis pantallas
+  medidas abren 1 o 2 conexiones en frío y tardan de 2 a 5 veces lo que en caliente (el Inicio, 13 viajes
+  contra 4,1; la Caja, 8,3 contra 1,8). **En producción** un viaje desde Railway dura ~30 ms (ver "Mediciones",
+  en producción), así que el frío le suma de 150 a 270 ms a cada pantalla. Se ve en los logs: los endpoints de
+  una sola query tardan ~32 ms en mediana y 250 a 360 ms en el p90, que son las cargas que abrieron conexión; y
+  la landing del turnero de demo, medida en rondas con 70 s de espera, tarda 232-243 ms en frío contra 52-74 en
+  caliente. Queda en medio: el umbral que se había puesto para subirlo era un viaje de 40 ms o más.
+- **Arreglo propuesto** (chico o medio, según la opción). Opciones:
+  1. **Menos queries en paralelo en las pantallas calientes** (Z8-03, Z8-04): una pantalla que hace una o dos
+     queries no necesita las conexiones frías. Ataca la causa y además ahorra viajes. Es la recomendada.
+  2. **Que el keep-alive mantenga las 3** (tres `SELECT 1` a la vez en cada tick). Riesgo: deja las 3
+     conexiones tomadas en el pooler todo el día; hay que confirmar que el cupo de conexiones del plan gratuito
+     alcanza para el cron, el backup y `consultar.js`.
+  3. Subir `idleTimeoutMillis`. Riesgo: el pooler corta conexiones ociosas por su cuenta (es el error del pool
+     que ya llega a Sentry, `estado_actual.md` → Pendientes), así que una conexión vieja fallaría y la salvaría
+     el reintento de `query()`, pagando el viaje igual.
+
+  Recomendado: 1, y medir antes y después (A medir, 1) para decidir si además hace falta 2.
+- **Novedad:** corrige el diagnóstico de `performance_frontends.md` y del comentario de `iniciarKeepAlive`
+  (`db.js:180-185`): el keep-alive evita la conexión fría de la primera query, no la de las que van en
+  paralelo. Se cruza con el pendiente "Validar en prod las optimizaciones de backend" de `estado_actual.md`.
+
+#### Z8-03 [MEDIO] El Inicio del panel hace 11 queries en tres pedidos, con tres tandas en serie, cada vez que se abre
+
+- **Dónde:** `backend/src/controllers/inicio.js:17-74` (`getResumenDia`: 6 queries en tres `Promise.all` de a
+  dos, uno detrás de otro), `:100-138` (`getComparativoMes`: 4 queries en dos tandas), `:178` (`getStockBajo`:
+  1); `frontend/src/screens/admin/sections/SeccionInicio.jsx:436` (los tres pedidos a la vez al montar).
+  `GET /api/inicio/*`, primera pantalla del panel del dueño (`PanelAdmin.jsx:330`).
+- **Alcance:** en producción.
+- **Costo:** 11 queries por cada vez que el dueño entra al panel. Llegan juntas a un pool de 3: arrancan 5, entran
+  3 y el resto espera. El camino más largo (`getResumenDia`) son 3 tandas en serie, más la espera por el pool:
+  unos 4 o 5 viajes de punta a punta, más las dos conexiones frías de Z8-02. Las 10 queries de cortes y ventas
+  filtran con `DATE(timestamp AT TIME ZONE …)` o `DATE_TRUNC`, que recorren la tabla entera (Z8-07). Pasa cada
+  vez que el dueño abre el panel o vuelve al Inicio: varias veces por día por local.
+- **Evidencia:** leído (front → `apiFetch` → `inicio.js`) y medido con los handlers reales contra demo: 11
+  queries, 4,1 viajes en caliente y 13 en frío (ver "Mediciones"). En producción, `resumen-dia` tarda en el
+  backend 209 a 307 ms de mediana y 342 a 480 ms de p90 según la semana (607 de máximo), y `comparativo-mes`, 254
+  y 484: la pantalla espera al más lento. `EXPLAIN` de la query de cortes del día en
+  kingsaistudio: `Seq Scan on corte`, costo 197; hoy cada una de esas queries cuesta de 2 a 4 ms en Postgres.
+- **Arreglo propuesto** (medio, un archivo): `getResumenDia` en una sola query por tabla con `FILTER` (día,
+  semana y mes en la misma pasada) o una sola query con dos subconsultas, y lo mismo para `getComparativoMes`.
+  El Inicio queda en 3 queries, una tanda. En el mismo cambio, filtros por rango (Z8-07). Riesgo: es la misma
+  query que tienen que corregir Z4-03 (el "facturado" del Inicio contra Balances) y Z4-06 (el rótulo del
+  comparativo de 21 a 24 hs): conviene hacer los tres juntos, con pruebas que comparen los números de antes y
+  de después en demo.
+- **Novedad:** confirma la nota de la zona 4 (que contó 6 y 4 queries) y suma el costo de la espera por el pool.
+
+#### Z8-04 [MEDIO] La Agenda del barbero son 10 queries por carga, 4 tandas en serie, y desde F1b se recarga sola cada 30 s
+
+- **Dónde:** `backend/src/middlewares/authMiddleware.js:109-118` (la query del barbero, en cada request de ese
+  rol), `backend/src/controllers/agenda.js:49` y `:53-58` (cuatro funciones en paralelo),
+  `backend/src/services/disponibilidadService.js:219-270` (`cargarDatosAgenda`: 6 queries sin servicio);
+  `frontend-barbero/src/components/Agenda.jsx:67` y `:235-260` (refresco cada 30 s y al volver al primer plano).
+  `GET /api/admin/agenda`.
+- **Alcance:** la carga de 10 queries, en producción. El refresco automático, solo en el branch (F1b,
+  `35a23f5`; en `main` la Agenda no tiene `setInterval` de recarga).
+- **Costo:** para un barbero, 1 query de revocación en `verificarToken` (en serie, antes de todo) y después 9 en
+  paralelo: `listarTurnos`, `listarSuspensiones`, `listarBloquesDescanso` y las 6 de `calcularGrillaDelDia`
+  (tenant, horario del barbero, turnos, suspensiones, horario del local y feriados). Con el pool de 3: 4 tandas
+  en serie. Para el admin, la misma cuenta con `barberoActivoEnTenant` en vez de la revocación. Los turnos y las
+  suspensiones del día se leen dos veces (una para la lista y otra para la grilla), y el horario del local, los
+  feriados y la duración del slot, que casi no cambian, se leen en cada carga. Con el refresco, cada celular con
+  la Agenda a la vista hace 120 cargas por hora: 1.200 queries por hora. Con 5 barberos mirándola, una carga
+  cada 6 s en promedio, cada una ocupando las 3 conexiones durante sus tandas (y abriendo conexiones según
+  Z8-02). No agota el pool, pero cada refresco compite con los cobros del iPad. Hoy la app del barbero casi no se
+  usa; con el login de F5, se espera que empiece.
+- **Evidencia:** leído (`Agenda.jsx` → `api.js` → `agenda.js` → servicios) y medido con `verificarToken` y
+  `getAgenda` reales contra demo, como barbero: 10 queries, 4,0 viajes en caliente y 8,8 en frío. En producción
+  (11 cargas entre el 6 y el 13/11, sin el refresco): 132 a 153 ms de mediana, 265 de máximo.
+- **Arreglo propuesto** (medio). Por orden de efecto:
+  1. Que la grilla y las listas salgan de la misma lectura: `cargarDatosAgenda` ya trae turnos y suspensiones;
+     sumarle lo que les falta (todos los estados de turno, el detalle de la suspensión) y dejar de leerlos
+     aparte. Bajaría a unas 6 queries. Riesgo: `listarTurnos` es la forma que comparten la Agenda y
+     `GET /api/admin/turnos`; hay que cuidar que la respuesta no cambie.
+  2. Refresco más espaciado (60 s) o solo al volver al primer plano y después de una acción. Riesgo: un turno
+     que entra por el turnero tarda más en aparecer.
+  3. Caché corto de `token_version` y `activo` por barbero, invalidado en `editarBarbero` (el mismo patrón que el
+     caché del tenant). Ahorra 1 viaje en serie por request. Riesgo: un cambio hecho por SQL directo no corta la
+     sesión hasta reiniciar el servicio (lo mismo que ya pasa con el caché del tenant, aceptado). No se
+     recomienda si 1 y 2 alcanzan.
+
+  Recomendado: 1 y 2.
+- **Novedad:** nuevo. El comentario de `authMiddleware.js:106-108` ya preveía cachear la revocación "si algún día
+  pesa"; el refresco de F1b es lo que la hace pesar.
+
+#### Z8-05 [MEDIO] Reservar, reprogramar y cancelar esperan a Google Calendar y al mail antes de responder; las cascadas, turno por turno
+
+- **Dónde:** `backend/src/controllers/turnero.js:331-391` (`crearTurno`), `:472-530` (`cancelarTurno`),
+  `:559-673` (`reprogramarTurno`); `backend/src/controllers/turnos.js:156-234` (`crearTurnoAdmin`, panel y app del
+  barbero); las cascadas en `services/feriadosService.js:90-113`, `services/horarioAtencionService.js:235-258` y
+  `services/suspensionesService.js:131-138`; `services/googleCalendar.js:95`, `:126`, `:160` (las llamadas a
+  Google, sin timeout propio) y `services/mail/resendProvider.js:11` (Resend, 15 s de timeout).
+- **Alcance:** en producción (el mismo `await` está en `main`; el branch sumó el turno "Sin datos" en
+  `crearTurnoAdmin`).
+- **Costo:** el cliente que reserva espera, en serie: 4 validaciones independientes entre sí (duración del
+  servicio, barbero activo, horario del local y feriado, una query cada una), el upsert del cliente, el
+  `INSERT`, la lectura del turno completo (7 viajes), y después la llamada a Google Calendar (si el barbero
+  tiene mail; la primera de cada hora además renueva el token de Google), el `UPDATE` del id del evento y el
+  envío por Resend. Recién ahí ve "Turno confirmado". Lo mismo pasa al reprogramar y al cancelar desde el link
+  del mail, y al crear un turno desde el panel o la app del barbero. Si Google se cuelga, la reserva queda
+  esperando sin límite: la librería no tiene timeout configurado. Las cascadas (feriado, horario del local,
+  ausencia de un barbero) hacen, por cada turno afectado y uno detrás de otro, `UPDATE`, Calendar y mail, dentro
+  del mismo request: con 20 turnos son 20 veces la suma, con el dueño mirando "Procesando…". La reserva es una
+  acción frecuente cuando un local usa el turnero (hoy ninguno tiene turnos propios: kingsaistudio tiene 1); las
+  cascadas son raras.
+- **Evidencia:** leído (`turnero.js` → `turnosService.js` → `googleCalendar.js` y `mailer.js` →
+  `resendProvider.js`) y medido en producción: la única reserva del turnero en los logs que guarda Railway (demo,
+  16/11, barbero sin mail, así que sin Calendar) tardó **428 ms** en el backend. Las 7 queries en serie son unos
+  210 ms (7 viajes de ~30 ms); el resto, **~200 ms, es el envío por Resend**, que el cliente espera de más.
+  Con Calendar, medido con una reserva de prueba en demo (autorizada por el usuario; ver "Mediciones"): la
+  reserva tardó **1.021 ms** en el backend, así que **Google Calendar le suma ~590 ms** (crear el evento, guardar
+  su id y, probablemente, renovar el token de Google). La cancelación desde el link tardó 616 ms, de los que
+  Calendar (borrar el evento) son unos 300 y el mail unos 200. Del lado del cliente, desde Argentina, la reserva
+  tardó 1,3 s. Hoy ningún barbero de un local real tiene mail cargado, así que Calendar no corre; cuando un local
+  lo active, cada reserva pasa a esperar un segundo.
+- **Arreglo propuesto** (medio):
+  1. Responder apenas el turno queda insertado y correr Calendar y el mail después de `res.json`, con su propio
+     `catch` (ya son best-effort: hoy un fallo tampoco le llega al cliente). En las cascadas, lo mismo, o las
+     llamadas de cada turno en paralelo con un tope. Riesgo: si el proceso se reinicia (un deploy) entre la
+     respuesta y el envío, ese mail se pierde; hoy se pierde igual si Resend falla. Las pruebas que miren el
+     orden de los logs tienen que ajustarse.
+  2. Las 4 validaciones en un `Promise.all` (o una sola query): 4 viajes pasan a 2 tandas, o a 1.
+  3. Un timeout para las llamadas a Google (la librería lo acepta por llamada).
+
+  Recomendado: los tres.
+- **Novedad:** nuevo. Incluye la nota de la zona 5 sobre las cascadas: confirmada, con el mismo arreglo.
+
+#### Z8-06 [MEDIO] El cálculo de días con lugar usa luxon dentro del bucle: con la agenda llena, 165 ms de CPU que frenan todo el backend; con slots de 1 a 5 minutos, segundos
+
+- **Dónde:** `backend/src/services/disponibilidadService.js:77-115` (`computarSlotsDeUnDia`: dos `plus()` y
+  comparaciones de `DateTime` por slot), `:426-446` (`calcularDias`: 15 días por barbero); `routes/turnero.js:26`
+  (`GET /api/turnero/dias-disponibles`, sin límite propio). Lo usan también `/disponibilidad` y la grilla de la
+  Agenda, con un solo día.
+- **Alcance:** en producción.
+- **Costo:** CPU del proceso, que en Node es uno solo: mientras corre el cálculo, no se atiende ningún otro
+  request de ningún local. El costo depende de cuántos slots revisa antes de encontrar uno libre en cada día.
+  Con días libres corta en el primero y es casi nada; con días llenos revisa todos. Medido en esta PC, con una
+  copia del cálculo y la agenda llena los 15 días, de 9 a 21, con servicios de 30 minutos:
+
+  | Caso | Hoy (luxon) | Con números |
+  |---|---|---|
+  | 1 barbero, slot de 30 min | 27 ms | 1 ms |
+  | "Cualquier barbero" con 6 barberos, slot de 30 | 163 ms | 8 ms |
+  | 6 barberos, slot de 15 | 334 ms | 11 ms |
+  | 6 barberos, slot de 5 | 911 ms | 22 ms |
+  | 6 barberos, slot de 1 | 4,6 s | 46 ms |
+
+  Se dispara cada vez que un cliente elige servicio y barbero en el turnero. Un local con los sábados llenos o
+  una semana cargada paga una parte de esos números en cada visita. Y como el endpoint solo tiene el límite
+  global (300 por minuto por IP), con 6 barberos y la agenda llena un solo cliente automatizado puede pedir 49 s
+  de CPU por minuto. El tiempo casi entero es luxon: con la lista de turnos separada por día baja poco (139 ms
+  en el caso de 163); con milisegundos (números) dentro del bucle baja 20 veces.
+- **Evidencia:** leído, y medido en local con una copia del algoritmo y datos inventados (sin base ni red).
+  Medido en esta PC; el CPU de Railway resultó parecido (los logins de producción dan unos 55 a 90 ms por
+  comparación `bcrypt`, contra 65 acá), así que los números valen. Una agenda llena 15 días seguidos es el peor
+  caso.
+  La parte de base, medida con el handler real contra demo: "Cualquier barbero" son 8 queries y 5 viajes en
+  caliente (10,7 en frío), y no crece con los barberos ni con los días.
+- **Arreglo propuesto** (medio): hacer la aritmética del bucle en milisegundos (`toMillis()` del inicio y fin de
+  cada bloque, de los turnos y de las suspensiones, una vez), y crear el `DateTime` solo para los slots que se
+  devuelven. Sumarle el piso de `duracion_slot_minutos` que propone la zona 5 y el límite propio para los `GET`
+  de disponibilidad de la zona 3. Riesgo: es la función que decide qué horarios se ofrecen; un error de un
+  minuto ofrece un horario ocupado. Hace falta una prueba que compare la versión vieja y la nueva con muchos
+  casos al azar antes de cambiarla. La disponibilidad sigue sin caché (regla del proyecto).
+- **Novedad:** nuevo. Confirma con números las notas de la zona 5 (`duracion_slot_minutos` desde 1) y de la zona 3
+  (los `GET` de disponibilidad sin límite propio), y las agrava: el costo no son solo las queries contra el pool,
+  es CPU que frena al resto de los locales.
+
+#### Z8-07 [BAJO] Los filtros por día y por mes recorren la tabla entera de todos los locales: 43 lugares del backend
+
+- **Dónde:** 43 filtros con `DATE(x AT TIME ZONE …)`, `TO_CHAR(x AT TIME ZONE …, 'YYYY-MM') = $n` o
+  `DATE_TRUNC('month', x AT TIME ZONE …)` sobre `corte.timestamp`, `venta.timestamp`, `gasto.timestamp`,
+  `movimiento_extra.timestamp` y `turno.inicio` (fuera de los scripts). Los más usados: el Inicio (Z8-03), la
+  Caja del día (`caja.js:65`, `:85`, `:105`, `:131`), Planillas (`planillaService.js:79`, `:165`, `:299`),
+  Balances (`balances.js:148-203`, `:362-403`), Ventas y Gastos del mes, y `listarTurnos` por fecha
+  (`turnosService.js`, usado por la Agenda y el Turnero del panel).
+- **Alcance:** en producción.
+- **Costo:** Postgres no puede usar un índice para una condición sobre una expresión, así que cada una de esas
+  queries lee la tabla completa, con las filas de todos los locales, y filtra. Hoy es barato: `corte` tiene 3.311
+  filas (1,3 MB en total) y desde el último reseteo de estadísticas (2025-12-08) hubo 17.751 lecturas completas,
+  de 1.595 filas en promedio. Crece con la historia de todos los locales: kingsaistudio suma unos 400 cortes por
+  mes (~5.000 por año), y `turno` va a crecer igual cuando un local use el turnero. Medido: hoy un filtro por
+  día cuesta ~2 ms y uno por mes con `TO_CHAR`, ~4,4 ms; con 100.000 filas (unos 10 locales como Kingsai
+  durante dos años), ~60 y ~130 ms por query, en pantallas que hacen 4 (Caja) o 10 (Inicio) y en Balances,
+  que hace varias por mes.
+- **Evidencia:** consultado y medido en la DB (ver "Mediciones"). `EXPLAIN` de los cortes del día con el filtro
+  actual: `Seq Scan on corte`, costo 197. La misma consulta con `timestamp >= … AND timestamp < …`: `Index Scan
+  using idx_corte_timestamp`, costo 2,5, y ~0 ms medido.
+- **Arreglo propuesto** (grande por la cantidad de lugares, mecánico): pasar los filtros a rangos sobre la columna
+  (`timestamp >= (fecha::timestamp AT TIME ZONE tz) AND timestamp < ((fecha + 1)::timestamp AT TIME ZONE tz)`) y
+  sumar índices `(tenant_id, timestamp)` en `corte`, `venta`, `gasto` y `movimiento_extra`, y `(tenant_id,
+  inicio)` sin filtro de estado en `turno`. Riesgo: el borde de medianoche en hora argentina; los mismos filtros
+  tienen el problema de rótulo de Z4-06. Conviene hacerlo con pruebas por día y por mes, empezando por el Inicio
+  y la Caja, y dejar el resto para cuando las tablas crezcan.
+- **Novedad:** confirma y amplía la nota de la zona 4 (los `TO_CHAR` de Balances, Ventas y Gastos).
+
+#### Z8-08 [BAJO] `googleapis` entero ocupa unos 100 MB, dos tercios de la memoria del backend en reposo, para usar solo Calendar
+
+- **Dónde:** `backend/src/services/googleCalendar.js:7` (`import { google } from 'googleapis'`, la librería con
+  todas las APIs de Google); `backend/package.json` (`googleapis` ^171.4.0). El cron la carga sin usarla:
+  `recordatoriosService.js:17` importa `construirLinkGestion` de `turnosService.js`, que importa
+  `googleCalendar.js` (`turnosService.js:10`).
+- **Alcance:** en producción.
+- **Costo:** memoria, que es lo único que Railway cobra hoy. Medido en local cargando las mismas dependencias
+  que el backend (express, pg, luxon, bcrypt): 54 MB de RSS sin `googleapis` y 162 MB con ella (108 MB más; el
+  heap pasa de 9 a 65 MB). El backend en reposo usa unos 140 MB, así que esta librería es la mayor parte.
+  `@sentry/node` con su `init` suma 35 MB más (157 → 193 MB), lo que coincide con el salto de 140 a 170-200 MB
+  que se vio en Railway después del deploy del monitoreo.
+- **Evidencia:** leído y medido en local (`process.memoryUsage()` después de cargar los módulos, dos corridas de
+  cada uno, sin red). En Railway corre Node 22 (acá, 24): los números pueden variar un poco.
+- **Arreglo propuesto** (chico): reemplazar `googleapis` por `@googleapis/calendar` (el paquete de una sola API,
+  con la misma forma de uso: `calendar({ version: 'v3', auth })`) más `google-auth-library` para el OAuth, y
+  mover `construirLinkGestion` a `utils/` para que el cron no cargue Calendar. Ahorro esperado: unos 100 MB y
+  cerca de $ 0,90 por mes (no sube la severidad). Riesgo bajo: `googleCalendar.js` es el único que importa la
+  librería (además del script `probarGoogleCalendar.js`), y se prueba con ese script. Hay que instalar una
+  dependencia nueva: va con el arreglo, no en esta auditoría. Medir la memoria antes y después.
+- **Novedad:** nuevo.
+
+### A medir
+
+Lo que no se puede estimar leyendo el código, con cómo medirlo (`convenciones_tecnicas.md` §10: contra el
+deploy real, no contra local).
+
+Nada pendiente: todo lo que estaba acá se midió (ver "Mediciones"). Cuánto dura un viaje desde Railway a la
+base (~30 ms, región `us-west2`), el costo de abrir conexiones en producción, el envío por Resend (~200 ms), Google
+Calendar (~590 ms al crear el evento, ~300 al borrarlo) y la velocidad del CPU de Railway (parecida a la de esta
+PC).
+
+Lo único que no se midió es el peor caso de CPU de Z8-06 en Railway, porque necesita una agenda llena: los
+números de esta PC valen, porque el CPU de Railway resultó parecido. Ojo con el método que se había propuesto para la reserva: las horas de los logs de
+la aplicación no sirven para medir, porque Railway les pone la hora en tandas (las 5 líneas de una reserva
+salen con 23 µs de diferencia, aunque en el medio hubo un envío de mail).
 
 ### Verificado correcto
 
+**Métricas y consumo**
+
+- Las métricas de Railway: el cron no consume (entre corridas está "Completed"; la línea plana de ~420 MB del
+  gráfico repite el último valor, y el costo lo confirma). Lo que se paga es la memoria del backend en reposo;
+  CPU y red son centavos.
+- Sentry: `tracesSampleRate: 0`, `maxBreadcrumbs: 0`, sin profiling y solo `captureConsoleIntegration` de
+  errores. Sus 35 MB (Z8-08) son el SDK, no los sample rates: no hay nada que bajar ahí sin perder el monitoreo.
+- Keep-alive: 4.320 `SELECT 1` por día, CPU y red despreciables (lo que no hace, en Z8-02).
+- Cron de recordatorios: 1 query de tenants, 1 por tenant y, por turno, un `UPDATE` de reclamo y un envío, en
+  serie. Hoy solo demo tiene el recordatorio activo: corre en segundos. Carga `googleapis` sin usarla (Z8-08).
+- Log de acceso (nota de la zona 7): confirmado que escribe el body entero de cualquier `POST` que pase por
+  `express.json` (hasta 100 kB). En CPU es nada (serializar 100 kB, menos de un milisegundo); el volumen y lo que
+  lleva adentro son de la zona 7 (Z7-05). Las imágenes van como binario (`express.raw`, `adminImagenes.js:15`)
+  y `/api/alta` se monta antes del log: ninguna de las dos pasa por él.
+- Sin compresión de respuestas (no hay `compression`): las respuestas son de pocos kB y la salida es de 0,05 GB
+  por mes. No hace falta.
+
+**Lo que corre en cada request**
+
+- `tenantMiddleware`: 0 queries después del primer pedido de cada subdominio. El caché guarda solo subdominios
+  válidos (los que no resuelven no se guardan), así que no crece más que la cantidad de locales.
+- `verificarToken`: admin y operativo leen la versión del token del caché del tenant (0 queries); el barbero, 1
+  query por request (Z8-04). Un caché corto para el admin y el operativo no ahorra nada: ya no consultan.
+- Rate limiter: el store en memoria de `express-rate-limit` usa dos mapas que rotan en cada ventana; no crece
+  sin tope.
+
+**Pool**
+
+- Ningún camino retiene una conexión mientras espera a Google, a Resend o a bcrypt: `query()` usa `pool.query`,
+  que libera la conexión al terminar cada sentencia. Las cascadas largas (Z8-05) demoran al usuario, no al pool.
+- `statement_timeout` de 5 s en cada conexión (`onConnect`) y `connectionTimeoutMillis` de 5 s: ninguna query
+  de las pantallas diarias se acerca. Con el uso normal de un local no hay forma de dejar al pool sin conexiones.
+
+**Pantallas de uso diario**
+
+- iPad, cobrar un corte: 3 viajes en serie sobre una conexión (barbero activo, duración del servicio y el
+  `INSERT` con CTE que completa el turno). Una venta: 3 (stock, `INSERT`, descuento de stock). En producción,
+  cobrar un corte tarda 180 ms de mediana en el backend (242 de p90), más su preflight (Z8-01). Juntar las dos
+  validaciones del corte ahorraría un viaje (~30 ms): marginal. Los catálogos se cargan una vez por sesión (`App.jsx:303`)
+  y la lista de turnos del día, una query al llegar al paso 2.
+- Caja del panel: 4 queries en paralelo (2 tandas) por día elegido; el Excel sale de lo ya cargado, sin otro
+  pedido. Socios, una vez.
+- Inicio de la app del barbero (`Dashboard.jsx`): un pedido, una query.
+- Turnero: la landing son 3 queries (el tenant, y horario y feriados en paralelo, `turnero.js:56-90`) más 1 de
+  imágenes; servicios y barberos se piden recién al entrar al flujo; la disponibilidad es un juego fijo de 7
+  queries para todo el rango, sin una query por día ni por barbero (sin N+1). Días y horarios van en serie a
+  propósito (los horarios dependen del día elegido).
+- Balances: el mensual, 5 queries en paralelo; el histórico, 4, acotado a 12 meses. Planillas: una query por
+  endpoint, tres pedidos en paralelo. Ventas y Gastos: acotados al mes.
+- Búsqueda de clientes del panel (`useBusquedaClientes.js`): espera 300 ms después de la última tecla, desde 2
+  letras, y el backend responde con `LIMIT 50`. No hay un pedido por tecla.
+
+**Lo que crece**
+
+- No hay listados de uso diario sin tope: todo lo que se lista está acotado por día, semana, mes o 12 meses.
+  `getMisClientes` (`clientes.js`) no tiene `LIMIT`, pero lo acota la cantidad real de clientes del barbero.
+- Turnero con un local real: el costo en queries no crece con los barberos ni con los días (un juego fijo); lo
+  que crece es la CPU (Z8-06) y los filtros sin índice (Z8-07).
+
+**Login (nota de la zona 1)**
+
+- `bcrypt` 6.0.0, costo 10: 65 ms por comparación en esta PC. Login del admin por el panel: 1 comparación.
+  Barbero por el panel: 1 + N en serie (en kingsaistudio, con 4 barberos activos, 5 comparaciones: 330 ms; en
+  paralelo serían 132 ms). Barbero por su app: 1. Un intento fallido cuesta 1 + N, igual que el login de un
+  barbero. Es un costo aceptado y documentado en `authPanel.js:10-13`, y con las sesiones de 30 días el login es
+  raro: no es hallazgo. Si se toca, las comparaciones en `Promise.all` lo bajan a menos de la mitad sin cambiar
+  nada más.
+- `POST /api/auth/recuperar/solicitar` (nota de la zona 1): 2 queries por pedido; el problema es el de Z1-01 y se
+  arregla con él. No tiene un costo propio que importe.
+
+**Índices**
+
+- Los que existen y lo que cubren: `turno` tiene `(tenant_id, inicio)` y `(barbero_id, inicio)` parciales sobre
+  `reservado` (disponibilidad, recordatorios, Agenda), el `EXCLUDE` GiST anti-solapamiento, `token_gestion` único
+  (gestión desde el mail) y `cliente_id`; `corte` tiene `tenant_id`, `timestamp` (lo usan solo los filtros por
+  rango) y `turno_id` único parcial; `venta`, `tenant_id` y `timestamp`; `gasto`, `producto`, `servicio`,
+  `barbero` y `tenant_imagen`, `tenant_id`; `barbero_suspension`, `(barbero_id, desde, hasta)`; `cliente`,
+  `(tenant_id, email)` único (upsert del turnero y búsqueda); `tenant`, `subdominio` único;
+  `tenant_feriado` y `tenant_horario_atencion`, únicos por tenant y fecha o día; `token_recuperacion`, hash único y
+  `(tenant_id, tipo, created_at)` (anti-spam de la recuperación).
+- Sin uso desde diciembre: `servicio_tenant_id_id_key` y `categoria_gasto_tenant_id_id_key` (0 lecturas).
+  Sostienen las FK compuestas `(tenant_id, id)`: no sobran.
+- `movimiento_extra` no tiene índice por `tenant_id` (14 filas): entra en Z8-07 cuando crezca.
+- La base entera es chica: la tabla más grande es `corte` con 1,3 MB.
+
+### Sin revisar
+
+- En producción lo único que escribió fue la reserva de prueba de demo (y su cancelación), autorizada por el
+  usuario. No se midió un cobro en vivo (sale de los logs). Las pantallas con login (Inicio, Caja, Agenda) se midieron por sus logs HTTP, no en vivo: el
+  login con el PIN no lo hace Claude.
+- Los milisegundos de las queries en Postgres se midieron solo para los filtros por fecha de `corte` (ver
+  "Mediciones"); el resto, por `EXPLAIN` sin `ANALYZE`, que da costos y no tiempos. Ninguna query de las
+  pantallas medidas pesa frente a un viaje.
+- Las escrituras (cobrar, reservar) no se midieron contra la base: el rol de solo lectura no las deja correr.
+  Sus viajes salen de leer el código.
+- De los fronts se miró la carga de datos de las pantallas de uso diario. No se revisaron las pestañas de
+  Gestión, el formulario de alta, la landing, ni `MiPlanilla` y `Clientes` de la app del barbero más allá de
+  qué piden.
+
 ### Para otra zona
+
+- **Docs:** `performance_frontends.md` ("el proceso de Railway no duerme", keep-alive) y el comentario de
+  `iniciarKeepAlive` (`db.js:180-185`) dicen que el keep-alive evita la conexión fría; vale para una de las tres
+  (Z8-02). El pendiente "Validar en prod las optimizaciones de backend de performance" de `estado_actual.md`
+  puede usar la medición 1 de "A medir".
+- **Zona 3:** el límite propio para los `GET` de disponibilidad que anotó la zona 3 sube de prioridad con Z8-06:
+  además de queries, cada pedido es CPU que frena al resto de los locales.
+- **Zona 5:** con la reserva respondiendo antes de Calendar y del mail (Z8-05), un turno creado justo antes de
+  un deploy puede quedar sin mail de confirmación; conviene que el arreglo de Z8-05 lo tenga en cuenta.
 
 ---
 
