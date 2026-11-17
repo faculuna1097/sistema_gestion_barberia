@@ -547,7 +547,6 @@ frontend-landing/
     |   |   |-- FreeMonthBadge.jsx
     |   |   |-- LandingFooter.jsx
     |   |   |-- LandingNav.jsx
-    |   |   |-- MetricCard.jsx
     |   |   |-- MobileCtaBar.jsx
     |   |   |-- NotaAlPie.jsx
     |   |   |-- PainCard.jsx

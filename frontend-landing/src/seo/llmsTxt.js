@@ -5,7 +5,7 @@
 // fuentes que la UI (D9). Solo lo importa entry-server.jsx: no llega al bundle
 // del cliente.
 
-import { MARCA, CONTACTO, PRECIO } from '../config/landing.js';
+import { MARCA, CONTACTO, PRECIO, DEMO } from '../config/landing.js';
 import { FAQS } from '../content/faq.js';
 import { INCLUYE } from '../content/plan.js';
 import { ALTERNATIVAS } from '../content/alternativas.js';
@@ -40,6 +40,8 @@ function lineasContacto() {
   if (CONTACTO.whatsapp) lineas.push(`WhatsApp: [${CONTACTO.whatsappDisplay}](${linkWhatsApp()})`);
   if (CONTACTO.email) lineas.push(`Email: [${CONTACTO.email}](mailto:${CONTACTO.email})`);
   lineas.push(`Sitio: ${URL_SITIO}`);
+  // Para que quien llega desde una IA pruebe el producto sin escribirle a nadie.
+  if (DEMO.turnero) lineas.push(`Turnero de una barbería de ejemplo, para probar cómo reserva un cliente: ${DEMO.turnero}`);
   return lineas;
 }
 

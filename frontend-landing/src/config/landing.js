@@ -58,8 +58,24 @@ export const FLAGS = {
  * Mientras el valor sea null, la UI muestra un placeholder neutro (no rompe).
  */
 export const CAPTURAS = {
-  // Hero — pantalla de Planillas (reemplaza el registro en papel).
-  planillas: { src: '/screenshots/seccionPlanillas.jpg', width: 1902, height: 862 },
+  // Hero en escritorio — pantalla de Planillas: detalle por barbero con un día
+  // desplegado (reemplaza el registro en papel).
+  planillas: { src: '/screenshots/seccionPlanillas.jpg', width: 1829, height: 1188 },
+  // Hero en celular (< 768 px) — el mismo día, solo hora, servicio, cliente y
+  // monto, para que se lea a 375 px. El navegador baja una sola de las dos.
+  planillasMobile: { src: '/screenshots/planillasMobile.jpg', width: 1020, height: 1007 },
+  // Sistema de gestión — Balance del mes (datos de prueba del tenant demo).
+  balance: { src: '/screenshots/balance.jpg', width: 1861, height: 1187 },
+};
+
+/**
+ * DEMO — links al producto real del tenant de ejemplo (demo).
+ * `turnero`: el turnero público de demo, para que el dueño pruebe reservar sin
+ * escribirle a nadie. El ?origen=landing queda guardado en turno.origen_link y
+ * permite contar cuántas reservas salen de la landing.
+ */
+export const DEMO = {
+  turnero: 'https://demo.barbermanager.app/turnos?origen=landing',
 };
 
 /**

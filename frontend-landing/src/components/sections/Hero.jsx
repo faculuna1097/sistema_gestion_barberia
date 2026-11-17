@@ -144,8 +144,9 @@ function Hero() {
             image={CAPTURAS.planillas?.src}
             width={CAPTURAS.planillas?.width}
             height={CAPTURAS.planillas?.height}
+            imageMobile={CAPTURAS.planillasMobile}
             priority
-            alt="Planilla semanal de BarberManager con el detalle de cada barbero"
+            alt="Planilla semanal de BarberManager: los cortes de un barbero en el día, con hora, servicio, cliente y monto"
             placeholderLabel="Captura de Planillas"
           />
           <p
@@ -157,9 +158,12 @@ function Hero() {
               textTransform: 'uppercase',
               letterSpacing: '0.06em',
               color: theme.muted,
+              // En celular corta en dos renglones parejos, sin "barbero" solo
+              // en el segundo.
+              textWrap: 'balance',
             }}
           >
-            Planilla semanal — sin cuaderno ni Excel
+            Planilla semanal con el detalle de cada barbero
           </p>
         </div>
       </Container>

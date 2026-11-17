@@ -1,6 +1,6 @@
 // /frontend-landing/src/components/landing/NotaAlPie.jsx
 // Línea de texto chico y centrado debajo de un bloque: aclaraciones como la
-// fuente de un dato, "números de ejemplo" o la línea "Sin instalaciones ·
+// fuente de un dato, que una captura usa datos de prueba o la línea "Sin instalaciones ·
 // Cancelás cuando quieras" del Plan.
 // 14 px en `muted`: es texto que se lee, así que respeta el mínimo de 14 px del
 // sistema y el contraste AA (5,05:1 sobre `bg`, 5,28:1 sobre blanco). `mutedSoft`

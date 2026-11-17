@@ -5,8 +5,8 @@
 > "a confirmar". Los archivos y líneas de §4 son del 2026-11-17: confirmalos al escribir cada prompt. Aprobar el
 > plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
-> **Estado (2026-11-17):** fase 0 hecha (demo con datos de prueba y capturas en `public/screenshots/`, sin
-> commitear: van con la fase 2) y fase 1 commiteada. Sigue la fase 2. Branch desde `main` (`bccc2d3`),
+> **Estado (2026-11-17):** fases 0, 1 y 2 hechas y commiteadas (las capturas van en el commit de la fase 2).
+> Sigue la fase 3. Branch desde `main` (`bccc2d3`),
 > independiente de `feature/mejoras-operativas`: no comparten archivos.
 
 ## 1. Contexto
@@ -365,6 +365,13 @@ Anotado por el orquestador el 2026-11-17:
   corrige en la fase 3.
 - **FAQ "¿Cómo empiezo?"** (`content/faq.js`) dice "Nos escribís por WhatsApp o email". Es coherente con el
   email del footer; queda como está salvo que el usuario quiera empujar solo a WhatsApp.
+- **CLS de 0,058 en el hero, desde la fase 1** (medido por el ejecutor de la fase 2 con Lighthouse en celular;
+  producción da 0). Geist entra por `@import` en `index.css:10` con `display=swap`, y el `<h1>` nuevo corta en
+  otros renglones con la fuente del sistema que con Geist, así que empuja el subtítulo al llegar la fuente. Está
+  debajo de 0,1 (el límite "bueno"). Arreglos posibles, a medir: `<link>` + `preconnect` en `index.html`, o una
+  fuente de reemplazo con `size-adjust`. El LCP mejoró de 3,5 s a 1,6 s.
+- **Portada del video del turnero en celular** (la caja gris): no es un bug. Es el fondo del marco mientras baja
+  la portada, que tiene `loading="lazy"` (`VideoEmbed.jsx:76`); solo se ve si se salta directo a la sección.
 - **`estado_actual.md:311`** dice que el teléfono se carga "desde Gestión → Negocio", pero esa pestaña no tiene
   ese campo: el teléfono y la dirección del tenant se cambian solo por SQL. Se corrige en la fase 3.
 
