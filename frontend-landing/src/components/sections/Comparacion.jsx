@@ -2,7 +2,7 @@
 // Sección Comparación: "antes vs después" en dos columnas. La del método
 // tradicional en rojo con ✗ (mismo recurso de "dolor" que Problema); la de
 // BarberManager en indigo con ✓ y resaltada como la opción ganadora.
-// Debajo, el bloque "¿Y frente a otras apps de turnos?" (content/alternativas.js).
+// Debajo, el bloque "¿Y frente a una app de turnos?" (content/alternativas.js).
 
 import { Check, X, Users, Banknote, PackageCheck, MessageCircle } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
@@ -14,8 +14,9 @@ import FeatureCard from '../landing/FeatureCard.jsx';
 import NotaAlPie from '../landing/NotaAlPie.jsx';
 
 // Íconos de los puntos de ALTERNATIVAS.puntos, en el mismo orden (el módulo de
-// contenido es datos puros, sin íconos).
-const ICONOS_ALTERNATIVAS = [Users, Banknote, PackageCheck, MessageCircle];
+// contenido es datos puros, sin íconos): la plata, los barberos, la
+// suscripción con todo y el acompañamiento.
+const ICONOS_ALTERNATIVAS = [Banknote, Users, PackageCheck, MessageCircle];
 
 // Paletas de las dos columnas.
 const PAL = {
@@ -135,9 +136,9 @@ function ColumnaComparativa({ titulo, items, variante }) {
 
 /**
  * BloqueAlternativas
- * Bloque "¿Y frente a otras apps de turnos?": título, los 4 puntos en
- * FeatureCard (2 × 2 en desktop, 1 columna en mobile) y la nota con la fuente.
- * Los textos salen de content/alternativas.js. Las tarjetas van en filas de a
+ * Bloque "¿Y frente a una app de turnos?": título, los 4 puntos en
+ * FeatureCard (2 × 2 en desktop, 1 columna en mobile) y, si la hay, la nota
+ * al pie. Los textos salen de content/alternativas.js. Las tarjetas van en filas de a
  * dos con el mismo flex y maxWidth que las columnas de arriba, así quedan
  * alineadas con ellas; con flex-wrap en una sola fila entrarían 3 por fila en
  * desktop.
@@ -183,14 +184,14 @@ function BloqueAlternativas() {
         ))}
       </div>
 
-      <NotaAlPie>{ALTERNATIVAS.nota}</NotaAlPie>
+      {ALTERNATIVAS.nota && <NotaAlPie>{ALTERNATIVAS.nota}</NotaAlPie>}
     </div>
   );
 }
 
 /**
  * Comparacion
- * Sección "antes vs después" + bloque frente a otras apps de turnos. Sin props.
+ * Sección "antes vs después" + bloque frente a una app de turnos. Sin props.
  * @returns {JSX.Element}
  */
 function Comparacion() {

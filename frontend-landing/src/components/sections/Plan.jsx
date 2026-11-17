@@ -1,16 +1,20 @@
 // /frontend-landing/src/components/sections/Plan.jsx
 // Sección Plan: primer mes gratis y luego una suscripción mensual. El precio
 // sale de PRECIO (config); si es null, muestra "Consultanos el precio".
+// El único CTA es WhatsApp: el email queda solo en el footer, para no competir
+// con el canal por donde llegan los clientes.
 
 import { theme } from '../../theme/tokens.js';
 import { PRECIO } from '../../config/landing.js';
 import { fmtPesos } from '../../utils/formato.js';
+import { linkWhatsApp } from '../../utils/contacto.js';
 import Section from '../landing/Section.jsx';
 import Reveal from '../landing/Reveal.jsx';
 import Card from '../ui/Card.jsx';
+import Button from '../ui/Button.jsx';
+import IconoWhatsApp from '../ui/IconoWhatsApp.jsx';
 import FreeMonthBadge from '../landing/FreeMonthBadge.jsx';
 import FeatureList from '../landing/FeatureList.jsx';
-import CTAGroup from '../landing/CTAGroup.jsx';
 import NotaAlPie from '../landing/NotaAlPie.jsx';
 import { INCLUYE } from '../../content/plan.js';
 
@@ -87,7 +91,10 @@ function Plan() {
           <FeatureList items={INCLUYE} style={{ width: '100%', textAlign: 'left' }} />
 
           {/* CTA */}
-          <CTAGroup align="center" primaryLabel="Empezá tu mes gratis" style={{ width: '100%' }} />
+          <Button href={linkWhatsApp()} external variant="primary" full={false}>
+            <IconoWhatsApp size={18} />
+            Empezá tu mes gratis
+          </Button>
 
           <NotaAlPie style={{ margin: 0 }}>Sin instalaciones · Cancelás cuando quieras</NotaAlPie>
         </Card>

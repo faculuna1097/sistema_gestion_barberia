@@ -5,8 +5,9 @@
 > "a confirmar". Los archivos y líneas de §4 son del 2026-11-17: confirmalos al escribir cada prompt. Aprobar el
 > plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
-> **Estado (2026-11-17):** escrito, sin empezar. Branch nuevo desde `main` (`bccc2d3`), independiente de
-> `feature/mejoras-operativas`: no comparten archivos.
+> **Estado (2026-11-17):** fase 0 hecha (demo con datos de prueba y capturas en `public/screenshots/`, sin
+> commitear: van con la fase 2) y fase 1 commiteada. Sigue la fase 2. Branch desde `main` (`bccc2d3`),
+> independiente de `feature/mejoras-operativas`: no comparten archivos.
 
 ## 1. Contexto
 
@@ -78,9 +79,22 @@ y videos reales del producto (`docs/decisiones_landing_ia.md`).
 | 12 | **Las capturas las saca el usuario** (fase 0), desde el tenant demo. | Lo pidió el usuario. |
 | 13 | **Fuera de esta tanda:** D1 (testimonios: cuando haya más clientes); D5 ("Hecho con BarberManager" al pie del turnero: hoy ningún local usa el turnero, lo vería nadie); D6 (alta sin pasar por WhatsApp: el usuario prefiere que le escriban y mandar él el link de `frontend-alta`). | Decisiones del usuario. |
 
-### 3.2 A confirmar con el usuario antes de la fase 1
+### 3.2 Titular, subtítulo y reaseguros (cerrado el 2026-11-17)
 
-Lo único abierto es el **titular (T1)**. El usuario pidió (2026-11-17) que haga énfasis en que el sistema trae un
+**Cerrado con el usuario:**
+- **Titular:** opción A.
+- **Subtítulo:** cambia, aunque el plan decía que quedaba. El de antes repetía "turnero online" y "conectado"
+  justo debajo de A, y el usuario quería poner el peso en tener todo organizado en un mismo lugar. Texto suyo:
+  "Turnos, caja, gastos y lo que le toca a cada barbero (comisiones), todo gestionado y organizado en un mismo
+  lugar y no repartido entre el cuaderno, el Excel y el WhatsApp. Lo que reserva tu cliente llega solo a la
+  caja. Hecho para barberías de Argentina, y te ayudamos a configurarlo."
+- **Primer reaseguro:** "Sin instalar nada: empezás en el día". El usuario quería decir que el alta es rápida.
+  Va en el reaseguro y no en el subtítulo, que ya es largo. Vale mientras el alta, del WhatsApp a
+  `frontend-alta` y la skill `alta-cliente`, se resuelva en el día.
+
+Lo que sigue es el análisis original.
+
+Lo único abierto era el **titular (T1)**. El usuario pidió (2026-11-17) que haga énfasis en que el sistema trae un
 turnero y todo un sistema de gestión, integrados y sincronizados. Opciones:
 
 - A. "Turnero online y gestión de tu barbería, conectados en un solo sistema."
@@ -156,12 +170,12 @@ Todo en `frontend-landing/src/`.
 
 ### T1 — Titular
 
-Cambiar el texto del `<h1>` de `Hero.jsx` por la opción elegida en §3.2. El subtítulo queda como está. La meta
+Cambiar el texto del `<h1>` de `Hero.jsx` por la opción elegida en §3.2 y el subtítulo por el de §3.2. La meta
 description (`index.html` + `seo/sitio.js`) no cambia.
 
 ### T2 — Precio en el hero
 
-`REASEGUROS` se arma con el precio de `PRECIO` y `fmtPesos`: "Sin instalar nada" · "Después, $ 30.000/mes,
+`REASEGUROS` se arma con el precio de `PRECIO` y `fmtPesos`: "Sin instalar nada: empezás en el día" · "Después, $ 30.000/mes,
 barberos ilimitados" · "Cancelás cuando quieras". Si `PRECIO.mensual` es `null`, el del medio no va. Revisar a
 375 px que no quede un renglón huérfano feo; si queda, el ejecutor propone la variante al usuario en su chat.
 
@@ -334,7 +348,25 @@ es si suben los mensajes y las altas que de verdad usan el sistema.
 
 ## 8. Hallazgos
 
-(Vacío al 2026-11-17. El orquestador anota acá lo que aparezca, verificado contra los docs.)
+Anotado por el orquestador el 2026-11-17:
+
+- **Capturas de la fase 0.** Las sacó el orquestador del panel de demo, a densidad 2. Medidas para la fase 2:
+  - `seccionPlanillas.jpg`: 1829 × 1188, 140 KB.
+  - `planillasMobile.jpg`: 1020 × 1007, 87 KB.
+  - `balance.jpg`: 1861 × 1187, 128 KB.
+
+  El panel no tiene versión para celular. Por eso la de celular es un recorte de la tabla de escritorio con 4
+  columnas (hora, servicio, cliente y monto), que en el celular se lee a ~10–11 px. El balance va en una sola
+  imagen: en el celular se leen los tres números grandes y la tabla queda como ilustración.
+- **Datos de prueba de demo.** Hay cortes, turnos, ventas y gastos del 3 al 14/11/2026, cargados con SQL. Las
+  marcas para borrarlos: clientes `seed-landing-N@ejemplo.invalid`, turnos con `token_gestion` `seed-landing-…`, y
+  cortes, ventas y gastos con la hora en minutos exactos (segundos en 0).
+- **`docs/decisiones_landing_ia.md:58`** habla de "la FAQ 5". Con la FAQ nueva, esa pregunta es la 6. Se
+  corrige en la fase 3.
+- **FAQ "¿Cómo empiezo?"** (`content/faq.js`) dice "Nos escribís por WhatsApp o email". Es coherente con el
+  email del footer; queda como está salvo que el usuario quiera empujar solo a WhatsApp.
+- **`estado_actual.md:311`** dice que el teléfono se carga "desde Gestión → Negocio", pero esa pestaña no tiene
+  ese campo: el teléfono y la dirección del tenant se cambian solo por SQL. Se corrige en la fase 3.
 
 Ya conocidos, que no son de esta tanda pero tocan la landing:
 

@@ -35,6 +35,10 @@ export const FAQS = [
     respuesta: respuestaPrecio(),
   },
   {
+    pregunta: '¿Cómo se paga cuando termina el mes gratis?',
+    respuesta: 'Por Mercado Pago, una vez por mes. Para el mes gratis no te pedimos tarjeta: si no seguís, no pagás nada.',
+  },
+  {
     pregunta: '¿Hay límite de barberos?',
     respuesta: 'No. Cargás todos los que tengas sin pagar más. Cada uno tiene su agenda, sus horarios y sus días libres, y vos ves todo el local junto.',
   },
@@ -43,8 +47,10 @@ export const FAQS = [
     respuesta: 'Registro de cortes, ventas y gastos; caja del día separada en efectivo y Mercado Pago; planillas semanales y mensuales con lo que le toca a cada barbero (comisión y propinas), exportables a Excel; y el balance del mes con la ganancia, los aportes y los retiros.',
   },
   {
-    pregunta: '¿En qué se diferencia de Fresha, Booksy o Setmore?',
-    respuesta: 'Esas apps cobran según la cantidad de miembros del equipo, y Booksy y Setmore en dólares. BarberManager cobra un precio fijo en pesos con barberos ilimitados, e incluye turnero, app para barberos y la gestión del negocio.',
+    // La pregunta nombra apps a propósito (para buscadores e IA); la respuesta
+    // habla solo de BarberManager: no se afirma nada de terceros.
+    pregunta: '¿En qué se diferencia de Fresha, Booksy, AgendaPro u otras apps de turnos?',
+    respuesta: 'BarberManager está hecho para barberías de Argentina: además del turnero, incluye la caja del día en efectivo y Mercado Pago, los gastos, lo que le toca a cada barbero y el balance del mes. Se paga un precio fijo en pesos, con barberos ilimitados.',
   },
   {
     pregunta: '¿Para qué barberías sirve?',

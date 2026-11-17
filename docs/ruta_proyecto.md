@@ -539,7 +539,6 @@ frontend-landing/
     |-- components/
     |   |-- landing/
     |   |   |-- Container.jsx
-    |   |   |-- CTAGroup.jsx
     |   |   |-- Eyebrow.jsx
     |   |   |-- FaqItem.jsx
     |   |   |-- FeatureCard.jsx

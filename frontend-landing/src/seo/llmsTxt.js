@@ -59,14 +59,18 @@ function lista(items) {
  * @returns {string} Markdown terminado en salto de línea
  */
 export function llmsTxt() {
+  // La nota al pie de las alternativas es opcional: sin nota, la sección
+  // termina en la lista (sin "null" ni renglones vacíos de más).
+  const notaAlternativas = ALTERNATIVAS.nota ? `\n\n${ALTERNATIVAS.nota}` : '';
+
   const secciones = [
     `# ${MARCA.nombre}`,
     `> ${DESCRIPCION}`,
     `## Qué incluye\n\n${lista(INCLUYE)}`,
     `## Precio\n\n${lista(lineasPrecio())}`,
-    `## Frente a otras apps de turnos\n\n${lista(
+    `## Frente a una app de turnos\n\n${lista(
       ALTERNATIVAS.puntos.map((p) => `**${p.titulo}** ${p.texto}`),
-    )}\n\n${ALTERNATIVAS.nota}`,
+    )}${notaAlternativas}`,
     `## Preguntas frecuentes\n\n${FAQS.map((f) => `### ${f.pregunta}\n\n${f.respuesta}`).join('\n\n')}`,
     `## Contacto\n\n${lista(lineasContacto())}`,
   ];
