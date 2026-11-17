@@ -96,6 +96,17 @@ app.use(cors({
     callback(null, false);
   },
   credentials: true,
+  // maxAge — segundos que el navegador puede recordar la respuesta del preflight
+  // (el OPTIONS que manda antes de cada pedido con headers propios:
+  // X-Tenant-Subdomain, Authorization, Content-Type JSON). Sin esto la recuerda
+  // 5 s y casi todo pedido pagaba un viaje extra hasta Railway (~230 ms desde
+  // Argentina; auditoría 2026-11, Z8-01). Cada navegador lo recorta a su tope
+  // (Chrome 2 h, Safari 10 min, Firefox 24 h): 7200 es el tope de Chrome.
+  // Ojo: el permiso se guarda por URL, así que una URL con otra fecha o barbero
+  // en el query string vuelve a preguntar la primera vez.
+  // Riesgo: si se cambia esta política (orígenes o headers permitidos), los
+  // navegadores que ya la guardaron tardan hasta ese tope en enterarse.
+  maxAge: 7200,
 }));
 // Backstop global de rate limiting [auditoría 4.1] — holgado, última red de
 // seguridad para el pool de 3 conexiones. Va DESPUÉS de cors (si respondiera
