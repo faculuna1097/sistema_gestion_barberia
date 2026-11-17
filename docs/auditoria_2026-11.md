@@ -1,6 +1,6 @@
 # Auditoría de seguridad y calidad — 2026-11
 
-> **Estado (2026-11-16): en curso.** Zonas 1 a 4 revisadas; el resto, pendiente o en curso (ver la tabla de zonas).
+> **Estado (2026-11-17): en curso.** Zonas 1 a 5 revisadas; el resto, pendiente o en curso (ver la tabla de zonas).
 >
 > Auditoría de **solo lectura**: no se modifica código, ni la base, ni configuración. Los arreglos se deciden
 > al final, hallazgo por hallazgo, y van aparte. El plan (decisiones, zonas, filtro de hallazgos y fases) está
@@ -29,7 +29,7 @@ tabla de todos los hallazgos con su destino.*
 | 2 | Aislamiento entre tenants y permisos por rol | `cb87b60` | Revisada | 0 | 0 | 1 | 3 |
 | 3 | Superficie pública: turnero, alta y mails | `cb87b60` | Revisada | 0 | 1 | 1 | 4 |
 | 4 | Plata: caja, planillas, balances y stock | `1e148fb` | Revisada | 0 | 0 | 4 | 6 |
-| 5 | Agenda, turnos y concurrencia | — | Pendiente | — | — | — | — |
+| 5 | Agenda, turnos y concurrencia | `dd99386` | Revisada | 0 | 0 | 2 | 7 |
 | 6 | Panel de gestión y app del barbero (front) | — | Pendiente | — | — | — | — |
 | 7 | Operación, infraestructura y dependencias | — | Pendiente | — | — | — | — |
 | 8 | Rendimiento y consumo del backend | — | Pendiente | — | — | — | — |
@@ -1166,11 +1166,338 @@ contenedor de Railway (Z4-06).
 
 ## Zona 5. Agenda, turnos y concurrencia
 
+**Commit auditado:** `dd99386` (`feature/mejoras-operativas`), 2026-11-16/17. Solo lectura: código, docs y la
+DB con el rol `resguardo_lectura`. No se reprodujo nada en demo: ningún hallazgo es alto ni crítico.
+
+**Resumen:** 9 hallazgos (0 críticos, 0 altos, 2 medios, 7 bajos). Ocho están en producción y uno solo en el
+branch (Z5-09). Dato que pesa en todas las severidades: **hoy ningún local real tiene turnos**. En la base hay
+158 turnos de demo y 1 de kingsaistudio (cancelado, de septiembre); luxuribarberclub y monte-sinai, ninguno, y
+ningún local real tiene ausencias, descansos ni feriados cargados. Nada de lo que sigue le pasó a un cliente:
+es lo que va a pasar cuando un local empiece a usar el turnero propio.
+
+**Revisión del orquestador (2026-11-17):** sin críticos ni altos, se revisó una muestra contra el código: Z5-01
+(`horarios.js` y `horariosService.js` no consultan turnos), Z5-02 (el 409 del feriado devuelve solo la cantidad
+y el mail sale solo con `cliente_email`), Z5-03 (`buscarTurnosAfectados` y el CTE de `crearSuspension` no
+filtran `inicio > now()`) y Z5-06 (`reclamarTurno` y el `UPDATE` de la reprogramación). Contra la base, el
+conteo de turnos por local. No se sacó ninguno ni cambió ninguna severidad.
+
 ### Hallazgos
+
+#### Z5-01 [MEDIO] Cambiar el horario de un barbero no dice nada de los turnos reservados que quedan afuera
+
+- **Dónde:** `backend/src/controllers/horarios.js:51-124` (`putHorarios`) y
+  `backend/src/services/horariosService.js:79-101` (`reemplazarHorarios`). Ruta: `PUT /api/admin/horarios/:barbero_id`
+  (admin, o el barbero sobre el suyo). Pantallas: Gestión → Barberos → Horarios del panel
+  (`TabBarberos.jsx:308`) y Gestión de la app del barbero.
+- **Alcance:** en producción (los dos archivos son iguales en `main`).
+- **Qué pasa:** el dueño le saca los sábados a un barbero, o le corta la tarde, y guarda. El horario se
+  reemplaza y listo: no se mira si ese barbero tiene turnos reservados en lo que dejó de trabajar. Esos turnos
+  siguen `reservado`, el cliente tiene su mail de confirmación y va a recibir el recordatorio, y el sábado
+  llega al local y su barbero no está. Nadie recibió un aviso al guardar. Las otras tres formas de cerrar
+  agenda sí lo resuelven: la ausencia lista los turnos y pide confirmar, y el feriado y el horario del local
+  cancelan con confirmación. El turno no desaparece (la Agenda del barbero y el Turnero del panel lo siguen
+  mostrando, porque se dibujan desde los turnos y no desde la grilla), pero hay que ir a buscarlo día por día.
+- **Evidencia:** leído (ruta → `putHorarios`, que valida forma, solapamiento y horario del local →
+  `reemplazarHorarios`; en los fronts, el guardado no consulta turnos). En la DB hay 1 turno reservado futuro
+  fuera del horario de su barbero, en demo.
+- **Arreglo propuesto** (medio): al guardar, contar los turnos reservados futuros del barbero que quedan fuera
+  de los bloques nuevos. Dos opciones:
+  1. **Avisar y dejar decidir (recomendada):** 409 `requiere_confirmacion` con la lista (día, hora, cliente),
+     como la ausencia. Al confirmar, el horario se guarda y los turnos **quedan** (no se cancelan): el dueño ya
+     sabe cuáles son y decide si los atiende igual o los cancela uno por uno. Es lo más chico y no manda mails
+     que nadie pidió.
+  2. Cascada completa como la del horario del local (cancelar con mail). Más grande, y cancelar clientes por
+     un cambio de horario del barbero es una decisión que conviene que el dueño tome turno por turno.
+- **Novedad:** nuevo. `decisiones_horario_atencion.md` cubre la cascada del horario del local, no la del
+  barbero. Pariente de la deuda "la reserva no valida el bloque horario del barbero", pero es otro camino: acá
+  el turno era válido cuando se reservó.
+
+#### Z5-02 [MEDIO] El feriado y el cambio de horario del local cancelan turnos de clientes sin mail y solo informan la cantidad
+
+- **Dónde:** `backend/src/controllers/feriados.js:81-88` y `horarioAtencion.js:90-102` (el 409 devuelve solo
+  `delta.turnos_cancelados`), `services/feriadosService.js:110` y `horarioAtencionService.js:256`
+  (`if (t.cliente_email)`: sin mail, no hay aviso). Pantallas: Gestión → Negocio → Feriados
+  (`BloqueFeriados.jsx:358`) y Horario de atención (`BloqueHorarioAtencion.jsx:317`).
+- **Alcance:** en producción. F1 (solo en el branch) lo agranda: los turnos "Sin datos" nunca tienen mail.
+- **Qué pasa:** el dueño carga un feriado para el viernes. El diálogo dice "se cancelan 6 turnos" y, al
+  confirmar, "6 turnos cancelados". De esos 6, los que cargó un barbero sin mail del cliente (lo habitual
+  cuando el turno se anota por WhatsApp o en el local) y los "Sin datos" se cancelan igual, pero a esos
+  clientes no les llega nada, y el dueño no sabe cuáles son ni cuántos: la pantalla no los nombra en ningún
+  momento. El viernes vienen y el local está cerrado. Para encontrarlos hay que abrir el Turnero del panel día
+  por día y mirar los cancelados. El barbero tampoco se entera si no tiene mail cargado (sin mail no hay evento
+  de Calendar; hoy ningún barbero de un local real lo tiene).
+- **Evidencia:** leído (los dos controllers, las dos cascadas y los dos diálogos). La ausencia sí devuelve la
+  lista con el nombre (`suspensionesService.js:114-119`), pero tampoco dice quién se queda sin aviso.
+- **Arreglo propuesto** (medio): que el 409 y la respuesta final de las tres cascadas traigan la lista de
+  turnos (día, hora, barbero, cliente, teléfono) con un campo `avisado` (tenía mail o no), y que el diálogo
+  separe "a estos les llega un mail" de "a estos avisales vos", con el teléfono a mano. Sin cambios de schema.
+- **Novedad:** nuevo; F1 lo agrava.
+
+#### Z5-03 [BAJO] Una ausencia que empieza en el pasado cancela turnos que ya pasaron y le manda al cliente "tuvimos que cancelar este turno"
+
+- **Dónde:** `backend/src/controllers/suspensiones.js:72-79` (solo valida `hasta > desde`) y
+  `services/suspensionesService.js:94-107` y `:183-203` (los turnos afectados son todos los `reservado` que
+  pisan el rango, sin `inicio > now()`). Ruta: `POST /api/admin/suspensiones`. Pantallas: Gestión → Barberos →
+  Ausencias (los dos `datetime-local` de `TabBarberos.jsx:679-689` no tienen mínimo) y Gestión de la app del
+  barbero.
+- **Alcance:** en producción.
+- **Qué pasa:** a las 11:00 un barbero se va enfermo y el dueño carga la ausencia "hoy de 9:00 a 20:00" (el
+  día entero, que es lo natural). Los turnos de 9:00 a 11:00 que el barbero atendió pero que no se cobraron
+  sobre el turno (se cobraron como cliente sin turno, o todavía no se cobraron) siguen `reservado`, así que
+  entran en la lista, se cancelan y cada cliente recibe un mail diciendo que el barbero suspendió su agenda y
+  su turno se canceló, después de haberse cortado. Además el turno queda `cancelado` y ya no se puede cobrar
+  sobre él. El diálogo muestra la lista con día y hora, así que un dueño atento lo ve; pero es la única cascada
+  que toca turnos pasados: la del feriado y la del horario filtran `inicio > now()`, y desde F9 ni el cliente
+  ni el barbero pueden cancelar un turno que ya empezó.
+- **Evidencia:** leído (controller → `crearSuspension` → `buscarTurnosAfectados` y el CTE `canceladas`).
+- **Arreglo propuesto** (chico): sumar `AND t.inicio > now()` en `buscarTurnosAfectados` y en los dos lugares
+  del CTE. La ausencia se puede seguir cargando con inicio pasado (sirve para el registro y para el % de la
+  jornada); lo que cambia es que no cancela lo que ya empezó.
+- **Novedad:** nuevo. Es la regla de F9 que faltó llevar a este camino.
+
+#### Z5-04 [BAJO] Borrar un corte devuelve su turno a "reservado" sin mirar la hora, de dónde venía ni si el horario sigue libre
+
+Junta las notas de las zonas 2 y 4 sobre `caja.js:312`. El 500 del choque con el `EXCLUDE` ya está reportado
+como **Z4-09** y no se repite: acá va el resto y la propuesta para los cuatro casos.
+
+- **Dónde:** `backend/src/controllers/caja.js:309-322`. Ruta: `DELETE /api/caja/movimientos/corte/:id` (admin).
+  Pantalla: Caja → Movimientos del día.
+- **Alcance:** en producción.
+- **Qué pasa:** al borrar un corte con turno, el turno pasa de `completado` a `reservado` y nada más. Tres
+  consecuencias que el dueño no ve venir (Caja no le dice que el corte tenía un turno):
+  1. **Turno de un día anterior:** queda un `reservado` en el pasado. Tiene salida (se puede volver a
+     completar desde el Turnero del panel, o marcar "no asistió"), pero no desde el iPad, que lista solo los
+     de hoy, y nadie avisa que quedó pendiente. Con el cierre nocturno de F3, esa misma noche pasaría a "no
+     asistió" con `no_asistio_por = 'sistema'`: un cliente que vino y pagó quedaría con una falta.
+  2. **Turno que el admin había completado desde "no asistió":** vuelve a `reservado`, no a "no asistió". No
+     hay dónde leer el estado anterior. Es el mismo caso 1 con otro origen.
+  3. **Turno de hoy que todavía no terminó:** vuelve a `reservado`, reaparece en el iPad y vuelve a ocupar su
+     horario. Es lo correcto, salvo que el horario ya lo haya tomado otro (Z4-09).
+- **Evidencia:** leído (`eliminarMovimiento`; `listarTurnosOperativos` filtra `reservado` y la fecha de hoy;
+  `cambiarEstado` y `completarTurnoConCorte` aceptan un reservado pasado sin límite de antigüedad).
+- **Qué debería pasar, por caso** (arreglo chico a medio, todo en `eliminarMovimiento` y el diálogo de Caja):
+
+  | Caso | Hoy | Propuesta |
+  |---|---|---|
+  | El turno no terminó y su horario sigue libre | → `reservado` | Igual. Es correcto. |
+  | El turno ya terminó (hoy o un día anterior) | → `reservado` en el pasado | Igual, **pero avisando**: es el único estado desde el que se puede volver a cobrar un turno de otro día. El diálogo de borrado dice "Este corte es del turno de las 15:00 de Juan: el turno vuelve a quedar pendiente de cobro", y F3 lo muestra en "turnos sin cobrar". |
+  | Venía de "no asistió" | → `reservado` | Igual que el anterior. No vale la pena guardar el estado previo: si de verdad faltó, se vuelve a marcar (y el cierre de F3 lo hace solo). |
+  | Otro turno ya tomó ese horario (Z4-09) | 500, el corte no se puede borrar | Atrapar `23P01`, borrar el corte igual y dejar el turno `cancelado` (`cancelado_por = 'admin'`, sin mail), devolviendo un aviso para que Caja diga "el horario de ese turno ya lo tiene otro cliente: quedó cancelado". No puede volver a `reservado` (lo impide el `EXCLUDE`) y `completado` sin corte es justo la inconsistencia que cuenta la zona 4. |
+
+  Lo que más reduce todo esto es **Z4-05** (editar un corte en vez de borrarlo y recargarlo): la mayoría de los
+  borrados de un corte con turno son para corregir la forma de pago o el monto.
+- **Novedad:** nuevo; completa Z4-09 y las notas de las zonas 2 y 4. Conviene decidirlo antes de F3 (fase 7 de
+  mejoras operativas), porque el cierre nocturno convierte el caso 1 en una falta mal puesta.
+
+#### Z5-05 [BAJO] Un turno cobrado antes de su hora deja de ocupar su horario: el turnero lo vuelve a ofrecer
+
+Es la pregunta que dejó la zona 4. Respuesta: **en el caso común es lo esperado; hay dos caminos donde no**.
+
+- **Dónde:** `backend/src/services/disponibilidadService.js:237-246` (la disponibilidad y la grilla cuentan
+  solo `estado = 'reservado'`), el `EXCLUDE` (también solo `reservado`), `services/turnosService.js:451-513`
+  (`completarTurnoConCorte` no mira la fecha ni la hora del turno) y `frontend/.../SeccionTurnero.jsx:1250`
+  ("Completar" en cualquier turno reservado, también de un día futuro).
+- **Alcance:** en producción.
+- **Qué pasa:**
+  - **Esperado:** el cliente del turno de las 15:00 llega a las 14:20, el barbero está libre, lo corta y lo
+    cobra a las 14:50. El turno pasa a completado y las 15:00 quedan libres de verdad. Que el turnero las
+    ofrezca (por cinco minutos, hasta la antelación mínima) es correcto.
+  - **No esperado, 1:** en el iPad, el selector "Turnos de hoy" lista todos los reservados del barbero. Si al
+    cobrar al cliente de las 15:00 se elige por error el turno de las 17:00, el de las 17:00 queda completado y
+    su horario libre: el turnero lo ofrece el resto de la tarde, otro cliente lo reserva y a las 17:00 llegan
+    dos. Corregirlo es borrar el corte, y ahí aparece Z4-09.
+  - **No esperado, 2:** desde el Turnero del panel se puede completar un turno de mañana o de la semana que
+    viene (un clic de más mirando otro día). Queda un corte con fecha de hoy y el horario libre para el turnero.
+  - En la Agenda del barbero el turno completado se sigue dibujando encima de su horario, así que el barbero
+    no puede marcar un descanso ahí, pero el turnero sí lo reserva: es el único punto donde la Agenda y la
+    disponibilidad muestran cosas distintas.
+- **Evidencia:** leído. En la DB hay 2 pares de turnos superpuestos del mismo barbero entre `reservado` y
+  `completado`, los dos en demo.
+- **Arreglo propuesto** (chico):
+  1. `completarTurnoConCorte` rechaza (409) un turno de un día posterior a hoy, y el panel no ofrece
+     "Completar" en esos días.
+  2. En el iPad, el selector marca cuál es el turno más cercano a la hora actual, o pide confirmar si el
+     elegido empieza dentro de más de una hora ("Este turno es a las 17:00, ¿es el que estás cobrando?").
+
+  No se propone que la disponibilidad cuente los completados: rompería el caso esperado.
+- **Novedad:** nuevo.
+
+#### Z5-06 [BAJO] Un turno reprogramado después de su recordatorio no vuelve a recibir recordatorio
+
+Responde la nota de la zona 3.
+
+- **Dónde:** `backend/src/controllers/turnero.js:627` (el `UPDATE` cambia `inicio` y `fin`; no toca
+  `recordatorio_enviado_en`) y `services/recordatoriosService.js:71-74` (el lote toma solo los turnos con esa
+  columna en `NULL`). Pantalla: gestión del turno, "Reprogramar".
+- **Alcance:** en producción (hoy solo demo tiene el recordatorio activo).
+- **Qué pasa:** el lote de las 20:30 le manda al cliente el recordatorio de su turno de mañana. El cliente
+  entra por ese mismo mail y lo pasa al viernes. El turno queda marcado como ya avisado, así que el jueves a la
+  noche el lote lo saltea y el cliente no recibe recordatorio del horario nuevo. Es justo el cliente que más lo
+  necesita: el que cambió el turno. **No** recibe un recordatorio del horario viejo: el mail se arma con los
+  datos del turno en el momento del envío. Sí recibe el mail de reprogramación.
+- **Evidencia:** leído (`reprogramarTurno`, `obtenerTurnosDelLote`, `reclamarTurno`). En la DB: 0 turnos con
+  recordatorio de un día que no sea la víspera (no pasó todavía).
+- **Arreglo propuesto** (chico): `recordatorio_enviado_en = NULL` en el `UPDATE` de la reprogramación. No puede
+  duplicar: el lote corre una vez por día y solo mira los turnos de mañana, así que un turno movido dentro del
+  mismo día después del lote no vuelve a entrar. De paso, sumar `AND estado = 'reservado'` al `WHERE` de
+  `reclamarTurno`: hoy, un turno cancelado entre la lectura del lote y su claim (segundos) recibe igual el
+  recordatorio.
+- **Novedad:** nuevo. `decisiones_mail_recordatorio.md` acepta las reservas hechas después del lote; este caso
+  no está.
+
+#### Z5-07 [BAJO] La validación del horario del local deja pasar un turno que cruza la medianoche
+
+- **Dónde:** `backend/src/services/horarioAtencionService.js:81-95` y `:107-116` (`validarRangoEnHorario`
+  compara `'HH:MM'` de inicio y de fin como texto). La usan `POST /api/turnero/turnos`,
+  `/turnos/:token/reprogramar` y `POST /api/admin/turnos`.
+- **Alcance:** en producción.
+- **Qué pasa:** con un local que abre de 10:00 a 19:00, un turno de 23:40 a 00:10 pasa la validación: `23:40`
+  no es menor que `10:00`, y `00:10` no es mayor que `19:00`. Por las pantallas no se llega (la disponibilidad
+  nunca ofrece ese horario), pero un pedido armado a mano contra el endpoint público sí: aparecen turnos a
+  medianoche en la Agenda del barbero, con su evento de Calendar y su mail. No bloquea horarios reales. La
+  misma comparación está en `calcularDelta` (`:202-204`), así que la cascada del horario tampoco los ve.
+- **Evidencia:** leído. En la DB: 1 turno reservado fuera del horario del local, en demo y ya pasado.
+- **Arreglo propuesto** (chico): rechazar si `finDT` no es del mismo día que `inicioDT` (hora argentina), antes
+  de comparar las horas.
+- **Novedad:** corrige la deuda "no validan que `inicio` caiga en un slot real" de `estado_actual.md`, que
+  afirma que el horario del local sí se valida: se valida, salvo este borde. El resto de esa deuda (bloque del
+  barbero y grilla) sigue igual y no se repite.
+
+#### Z5-08 [BAJO] El iPad no muestra un turno marcado "no asistió", aunque el backend está preparado para cobrarlo
+
+- **Dónde:** `backend/src/services/turnosService.js:337-351` (`listarTurnosOperativos` filtra
+  `estado = 'reservado'`) contra `controllers/cortes.js:18-19` y `:82` (`createCorte` acepta `no_asistio` del
+  día: "elegirlo dice que el cliente vino"). Pantallas: `FlujoCorte` del iPad y "No asistió" de la app del
+  barbero (`DetalleTurnoModal.jsx:74-80`, disponible desde el minuto en que empieza el turno).
+- **Alcance:** en producción.
+- **Qué pasa:** el turno es a las 10:00. A las 10:03 el barbero lo marca "no asistió"; a las 10:08 llega el
+  cliente y lo atiende igual. Al cobrar, el turno ya no está en el selector del iPad: el cobro entra como
+  cliente sin turno, el turno queda con la falta, y la planilla cuenta un corte "sin turno" de más. La única
+  corrección es que el dueño lo complete desde el Turnero del panel ese mismo día. La rama del backend que lo
+  resolvía desde el iPad no se puede alcanzar.
+- **Evidencia:** leído (`FlujoCorte.jsx:103` → `getTurnosDelDia` → `GET /api/turnos` → `listarTurnosOperativos`).
+- **Arreglo propuesto** (chico): que `listarTurnosOperativos` devuelva también los `no_asistio` del día, con
+  su estado, y el selector los muestre al final con la etiqueta "No asistió". El resto ya está hecho.
+- **Novedad:** nuevo.
+
+#### Z5-09 [BAJO] Asignar un cliente a un turno "Sin datos" es de una sola vez: un error no se puede corregir
+
+- **Dónde:** `backend/src/services/turnosService.js:691-693` y `:760` (`cliente_id IS NULL` como condición).
+  Ruta: `PATCH /api/admin/turnos/:id/cliente`. Pantallas: "Asignar cliente" en la app del barbero y en el
+  Turnero del panel.
+- **Alcance:** solo en el branch (F1).
+- **Qué pasa:** el barbero busca "Juan", toca al Juan equivocado y confirma. El turno queda con ese cliente y
+  ni él ni el dueño lo pueden cambiar: un segundo intento responde 409 "El turno ya tiene un cliente asignado",
+  y el botón desaparece. Si el turno está reservado, la salida es cancelarlo y cargarlo de nuevo; si ya está
+  completado, no hay ninguna, y la planilla y la futura ficha del cliente quedan con el corte a nombre de otro.
+  La regla de no pisar está bien para la carrera entre dos pantallas, que es para lo que se escribió.
+- **Evidencia:** leído (`verificarTurnoAsignable`, `asignarClienteATurno`, y los dos fronts: el botón sale solo
+  con `!turno.cliente_id`).
+- **Arreglo propuesto** (chico a medio): permitirle al admin reemplazar el cliente de un turno (un
+  `reemplazar: true` que saca el `cliente_id IS NULL` del `WHERE`, solo con rol admin), con "Cambiar" en el
+  detalle del turno del panel. El barbero sigue sin poder pisar.
+- **Novedad:** nuevo.
 
 ### Verificado correcto
 
+**Estados del turno y transiciones** (todas las que existen en el código, por camino). El CHECK de la base
+admite `reservado`, `cancelado`, `completado` y `no_asistio`; no hay ningún `UPDATE turno SET estado` fuera de
+esta tabla.
+
+| De → a | Camino | Condiciones (dónde se controlan) |
+|---|---|---|
+| (nuevo) → `reservado` | Turnero público, `POST /api/turnero/turnos` | Futuro (+5 min), dentro de 15 días, horario del local, sin feriado; sin otro turno (`EXCLUDE`) ni ausencia o descanso (`NOT EXISTS` en el `INSERT`) |
+| (nuevo) → `reservado` | App del barbero (wizard y atajo de la Agenda), `POST /api/admin/turnos` | Igual, sin el tope de 15 días; con cliente nuevo, existente o "Sin datos" |
+| `reservado` → `reservado` (otro horario) | Cliente, link del mail, `/reprogramar` | El turno no empezó (`inicio > now()` en el `WHERE`); el horario nuevo cumple lo mismo que una reserva. No hay reprogramación desde el backoffice |
+| `reservado` → `cancelado` | Cliente, link del mail, `/cancelar` | No empezó (en el `WHERE`). `cancelado_por = 'cliente'` |
+| `reservado` → `cancelado` | App del barbero y panel, `DELETE /api/admin/turnos/:id` | No empezó (en el `WHERE`); el barbero, solo los suyos |
+| `reservado` → `cancelado` | Ausencia, `POST /api/admin/suspensiones` con confirmación | Todo `reservado` que pise el rango, **también los pasados** (Z5-03). `cancelado_por = 'suspension'` |
+| `reservado` → `cancelado` | Feriado y cambio de horario del local, con confirmación | `inicio > now()`; `cancelado_por = 'admin'` |
+| `reservado` → `completado` | iPad, `POST /api/cortes` con `turno_id` | Turno del barbero elegido; el iPad lista los de hoy. Sin control de hora (Z5-05) |
+| `reservado` → `completado` | Panel, `POST /api/admin/turnos/:id/completar` | Admin (el backend también acepta al barbero sobre los suyos; ninguna pantalla suya lo ofrece). Cualquier día (Z5-05) |
+| `reservado` → `no_asistio` | App del barbero y panel, `PATCH .../estado` | Ya empezó (lectura previa; el `WHERE` repite `estado = 'reservado'`). Sin límite hacia atrás |
+| `no_asistio` → `completado` | Panel (solo admin) e iPad | Solo el mismo día del turno, en la misma sentencia. El iPad no llega a ofrecerlo (Z5-08) |
+| `completado` → `reservado` | Caja, borrar el corte (admin) | Ninguna (Z5-04, Z4-09) |
+| `cancelado` → (nada) | — | Terminal. Si el iPad cobra un turno cancelado, el corte entra sin turno y el turno no se revive |
+| Sin cambio de estado | Asignar cliente (`reservado` o `completado`), job de recordatorios (`recordatorio_enviado_en`), Calendar (`google_event_id`) | — |
+
+- **"Un turno se completa solo con su corte":** se respeta en todos los caminos. `PATCH .../estado` rechaza
+  `completado` (400); los dos únicos caminos a `completado` pasan por `registrarCorte`, que marca el turno e
+  inserta el corte en una sola sentencia. En la DB: 0 cortes con turno no completado; 17 completados sin corte,
+  todos de demo y anteriores al 2026-10-20 (hoy no se pueden generar).
+- **Estados sin salida:** ninguno que no sea por diseño. Un `reservado` pasado se puede completar desde el panel
+  o marcar "no asistió"; `cancelado` y, pasado su día, `no_asistio` son terminales a propósito. En la DB: 24
+  reservados con el fin pasado, todos de demo (18 de más de 30 días); es la deuda ya anotada que resuelve F3.
+- **Turno pasado:** cancelar y reprogramar exigen `inicio > now()` con el reloj de la base y en el `WHERE`, en
+  los tres caminos (cliente, barbero, admin). "No asistió" exige lo contrario. Los fronts ofrecen cada acción
+  con la misma regla (`DetalleTurnoModal`, `Dashboard` del barbero, `SeccionTurnero`).
+- **Turno sin cliente (F1):** no queda ningún `JOIN cliente` que no sea `LEFT JOIN` (`sqlTurnoEnriquecido`,
+  `listarTurnos`, `listarTurnosOperativos`, `getTurnoPorToken`, `planillaService`). El único `JOIN turno` desde
+  `cliente` es `getMisClientes`, donde corresponde. Todos los mails cortan si no hay email
+  (`debeSaltarseEnvio`), y las cascadas y el recordatorio lo chequean antes de armar el mail. Calendar nombra
+  el evento "Sin datos" y lo actualiza al asignar el cliente. Asignar dos veces da 409 sin pisar (una sola
+  sentencia con `cliente_id IS NULL`); a un turno cancelado o "no asistió", 409. Las listas de turnos afectados
+  de una ausencia muestran "Sin datos" (`textoCliente`) en los dos fronts.
+- **Cascadas sin transacción:** la ausencia inserta y cancela en una sola sentencia (o todo o nada), y avisa
+  después solo por los ids que canceló. El feriado y el horario del local cancelan turno por turno con
+  `estado = 'reservado'` en el `WHERE`, y graban el feriado o el horario nuevo **al final**: si algo falla a
+  mitad de camino, los turnos ya cancelados quedaron avisados, el feriado o el horario no se guardó, y repetir
+  la acción recalcula y termina el resto. Un fallo de mail o de Calendar no corta la cascada. Lo que no hacen
+  bien es informar (Z5-02).
+- **Descansos:** `crearDescanso` valida contra la misma grilla que usa el turnero (alineado, dentro de un
+  bloque, futuro, libre) y repite la ocupación en el `INSERT`. Liberar pone todas las reglas en el `WHERE`
+  (dos pedidos no liberan dos veces; el barbero no libera lo del admin). El rango efectivo tiene una sola
+  definición (`finEfectivoSql`, `suspensionSolapaSql`) y la usan la disponibilidad, la grilla, las reservas, la
+  reprogramación y los listados; `unirDescansos` hace el mismo cálculo en JS. La Agenda del barbero y la del
+  panel reciben los mismos bloques ya unidos del backend. En la DB: 0 turnos reservados sobre una ausencia o un
+  descanso vigente, y 0 ausencias o descansos vigentes superpuestos entre sí.
+- **Disponibilidad:** el último slot del día entra solo si el servicio termina antes del fin del bloque; un
+  servicio más largo que el hueco no se ofrece; cada bloque ancla en su `hora_inicio`, así que con slots de 50
+  minutos lo que sobra al final queda sin ofrecer (y la Agenda lo dibuja en gris). No hay cruce de medianoche
+  posible en la grilla: los bloques son `time` con `hora_fin > hora_inicio`. "Hoy" y "ahora" salen de luxon en
+  hora argentina, con la antelación de 5 minutos; un día pasado devuelve vacío; feriado o día cerrado, vacío.
+  "Cualquier barbero" usa el mismo cálculo por barbero. Días y horarios salen de la misma función, así que la
+  tira de días no puede ofrecer un día sin horarios. En la DB: 0 bloques de barbero fuera del horario del
+  local y 0 turnos reservados en un feriado.
+- **Fechas:** todos los instantes del cliente pasan por `parsearInstante` y llegan al SQL con offset
+  (`toISO()`); ninguno llega crudo. Las comparaciones con "ahora" que deciden algo se hacen en la base
+  (`now()`) o con luxon en `TZ`. Las fechas `DATE` convertidas con `toISOString()` (feriados) dan el día
+  correcto mientras el proceso corra en UTC o en una zona al oeste (Railway y las máquinas de desarrollo); los
+  fronts no usan `toISOString()` para sacar "hoy" (`getFechaHoy`, `fechaLocalISO`).
+- **Concurrencia entre dos personas:** dos reservas del mismo horario, el `EXCLUDE`. Cliente que cancela y
+  barbero que cobra a la vez: gana el primero y el otro recibe su 409 (o, en el iPad, el corte entra sin
+  turno). Dos cobros del mismo turno: 409 y `corte_turno_unico`. Barbero que marca "no asistió" y admin que
+  completa: el `WHERE` de cada uno. Dos asignaciones de cliente: `cliente_id IS NULL`. No encontré ninguna
+  carrera fuera de las ya aceptadas (reserva contra ausencia o descanso en el mismo instante).
+- **Recordatorios:** el claim es un solo `UPDATE ... WHERE recordatorio_enviado_en IS NULL` antes de enviar: dos
+  corridas no mandan dos mails. Opt-in estricto (`activo === true`); hoy solo demo lo tiene. Un turno cancelado
+  no entra al lote. Un turno sin mail se saltea antes del claim.
+- **Calendar:** todas las llamadas atrapan su error y devuelven `null` o `false`: una falla de Google no rompe
+  la reserva, la cancelación ni la reprogramación. Cancelar por cualquiera de los cinco caminos borra el
+  evento; reprogramar lo actualiza. Sin mail del barbero no se crea evento. Un evento solo puede quedar
+  huérfano si Google falla justo al cancelar (aceptado en `decisiones_turnero.md`, queda un `console.error`).
+  Al evento van el nombre, el teléfono y el mail del cliente, que el barbero ya ve en su app.
+
+**Sin revisar:** el render completo de `SeccionTurnero` (se leyeron el detalle del turno, las acciones y qué
+pide), `CrearTurno.jsx` y `HojaReservar.jsx` (solo qué mandan), `Gestion.jsx` de la app del barbero (solo el
+flujo de la ausencia) y `descansosSemanal` de Planillas. No se ejecutó nada: `unirDescansos` y el algoritmo de
+slots se revisaron leyendo, sin casos de prueba.
+
 ### Para otra zona
+
+- **Zona 8:** `duracion_slot_minutos` acepta de 1 a 240 (`turneroConfig.js:42`). Con un valor muy chico, cada
+  consulta pública de disponibilidad arma cientos de slots por barbero y por día, y `/dias-disponibles` lo
+  repite por 15 días. Además, cambiarlo no avisa que mueve la grilla de todos los barberos y la duración de
+  todos los servicios.
+- **Zona 8:** las cascadas del feriado y del horario del local hacen, turno por turno y en serie, un `UPDATE`,
+  una llamada a Calendar y un mail, dentro del mismo request: con decenas de turnos son decenas de segundos.
+- **Zona 7:** el lote de recordatorios escribe en el log el nombre y el mail del cliente
+  (`recordatoriosService.js:154` y `:161`).
+- **Zona 6:** en el Turnero del panel, "Completar" aparece en turnos de días futuros (Z5-05), y el borrado de
+  un corte en Caja no dice que el corte tiene un turno (Z5-04).
+- **Docs:** `SQL_Schema.md` no nombra `tenant_feriado_fecha_unica UNIQUE (tenant_id, fecha)` ni
+  `turno_rango_valido CHECK (fin > inicio)`, que existen en la DB. El comentario de `caja.js:305-306` dice que
+  el registro "solo completa turnos reservado": también completa `no_asistio`.
 
 ---
 
