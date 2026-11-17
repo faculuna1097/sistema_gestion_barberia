@@ -8,6 +8,9 @@
 > - clases `om-`: `src/index.css`;
 > - imagen de vista previa: `scripts/og-image.html` → `public/og-image.png`.
 >
+> **Actualizado el 2026-11-17** (`feature/landing-captacion`): el mensaje, la competencia y
+> las capturas cambiaron (filas "Mensaje", "Competencia" y "Capturas y demo").
+>
 > **En producción desde el 2026-10-01.** Comprobados el 2026-11-04 los puntos 1 y 2 de la
 > checklist del final y que Vercel Analytics está activo. **Pendiente:** el resto de la
 > checklist y las acciones fuera del sitio (ver `estado_actual.md` → Pendientes).
@@ -32,8 +35,9 @@ saber quién visitaba la página.
 | FAQ | `<details>` / `<summary>` nativo: la respuesta está siempre en el HTML. | Antes la respuesta solo existía con el acordeón abierto. Además funciona antes de hidratar y es accesible por defecto. |
 | Analytics | **Vercel Web Analytics**, plan Hobby: 50k eventos/mes, ventana de **1 mes**, sin eventos de clic ni UTM. | Ya estábamos en Vercel. No usa cookies (no hace falta banner). Los clics en WhatsApp igual llegan como mensajes. |
 | Mercado y precio | Solo Argentina. **$30.000/mes** (antes $40.000), barberos ilimitados, primer mes gratis, una suscripción por local. | Decisión de negocio. |
-| Mensaje | Central: BarberManager es un **sistema de gestión completo**, no solo turnos. Apoyos: barberos ilimitados y precio fijo en pesos. | Los dolores de los dueños con otras apps eran el precio y el límite de barberos. |
-| Competencia | Contra Fresha, Booksy y Setmore **solo se afirma lo verificable y con fecha**. Los precios **no** se comparan con números. | Fresha sale más barato hasta unos 5 barberos, Setmore es gratis hasta 4 usuarios y Fresha también tiene gestión (caja, comisiones, gastos). Lo verificable: los tres cobran según el tamaño del equipo, y Booksy y Setmore cobran en dólares. |
+| Mensaje | Central (desde el 2026-11-17): **el turnero y la gestión integrados**. Lo que reserva el cliente llega solo a la caja y a las planillas, y todo queda organizado en un mismo lugar. Frente a una app de turnos, lo que diferencia es la gestión: caja, gastos y lo que le toca a cada barbero. Apoyos: barberos ilimitados y precio fijo en pesos, que se ve en el hero. | Los locales usan la gestión, no el turnero, y la competencia local (apps en pesos con plan gratis) no la cubre completa. Antes el mensaje era "sistema de gestión completo". Análisis en [`plan_landing_captacion.md`](./plan_landing_captacion.md). |
+| Competencia | Desde el 2026-11-17 **no se afirma nada de terceros**: ni nombres, ni precios, ni funciones. El bloque "¿Y frente a una app de turnos?" habla solo de BarberManager y no tiene nota al pie. La FAQ "¿En qué se diferencia de Fresha, Booksy, AgendaPro u otras apps de turnos?" nombra apps solo en la pregunta, para buscadores e IA. | Los datos fechados eran una deuda de mantenimiento y comparaban con apps que el dueño argentino no usa. Sin afirmaciones sobre terceros no hay nada que pueda quedar viejo. Antes (2026-10-01) se afirmaba lo verificable y con fecha sobre Fresha, Booksy y Setmore. |
+| Capturas y demo | Las capturas son del panel real, con datos de prueba del tenant demo, y lo dicen ("Captura del sistema con datos de prueba"). En el hero, por debajo de 768 px va un recorte de la planilla con `<picture>`, así se baja una sola imagen. El botón "Probá reservar en una barbería de ejemplo" abre el turnero de demo con `?origen=landing`. | Una captura real convence más que números de ejemplo. La planilla de escritorio achicada no se leía en el celular. El botón deja probar sin escribirle a nadie, y `turno.origen_link` cuenta cuántas reservas salen de la landing. |
 | Fuente única de datos | `config/landing.js` + `src/content/` (`faq.js`, `alternativas.js`, `plan.js`) alimentan la UI, el JSON-LD y el `llms.txt`. El número del precio solo está en `PRECIO`. | Cambiar el precio o una respuesta en un lugar actualiza todo. |
 | JSON-LD | Organization + SoftwareApplication (con `offers` en ARS) + FAQPage, armado en `src/seo/` e inyectado en el `<head>` por `prerender.js`. No va al bundle del cliente. Sin `aggregateRating`. | Solo sirve en el HTML estático. Sin reseñas reales no se inventan calificaciones (el Rich Results Test lo marca como advertencia). |
 | `llms.txt` | Generado en el build (`dist/llms.txt`) desde las mismas fuentes. Los links de WhatsApp llevan el mensaje precargado. | Un cambio de config no deja datos viejos. Quien llega desde una IA abre WhatsApp con el mensaje listo. |
@@ -49,19 +53,27 @@ saber quién visitaba la página.
   `llms.txt` salen de ahí.
 - **Cambiar la meta description:** en `index.html` **y** en `src/seo/sitio.js`. Si quedan
   distintas, el build falla a propósito.
-- **Cambiar una captura:** actualizar `src`, `width` y `height` en `CAPTURAS`.
-- **Regenerar la `og-image`:** editar `scripts/og-image.html` y correr el comando de su
-  comentario.
-- **Datos de la competencia:**
-  1. Revisar cada tanto las páginas de precios de Fresha, Booksy y Setmore (desde Argentina:
-     Fresha muestra precios en pesos).
-  2. Si cambia algo que el texto afirma, corregir `src/content/alternativas.js` y la FAQ 5.
-  3. Actualizar la fecha de la nota al pie.
+- **Cambiar una captura:**
+  1. Sacarla del panel de demo a densidad 2, solo el bloque que importa y sin la barra lateral,
+     en JPG de menos de 150 KB.
+  2. Dejarla en `public/screenshots/` y actualizar `src`, `width` y `height` en `CAPTURAS`.
 
-  Relevamiento original (01/10/2026):
-  - **Fresha:** 8.000 ARS/mes (1 profesional) o 5.300 ARS por miembro/mes, más impuestos.
-  - **Booksy:** US$29,99 + US$20 por miembro adicional, más impuestos.
-  - **Setmore:** gratis hasta 4 usuarios; Pro a US$5 por usuario/mes (anual) o US$12 (mensual).
+  Hoy hay tres:
+  - `planillas`: el hero en escritorio.
+  - `planillasMobile`: el hero en celular, un recorte de la misma planilla con hora, servicio,
+    cliente y monto, porque el panel no tiene versión para celular.
+  - `balance`: la sección de gestión.
+
+  Los datos de prueba de demo (3 al 14/11/2026) y cómo borrarlos están en
+  [`plan_landing_captacion.md`](./plan_landing_captacion.md) §8. Si se cambia `planillas`,
+  regenerar la `og-image`.
+- **Regenerar la `og-image`:** editar `scripts/og-image.html` y correr el comando de su
+  comentario. El título es la versión corta del `<h1>`: el completo no entra en dos renglones.
+- **Bloque frente a otras apps y FAQ de la diferencia:** no afirmar nada de terceros. No hay
+  datos de la competencia que mantener.
+- **Turnero de ejemplo (`DEMO.turnero`):** el botón lleva al turnero real del tenant demo, así
+  que lo que ve el prospecto es lo que esté cargado ahí (nombre, logo, servicios, precios y
+  horarios). Mantener la suscripción de demo vigente y los precios al día.
 - **Agregar algo que dependa del ancho de pantalla:** CSS (`om-`) o flex-wrap inline, nunca
   `useIsDesktop` ni nada que lea `window` durante el render. Si el primer render del cliente
   difiere del HTML del build, la hidratación falla.

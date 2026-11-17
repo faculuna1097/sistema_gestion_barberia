@@ -5,8 +5,9 @@
 > "a confirmar". Los archivos y líneas de §4 son del 2026-11-17: confirmalos al escribir cada prompt. Aprobar el
 > plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
-> **Estado (2026-11-17):** fases 0, 1 y 2 hechas y commiteadas (las capturas van en el commit de la fase 2).
-> Sigue la fase 3. Branch desde `main` (`bccc2d3`),
+> **Estado (2026-11-17):** fases 0, 1 y 2 commiteadas, y la parte de docs de la fase 3 también (los dos
+> primeros puntos). Falta: push, PR, merge y deploy, que hace el usuario, y la verificación en producción (los
+> pasos 4 de la fase 3). Lo que queda también figura en `estado_actual.md` → Pendientes. Branch desde `main` (`bccc2d3`),
 > independiente de `feature/mejoras-operativas`: no comparten archivos.
 
 ## 1. Contexto
