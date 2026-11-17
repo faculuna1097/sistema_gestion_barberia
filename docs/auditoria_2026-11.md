@@ -58,52 +58,52 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 | Id | Hallazgo | Sev. | Alc. | Tamaño | Destino |
 |---|---|---|---|---|---|
 | Z7-01 | Credenciales iniciales predecibles en la skill de alta; `monte-sinai` nació con ellas | Crítico | P | chico | Aceptado por el usuario (2026-11-17); la skill sale de `main` |
-| Z1-01 | Pedir el link de recuperación no tiene límite por IP | Alto | B | chico | a decidir |
-| Z1-03 | El PIN de admin de 4 dígitos se adivina desde internet en días | Alto | P | medio | a decidir |
-| Z3-01 | Reprogramar sin límite: mails sin tope a cualquier dirección | Alto | P | chico | a decidir |
-| Z7-02 | Texto de un anónimo en los logs que lee la sesión de Claude en la nube | Alto | P | chico a medio | a decidir |
-| Z8-01 | Casi cada pedido paga un preflight de CORS | Alto | P | chico | a decidir |
-| Z1-02 | Cambiar el mail del dueño no avisa a nadie | Medio | B | chico | a decidir |
-| Z2-01 | El barbero elige un cliente del buscador y recibe "Cliente no encontrado" | Medio | B | chico | a decidir |
+| Z1-01 | Pedir el link de recuperación no tiene límite por IP | Alto | B | chico | Mejoras operativas, antes del merge |
+| Z1-03 | El PIN de admin de 4 dígitos se adivina desde internet en días | Alto | P | medio | `fix/` de `trust proxy`, prioridad 4; el PIN de 6 dígitos, a decidir |
+| Z3-01 | Reprogramar sin límite: mails sin tope a cualquier dirección | Alto | P | chico | `fix/` desde `main`, prioridad 2 |
+| Z7-02 | Texto de un anónimo en los logs que lee la sesión de Claude en la nube | Alto | P | chico a medio | `fix/` desde `main`, prioridad 3 (puntos 1 y 2); el punto 3, con la fase 4 del resguardo |
+| Z8-01 | Casi cada pedido paga un preflight de CORS | Alto | P | chico | `fix/` desde `main`, **prioridad 1** |
+| Z1-02 | Cambiar el mail del dueño no avisa a nadie | Medio | B | chico | Mejoras operativas, antes del merge |
+| Z2-01 | El barbero elige un cliente del buscador y recibe "Cliente no encontrado" | Medio | B | chico | Mejoras operativas, antes del merge |
 | Z3-02 | Un byte nulo en un texto público da 500 y avisa a Sentry | Medio | P | chico | a decidir |
-| Z4-01 | 12 cortes duplicados por doble toque en kingsaistudio | Medio | P | datos | a decidir |
+| Z4-01 | 12 cortes duplicados por doble toque en kingsaistudio | Medio | P | datos | Aceptado por el usuario (2026-11-17): los pagos a los barberos ya están hechos |
 | Z4-03 | El "facturado" del Inicio no coincide con los ingresos de Balances | Medio | P | chico | a decidir |
 | Z4-04 | El iPad cobra con los precios que cargó al abrirse | Medio | P | chico | a decidir |
 | Z4-05 | Un corte mal cargado no se puede corregir sin cambiarle la fecha | Medio | P | medio | a decidir |
 | Z5-01 | Cambiar el horario de un barbero no avisa de los turnos que quedan afuera | Medio | P | medio | a decidir |
 | Z5-02 | Feriado y horario del local cancelan turnos sin mail y no dicen cuáles | Medio | P | medio | a decidir |
-| Z7-03 | La credencial de solo lectura vale como admin y hace pedidos HTTP desde la base | Medio | P | datos | a decidir |
-| Z7-04 | `body-parser` con un aviso alto de caída con cuerpos comprimidos | Medio | P | chico | a decidir |
+| Z7-03 | La credencial de solo lectura vale como admin y hace pedidos HTTP desde la base | Medio | P | datos | Datos: SQL que corre el usuario, con la fase 5 del resguardo |
+| Z7-04 | `body-parser` con un aviso alto de caída con cuerpos comprimidos | Medio | P | chico | `fix/` desde `main`, prioridad 3 (junto con Z7-02) |
 | Z8-02 | El keep-alive mantiene caliente una sola de las 3 conexiones | Medio | P | chico | a decidir |
 | Z8-03 | El Inicio del panel hace 11 queries con tandas en serie | Medio | P | medio | a decidir |
-| Z8-04 | La Agenda del barbero son 10 queries y se recarga cada 30 s | Medio | P y B | medio | a decidir |
+| Z8-04 | La Agenda del barbero son 10 queries y se recarga cada 30 s | Medio | P y B | medio | El refresco cada 30 s: mejoras operativas; las 10 queries: a decidir |
 | Z8-05 | Reservar, reprogramar y cancelar esperan a Calendar y al mail | Medio | P | medio | a decidir |
 | Z8-06 | El cálculo de días con lugar usa luxon en el bucle y frena el backend | Medio | P | medio | a decidir |
 | Z1-04 | Un PIN que no es texto o un `barbero_id` mal formado dan 500 | Bajo | P | chico | a decidir |
-| Z1-05 | El mail del dueño a medio tapar se le da a cualquiera | Bajo | B | chico | a decidir |
-| Z1-06 | La sesión del barbero se guarda 30 días sin preguntar | Bajo | B | chico | a decidir |
+| Z1-05 | El mail del dueño a medio tapar se le da a cualquiera | Bajo | B | chico | Mejoras operativas, antes del merge |
+| Z1-06 | La sesión del barbero se guarda 30 días sin preguntar | Bajo | B | chico | Aceptado por el usuario (2026-11-17): la sesión queda siempre guardada |
 | Z1-07 | La confirmación con el PIN de admin no tiene tope de intentos | Bajo | P | chico | a decidir |
 | Z1-08 | El bloqueo por suscripción se chequea solo al entrar | Bajo | P | medio | a decidir |
 | Z2-02 | `X-Tenant-Subdomain: constructor` pasa con tenant indefinido | Bajo | P | chico | a decidir |
-| Z2-03 | `anon` y `authenticated` con todos los permisos sobre las tablas | Bajo | P | datos | a decidir |
+| Z2-03 | `anon` y `authenticated` con todos los permisos sobre las tablas | Bajo | P | datos | Datos: SQL que corre el usuario |
 | Z2-04 | `turno.cliente_id` llega del cliente y su FK no es compuesto | Bajo | B | chico | a decidir |
 | Z3-03 | El nombre del cliente viaja libre al mail | Bajo | P | chico | a decidir |
 | Z3-04 | La solicitud de alta guarda campos sin validar | Bajo | P | chico | a decidir |
 | Z3-05 | El link del alta sigue mostrando los datos después de cargada | Bajo | P | chico | a decidir |
-| Z3-06 | `booking_url` acepta `javascript:` y el iPad lo abre | Bajo | P | chico | a decidir |
+| Z3-06 | `booking_url` acepta `javascript:` y el iPad lo abre | Bajo | P | chico | Mejoras operativas, antes del merge |
 | Z4-02 | 12 cortes de kingsaistudio con el total sin la propina | Bajo | P | datos | a decidir |
 | Z4-06 | Rótulos del Inicio corridos de 21 a 24 hs | Bajo | P | chico | a decidir |
 | Z4-07 | La propina toma la forma de pago del corte | Bajo | P | medio | a decidir |
 | Z4-08 | El stock solo se puede sumar | Bajo | P | chico | a decidir |
-| Z4-09 | Borrar un corte con turno da 500 si otro turno tomó el horario | Bajo | P | chico | a decidir |
+| Z4-09 | Borrar un corte con turno da 500 si otro turno tomó el horario | Bajo | P | chico | Mejoras operativas, antes de F3 (junto con Z5-04) |
 | Z4-10 | El Excel de Caja ignora "Solo Barberos" | Bajo | P | chico | a decidir |
 | Z5-03 | Una ausencia con inicio pasado cancela turnos ya atendidos y manda mail | Bajo | P | chico | a decidir |
-| Z5-04 | Borrar un corte devuelve el turno a "reservado" sin mirar nada | Bajo | P | chico a medio | a decidir |
+| Z5-04 | Borrar un corte devuelve el turno a "reservado" sin mirar nada | Bajo | P | chico a medio | Mejoras operativas, antes de F3 |
 | Z5-05 | Un turno cobrado antes de hora libera su horario | Bajo | P | chico | a decidir |
 | Z5-06 | Reprogramar después del recordatorio deja sin recordatorio | Bajo | P | chico | a decidir |
 | Z5-07 | El horario del local deja pasar un turno que cruza la medianoche | Bajo | P | chico | a decidir |
 | Z5-08 | El iPad no muestra un turno "no asistió" | Bajo | P | chico | a decidir |
-| Z5-09 | Asignar un cliente a un turno "Sin datos" no se puede corregir | Bajo | B | chico a medio | a decidir |
+| Z5-09 | Asignar un cliente a un turno "Sin datos" no se puede corregir | Bajo | B | chico a medio | Mejoras operativas, antes del merge |
 | Z6-01 | El backend deja que un barbero cobre sus propios turnos | Bajo | P | chico | a decidir |
 | Z6-02 | "Sin barberos cargados" cuando lo que falló fue la carga | Bajo | P | chico | a decidir |
 | Z6-03 | La app del barbero muestra "Load failed" sin señal | Bajo | P | chico | a decidir |
@@ -112,9 +112,9 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 | Z7-06 | Rechazos de input registrados como error | Bajo | P | chico | a decidir |
 | Z7-07 | Logins fallidos del iPad con `console.log` | Bajo | P | chico | a decidir |
 | Z7-08 | El panel se puede embeber en un iframe; la gestión del turno sin `noindex` | Bajo | P | chico | a decidir |
-| Z7-09 | La key de B2 puede ocultar o pisar los backups | Bajo | P | datos | a decidir |
+| Z7-09 | La key de B2 puede ocultar o pisar los backups | Bajo | P | datos | Configuración: dashboard de B2 |
 | Z7-10 | El PIN de admin de demo está en el repo público | Bajo | P | chico | a decidir |
-| Z7-11 | Sin `NODE_ENV=production` en el cron, Sentry lo dejaría sin avisos | Bajo | P | chico | a decidir |
+| Z7-11 | Sin `NODE_ENV=production` en el cron, Sentry lo dejaría sin avisos | Bajo | P | chico | Configuración: confirmar en Railway antes de tocar las reglas de Sentry |
 | Z7-12 | Vulnerabilidades en las herramientas de desarrollo de los fronts | Bajo | D | chico | a decidir |
 | Z8-07 | 43 filtros por fecha que no pueden usar índice | Bajo | P | grande | a decidir |
 | Z8-08 | `googleapis` entero ocupa ~100 MB para usar solo Calendar | Bajo | P | chico | a decidir |
