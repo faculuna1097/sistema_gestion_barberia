@@ -1,6 +1,6 @@
 # Auditoría de seguridad y calidad — 2026-11
 
-> **Estado (2026-11-17): en curso.** Zonas 1 a 6 revisadas; el resto, pendiente o en curso (ver la tabla de zonas).
+> **Estado (2026-11-17): en curso.** Zonas 1 a 7 revisadas; el resto, pendiente o en curso (ver la tabla de zonas).
 >
 > Auditoría de **solo lectura**: no se modifica código, ni la base, ni configuración. Los arreglos se deciden
 > al final, hallazgo por hallazgo, y van aparte. El plan (decisiones, zonas, filtro de hallazgos y fases) está
@@ -31,7 +31,7 @@ tabla de todos los hallazgos con su destino.*
 | 4 | Plata: caja, planillas, balances y stock | `1e148fb` | Revisada | 0 | 0 | 4 | 6 |
 | 5 | Agenda, turnos y concurrencia | `dd99386` | Revisada | 0 | 0 | 2 | 7 |
 | 6 | Panel de gestión y app del barbero (front) | `9ad3ec9` | Revisada | 0 | 0 | 0 | 4 |
-| 7 | Operación, infraestructura y dependencias | — | Pendiente | — | — | — | — |
+| 7 | Operación, infraestructura y dependencias | `b4b21b3` | Revisada | 1 | 1 | 2 | 8 |
 | 8 | Rendimiento y consumo del backend | — | Pendiente | — | — | — | — |
 
 Estados: **Pendiente** (sin empezar), **Escrita** (el ejecutor terminó su sección) y **Revisada** (el
@@ -1763,11 +1763,457 @@ corrí `eslint`. Nada se confirmó en pantalla.
 
 ## Zona 7. Operación, infraestructura y dependencias
 
+**Commit auditado:** `b4b21b3` (`feature/mejoras-operativas`), 2026-11-17. Solo lectura: código, historial de git,
+docs, la DB con el rol `resguardo_lectura` (catálogo, más un conteo por tenant autorizado por el usuario para
+Z7-01), `npm audit` sin `fix` y las cabeceras reales de los fronts con `curl` (GET, solo cabeceras). No se hizo
+ningún request a la API de producción. Para Z7-04 se probó la librería `body-parser` aislada, en memoria, sin
+servidor, sin red y sin DB.
+
+**Resumen:** 12 hallazgos (1 crítico, 1 alto, 2 medios, 8 bajos). Los doce están en producción. El crítico (Z7-01)
+se le avisó al usuario en el chat apenas apareció. Ningún secreto en el repo ni en su historial.
+
+**Revisión del orquestador (2026-11-17):** Z7-01 y Z7-02 se confirmaron contra el código y la base. Z7-01: el
+repo es público (`gh repo view`), la skill con el paso 2 está en `main`, y en la base `monte-sinai` está activo,
+en uso (cortes hasta el 12/11) y con el usuario del iPad igual al subdominio. Z7-02: `enmascararTokensEnRuta`
+no saca el query string, la lista `deny` compara solo el texto del comando, y las dos skills afirman un cartel
+de permiso que la decisión 13 de `plan_monitoreo_prod.md` dice que en la nube no existe. Z7-03 coincide con lo
+que la zona 2 vio en el catálogo. No se sacó ninguno ni cambió ninguna severidad. Sobre la decisión del usuario
+en Z7-01, ver la nota del orquestador dentro del hallazgo.
+
 ### Hallazgos
+
+#### Z7-01 [CRÍTICO] La skill de alta, publicada en el repo, fija credenciales iniciales predecibles, y un local real nació con ellas
+
+- **Dónde:** `.claude/skills/alta-cliente/SKILL.md:86-108` (paso 2, "Credenciales"). El repo es público en GitHub.
+  Lo que alimenta el patrón es público: el subdominio (la URL del local) y el WhatsApp del local, que devuelve
+  `GET /api/turnero/tenant` (`controllers/turnero.js:56-84`) y muestra la landing del turnero.
+- **Alcance:** en producción (la skill está en `main` desde `383f184`, 2026-11-11, con el mismo paso 2).
+- **Qué pasa:** la skill le indica a Claude que proponga, para cada local nuevo:
+  - PIN de los barberos: `1111`, `2222`, `3333`… en el orden del formulario;
+  - usuario del iPad: el subdominio;
+  - contraseña del iPad: el subdominio sin guiones más el año (con un ejemplo);
+  - PIN de admin: las últimas 4 cifras del celular del dueño.
+
+  Cualquiera que lea el repo puede entrar desde internet al iPad de un local nuevo (subdominio y subdominio más
+  el año), a la app del barbero con `1111` y, si el WhatsApp público del local es el celular del dueño, al panel
+  de admin con sus últimas 4 cifras: caja, configuración y el mail del dueño (con eso se queda también con la
+  recuperación, Z1-02). El limiter de login no ayuda: el atacante necesita uno o dos intentos, no miles.
+- **Evidencia:** leído, y consultado en la DB (solo comparaciones, sin hashes; autorizado por el usuario):
+  `monte-sinai` (activo) vino de una solicitud `cargada`, tiene el usuario del iPad igual al subdominio y su
+  WhatsApp público termina con las mismas 4 cifras que el celular del dueño. `pepe-barber` (de prueba, dado de
+  baja) igual. `kingsaistudio` y `luxuribarberclub` tienen el usuario del iPad igual al subdominio, pero se
+  dieron de alta a mano, antes de la skill: su contraseña no sigue este patrón (que se sepa).
+  **Sin confirmar:** si las credenciales cargadas en `monte-sinai` fueron las que propuso la skill (Facundo
+  podía cambiarlas) y si después se cambiaron. Confirmarlo es comparar los hashes contra el patrón, y no se
+  hizo.
+- **Arreglo propuesto:**
+  1. (chico) Que la skill proponga credenciales al azar (PINs distintos sin patrón, contraseña generada) y
+     sacar el patrón y el ejemplo del texto.
+  2. (chico, lo hace el dueño o Facundo) En `monte-sinai`, cambiar el PIN de admin y la contraseña del iPad
+     desde Gestión → Seguridad, y los PIN de los barberos.
+
+  **Decisión del usuario (2026-11-17):** sacar la skill de `main` y dejarla ignorada en `.gitignore`, sin rotar
+  las credenciales. Para tener en cuenta al hacerlo: el archivo sigue en el historial público del repo (desde
+  `383f184`), así que sacarlo de `main` lo saca de la vista pero no lo borra; reescribir el historial no es
+  posible con el ruleset de `main` y no llega a clones ni forks. Y las credenciales de `monte-sinai` quedan como
+  están. En el `.gitignore` de la raíz, la regla va **después** de `!.claude/skills/`
+  (`.claude/skills/alta-cliente/`), más un `git rm -r --cached` de la carpeta.
+- **Nota del orquestador (2026-11-17), recomendación pendiente de decisión:** sacar la skill de `main` no
+  cierra el riesgo: el patrón sigue en el historial público, y las credenciales de `monte-sinai` son las que
+  importan. Recomendado: (1) cambiar ya las credenciales de `monte-sinai` (PIN de admin, contraseña del iPad y
+  PINs de los barberos) desde Gestión → Seguridad y Barberos, que no requiere código; (2) que la skill genere
+  credenciales al azar, se quede o no en el repo. Además, este mismo documento describe el patrón y vive en el
+  repo público: no pushearlo hasta que (1) esté hecho.
+- **Novedad:** nuevo.
+
+#### Z7-02 [ALTO] Un anónimo escribe texto en las líneas del log que lee la sesión de Claude en la nube, y esa sesión tiene un token de Railway que lee los secretos
+
+- **Dónde:**
+  - Texto del atacante en líneas de `stderr` (lo que lee `salud-prod`, paso 5, `--filter "@level:error"`):
+    `index.js:132` (`[index] body rechazado`, con la URL **y su query string**: un POST con JSON roto a cualquier
+    ruta, sin límite propio); `rateLimitMiddleware.js:54` (la ruta con query string, al pasar un límite);
+    `tenantMiddleware.js:170` (el header `X-Tenant-Subdomain`, hasta 63 caracteres, y la skill pide reportarlo:
+    `salud-prod/SKILL.md:142-144`). También el `path` de los 5xx del borde (paso 4) y, por Z1-04, el mensaje de
+    Postgres con el `barbero_id` del atacante, que llega como título de un issue de Sentry al aviso de Discord
+    que se pega en `arreglo-prod`.
+  - Qué puede hacer la sesión: `RAILWAY_TOKEN` de proyecto, que puede deployar y leer y cambiar variables
+    (`decisiones_monitoreo_prod.md`, "Garantías"); `git push` a cualquier branch que no sea `main` y `gh api`
+    contra un repo público; en la nube no hay cartel de permiso para ningún comando (`plan_monitoreo_prod.md`,
+    decisión 13). La lista `deny` (`.claude/settings.json:9-60`) compara el texto del comando: no frena
+    `npx @railway/cli variables`, la CLI llamada por su ruta completa, un `curl` o un `node -e` contra la API
+    de Railway con el token del entorno, ni el `push` de un branch.
+- **Alcance:** en producción.
+- **Qué pasa:** el repo es público y las skills dicen exactamente qué líneas se leen. Un anónimo manda
+  `POST /api/x?<instrucciones de varios kB>` con un JSON roto: queda una línea `[index] body rechazado` con ese
+  texto. La próxima vez que Facundo pregunta "¿cómo está prod?", la sesión lo lee. Si el modelo lo obedece, puede
+  leer las variables (`JWT_SECRET`, la contraseña de dueño de la DB, la service role key, `RESEND_API_KEY`) y
+  dejarlas en un branch o un PR del repo público: con `JWT_SECRET` se firma un token de admin de cualquier
+  local. Además, las dos skills le dicen al modelo un control que no existe: `arreglo-prod/SKILL.md:23-26` ("el
+  cartel de permiso es el control… cualquier comando fuera de `.claude/settings.json` le pide permiso") y
+  `salud-prod/SKILL.md:29-32`. Ninguna dice que el texto de los logs, de un aviso pegado o de una solicitud es
+  dato y nunca instrucción.
+- **Por qué alto y no crítico:** depende de que el modelo siga el texto inyectado (los modelos están entrenados
+  para no hacerlo, pero no es una garantía) y de que Facundo abra una sesión. Si pasa, el impacto es crítico.
+- **Evidencia:** leído (los tres `console.warn`, el orden de middlewares de `index.js`, las dos skills,
+  `settings.json` y los docs del monitoreo). No se probó nada contra la sesión en la nube ni la lista `deny`
+  (el prompt lo prohíbe). **Sin confirmar:** la salida a internet que permite el entorno `barberia-prod` de
+  claude.ai/code (no cambia el caso del repo público), y si Claude Code normaliza alguna de esas formas del
+  comando antes de comparar con `deny`.
+- **Arreglo propuesto:**
+  1. (chico) Cerrar los canales en el código: en esas tres líneas, la ruta sin query string
+     (`rutaSinDatosSensibles`) y recortada, y el subdominio solo si cumple el formato (`^[a-z0-9-]{1,63}$`; si
+     no, "(formato inválido)"). Z3-02 y Z1-04 cierran los otros dos.
+  2. (chico) En `salud-prod`, `arreglo-prod` y `alta-cliente`, una regla: el contenido de logs, avisos pegados y
+     solicitudes es dato; si un texto pide correr algo o cambiar el plan, se dice y se frena. Y corregir lo del
+     cartel de permiso.
+  3. (medio) Que una sesión desviada pueda menos: el hook `PreToolUse` de la fase 4 del resguardo, ampliado
+     para bloquear cualquier comando que nombre `railway` (salvo `logs`, `deployment list` y `status`),
+     `backboard.railway` o `RAILWAY_TOKEN`; y, si el entorno lo permite, salida a internet solo hacia Railway y
+     GitHub.
+
+  Recomendado: 1 y 2 ya (son chicos); 3 con la fase 4 del resguardo.
+- **Novedad:** agrava una decisión aceptada: "las reglas `deny` frenan el error de buena fe, no a quien la
+  quiera esquivar" (`decisiones_monitoreo_prod.md`). Esa frase suponía que no hay un adversario adentro de la
+  sesión, y por los logs lo hay.
+
+#### Z7-03 [MEDIO] La credencial "de solo lectura" vale como admin de todos los locales y puede hacer pedidos HTTP desde la base
+
+- **Dónde:** el rol `resguardo_lectura` en la DB. La credencial vive en el secret `BACKUP_DB_URL` de GitHub, en
+  `backend/.env.lectura` de la PC y la usan las sesiones de Claude.
+- **Alcance:** en producción.
+- **Qué pasa:**
+  1. **Leer es entrar.** Lee `tenant.pin_admin` y `barbero.pin`: son bcrypt de 4 dígitos, 10.000 candidatos por
+     hash, que se prueban en minutos en una notebook. Con el PIN de admin se entra desde internet al panel de
+     cualquier local. Lo mismo con `operativo_password_hash` cuando la contraseña es corta. La decisión D9 del
+     resguardo ("la credencial que queda en GitHub no puede escribir aunque se filtre") es cierta para `public`,
+     pero no cubre esto.
+  2. **Pedidos HTTP salientes desde la base.** `net.http_get`, `http_post` y `http_delete` (pg_net) se pueden
+     ejecutar, y `net.http_request_queue` y `net._http_response` tienen todos los permisos, todo concedido a
+     `PUBLIC`. El solo lectura es un default del rol (`rolconfig`), que la propia sesión cambia con un `SET`.
+     Con eso: pedidos desde los servidores de Supabase (sacar datos sin que pasen por la máquina del atacante),
+     borrar los pedidos pendientes de los triggers `web_deploy_*` de la web de Kingsai, o leerlos mientras
+     esperan (la fila lleva la URL del hook de deploy, que sale de Vault).
+- **Evidencia:** consultado en la DB, solo catálogo, sin ejecutar ninguna función de pg_net ni cambiar el modo
+  de la sesión. `rolbypassrls = true`, `rolinherit = false`, sin membresías, `CONNECTION LIMIT 3`,
+  `rolconfig = {default_transaction_read_only=on, statement_timeout=30s}`. `USAGE` en `public`, `extensions` y
+  `net` (en `net`, por `PUBLIC`, `anon` y `authenticated`); sin `USAGE` en `auth`, `storage`, `vault`, `realtime`
+  ni `graphql`. `SELECT` en las 23 relaciones de `public`, ninguna escritura. En `public` solo ejecuta las
+  funciones de `btree_gist` (`timerange`, `timemultirange`); las 6 propias, no. `token_recuperacion` guarda
+  solo el hash (no es un riesgo).
+- **Arreglo propuesto** (medio; SQL que corre el usuario):
+  1. `REVOKE` de `PUBLIC` sobre las funciones `net.http_*` y las tablas de `net`, dejándoselo a `postgres`, que
+     es el dueño de `web_deploy_kingsai()` (`SECURITY DEFINER`). Probarlo antes en el proyecto de la
+     restauración (fase 3), porque toca una extensión de Supabase.
+  2. Separar los usos: el `pg_dump` necesita leer todo y se queda con este rol, que vive solo en GitHub; las
+     consultas de Claude pasan a otro rol sin `SELECT` sobre las columnas de PIN y contraseña.
+
+  Recomendado: 1 con la fase 5 del resguardo; 2 cuando se toque la fase 5.
+- **Novedad:** confirma y amplía la nota de la zona 2. Corrige la premisa de D9 de `plan_resguardo_db.md`, y
+  la del "dos capas: aunque alguien apague el modo solo lectura, no tiene permisos" (§2), que no vale para `net`.
+
+#### Z7-04 [MEDIO] `body-parser` 2.2.2, de runtime en el backend, tiene un aviso alto de caída con cuerpos comprimidos, y la API los acepta en todas las rutas
+
+- **Dónde:** `backend/package-lock.json` (`express@5.2.1` → `body-parser@2.2.2`); `index.js:107`
+  (`express.json()` global, con `inflate` activado por defecto).
+- **Alcance:** en producción (mismo lock en `main`).
+- **Qué pasa:** `npm audit` marca GHSA-27r3-jxmh-p828, alto, "Denial of Service via trailing bytes after a
+  compressed request body", CWE-248 (excepción no atrapada). El código usa la parte afectada: cualquier anónimo
+  puede mandar un JSON con `Content-Encoding: gzip`, `deflate` o `br` a cualquier ruta, antes del tenant y del
+  token. Si el aviso es una caída del proceso, un pedido tumba la API de todos los locales (Railway la
+  reinicia; repetido, es una caída sostenida).
+- **Evidencia:** `npm audit` y leído (`body-parser/lib/read.js`). Prueba aislada en memoria (sin servidor, red
+  ni DB), 9 variantes: gzip, deflate y brotli con bytes de más, juntos y en un segundo pedazo demorado. Con gzip
+  da un 400, y con deflate y brotli ignora lo que sobra; ninguna tiró una excepción. **Sin confirmar** el
+  escenario exacto del aviso (no se consultó el texto completo).
+- **Arreglo propuesto** (chico): `npm audit fix` sin `--force` en `backend` (la versión corregida entra en el
+  rango de `express@5`), y además `express.json({ inflate: false })`: ningún front manda el cuerpo comprimido,
+  así que se cierra la superficie entera. Recomendado: las dos.
+- **Novedad:** nuevo (en julio, el backend quedó con 0 vulnerabilidades).
+
+#### Z7-05 [BAJO] Datos de clientes en los logs de Railway, que también lee la sesión de diagnóstico
+
+- **Dónde:**
+  - `index.js:201-209`, el log de acceso: escribe el body de cada pedido, y `sanitizarObjeto` tapa solo
+    credenciales (`utils/sanitizarLogs.js:12-15`). Así quedan el nombre, el teléfono y el mail del cliente en
+    `POST /api/turnero/turnos` y `POST /api/admin/turnos`, el `usuario` del iPad en su login y el `barbero_id`
+    en el login del barbero.
+  - `mailer.js:248`: el mail del cliente en cada envío (confirmación, cancelación, reprogramación,
+    recordatorio, cancelación automática). La recuperación ya lo enmascara.
+  - `recordatoriosService.js:154`: el nombre del cliente cuando no tiene mail (es un `warn`, así que lo lee
+    `salud-prod`). La línea 161 es solo del modo de prueba.
+- **Alcance:** en producción (las mismas líneas en `main`).
+- **Qué pasa:** cada reserva deja los datos personales del cliente en los logs. Los ve quien entra a Railway y,
+  por las líneas de `stderr`, entran al contexto de la sesión de Claude: `salud-prod` pide "contarlos, no
+  copiarlos", pero los lee igual. Nada de esto sirve para diagnosticar: alcanza con el id del turno o del
+  cliente.
+- **Evidencia:** leído; las tres líneas existen igual en `main`.
+- **Arreglo propuesto** (chico): sumar a `KEYS_SENSIBLES` `nombre`, `email`, `telefono` y `usuario` (o, mejor,
+  pasar a una lista blanca de claves que sí se escriben); en el mailer, `destinoLog` enmascarado por defecto,
+  como en la recuperación; en el recordatorio, el id del turno en vez del nombre. Recomendado: la lista blanca.
+- **Novedad:** nuevo. Junta las notas de las zonas 1, 3 y 5.
+
+#### Z7-06 [BAJO] Rechazos de input que se registran como error: uno avisa al celular y otros ensucian el diagnóstico
+
+- **Dónde:** `plataformaAuthMiddleware.js:43`, y el manejo de errores del body en `index.js:124-134`.
+- **Alcance:** en producción.
+- **Qué pasa:**
+  1. `PLATFORM_ADMIN_KEY` no está seteada a propósito (`estado_actual.md` → Deploy, y `onboarding.md`), así que
+     cada `POST /api/plataforma/cache/invalidate` anónimo hace un `console.error`, que va a Sentry y a
+     Discord. Es un aviso que Facundo no puede resolver sin setear la variable; si lo marca resuelto, el
+     próximo pedido lo reabre ("Issue que vuelve"). Los repetidos seguidos los descarta el filtro de eventos
+     duplicados del SDK (`dedupeIntegration`, activado por defecto en `@sentry/node` 11), así que no gasta
+     cuota salvo que se intercale con otro error.
+  2. El handler de `index.js` cubre solo JSON mal formado y body grande. Un `Content-Encoding` desconocido
+     (415), un charset desconocido (415) o un gzip roto (400) siguen hasta el handler final de Express, que
+     imprime el stack con `console.error` (`express/lib/application.js:615-618`). A Sentry no llega
+     (`esLogDeExpress` lo descarta), pero `salud-prod` lo cuenta como un error "que escapó de un handler", y la
+     respuesta sale en HTML.
+- **Evidencia:** leído; el filtro de duplicados, leído en `@sentry/core/build/cjs/integrations/dedupe.js`.
+- **Arreglo propuesto** (chico): en el middleware de plataforma, `console.warn` (o un solo aviso al arrancar,
+  y el 503 sin log); en el handler de `index.js`, responder JSON con `console.warn` a todo error con
+  `err.status` 4xx que venga del parseo del body.
+- **Novedad:** nuevo. Del mismo tipo que lo que ya se arregló en `index.js:124` (body mal formado).
+
+#### Z7-07 [BAJO] Los intentos fallidos de login del iPad se loguean con `console.log`: el diagnóstico no los ve
+
+- **Dónde:** `controllers/authOperativo.js:46`, `:55` y `:64`.
+- **Alcance:** en producción.
+- **Qué pasa:** la convención (§1, punto 4) pide `console.warn` para los logins fallidos. Con `console.log` van
+  por `stdout`, nivel `info`, y `salud-prod` lee solo `@level:error` (`stderr`): una fuerza bruta contra la
+  contraseña del iPad no aparece en el reporte, mientras que la del PIN sí (`authPanel` y `authBarbero` usan
+  `warn`). Con Z7-01, la contraseña del iPad es justo la credencial más fácil de adivinar.
+- **Evidencia:** leído; mismas líneas en `main`.
+- **Arreglo propuesto** (chico): `console.warn` en las tres, y sumarlas a la lista de logins fallidos de
+  `salud-prod/SKILL.md` (paso 5).
+- **Novedad:** nuevo (nota de la zona 1).
+
+#### Z7-08 [BAJO] Cabeceras de los fronts: el panel se puede embeber en un iframe, y la gestión del turno no lleva `noindex` ni `Referrer-Policy`
+
+- **Dónde:** `frontend/vercel.json` (solo `X-Robots-Tag` y el cache de `/fonts`). Los demás `vercel.json` no
+  tienen cabeceras de seguridad, y la landing no tiene `vercel.json`.
+- **Alcance:** en producción.
+- **Qué pasa:**
+  1. Ningún front manda `X-Frame-Options` ni `Content-Security-Policy: frame-ancestors`: cualquier sitio puede
+     embeber el panel. Hoy el riesgo es acotado: los navegadores separan el `localStorage` de un iframe de otro
+     sitio, así que el iframe no tiene el token del iPad, y lo que se tipea adentro no lo lee la página de
+     afuera. Es defensa en profundidad.
+  2. `/turnos/gestionar/<token>` no lleva `X-Robots-Tag: noindex` (la regla de `frontend/vercel.json` excluye
+     todo `/turnos`). Si alguien publica su link, se puede indexar con el token.
+  3. Esa página tampoco lleva `Referrer-Policy`. Hoy el token no sale en el `Referer` por el default de los
+     navegadores (`strict-origin-when-cross-origin`) y por el `rel="noreferrer"` de los links. La nota de julio
+     (3.3) se lo atribuye a `helmet`, pero `helmet` pone la cabecera en las respuestas de la API, no en la
+     página que sirve Vercel.
+- **Evidencia:** cabeceras reales con `curl` (abajo, en "Verificado correcto").
+- **Arreglo propuesto** (chico): en `frontend/vercel.json`, `X-Frame-Options: DENY` (o
+  `frame-ancestors 'none'`) para todo menos `/turnos`, y una regla para `/turnos/gestionar/(.*)` con
+  `X-Robots-Tag: noindex` y `Referrer-Policy: no-referrer`. Lo mismo en `frontend-alta/vercel.json`
+  (`Referrer-Policy`, porque el link también lleva un token).
+- **Novedad:** corrige la nota de mitigación de 3.3 en `auditoria_2026-07.md` (el `Referer` lo cuida el
+  navegador, no `helmet`). Junta las notas de las zonas 3 y 6.
+
+#### Z7-09 [BAJO] La key de B2 "que no puede borrar" puede ocultar o pisar los backups, y las reglas de ciclo de vida los terminan borrando
+
+- **Dónde:** la key `backup-github-subida` (`listBuckets`, `writeFiles`), en los secrets de GitHub; las reglas
+  de ciclo de vida del bucket (D4, D5 y §7 de `plan_resguardo_db.md`).
+- **Alcance:** en producción.
+- **Qué pasa:** según la documentación de B2 (de memoria, sin consultar), `writeFiles` también permite
+  `b2_hide_file` y subir otra versión con el mismo nombre, y las reglas de ciclo de vida borran las versiones
+  ocultas o reemplazadas pasados los días configurados. Los nombres son predecibles
+  (`diarios/AAAA-MM-DD.dump.age`). Quien tenga la key puede, sin `deleteFiles`, hacer desaparecer los backups o
+  dejar basura en su lugar. La key vive solo en GitHub, así que hace falta una filtración (la cuenta de GitHub o
+  una corrida del workflow comprometida).
+- **Evidencia:** leído (workflow, script y plan). **Sin confirmar:** las reglas de ciclo de vida reales del
+  bucket (`daysFromHidingToDeleting`) y si la key puede ocultar archivos; se ve en el dashboard de B2.
+- **Arreglo propuesto** (chico, en el dashboard de B2): Object Lock con retención, por ejemplo de 30 días en
+  `diarios/`. Con eso, ninguna key puede borrar ni pisar un backup antes de tiempo.
+- **Novedad:** corrige la premisa de D4 ("si se filtra, nadie puede borrar") y del descarte de Object Lock en
+  §7 del plan del resguardo.
+
+#### Z7-10 [BAJO] El PIN de admin de demo está escrito en el repo público
+
+- **Dónde:** `backend/src/scripts/hashearPinAdmin.js:9` (`PIN_PLANO` del tenant demo).
+- **Alcance:** en producción (está en `main`).
+- **Qué pasa:** si demo sigue con ese PIN, cualquiera entra como admin de demo. Eso no toca a los locales
+  reales (otro origen y otro tenant), pero desde ahí puede crear turnos que mandan confirmaciones a cualquier
+  dirección (`crearTurnoAdmin`, solo con el límite global), con la cuota de Resend que comparten todos (ver
+  Z3-01), o dejar un `javascript:` en el `booking_url` de demo (Z3-06), que Facundo abre al probar.
+- **Evidencia:** leído. **Sin confirmar:** si el PIN de demo sigue siendo ese (no se compararon hashes) y si
+  la suscripción de demo está vigente (`estado_actual.md` dice que venció el 2026-10-30: vencida, el panel
+  responde 402 y el abuso queda frenado hasta que se renueve).
+- **Arreglo propuesto** (chico): borrar el script (`crearTenant.js` y la pantalla de Seguridad ya cubren lo
+  mismo) y cambiar el PIN de admin de demo.
+- **Novedad:** nuevo.
+
+#### Z7-11 [BAJO] Si el cron no tiene `NODE_ENV=production`, pasar las reglas de Sentry a `production` lo deja sin avisos
+
+- **Dónde:** `instrument.js:132` (`environment: process.env.NODE_ENV || 'development'`), el servicio cron de
+  Railway, y el residual del monitoreo en `estado_actual.md` → Pendientes.
+- **Alcance:** en producción.
+- **Qué pasa:** el residual dice que pasar las 4 reglas de "All environments" a `production` "no cambia nada en
+  la práctica". Los docs listan `NODE_ENV=production` entre las variables del servicio web, pero no del cron,
+  cuyas compartidas son solo `RESEND_API_KEY`, `MAIL_FROM` y `SENTRY_DSN`. Si el cron no la tiene, sus errores
+  salen con `environment: development` y, después de ese cambio, el fallo del recordatorio no avisaría.
+- **Evidencia:** leído. **Sin confirmar:** las variables del servicio cron (se ven en el dashboard de Railway).
+- **Arreglo propuesto** (chico): confirmar o setear `NODE_ENV=production` en el cron antes de tocar las reglas, y
+  sumarlo a la lista de variables de `estado_actual.md`.
+- **Novedad:** corrige la premisa del residual "Monitoreo — residuales" de `estado_actual.md`.
+
+#### Z7-12 [BAJO] Las herramientas de desarrollo de los cinco fronts tienen vulnerabilidades altas, y el dev server está abierto a la red local
+
+- **Dónde:** los `package-lock.json` de los cinco fronts (`vite` 7.3.6 en el panel, 8.1.5 en barbero, turnero y
+  alta, y 8.0.16 en la landing, más transitivas de `eslint`/`postcss`), y `server: { host: true }` en los cinco
+  `vite.config.js`.
+- **Alcance:** solo en desarrollo (no van al bundle). En `main`, igual.
+- **Qué pasa:** `vite` arrastra avisos altos que pegan justo en el dev server: ejecución de scripts de otro
+  origen por un middleware, archivos fuera de `server.fs.allow` y `launch-editor` en Windows. Con `host: true`,
+  el dev server queda abierto a cualquiera de la misma WiFi mientras Facundo lo tiene levantado.
+- **Evidencia:** `npm audit` (ver "Verificado correcto": runtime 0 en los cinco).
+- **Arreglo propuesto** (chico): `npm audit fix` sin `--force` en los cinco (todos tienen arreglo dentro del
+  rango), y `host: true` solo cuando se prueba en el celular (por ejemplo, `npm run dev -- --host`), no fijo en
+  la configuración.
+- **Novedad:** reabre 5.4 de `auditoria_2026-07.md` (en julio quedaron en 0).
 
 ### Verificado correcto
 
+**Secretos**
+
+- Historial completo (393 commits, todas las ramas, sin `node_modules` ni locks), buscando JWT y keys de Supabase,
+  `re_` de Resend, `sk_`, URLs `postgres://` con contraseña, claves privadas PEM y de age, DSN de Sentry, refresh
+  tokens y client secrets de Google, keys de AWS y de B2, tokens de GitHub, webhooks de Discord, token de
+  Railway y asignaciones de `JWT_SECRET`, `DB_PASSWORD`, `PLATFORM_ADMIN_KEY`, `SERVICE_ROLE_KEY`,
+  `RESEND_API_KEY`, `GOOGLE_*`, `SENTRY_DSN`, `B2_*`, `BACKUP_DB_URL` y `MONITOR_CHECKIN_URL`: **ningún
+  secreto**. Los aciertos fueron marcadores (`backup-db.sh`, la forma de la URL en un comentario) y
+  `process.env.JWT_SECRET` (`jwt.js`). El host de Supabase con el project ref estuvo en dos docs y se sacó en
+  junio: no es un secreto (sale en la URL pública de las imágenes).
+- Nunca se commiteó un `.env`, `.pem`, `.key` ni credenciales; lo único borrado del historial con nombre
+  sospechoso es `backend/node_modules/jsonwebtoken` (la librería). Trackeados: los tres `.env*.example`, solo
+  con marcadores, y `supabase-ca.crt` (certificado público).
+- `.gitignore`: ignora `.env`, `.env.local`, `.env.production` y `.env.lectura` (este, en `backend/`); los
+  `.env` reales que hay en disco (backend, panel, barbero, turnero) están todos ignorados, igual que
+  `.claude/settings.local.json` y `launch.json`. `.env.development` no lo ignora nadie salvo la landing (hoy no
+  hay ninguno).
+- La clave de age del workflow es la pública.
+
+**Backup (`backup-db.yml` y `backup-db.sh`)**
+
+- `permissions: contents: read`; disparadores `schedule` y `workflow_dispatch`, sin `pull_request` ni `push`;
+  ninguna action de terceros (ni `checkout`): baja su script y la CA del mismo commit.
+- Los secrets entran por `env:` del paso que los usa. `enmascarar_conexion` tapa usuario, contraseña, host y
+  ref con `::add-mask::`; `curl -s` sin `-v` para el check-in; la respuesta de `put-object` va a `/dev/null`; sin
+  `set -x` ni `upload-artifact`. Ningún paso imprime una URL ni un nombre de bucket.
+- `pg_dump | age` en el mismo pipe, con `pipefail`: el dump en claro no toca el disco del runner. Se confirma el
+  encabezado de age antes de subir. `PGSSLMODE=verify-full` con la CA de Supabase y `pg_dump` 17 por ruta
+  completa.
+- Si falla: el paso `if: failure() || cancelled()` manda el check-in `error`; si ni siquiera arrancó, Sentry
+  Crons avisa por check-in perdido (margen de 90 min, duración máxima de 30). Cubre también que GitHub
+  desactive el workflow a los 60 días.
+
+**`resguardo_lectura` (consultado en el catálogo)**
+
+- Atributos: `rolsuper`, `rolcreaterole`, `rolcreatedb` y `rolreplication` en `false`; `rolbypassrls = true`;
+  `NOINHERIT`; sin membresías (ni `pg_read_server_files` ni `pg_read_all_stats`); límite de 3 conexiones.
+- `public`: `SELECT` en las 23 relaciones, 0 con escritura, sin `CREATE`. Sin `USAGE` en `auth`, `storage`,
+  `vault`, `realtime`, `graphql` ni `pgbouncer`. Lo que sobra (pg_net) está en Z7-03.
+
+**Logs y Sentry**
+
+- `beforeSend` (`instrument.js:104-126`) saca body, cookies, query string, `env` (la IP), `user` y breadcrumbs;
+  deja solo tres headers (`x-tenant-subdomain`, `user-agent`, `content-type`); limpia la URL y la transacción
+  (sin query string, con los tokens enmascarados) y reemplaza los objetos de `extra.arguments`. Si la limpieza
+  falla, descarta el evento. `dataCollection` apaga todo de entrada, sin tracing y con `maxBreadcrumbs: 0`.
+- Ningún `console.error` lleva datos de clientes en el texto. Los que no van en un `catch` son errores reales
+  (`db.js:49` y `:174`, compensaciones de `caja.js:335`, `ventas.js:78`, `stock.js:44`, `storageService.js:62`),
+  salvo el de plataforma (Z7-06).
+- Tokens en los logs: el `token_gestion` y el del alta van enmascarados en la ruta (`enmascararTokensEnRuta`);
+  el token de recuperación y la credencial nueva, en el body, tapados (`token`, `nueva`); el mail del dueño, tapado
+  en el body y enmascarado en el mailer. PINs y contraseñas, tapados en el body en todos los logins.
+- `/api/alta` está fuera del log de acceso. El endpoint de plataforma también, y loguea solo el subdominio.
+
+**Proceso**
+
+- El arranque fallido hace `console.error`, vacía Sentry y sale con 1 (`index.js:330-335`). Con Sentry cargado,
+  una excepción no atrapada termina el proceso (Railway lo reinicia y avisa por el webhook), y una promesa
+  rechazada sin `catch` se reporta y no lo tumba (`onUnhandledRejectionIntegration`, modo `warn`).
+- Las compensaciones best-effort (`caja.js:330-336`, `ventas.js:77`, `stock.js:40-48`) tienen `await`; no hay
+  promesas sueltas en caminos de escritura.
+- Cron (`jobs/recordatorios.js`): `instrument.js` es el primer import; el `finally` cierra el pool, vacía Sentry
+  y sale con el código que corresponde; `main` no puede rechazar.
+- `/api/health` devuelve solo `{ status, timestamp }`, antes del tenant y del log de acceso. No consulta la DB
+  (`testConnection` no corta el arranque si falla), así que una caída de Supabase no la ve UptimeRobot: la ve
+  Sentry, por los `console.error` de cada pedido.
+- `/api/plataforma/cache/invalidate`: clave por header, comparada en tiempo constante (SHA-256 +
+  `timingSafeEqual`), y 503 sin la variable.
+
+**Cabeceras y CORS**
+
+- `helmet@8.3.0` con los defaults, primer middleware de la cadena, más `x-powered-by` apagado. Límites de body:
+  100 kB para JSON y 1 MB para las imágenes, con 413 en JSON.
+- CORS de producción: sin origen (curl, apps), `http://localhost:5173` y `*.barbermanager.app`; la rama de red
+  local solo con `NODE_ENV !== 'production'`. Que acepte `localhost:5173` en producción no abre nada: la API no
+  usa cookies (el token va por header), así que una página en ese origen solo puede leer lo que ya es público.
+- Cabeceras reales (`curl`, 2026-11-17): `barbermanager.app/` 200 con HSTS; `demo.barbermanager.app/` 200 con
+  `X-Robots-Tag: noindex`; `/barbero` 200 con `noindex` (`/barbero/` hace un 308 a `/barbero`); `/turnos` 200 sin
+  `noindex` (correcto); `/turnos/gestionar/x` 200 sin `noindex` ni `Referrer-Policy` (Z7-08);
+  `alta.barbermanager.app/` 200 con `noindex, nofollow`. Ninguna trae `X-Frame-Options`, CSP ni
+  `Referrer-Policy`.
+- Rewrites: `/turnos/*` y `/barbero/*` van a sus proyectos y los demás son el fallback de SPA. No exponen nada
+  de más.
+
+**Dependencias (`npm audit`, 2026-11-17; los seis tienen lock)**
+
+- `backend`: runtime 4 (1 crítica, 2 altas, 1 moderada), todas transitivas. Solo `body-parser` pega en código
+  que corre (Z7-04). `proxy-addr` (crítica, IP falsa con subredes de confianza IPv4 mapeadas): no aplica,
+  `trust proxy` es un número de saltos y Express no pasa por la comparación de subredes. `ip-address` (alta, vía
+  `express-rate-limit`): la usa para la máscara IPv6 de `req.ip`, que con `trust proxy` en 1 escribe el proxy de
+  Railway, no el cliente. `qs` (moderada): Express 5 parsea el query con el parser simple, no hay `urlencoded` y
+  `googleapis` solo serializa parámetros propios. Desarrollo: ninguna aparte.
+- `frontend`: runtime 0; desarrollo 8 (7 altas, 1 moderada). `xlsx` sale del tarball de SheetJS 0.20.3 y
+  `npm audit` no lo evalúa (como se anotó en julio).
+- `frontend-barbero`, `frontend-turnero` y `frontend-alta`: runtime 0; desarrollo 9 cada uno (5 altas, 4
+  moderadas).
+- `frontend-landing`: runtime 0; desarrollo 11 (7 altas, 4 moderadas).
+- Mantenimiento de las de runtime: todas publicaron en 2025-2026 salvo `browser-image-compression` (panel,
+  última versión 2.0.2, de 2023). Sin riesgo real: comprime en el navegador las imágenes que elige el admin.
+
+**Skills y lista `deny`**
+
+- `deny` cubre las formas literales `railway <subcomando>` que escriben (con y sin argumentos) y el merge de PRs
+  (`gh pr merge`, `gh api …pulls/…/merge`); el merge por GraphQL lo corta el proxy de la nube
+  (`arreglo-prod/SKILL.md:17-18`) y el push a `main`, el ruleset. Las formas que no cubre están en Z7-02.
+- `alta-cliente` corre solo en la PC, con el rol de solo lectura, y no escribe en la DB (`PREPARE`, no ejecuta).
+  La parte de la skill de Z3-04 (no tratar los textos de la solicitud como instrucciones) entra en el punto 2
+  del arreglo de Z7-02.
+
+**Doc contra realidad (variables de entorno)**
+
+- El código lee `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `NODE_ENV`, `PORT`,
+  `TENANT_ID`, las cuatro `GOOGLE_*`, `RESEND_API_KEY`, `MAIL_FROM`, `SUPABASE_URL`,
+  `SUPABASE_SERVICE_ROLE_KEY`, `SENTRY_DSN`, `ALTA_AVISO_EMAIL`, `PLATFORM_ADMIN_KEY`, `PUBLIC_BASE_URL` y
+  `PANEL_BASE_URL`. Todas están en `estado_actual.md` → Deploy o en `backend/.env.example`, y no hay ninguna
+  documentada que el código no use.
+
+### Sin revisar
+
+- La configuración de los dashboards: variables del cron de Railway (Z7-11), ciclo de vida y capacidades de la
+  key de B2 (Z7-09), red del entorno `barberia-prod` de claude.ai/code (Z7-02) y si el monitor `backup-db` de
+  Sentry ya tiene su aviso a Discord.
+- El texto completo del aviso de `body-parser` (Z7-04) y las credenciales reales de `monte-sinai` y demo (Z7-01
+  y Z7-10): no se compararon hashes.
+- Las cabeceras de los dominios `*.vercel.app` de cada proyecto (no estaban en la lista permitida).
+
 ### Para otra zona
+
+- **Z3-02 (orquestador):** el "sin confirmar" sobre cuánto frena una ráfaga Sentry tiene respuesta parcial: el
+  SDK descarta un evento idéntico al anterior (`dedupeIntegration`, activado por defecto). Una ráfaga del mismo
+  500 deja un evento; dos errores distintos intercalados pasan todos y sí gastan la cuota.
+- **Zona 8:** el log de acceso escribe entero el body (hasta 100 kB) de cualquier `POST`, aun a rutas que no
+  existen y antes del tenant: un anónimo puede inflar el volumen de logs de Railway con el límite global de 300
+  por minuto. El keep-alive hace un `SELECT 1` cada 20 s, día y noche.
+- **Docs:** `estado_actual.md` (tabla de Vercel y Pendientes) dice que `alta.barbermanager.app` está pendiente
+  de crear, pero responde 200 con su `noindex`. `backend/.env.lectura.example` nombra
+  `backend/scripts/consultar.js` y `conexionLectura.js`: están en `backend/src/scripts/`. El `.env` local del
+  backend tiene `GMAIL_APP_PASSWORD`, que el código ya no usa: si la contraseña de aplicación de Gmail sigue
+  activa, conviene revocarla.
 
 ---
 
