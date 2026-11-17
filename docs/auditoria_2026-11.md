@@ -1,6 +1,6 @@
 # Auditoría de seguridad y calidad — 2026-11
 
-> **Estado (2026-11-16): en curso.** Zonas 1, 2 y 3 revisadas; el resto, pendiente o en curso (ver la tabla de zonas).
+> **Estado (2026-11-16): en curso.** Zonas 1 a 4 revisadas; el resto, pendiente o en curso (ver la tabla de zonas).
 >
 > Auditoría de **solo lectura**: no se modifica código, ni la base, ni configuración. Los arreglos se deciden
 > al final, hallazgo por hallazgo, y van aparte. El plan (decisiones, zonas, filtro de hallazgos y fases) está
@@ -28,7 +28,7 @@ tabla de todos los hallazgos con su destino.*
 | 1 | Autenticación, sesiones y recuperación | `fef2fd0` | Revisada | 0 | 2 | 1 | 5 |
 | 2 | Aislamiento entre tenants y permisos por rol | `cb87b60` | Revisada | 0 | 0 | 1 | 3 |
 | 3 | Superficie pública: turnero, alta y mails | `cb87b60` | Revisada | 0 | 1 | 1 | 4 |
-| 4 | Plata: caja, planillas, balances y stock | — | Pendiente | — | — | — | — |
+| 4 | Plata: caja, planillas, balances y stock | `1e148fb` | Revisada | 0 | 0 | 4 | 6 |
 | 5 | Agenda, turnos y concurrencia | — | Pendiente | — | — | — | — |
 | 6 | Panel de gestión y app del barbero (front) | — | Pendiente | — | — | — | — |
 | 7 | Operación, infraestructura y dependencias | — | Pendiente | — | — | — | — |
@@ -858,11 +858,309 @@ escapado al mail de sus clientes y solo le falta un tope de largo.
 
 ## Zona 4. Plata: caja, planillas, balances y stock
 
+Commit auditado: `1e148fb`. Todo lo que registra o calcula plata es igual en `main` y en el branch
+(`git diff main...HEAD` sobre los controllers, services y utils de la zona solo muestra F7 en `gestion.js` y
+`comision.js`, y cambios de texto en `FlujoCorte`, `SeccionPlanillas` y `MiPlanilla`): los diez hallazgos están
+**en producción**. No se reprodujo nada en demo ni se escribió en la base; los datos salen de `consultar.js`
+(2026-11-16).
+
+**Resumen:** 0 críticos, 0 altos, 4 medios, 6 bajos. Lo central de la zona está bien: la comisión, las propinas,
+los gastos y la ganancia salen de una sola fórmula en el backend y dan lo mismo en Planillas, MiPlanilla,
+Balances (mensual e histórico) y los Excel. Lo que no coincide es el "facturado" del Inicio contra Balances
+(Z4-03). En la base de un local real hay dos grupos de cortes viejos mal guardados (Z4-01 y Z4-02); ninguno se
+puede generar hoy.
+
+**Revisión del orquestador (2026-11-16):** sin críticos ni altos, se revisó una muestra. Contra la base: los 12
+pares duplicados (Z4-01) y los 12 totales sin propina (Z4-02) de kingsaistudio. Contra el código: Z4-03
+(`inicio.js` contra `balances.js`), Z4-04 (`createCorte` no compara el precio con el catálogo), Z4-06 y Z4-10.
+No se sacó ninguno ni cambió ninguna severidad. Un dato que la sección no trae: la misma consulta de Z4-01
+devuelve además 4 pares en demo, del 29 y 30 de octubre; son de pruebas y no cambian la conclusión.
+
 ### Hallazgos
+
+#### Z4-01 [MEDIO] En kingsaistudio quedaron 12 cortes duplicados por doble toque, y siguen contando
+
+- **Dónde:** tabla `corte` (datos). El camino que los generó ya no existe: `frontend/src/screens/flows/FlujoCorte.jsx`
+  antes del rediseño del 2026-05-29 (`6d89c04`).
+- **Alcance:** en producción (datos de kingsaistudio).
+- **Qué pasa:** hay 12 pares de cortes iguales (mismo barbero, servicio, monto y forma de pago, los dos sin turno)
+  cargados con entre 0 y 0,65 segundos de diferencia: 2 en abril, 9 en mayo y 1 en junio (el último, el 05/06).
+  Nadie carga dos cortes en medio segundo: son dobles toques en "Confirmar". El segundo corte de cada par sigue
+  en la base, así que esos 12 cobros están contados dos veces en Caja, Planillas y Balances de esos meses. En 6
+  de los 12 el barbero tenía 100 % (no cambia la ganancia del local, sí los ingresos brutos); en los otros 6, la
+  planilla de esa semana le sumó al barbero una comisión de más. Son 2 barberos.
+- **Por qué no es alto:** la causa está cerrada. Desde el 05/06 no hay ningún par a menos de 6 segundos en los
+  2.154 cortes posteriores (los pares de 6 a 60 segundos que sí hay, 228, son el ritmo normal de cargar varios
+  cortes seguidos: cada uno pasa por los 6 pasos y los 2,5 s de la pantalla de éxito). En ventas y gastos no hay
+  ningún par a menos de 10 segundos, en ningún tenant.
+- **Evidencia:** consultado en la DB (self-join de `corte` por tenant, barbero, servicio, `monto_total` y
+  `forma_pago`, con la diferencia de `timestamp`). El front de hoy: `disabled={enviando}` en los tres flujos
+  (`FlujoCorte.jsx:385`, `FlujoVenta.jsx:253`, `FlujoGasto.jsx:235`) y la pantalla de éxito reemplaza al botón.
+- **Arreglo propuesto** (chico, de datos, lo decide el dueño): listarle los 12 pares con día, hora, barbero y
+  monto, y que confirme cuáles borrar desde Caja (o por SQL, uno de cada par). La consulta que los encuentra:
+  cortes del mismo tenant, barbero, servicio, `monto_total` y `forma_pago` con menos de 3 segundos entre sí. De
+  fondo, la deuda de la idempotency key sigue igual (ver Novedad).
+- **Novedad:** nuevo como dato. Corrige el alcance de la deuda diferida 2 de julio ("idempotency keys para
+  `turno`, `venta` y `gasto`"): el corte sin turno tampoco tiene clave y no figura en esa lista, y es el único
+  de los tres que ya dejó duplicados reales.
+
+#### Z4-02 [BAJO] 12 cortes de kingsaistudio tienen el total guardado sin la propina
+
+- **Dónde:** tabla `corte`, columna `monto_total` (datos). Lo leen `backend/src/controllers/caja.js:53` y
+  `backend/src/controllers/inicio.js:20`, `:41`, `:60`, `:103` y `:123`.
+- **Alcance:** en producción (datos de kingsaistudio; 4 casos iguales en demo).
+- **Qué pasa:** 12 cortes del 25/03 al 04/04 de 2026 (los primeros días de uso) tienen `monto_total = precio`,
+  con una propina cargada aparte: la diferencia es, en los 12, exactamente la propina. Desde el 07/04 todos los
+  cortes con propina cierran. Caja de esos días muestra esos cortes sin la propina (y el neto por forma de pago
+  queda corto por ese monto). Planillas y Balances no se ven afectados: leen `precio` y `propina` por separado.
+- **Evidencia:** consultado en la DB (`monto_total <> precio + propina`: 12 en kingsaistudio, 4 en demo, 0 en
+  los otros tenants). Hoy `registrarCorte` calcula `monto_total = precio + propina` (`cortesService.js:79`).
+- **Arreglo propuesto** (chico, un SQL que corre el usuario):
+  `UPDATE corte SET monto_total = precio + COALESCE(propina, 0) WHERE monto_total <> precio + COALESCE(propina, 0);`
+  (16 filas). Opcional y más grande: un `CHECK (monto_total = precio + propina)` después del arreglo, o dejar
+  de guardar el total y calcularlo.
+- **Novedad:** nuevo.
+
+#### Z4-03 [MEDIO] El "facturado" del Inicio no es el "ingreso" de Balances: suma las propinas y no los otros ingresos
+
+- **Dónde:** `backend/src/controllers/inicio.js:20`, `:60` y `:103` (`SUM(monto_total)` de cortes, más ventas)
+  contra `backend/src/controllers/balances.js:140` y `:271-273` (`SUM(c.precio)` + productos + otros ingresos).
+  Pantallas: Inicio → "facturado hoy" y "facturado este mes" (`SeccionInicio.jsx:192` y `:236`); Balances →
+  "Ingresos del negocio" y la fila "Total" de "Ingresos por barbero" (`SeccionBalances.jsx:724` y `:930`).
+- **Alcance:** en producción.
+- **Qué pasa:** las dos pantallas responden "cuánto entró este mes" con reglas distintas.
+  - El Inicio suma `corte.monto_total`, que incluye la **propina**. Balances la deja afuera a propósito ("van al
+    barbero, no se incluyen en el balance", `SeccionBalances.jsx:753`).
+  - El Inicio **no** suma los "otros ingresos" (`movimiento_extra`); Balances sí.
+
+  Ejemplo con demo: en octubre el Inicio daría $ 104.201 y Balances, en "Sin comisiones", $ 98.201 (la
+  diferencia son los $ 6.000 de propinas). En septiembre, $ 34.500 contra $ 488.001: $ 3.000 de propinas de más
+  y $ 456.501 de otros ingresos de menos. En kingsaistudio hay 348 cortes con propina: la diferencia aparece
+  todos los meses. El comparativo "vs mes anterior" del Inicio arrastra lo mismo.
+- **Evidencia:** leído (las dos queries lado a lado) y consultado en la DB (las dos sumas sobre demo, mes por mes).
+- **Arreglo propuesto** (chico): que `inicio.js` use la misma regla que Balances: `SUM(precio)` en vez de
+  `SUM(monto_total)`, más los movimientos con `afectaResultado` (`utils/movimientos.js`). Alternativa: dejar el
+  número y cambiar el rótulo a "cobrado" (lo que pasó por la caja, propinas incluidas), que es lo que hoy mide.
+  Recomendada la primera: "facturado" y "ingresos" tienen que ser el mismo número.
+- **Novedad:** nuevo.
+
+#### Z4-04 [MEDIO] El iPad cobra con la lista de precios que cargó al abrirse, y el backend guarda el precio que manda el iPad
+
+- **Dónde:** `frontend/src/App.jsx:300-321` y `:405` (`precargarDatos` corre al iniciar sesión en el iPad, al
+  cerrar el panel en ese iPad y al volver de una venta; `FlujoCorte` vuelve con `volverAlInicio`, sin recargar);
+  `frontend/src/screens/flows/FlujoCorte.jsx:144` (`precio: servicioSeleccionado.precio`) y `FlujoVenta.jsx:106`;
+  `backend/src/controllers/cortes.js:45` y `ventas.js:24` (validan el rango, no contra el catálogo).
+  Rutas: `POST /api/cortes`, `POST /api/ventas`.
+- **Alcance:** en producción.
+- **Qué pasa:** el dueño cambia el precio de un servicio desde su celular o su compu (Gestión → Servicios). El
+  iPad del local, que queda abierto días enteros con la sesión guardada, sigue mostrando y registrando el precio
+  viejo hasta que alguien lo recarga o entra y sale del panel en ese mismo iPad. Cada corte de ese período queda
+  con el precio viejo: Caja, la planilla del barbero (su comisión se calcula sobre ese precio) y Balances quedan
+  por debajo de lo que se cobró de verdad, sin ningún aviso. El turnero ya le muestra al cliente el precio nuevo.
+  Con los productos pasa lo mismo hasta la primera venta (que recarga el catálogo al volver), y un barbero o un
+  servicio nuevo no aparece en el iPad hasta recargar.
+- **Evidencia:** leído (`App.jsx` → `FlujoCorte` → `registrarCorte` → `createCorte` → `cortesService.registrarCorte`,
+  que inserta `$4::numeric` tal como llega). En demo, 9 cortes de los últimos 30 días tienen un precio distinto
+  al actual de su servicio (son pruebas; no distingue este caso de un cambio de precio posterior).
+- **Arreglo propuesto:**
+  1. (chico, recomendado) recargar los catálogos al entrar a cada flujo, o al volver a la pantalla principal y
+     cuando la pestaña vuelve al primer plano (`visibilitychange`).
+  2. (medio, como red) que `POST /api/cortes` y `POST /api/ventas` con rol operativo comparen el precio recibido
+     con el del catálogo y respondan 409 "El precio cambió, actualizá la pantalla" si difieren. El completar del
+     panel (`POST /api/admin/turnos/:id/completar`) deja editar el precio a propósito y no cambia.
+- **Novedad:** nuevo.
+
+#### Z4-05 [MEDIO] Un corte mal cargado no se puede corregir sin cambiarle la fecha
+
+- **Dónde:** no existe `PUT /api/cortes/:id`; `backend/src/controllers/caja.js:287-340` (borrar) y
+  `backend/src/services/cortesService.js:98-103` (el `INSERT` no recibe fecha: `timestamp` es `now()`).
+  Pantalla: Caja → Movimientos del día.
+- **Alcance:** en producción.
+- **Qué pasa:** ventas y gastos se editan; un corte, no. Si el dueño ve el lunes que un corte del sábado quedó
+  con la forma de pago, el servicio o la propina mal, lo único que puede hacer es borrarlo en Caja y cargarlo
+  de nuevo, y el corte nuevo entra con la fecha y la hora de ese momento. La plata pasa del sábado al lunes: la
+  Caja del sábado queda sin ese cobro, y la planilla del barbero lo cuenta en otra semana (y en otro mes si
+  cruza el fin de mes). Si el corte venía de un turno, el turno vuelve a "reservado" y completarlo desde el
+  Turnero del panel también lo registra con la hora de hoy.
+- **Evidencia:** leído (rutas de `cortes.js`, `eliminarMovimiento`, `registrarCorte`, `completarTurnoConCorte`).
+- **Arreglo propuesto** (medio): `PUT /api/cortes/:id` solo admin, para forma de pago, propina, precio y
+  servicio, sin tocar `timestamp`, `barbero_id`, `turno_id` ni `comision_porcentaje`, y recalculando
+  `monto_total`; con su modal en Caja, como el de ventas. Alternativa más chica: que el alta acepte una fecha
+  pasada, como `crearMovimientoExtra` (`caja.js:227-230`). Recomendada la edición: no pasa por el borrado ni
+  toca el turno.
+- **Novedad:** nuevo. La deuda anotada es solo la de movimientos extra ("sin edición", `estado_actual.md`).
+
+#### Z4-06 [BAJO] De 21 a 24 hs, el comparativo del Inicio rotula mal el día y, el último día del mes, el mes anterior
+
+- **Dónde:** `backend/src/controllers/inicio.js:147-159` (`ahora.getDate()`, `ahora.getFullYear()`,
+  `ahora.getMonth()`: hora del servidor, no argentina). Pantalla: Inicio → "Estadísticas del mes"
+  (`SeccionInicio.jsx:222` y `:257`).
+- **Alcance:** en producción.
+- **Qué pasa:** las queries usan hora argentina, pero el día y el mes anterior del rótulo salen del reloj del
+  servidor (UTC). Desde las 21:00 el dueño ve "Noviembre — del 1 al 17" siendo 16, al lado de la tarjeta del
+  día que dice 16. El último día del mes a esa hora es peor: "Noviembre — del 1 al 1" y "vs Noviembre al día
+  1", cuando los números son de todo noviembre contra octubre. Los montos están bien; lo que confunde es el
+  rótulo, justo a la hora en que se cierra la caja.
+- **Evidencia:** leído, y simulado el cálculo de las etiquetas con `TZ=UTC node` (solo JS, sin base): a las
+  21:30 del 30/11 da `mes_anterior: noviembre`, `dia_corte: 1`. Supone que el contenedor de Railway corre en
+  UTC (no hay `TZ` en el código ni en las variables documentadas): **sin confirmar** en Railway.
+- **Arreglo propuesto** (chico): sacar día y meses con luxon en `TZ` (`DateTime.now().setZone(TZ)`), como pide
+  `convenciones_tecnicas.md` §4.
+- **Novedad:** nuevo.
+
+#### Z4-07 [BAJO] La propina siempre toma la forma de pago del corte
+
+- **Dónde:** `corte.forma_pago` es una sola por corte (`SQL_Schema.md`); `FlujoCorte.jsx` pasos 4 y 5;
+  `caja.js:53` (el movimiento de Caja es `monto_total`, con esa forma de pago).
+- **Alcance:** en producción.
+- **Qué pasa:** no hay pagos mixtos en ningún camino: cada corte, venta, gasto y movimiento extra tiene una
+  sola forma de pago, así que no hay partes que sumar ni que puedan descuadrar. El costo es el caso más común
+  de propina: el cliente paga el corte por Mercado Pago y deja la propina en efectivo. Se registra todo como
+  Mercado Pago, y "Mercado Pago neto" de Caja queda por encima de lo que entró a la cuenta. Tampoco se puede
+  registrar un corte pagado mitad y mitad.
+- **Evidencia:** leído (schema, `createCorte`, `registrarCorte`, `getMovimientosDia`, `calcularNeto` en
+  `SeccionCaja.jsx:540`).
+- **Arreglo propuesto** (medio, decisión de producto): una `forma_pago_propina` opcional en `corte` (por
+  defecto, la del corte), un paso más en el iPad solo si hay propina, y que Caja parta el movimiento en dos.
+  Si no se hace, anotarlo como límite conocido.
+- **Novedad:** nuevo.
+
+#### Z4-08 [BAJO] El stock solo se puede sumar: un error de carga no tiene arreglo desde el panel
+
+- **Dónde:** `backend/src/controllers/gestion.js:27-34` y `:410-420` (`agregar_stock` entero >= 0);
+  `frontend/src/screens/admin/sections/gestion/TabProductos.jsx` ("Unidades a agregar").
+- **Alcance:** en producción.
+- **Qué pasa:** si el dueño carga 100 unidades en vez de 10, o se rompe o se regala un producto, no hay forma
+  de bajar el stock: Gestión solo suma, y lo único que resta es una venta (que además mete plata que no
+  existió en Caja y Balances). El stock queda mal hasta que alguien lo corrija por SQL, y la alerta de stock
+  bajo del Inicio deja de servir para ese producto.
+- **Evidencia:** leído (`editarProducto`, `errorStockProducto`, `TabProductos`).
+- **Arreglo propuesto** (chico): aceptar un ajuste negativo en `agregar_stock` solo al editar, con el tope en
+  el `WHERE` (`stock_actual + $5 >= 0`), y en el front un "Corregir stock" separado de "Unidades a agregar".
+- **Novedad:** nuevo.
+
+#### Z4-09 [BAJO] Borrar un corte con turno da 500 si el horario de ese turno ya lo tiene otro turno reservado
+
+- **Dónde:** `backend/src/controllers/caja.js:311-315` (`UPDATE turno SET estado = 'reservado'`, sin atrapar
+  `23P01`). Ruta: `DELETE /api/caja/movimientos/corte/:id`.
+- **Alcance:** en producción.
+- **Qué pasa:** el `EXCLUDE` de `turno` solo mira los `reservado`, y la disponibilidad también
+  (`disponibilidadService.js:242`): cuando un turno se cobra antes de su hora (el cliente llegó temprano), su
+  horario vuelve a ofrecerse. Si otro cliente lo reserva y después el dueño quiere borrar ese corte, devolver
+  el turno a "reservado" choca con el `EXCLUDE`, el borrado responde 500 "Error al eliminar corte" (con aviso
+  de Sentry) y el corte no se puede borrar mientras el otro turno siga reservado.
+- **Evidencia:** leído; **sin reproducir** (habría que escribir en demo y la severidad no lo justifica).
+- **Arreglo propuesto** (chico): atrapar `23P01` en ese `UPDATE` y borrar el corte igual, dejando el turno
+  como está (completado sin corte) o pasándolo a cancelado; lo decide la zona 5 junto con su nota sobre este
+  mismo `UPDATE`.
+- **Novedad:** nuevo; complementa la nota de la zona 2 sobre `caja.js:312`.
+
+#### Z4-10 [BAJO] El Excel de Caja ignora el filtro "Solo Barberos"
+
+- **Dónde:** `frontend/src/screens/admin/sections/SeccionCaja.jsx:582` (`movimientos.map`, no
+  `movimientosFiltrados`) contra `:535-545` (la tabla y los dos netos sí usan el filtro).
+- **Alcance:** en producción.
+- **Qué pasa:** con "Solo Barberos" activo, la pantalla saca los cortes de comisión 100 % y recalcula los
+  netos; el Excel que se baja en ese momento trae todos los movimientos. Quien suma la columna "Monto" del
+  Excel no llega al número que tenía en pantalla.
+- **Evidencia:** leído.
+- **Arreglo propuesto** (chico): exportar `movimientosFiltrados`, o agregar al nombre del archivo que es la
+  vista completa. F4 (socios) va a tocar ese filtro: conviene arreglarlo ahí.
+- **Novedad:** nuevo.
 
 ### Verificado correcto
 
+**El mismo número en cada pantalla**
+
+| Número | Pantallas comparadas | Dónde se calcula | ¿Coincide? |
+|---|---|---|---|
+| Comisión de un corte | Planillas (Detalle), MiPlanilla, Excel del Detalle | `comisionCorteSql` (backend); los fronts solo suman `c.comision` | Sí |
+| Comisión de la semana y "A pagar" | Planillas (Resumen y modal), MiPlanilla, Excel del Resumen | `resumenSemanal` (`comision_servicios`, `comision`) | Sí |
+| Comisiones del mes | Balances mensual, histórico y sus Excel | `comisionCorteSql` en las dos queries | Sí |
+| Comisión semanal contra mensual | Planillas contra Balances | Misma expresión, redondeo por corte | Sí (los cortes de una semana partida entre dos meses caen en el mes de su fecha) |
+| Monto de servicios | Planillas, MiPlanilla, Balances | `SUM(c.precio)` | Sí |
+| Propinas | Planillas, MiPlanilla, nota de Balances | `SUM(c.propina)` | Sí |
+| Ingresos del mes | Inicio contra Balances | `SUM(monto_total)` contra `SUM(precio)` + otros ingresos | **No** (Z4-03) |
+| Total de cortes del día | Caja contra Inicio ("facturado hoy") | `monto_total` en los dos | Sí (los dos con propina) |
+| Ventas | Caja, Inicio, Ventas, Balances | `cantidad * precio_unitario` | Sí |
+| Gastos | Caja, Gastos, Balances (egresos) | `gasto.monto` | Sí |
+| Ganancia del mes | Balances mensual, histórico, modal del mes y Excel | `balance_neto` del backend; "Sin comisiones" = brutos − egresos en el front y en `balanceSinComisiones` | Sí |
+| Queda en el negocio | Balances mensual, modal del mes, Excel | `quedaEnElNegocio` (front, una sola función) | Sí (el Excel va siempre con comisiones; está comentado en el código) |
+| Netos de Caja | Pantalla contra Excel de Caja | `calcularNeto` contra filas del Excel | Sí sin filtro; **no** con "Solo Barberos" (Z4-10) |
+
+- **Límites de día, semana y mes:** todas las queries cortan en hora argentina (`DATE(timestamp AT TIME ZONE)`,
+  `TO_CHAR(… 'YYYY-MM')`, `DATE_TRUNC` sobre el instante ya convertido). Un corte a las 23:50 o a las 00:10, y
+  el último día del mes, caen en el mismo día y mes en Caja, Inicio, Planillas y Balances. La semana empieza el
+  lunes en las tres pantallas que la usan (`semanaDesde` con luxon, `DATE_TRUNC('week')` en el Inicio,
+  `lunesDeEstaSemana` en MiPlanilla): un corte del domingo es de la semana que termina. Confirmado que la sesión
+  de la base está en UTC y que `DATE_TRUNC('week', <date>)` compara bien contra la fecha argentina. Lo único
+  fuera de hora argentina son las etiquetas de Z4-06.
+- **Redondeo:** la comisión se redondea a centavos por corte y los totales son sumas de esos valores, en todas
+  las pantallas; ningún front recalcula un porcentaje. `fmtPesos` muestra pesos enteros: con precios en pesos
+  enteros y comisiones de 5 en 5 casi nunca hay centavos (en producción, 0 cortes con comisión con centavos).
+- **Comisión guardada contra el % actual:** todas las pantallas usan `corte.comision_porcentaje`
+  (`porcentajeComisionSql`). El % actual del barbero (`comision_valor`) solo se usa para el texto de un barbero
+  sin cortes en el período. `registrarCorte` copia el % en el mismo `INSERT`.
+- **F7:** `esComisionValida` (entero, 0 a 100, múltiplo de 5) está en los dos caminos que escriben el % desde
+  la app: `crearBarbero` y `editarBarbero` (`gestion.js:102` y `:156`). El tercer camino es el alta por SQL
+  (plantilla de la skill y `crearTenant.js`), que cubre Z3-04. En la base: 0 barberos y 0 cortes con un % que
+  no sea múltiplo de 5 o esté fuera de 0 a 100, en todos los tenants.
+- **Un % que no es múltiplo de 5 (nota de Z3-04):** Planillas, Balances y Caja lo manejan bien. La fórmula no
+  depende del múltiplo, `textoPorcentajeComision` muestra decimales y "Solo Barberos" compara `< 100`. El único
+  efecto es el ya anotado: Gestión → Barberos no deja guardar a ese barbero sin cambiarle el %.
+- **Montos:** `esMontoValido`, `sumaMontosValida`, `esCantidadValida` y `esFormaPagoValida` están en todas las
+  altas y ediciones (corte, completar turno, venta, gasto); el movimiento extra exige monto > 0. Lo cerrado en
+  julio (6.1 y 6.3) sigue cerrado. En la base: 0 montos negativos, 0 ventas con cantidad <= 0, 0 gastos sin
+  categoría.
+- **Editar y eliminar:**
+  - Venta: la edición aplica el delta neto de stock y la baja lo devuelve, las dos por `utils/stock.js`, con la
+    fila escrita al final y compensación si falla. `deleteVenta` y Caja comparten `eliminarVenta`.
+  - Gasto de "Productos para venta": no toca el stock en ningún camino (es solo un recordatorio en el iPad),
+    así que editarlo o borrarlo no puede aplicar nada dos veces.
+  - Movimiento extra: el borrado filtra por tipo y tenant; no hay edición (deuda anotada).
+  - Corte: al borrarlo desaparece de todas las queries (ninguna pantalla guarda totales) y su turno vuelve a
+    "reservado". No se puede cobrar dos veces: `corte_turno_unico`, más el 409 de `registrarCorte` ante un
+    turno ya completado.
+- **Aportes y retiros:** no entran en el Inicio, ni en Planillas, ni en la ganancia de Balances
+  (`afectaResultado` en `utils/movimientos.js`, una sola fuente). En Caja suman o restan al neto por forma de
+  pago, que es lo correcto (es plata que entró o salió de la caja). Un socio inactivo no se puede elegir en un
+  alta (`socioActivoEnTenant`), y sus movimientos siguen saliendo en Caja y en Balances (los `JOIN` no filtran
+  por `activo`). Lo mismo con los cortes de un barbero dado de baja.
+- **Doble envío:** en los tres flujos del iPad, en el alta de movimientos extra, en editar y eliminar de
+  Ventas, Gastos y Caja, y en completar un turno desde el panel, el botón queda deshabilitado mientras
+  responde el servidor. Ningún `fetch` del panel reintenta solo (`apiFetch`, `apiFetchOperativo`,
+  `fetchConDiagnostico`). El cobro de un turno, además, lo protege el backend. Los datos lo confirman (Z4-01).
+- **Stock:** lo mueven solo `utils/stock.js` (ventas) y `crearProducto` / `editarProducto` (sumas, sin
+  reintento y con el tope en el `WHERE`). En la base: 0 productos con stock negativo o nulo.
+- **Datos en la base (todos los tenants):** 0 cortes con `turno_id` de un turno no completado; 17 turnos
+  completados sin corte, todos de demo y el último del 20/10 (anteriores a "un turno se completa solo con su
+  corte"); 0 movimientos extra de socios inactivos; los 3 cortes con turno de otro barbero que ya contó la zona
+  2 (demo); 1 corte de demo con un servicio distinto al de su turno (anterior a la sincronización).
+- **Hoy no se puede generar** un corte con turno de otro barbero ni con el total mal: el `UPDATE` del turno
+  filtra por `barbero_id` y el total se calcula en `registrarCorte`.
+
+**Sin revisar:** el render completo de `SeccionGastos`, `SeccionVentas`, `TabProductos` y `MiPlanilla` (se
+leyeron las cuentas, los handlers y los Excel, no cada componente); el modal de completar de `SeccionTurnero`
+(solo que el botón se deshabilita); `descansosSemanal` (no es plata; zona 5); y la zona horaria real del
+contenedor de Railway (Z4-06).
+
 ### Para otra zona
+
+- **Zona 5:** borrar el corte de un turno que se había completado desde "no asistió" lo deja en "reservado",
+  no en "no asistió" (`caja.js:312`). Y Z4-09: ese mismo `UPDATE` puede chocar con el `EXCLUDE`.
+- **Zona 5:** el iPad deja cobrar un turno antes de su hora, y desde ese momento el turnero vuelve a ofrecer
+  ese horario (la disponibilidad solo cuenta los `reservado`, `disponibilidadService.js:242`).
+- **Zona 6:** inyección de fórmulas en Excel: el de Caja exporta `Detalle` con la descripción de un gasto o
+  de un otro ingreso (texto libre, el gasto lo escribe cualquiera en el iPad) y el de Planillas, el nombre del
+  cliente del turnero (`SeccionCaja.jsx:586`, `SeccionPlanillas.jsx` → `exportarExcel`).
+- **Zona 6:** `createGasto` y `updateGasto` aceptan una descripción de solo espacios (`gastos.js:23`); el iPad
+  lo evita con `trim()`, el modal de edición del panel no se revisó.
+- **Zona 8:** `getResumenDia` hace 6 queries y `getComparativoMes` 4, en tandas de a dos, cada vez que se abre
+  el Inicio; y los filtros por mes con `TO_CHAR(timestamp AT TIME ZONE …) = $2` (Balances, Ventas, Gastos) no
+  pueden usar un índice sobre `timestamp`.
+- **Docs:** el encabezado de `backend/src/utils/comision.js:10-12` todavía habla de la columna nullable (ya
+  anotado como opcional en `estado_actual.md`). La deuda diferida 2 de julio debería nombrar también al corte
+  sin turno (Z4-01).
 
 ---
 
