@@ -1818,12 +1818,16 @@ en Z7-01, ver la nota del orquestador dentro del hallazgo.
   posible con el ruleset de `main` y no llega a clones ni forks. Y las credenciales de `monte-sinai` quedan como
   están. En el `.gitignore` de la raíz, la regla va **después** de `!.claude/skills/`
   (`.claude/skills/alta-cliente/`), más un `git rm -r --cached` de la carpeta.
-- **Nota del orquestador (2026-11-17), recomendación pendiente de decisión:** sacar la skill de `main` no
+- **Nota del orquestador (2026-11-17):** sacar la skill de `main` no
   cierra el riesgo: el patrón sigue en el historial público, y las credenciales de `monte-sinai` son las que
   importan. Recomendado: (1) cambiar ya las credenciales de `monte-sinai` (PIN de admin, contraseña del iPad y
   PINs de los barberos) desde Gestión → Seguridad y Barberos, que no requiere código; (2) que la skill genere
   credenciales al azar, se quede o no en el repo. Además, este mismo documento describe el patrón y vive en el
   repo público: no pushearlo hasta que (1) esté hecho.
+- **Decisión confirmada por el usuario (2026-11-17), después de la nota del orquestador:** las credenciales de
+  `monte-sinai` no se cambian. Queda en pie lo de la skill (sacarla de `main` e ignorarla). El riesgo de
+  `monte-sinai` queda aceptado por el usuario; en la fase 9 este hallazgo entra con ese destino. Sigue abierta
+  la pregunta de cuándo publicar este documento (ver la nota anterior).
 - **Novedad:** nuevo.
 
 #### Z7-02 [ALTO] Un anónimo escribe texto en las líneas del log que lee la sesión de Claude en la nube, y esa sesión tiene un token de Railway que lee los secretos
