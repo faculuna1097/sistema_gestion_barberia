@@ -8,6 +8,7 @@
 > **Estado (2026-11-13):** **en curso.** Branch rebasado sobre `main` (`3931843`: monitoreo, formulario de alta y
 > fases 0-2 del resguardo de la DB). Fases 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8), 2 (F6a), 3 (F6b), 4 (F5), 5 (F1a) y 6
 > (F1b) hechas y commiteadas. Próximo: fase 7 (F3), que espera el SQL de `no_asistio_por`.
+> **(2026-11-17)** La auditoría 2026-11 dejó nueve arreglos para esta tanda, dos de ellos antes de F3: ver §8.
 > Antes, 2026-11-05: fase 0 hecha y la tanda en espera del monitoreo (`feature/monitoreo-prod`, ya en producción).
 
 ## 1. Contexto
@@ -77,8 +78,8 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
   `crearTurnoAdmin` (`backend/src/controllers/turnos.js:77`) → `upsertCliente` (`services/turnosService.js:48`; sin
   email inserta un cliente nuevo siempre) → `insertarTurno`. `turno.cliente_id` es `NOT NULL`.
 - **`JOIN cliente`** en `controllers/turnero.js`, `services/planillaService.js`, `services/sqlTurnoEnriquecido.js`
-  y `services/turnosService.js`. Búsqueda de clientes: `GET /api/admin/clientes` (`controllers/clientes.js`, ya
-  scopea por barbero con rol barbero); front: `buscarClientes` en `frontend-barbero/src/services/api.js`.
+  y `services/turnosService.js`. Búsqueda de clientes: `GET /api/admin/clientes` (`controllers/clientes.js`, no
+  filtra por barbero, y así queda por decisión del usuario: auditoría 2026-11, Z2-01); front: `buscarClientes` en `frontend-barbero/src/services/api.js`.
 - **Agenda (barbero):** `frontend-barbero/src/components/Agenda.jsx`. Los datos se cargan solo al cambiar de día y
   después de una acción propia (`cargarAgenda`, líneas ~141/177/298); el intervalo de 30 s (línea ~186) solo mueve
   "ahora". Selección de slots: `utils/seleccionSlots.js` (`depurarSeleccion` limpia los que dejaron de valer).
@@ -188,13 +189,14 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
 - **Backend:** `POST /api/admin/turnos` acepta `sin_cliente: true` (sin nombre ni contacto) → turno sin cliente.
   Los 4 `JOIN cliente` pasan a `LEFT JOIN`; mails y Calendar toleran cliente nulo. Endpoint nuevo para **asignar
   un cliente** a un turno (existente por id, o crear uno nuevo con nombre/teléfono/email); con rol barbero, solo
-  turnos propios y clientes propios (los de sus turnos).
+  turnos propios y clientes propios (los de sus turnos). **Corregido (2026-11-17, auditoría Z2-01):** el
+  barbero puede elegir cualquier cliente del local; sigue tocando solo sus turnos.
 - **App del barbero:**
   - Paso del cliente: botón destacado "Sin datos" que confirma sin nombre.
   - Wizard: días en chips (hoy, mañana, …) en lugar del input nativo; fecha y horario en un mismo paso.
   - **Atajo en la Agenda:** con slots elegidos, el footer ofrece "Reservar turno" además de "Marcar descanso" →
     hoja con servicio + cliente (buscar / nuevo / "Sin datos") que arranca en el primer slot elegido.
-  - Detalle del turno: "Asignar cliente" si no tiene (buscar entre sus clientes o crear).
+  - Detalle del turno: "Asignar cliente" si no tiene (buscar entre los clientes del local o crear; ver Z2-01 en §8).
   - **Refresco de la Agenda:** recarga silenciosa cada 30 s con la app visible y al volver al primer plano
     (`visibilitychange`), sin perder la selección ni el modal abierto.
   - Todo turno sin cliente se muestra como "Sin datos".
@@ -434,3 +436,32 @@ _(Los completa el orquestador durante la tanda.)_
   la lista de Gestión → Barberos (hacía falta cobrar un turno "Sin datos" en demo); revisado en el código. Va a
   la prueba del usuario antes del merge. Quedaron en demo, por pedido del usuario, turnos de prueba de Alejo
   (13/11, 17/11 y 4/12) y clientes "Prueba F6…": borrarlos cuando ya no sirvan.
+- **(2026-11-17, auditoría 2026-11) Nueve hallazgos de la auditoría se arreglan dentro de esta tanda, antes del
+  merge.** Detalle de cada uno (dónde, qué pasa y arreglo propuesto) en [`auditoria_2026-11.md`](./auditoria_2026-11.md);
+  destinos decididos con el usuario el 2026-11-17. El orquestador los reparte en las fases que quedan o en una
+  fase propia antes del cierre:
+  - **Z1-01 (alto), F6:** `POST /api/auth/recuperar/solicitar` no tiene límite por IP (`limiterLogin` cuenta solo
+    los fallos y `solicitar` responde siempre 200). Limiter propio que cuente todos los pedidos, y tope de links
+    por local por día en la misma sentencia de `emitirToken`.
+  - **Z1-02, F6:** cambiar el mail del dueño no avisa a nadie. Aviso al mail anterior y anular los links
+    pendientes del tenant en el mismo cambio.
+  - **Z1-05, F6:** el mail enmascarado deja ver el dominio entero. Taparlo también (`fa•••@g•••.com`).
+  - **Z2-01, F1:** el barbero elige un cliente del buscador y recibe "Cliente no encontrado". **Decisión del
+    usuario:** el buscador no filtra por barbero (hay clientes que no se cortan siempre con el mismo). Sacar el
+    filtro de "cliente suyo" de `clienteUsable` y `asignarClienteATurno` y borrar `sqlClienteDelBarbero`; el
+    barbero sigue tocando solo sus turnos. Con el arreglo, corregir F1 en este plan (§4, "clientes propios") y
+    los comentarios del panel que dicen que el buscador devuelve "solo los suyos".
+  - **Z5-09, F1:** asignar un cliente a un turno "Sin datos" no se puede corregir. Que el admin pueda cambiar el
+    cliente asignado.
+  - **Z3-06 (en producción, pero pesa más desde F5):** `booking_url` acepta `javascript:` y el iPad lo abre con
+    `window.open`. Validar `https://` en `editarNegocio` y abrirlo solo si es `https://`, con `noopener`.
+  - **Z8-04, solo el refresco de F1b:** la Agenda del barbero recarga sus 10 queries cada 30 s. Pasar a 60 s, o
+    solo al volver a la app. Las 10 queries van a la tanda de deudas.
+  - **Z5-04 y Z4-09, antes de F3 (fase 7):** borrar un corte con turno lo devuelve a "reservado" sin mirar
+    nada, y da 500 si otro turno tomó el horario. Con el cierre nocturno de F3, un turno de un día anterior
+    al que se le borró el corte pasaría a "no asistió" aunque el cliente vino y pagó. Arreglo: el diálogo de
+    Caja dice de qué turno se trata (hora y cliente) y que queda pendiente de cobro; ante el `23P01`, el corte
+    se borra igual y el turno queda cancelado (`cancelado_por = 'admin'`, sin mail), con un aviso en Caja.
+- **(2026-11-17, auditoría 2026-11) Aceptados por el usuario, que tocan esta tanda:** Z1-06 (la sesión del
+  barbero queda siempre guardada, sin casilla) y Z1-03 en su parte de producto (el PIN de admin sigue en 4
+  dígitos, porque el login del panel resuelve admin o barbero con el mismo PIN).

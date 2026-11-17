@@ -4,7 +4,9 @@
 > orquestar. Las decisiones de §2 están cerradas con el usuario (2026-11-16). Aprobar el plan no es arrancar: el
 > orquestador confirma con el usuario antes de cada fase.
 >
-> **Estado (2026-11-16):** plan escrito, sin empezar.
+> **Estado (2026-11-17):** fases 0 a 9 hechas. Las 8 zonas, revisadas por el orquestador; los 61 hallazgos, con
+> destino decidido por el usuario, y el plan de arreglos escrito en `auditoria_2026-11.md`. Queda la fase 10
+> (segunda pasada sobre lo que se haga de mejoras operativas después de `f986081`, antes del PR de merge).
 
 ## 1. Contexto
 
