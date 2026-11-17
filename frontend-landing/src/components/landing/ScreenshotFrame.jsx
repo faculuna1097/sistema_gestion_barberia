@@ -80,6 +80,57 @@ function Placeholder({ label }) {
   );
 }
 
+// Corte celular/escritorio, el mismo de las clases om- de index.css (768 px).
+// Va en el atributo media del <source>: lo resuelve el navegador, no el render.
+const MEDIA_CELULAR = '(max-width: 767px)';
+
+/**
+ * Captura
+ * La imagen de la captura. Con imageMobile arma un <picture>: el navegador
+ * elige la versión según el ancho y baja una sola. Sin imageMobile, un <img>.
+ * @param {string} props.image - URL de la captura de escritorio
+ * @param {number} [props.width] - Ancho real del archivo de escritorio en px
+ * @param {number} [props.height] - Alto real del archivo de escritorio en px
+ * @param {{src: string, width: number, height: number}} [props.imageMobile] -
+ *   Versión para celular (< 768 px), con sus medidas reales
+ * @param {boolean} props.priority - Descarga con prioridad alta (fetchpriority)
+ * @param {'lazy'|'eager'} [props.loading] - Carga diferida nativa del <img>
+ * @param {string} props.alt - Texto alternativo (vale para las dos versiones)
+ * @returns {JSX.Element}
+ */
+function Captura({ image, width, height, imageMobile, priority, loading, alt }) {
+  // height: 'auto' es obligatorio: con el atributo height solo, la imagen
+  // quedaría con alto fijo. Así el navegador usa width/height como
+  // proporción y reserva el lugar justo.
+  const img = (
+    <img
+      src={image}
+      alt={alt}
+      width={width}
+      height={height}
+      fetchPriority={priority ? 'high' : undefined}
+      loading={loading}
+      style={{ display: 'block', width: '100%', height: 'auto' }}
+    />
+  );
+  if (!imageMobile) return img;
+
+  // El width/height del <source> reserva la proporción de la versión celular
+  // (sin ellos, el lugar se reservaría con la proporción de la de escritorio y
+  // saltaría al cargar). El fetchpriority del <img> vale para la que se elija.
+  return (
+    <picture>
+      <source
+        media={MEDIA_CELULAR}
+        srcSet={imageMobile.src}
+        width={imageMobile.width}
+        height={imageMobile.height}
+      />
+      {img}
+    </picture>
+  );
+}
+
 /**
  * ScreenshotFrame
  * Marco que contiene una captura del producto (o un placeholder).
@@ -87,8 +138,12 @@ function Placeholder({ label }) {
  * @param {number} [props.width] - Ancho real del archivo en px. Junto con height,
  *   el navegador reserva el espacio antes de que cargue (sin salto de contenido)
  * @param {number} [props.height] - Alto real del archivo en px
+ * @param {{src: string, width: number, height: number}} [props.imageMobile] -
+ *   Versión para celular (< 768 px). Si viene, se baja solo la que corresponde
  * @param {boolean} [props.priority=false] - Imagen principal de la página (Hero):
  *   se descarga con prioridad alta. Solo una por página
+ * @param {'lazy'|'eager'} [props.loading] - 'lazy' para capturas lejos del
+ *   primer pantallazo: no se bajan hasta que el usuario se acerca
  * @param {string} [props.alt=''] - Texto alternativo de la imagen
  * @param {ReactNode} [props.children] - Contenido alternativo si no hay image
  * @param {boolean} [props.chrome=false] - Muestra la barra tipo navegador
@@ -101,7 +156,9 @@ function ScreenshotFrame({
   image,
   width,
   height,
+  imageMobile,
   priority = false,
+  loading,
   alt = '',
   children,
   chrome = false,
@@ -122,16 +179,14 @@ function ScreenshotFrame({
     >
       {chrome && <ChromeBar label={label} />}
       {image ? (
-        // height: 'auto' es obligatorio: con el atributo height solo, la imagen
-        // quedaría con alto fijo. Así el navegador usa width/height como
-        // proporción y reserva el lugar justo.
-        <img
-          src={image}
-          alt={alt}
+        <Captura
+          image={image}
           width={width}
           height={height}
-          fetchPriority={priority ? 'high' : undefined}
-          style={{ display: 'block', width: '100%', height: 'auto' }}
+          imageMobile={imageMobile}
+          priority={priority}
+          loading={loading}
+          alt={alt}
         />
       ) : (
         children ?? <Placeholder label={placeholderLabel} />

@@ -1,52 +1,26 @@
 // /frontend-landing/src/components/sections/CtaFinal.jsx
 // Cierre de la landing: banda indigo a todo lo ancho con la propuesta repetida
-// y los dos CTA (WhatsApp + email) en alto contraste sobre el fondo de acento.
+// y el CTA de WhatsApp en alto contraste sobre el fondo de acento. El email
+// queda solo en el footer, para no competir con WhatsApp.
 
 import { useState } from 'react';
-import { Mail, Gift } from 'lucide-react';
+import { Gift } from 'lucide-react';
 import IconoWhatsApp from '../ui/IconoWhatsApp.jsx';
 import { theme } from '../../theme/tokens.js';
-import { linkWhatsApp, linkEmail } from '../../utils/contacto.js';
+import { linkWhatsApp } from '../../utils/contacto.js';
 import Container from '../landing/Container.jsx';
 import Reveal from '../landing/Reveal.jsx';
 
 /**
  * BotonCta
- * Botón/enlace pensado para el fondo indigo. `solid` = blanco lleno; si no,
- * contorno blanco translúcido.
- * @param {string} props.href
- * @param {boolean} [props.solid=false]
- * @param {ReactNode} props.children
+ * Enlace con forma de botón pensado para el fondo indigo: blanco lleno, con
+ * el texto en el color de acento. Abre en una pestaña nueva.
+ * @param {string} props.href - Destino del enlace
+ * @param {ReactNode} props.children - Contenido del botón
+ * @returns {JSX.Element}
  */
-function BotonCta({ href, solid = false, children }) {
+function BotonCta({ href, children }) {
   const [hover, setHover] = useState(false);
-
-  const base = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    padding: '13px 22px',
-    borderRadius: theme.radius,
-    fontFamily: theme.body,
-    fontWeight: theme.weightMedium,
-    fontSize: 15,
-    transition: `background ${theme.transitionFast}, filter ${theme.transitionFast}`,
-    cursor: 'pointer',
-  };
-
-  const variante = solid
-    ? {
-        background: theme.surface,
-        color: theme.accent,
-        boxShadow: theme.shadowSm,
-        filter: hover ? 'brightness(0.96)' : 'none',
-      }
-    : {
-        background: hover ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)',
-        color: theme.accentInk,
-        border: '1px solid rgba(255,255,255,0.45)',
-      };
 
   return (
     <a
@@ -55,7 +29,23 @@ function BotonCta({ href, solid = false, children }) {
       rel="noopener noreferrer"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      style={{ ...base, ...variante }}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        padding: '13px 22px',
+        borderRadius: theme.radius,
+        fontFamily: theme.body,
+        fontWeight: theme.weightMedium,
+        fontSize: 15,
+        transition: `filter ${theme.transitionFast}`,
+        cursor: 'pointer',
+        background: theme.surface,
+        color: theme.accent,
+        boxShadow: theme.shadowSm,
+        filter: hover ? 'brightness(0.96)' : 'none',
+      }}
     >
       {children}
     </a>
@@ -115,6 +105,8 @@ function CtaFinal() {
               lineHeight: 1.12,
               color: theme.accentInk,
               margin: 0,
+              // Renglones parejos: sin esto, en celular queda "mes." solo.
+              textWrap: 'balance',
             }}
           >
             Probá BarberManager gratis durante tu primer mes.
@@ -133,13 +125,9 @@ function CtaFinal() {
           </p>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginTop: 4 }}>
-            <BotonCta href={linkWhatsApp()} solid>
+            <BotonCta href={linkWhatsApp()}>
               <IconoWhatsApp size={18} />
               Quiero empezar
-            </BotonCta>
-            <BotonCta href={linkEmail()}>
-              <Mail size={18} strokeWidth={1.75} aria-hidden="true" />
-              Escribinos por email
             </BotonCta>
           </div>
         </Reveal>

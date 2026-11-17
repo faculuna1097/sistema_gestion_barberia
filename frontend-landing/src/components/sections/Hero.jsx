@@ -1,19 +1,36 @@
 // /frontend-landing/src/components/sections/Hero.jsx
 // Sección Hero: la promesa principal en menos de 5 segundos. Badge de la
-// oferta + h1 + subtítulo + doble CTA + reaseguro, y debajo el mockup del
-// panel dentro de un ScreenshotFrame.
+// oferta + h1 (turnero y gestión conectados) + subtítulo + doble CTA +
+// reaseguros con el precio, y debajo la captura de Planillas dentro de un
+// ScreenshotFrame.
 
 import { theme } from '../../theme/tokens.js';
 import { linkWhatsApp } from '../../utils/contacto.js';
-import { CAPTURAS } from '../../config/landing.js';
+import { fmtPesos } from '../../utils/formato.js';
+import { CAPTURAS, PRECIO } from '../../config/landing.js';
 import Container from '../landing/Container.jsx';
 import Button from '../ui/Button.jsx';
 import IconoWhatsApp from '../ui/IconoWhatsApp.jsx';
 import FreeMonthBadge from '../landing/FreeMonthBadge.jsx';
 import ScreenshotFrame from '../landing/ScreenshotFrame.jsx';
 
-// Puntos de reaseguro bajo los CTA (bajan la fricción de contactarse).
-const REASEGUROS = ['Sin instalar nada', 'Te ayudamos a configurarlo', 'Cancelás cuando quieras'];
+/**
+ * armarReaseguros
+ * Arma los puntos de reaseguro bajo los CTA (bajan la fricción de
+ * contactarse). El del precio sale de PRECIO, nunca con el número escrito; si
+ * PRECIO.mensual es null, ese punto no va.
+ * @returns {string[]} Textos de los reaseguros, en orden
+ */
+function armarReaseguros() {
+  const reaseguros = ['Sin instalar nada: empezás en el día'];
+  if (PRECIO.mensual != null) {
+    reaseguros.push(`Después, ${fmtPesos(PRECIO.mensual)}/mes, barberos ilimitados`);
+  }
+  reaseguros.push('Cancelás cuando quieras');
+  return reaseguros;
+}
+
+const REASEGUROS = armarReaseguros();
 
 /**
  * Hero
@@ -55,9 +72,13 @@ function Hero() {
               lineHeight: 1.08,
               color: theme.ink,
               margin: 0,
+              // Reparte las palabras parejas entre renglones: sin esto queda
+              // "sistema." solo en el último. Un navegador que no lo soporta
+              // corta como siempre.
+              textWrap: 'balance',
             }}
           >
-            Gestioná toda tu barbería desde un solo lugar.
+            Turnero online y gestión de tu barbería, conectados en un solo sistema.
           </h1>
 
           <p
@@ -70,10 +91,11 @@ function Hero() {
               maxWidth: 600,
             }}
           >
-            El sistema de gestión para barberías de Argentina: turnero online,
-            caja, barberos y números, todo conectado. Sin planillas sueltas ni
-            el WhatsApp desbordado. Te ayudamos a configurarlo y trabajás
-            ordenado desde el primer día.
+            Turnos, caja, gastos y lo que le toca a cada barbero (comisiones),
+            todo gestionado y organizado en un mismo lugar y no repartido entre
+            el cuaderno, el Excel y el WhatsApp. Lo que reserva tu cliente llega
+            solo a la caja. Hecho para barberías de Argentina, y te ayudamos a
+            configurarlo.
           </p>
 
           {/* Doble CTA */}
@@ -101,7 +123,13 @@ function Hero() {
           >
             {REASEGUROS.map((r, i) => (
               <span key={r} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                {i > 0 && <span aria-hidden="true" style={{ color: theme.hairline }}>·</span>}
+                {/* El separador va solo en desktop: en celular los reaseguros
+                    caen uno por renglón y el "·" quedaba al principio. */}
+                {i > 0 && (
+                  <span className="om-solo-desktop">
+                    <span aria-hidden="true" style={{ color: theme.hairline }}>·</span>
+                  </span>
+                )}
                 {r}
               </span>
             ))}
@@ -116,8 +144,9 @@ function Hero() {
             image={CAPTURAS.planillas?.src}
             width={CAPTURAS.planillas?.width}
             height={CAPTURAS.planillas?.height}
+            imageMobile={CAPTURAS.planillasMobile}
             priority
-            alt="Planilla semanal de BarberManager con el detalle de cada barbero"
+            alt="Planilla semanal de BarberManager: los cortes de un barbero en el día, con hora, servicio, cliente y monto"
             placeholderLabel="Captura de Planillas"
           />
           <p
@@ -129,9 +158,12 @@ function Hero() {
               textTransform: 'uppercase',
               letterSpacing: '0.06em',
               color: theme.muted,
+              // En celular corta en dos renglones parejos, sin "barbero" solo
+              // en el segundo.
+              textWrap: 'balance',
             }}
           >
-            Planilla semanal — sin cuaderno ni Excel
+            Planilla semanal con el detalle de cada barbero
           </p>
         </div>
       </Container>

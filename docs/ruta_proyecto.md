@@ -539,7 +539,6 @@ frontend-landing/
     |-- components/
     |   |-- landing/
     |   |   |-- Container.jsx
-    |   |   |-- CTAGroup.jsx
     |   |   |-- Eyebrow.jsx
     |   |   |-- FaqItem.jsx
     |   |   |-- FeatureCard.jsx
@@ -548,7 +547,6 @@ frontend-landing/
     |   |   |-- FreeMonthBadge.jsx
     |   |   |-- LandingFooter.jsx
     |   |   |-- LandingNav.jsx
-    |   |   |-- MetricCard.jsx
     |   |   |-- MobileCtaBar.jsx
     |   |   |-- NotaAlPie.jsx
     |   |   |-- PainCard.jsx
