@@ -38,6 +38,8 @@ const errorCorte = (code, mensaje) => {
  * registrarCorte
  * Inserta un corte y, si viene turnoId, marca ese turno como 'completado' y
  * sincroniza turno.servicio_id con el servicio del corte (consistencia corte↔turno).
+ * Si el turno venía de 'no_asistio' (el cliente vino), turno.no_asistio_por vuelve a
+ * NULL en el mismo UPDATE (F3): es el único camino que saca un turno de no_asistio.
  * El corte guarda el % de comisión actual del barbero (corte.comision_porcentaje).
  * Insertador central de cortes (ver cabecera del archivo).
  *
@@ -85,10 +87,11 @@ export const registrarCorte = async ({
     // El corte guarda el % de comisión que tiene el barbero en este momento
     // (corte.comision_porcentaje): un cambio de % posterior no lo toca (utils/comision.js).
     // Un turno marcado 'no_asistio' solo se completa el mismo día del turno (hora
-    // argentina, $11): pasado ese día, la marca queda como está.
+    // argentina, $11): pasado ese día, la marca queda como está. Al completarlo se
+    // borra quién lo había marcado (no_asistio_por): ya no es un "no asistió".
     result = await query(
       `WITH completado AS (
-         UPDATE turno SET estado = 'completado', servicio_id = $3::uuid
+         UPDATE turno SET estado = 'completado', servicio_id = $3::uuid, no_asistio_por = NULL
           WHERE id = $8::uuid AND tenant_id = $1::uuid AND barbero_id = $2::uuid
             AND estado = ANY($9::text[])
             AND (estado <> 'no_asistio'

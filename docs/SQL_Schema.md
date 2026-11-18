@@ -284,6 +284,14 @@ CREATE TABLE public.turno (
   -- 'qr'). Solo lo graba el turnero público; null si no vino o no cumple el formato
   -- (la reserva no se rechaza). Agregada el 2026-10-08. No confundir con origen_creacion.
   origen_link text CONSTRAINT turno_origen_link_formato CHECK (origen_link ~ '^[a-z0-9_-]{1,30}$'),
+  -- Quién marcó el turno como "no asistió" (F3, agregada el 2026-11-18). Solo con
+  -- estado = 'no_asistio'; vuelve a NULL si el admin lo completa (el cliente vino):
+  --   'barbero' → lo marcó el barbero desde su app (cambiarEstado con rol barbero)
+  --   'admin'   → lo marcó el admin desde el panel (cambiarEstado con rol admin)
+  --   'sistema' → lo cerró el cron nocturno (jobs/cierreDiario.js): quedó reservado
+  --               sin cobrar después del día del turno
+  -- NULL en un no_asistio = marcado antes de que existiera la columna.
+  no_asistio_por text CONSTRAINT turno_no_asistio_por_valido CHECK (no_asistio_por = ANY (ARRAY['barbero'::text, 'admin'::text, 'sistema'::text])),
   CONSTRAINT turno_pkey PRIMARY KEY (id),
   CONSTRAINT turno_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
   CONSTRAINT turno_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.cliente(id),

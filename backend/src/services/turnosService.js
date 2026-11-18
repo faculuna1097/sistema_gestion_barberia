@@ -357,10 +357,14 @@ export const listarTurnosOperativos = async ({ tenantId, barberoId, fecha }) => 
  * (completarTurnoConCorte o el iPad). Completarlo acá lo dejaba completado sin
  * corte y, como el iPad lista solo los reservados, el cobro terminaba cargado
  * como un cliente sin turno.
+ * En el mismo UPDATE guarda quién lo marcó (turno.no_asistio_por, F3): 'barbero'
+ * si viene barberoId, 'admin' si no. El cron de cierre diario usa 'sistema'.
+ * No toca Google Calendar: el evento queda como está.
  * @param {string} turnoId
  * @param {string} nuevoEstado - 'no_asistio'
  * @param {string} tenantId
  * @param {string|null} barberoId - si es barbero, solo puede cambiar los suyos
+ *   (y queda no_asistio_por = 'barbero'); null = admin
  * @returns {Promise<Object>} { id, estado }
  * @throws {{ code: 'ESTADO_NO_PERMITIDO' | 'NO_ENCONTRADO' | 'ESTADO_INVALIDO' | 'TURNO_NO_EMPEZO' }}
  */
@@ -410,9 +414,11 @@ export const cambiarEstado = async (turnoId, nuevoEstado, tenantId, barberoId) =
   // (se canceló, se registró su corte), no se pisa. tenant_id redundante
   // (defensa en profundidad, auditoría 2.2): el turnoId ya vino del lookup
   // scopeado por tenant de arriba.
+  const marcadoPor = barberoId ? 'barbero' : 'admin';
   const updateRes = await query(
-    `UPDATE turno SET estado = $1 WHERE id = $2 AND tenant_id = $3 AND estado = 'reservado'`,
-    [nuevoEstado, turnoId, tenantId]
+    `UPDATE turno SET estado = $1, no_asistio_por = $4
+     WHERE id = $2 AND tenant_id = $3 AND estado = 'reservado'`,
+    [nuevoEstado, turnoId, tenantId, marcadoPor]
   );
   if (updateRes.rowCount === 0) {
     console.warn('[turnosService] cambiarEstado — el turno dejó de estar reservado antes del UPDATE | turno_id:', turnoId);
@@ -430,7 +436,8 @@ export const cambiarEstado = async (turnoId, nuevoEstado, tenantId, barberoId) =
  * financiero del turno — es el equivalente backoffice del flujo operativo del
  * iPad: completar = registrar el corte. Valida (scoped) que el turno exista y siga
  * 'reservado'; el admin también puede completar uno marcado 'no_asistio' (el
- * cliente vino y la falta estaba mal marcada). El servicio
+ * cliente vino y la falta estaba mal marcada; registrarCorte deja
+ * no_asistio_por en NULL en la misma sentencia). El servicio
  * del corte es por defecto el del turno; opcionalmente se acepta un override
  * (servicioId) que se valida contra el catálogo (tenant + activo). Delega en
  * registrarCorte (cortesService), que inserta el corte, marca el turno

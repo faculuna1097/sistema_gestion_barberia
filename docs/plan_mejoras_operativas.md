@@ -8,8 +8,8 @@
 > **Estado (2026-11-18):** **en curso.** Hechas y commiteadas: 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8), 2 (F6a),
 > 3 (F6b), 4 (F5), 5 (F1a), 6 (F1b) y, de la auditoría 2026-11, 6b (Z5-04 + Z4-09, `edc3919`), 6c (Z2-01, Z5-09 y el
 > refresco de Z8-04, `45c0e8a`) y 6d (Z1-01, Z1-02, Z1-05 y Z3-06, `cb0573a`). Con eso están hechos los nueve arreglos de la
-> auditoría que le tocaban a esta tanda. **Próximo: fase 7** (F3; el SQL de `no_asistio_por` lo arma su ejecutor y
-> lo corre el usuario). Después: 8 (F4), 9 y 10 (F2), los dos pasos previos al PR (sacar la skill `alta-cliente` con su
+> auditoría que le tocaban a esta tanda. También 7a (F3 backend: `turno.no_asistio_por`, `GET /api/turnos/sin-cobrar` y
+> `jobs/cierreDiario.js`). **Próximo: fase 7b** (F3: los avisos en el iPad y en el Inicio del panel). Después: 8 (F4), 9 y 10 (F2), los dos pasos previos al PR (sacar la skill `alta-cliente` con su
 > respaldo y la fase 10 de la auditoría: segunda pasada sobre `git diff 3138425..HEAD`) y 11 (cierre, que también
 > marca los arreglos como hechos en `auditoria_2026-11.md`).
 > **Rebasado sobre `main` el 2026-11-18** (`origin/main` en `fb1fc19`: landing de captación #9, CORS #10, monitor del
@@ -355,7 +355,8 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
 | 6b | ✅ **Hecha (2026-11-18, commiteada).** Auditoría Z5-04 + Z4-09: borrar en Caja un corte con turno. La lógica pasó a `eliminarCorte` (`services/movimientosService.js`): el turno vuelve a `reservado`; si su horario ya es de otro (`23P01`), queda `cancelado` (`cancelado_por = 'admin'`, sin mail, y se borra su evento de Calendar recién con el corte borrado), con compensación si el borrado falla. El `DELETE` de un corte responde `{ ok, turno: { id, estado } \| null, aviso? }`. La lista de Caja suma `turno_inicio`, `turno_estado` y `turno_cliente_nombre`; el diálogo muestra la fila "Turno" y que queda pendiente de cobro (y, si es de un día anterior, que no aparece en el iPad y que esa noche pasa a "no asistió"); el `aviso` sale como toast | Ejecutor | — |
 | 6c | ✅ **Hecha (2026-11-18, commiteada).** Arreglos de F1 (auditoría). Z2-01: el cliente del alta y de la asignación alcanza con que sea del local, con cualquier rol (se borró `sqlClienteDelBarbero`); el barbero sigue tocando solo sus turnos. Z5-09: el admin cambia el cliente con `PATCH /api/admin/turnos/:id/cliente` + `{ reemplazar: true, cliente_actual_id }` (403 con otro rol; 409 `cliente_cambio` si el turno ya no tiene ese cliente; una sola sentencia que además rota `token_gestion` si el cliente cambia, para que el link del anterior deje de servir; el cliente anterior no se borra; un turno con cliente no vuelve a "Sin datos"), con "Cambiar" en el detalle del panel. Z8-04: la Agenda se refresca cada 60 s | Ejecutor | — |
 | 6d | ✅ **Hecha (2026-11-18, commiteada).** Arreglos de F6 (auditoría). Z1-01: `limiterRecuperacion` (5 por hora por IP, cuenta todos los pedidos) solo en `POST /api/auth/recuperar/solicitar`, y tope por local en la misma sentencia de `emitirToken` (`MAX_LINKS_POR_DIA = 6` en 24 h, los dos tipos; usa el índice `token_recuperacion_tenant_tipo` con las tres columnas, sin DDL), que ahora devuelve `'creado' \| 'frenado' \| 'tope'` (con los dos frenos a la vez, `'frenado'`); ante el tope, la misma respuesta sin mail, `console.warn` y `reportarAviso` (fingerprint `['recuperacion', 'tope-diario']`). Z1-02: `editarContactoNegocio` lee el mail anterior, guarda y, si el mail cambió, anula los links pendientes del tenant en una sola sentencia; si había mail anterior, le manda `enviarAvisoCambioEmail` (mail nuevo enmascarado y contacto del soporte, `SOPORTE` en `utils/constantes.js`); la respuesta no cambia. Z1-05: `enmascararEmail` tapa también el dominio (`fa•••@g•••.com`). Z3-06: `editarNegocio` responde 400 `{ error, campo: 'booking_url' }` si no es texto o no pasa `esUrlHttps` (vacío o solo espacios → `null`) y, decidido con el usuario de paso, 400 `{ error, campo: 'nombre_negocio' }` si el nombre no es texto o es solo espacios (antes, un número daba 500); el panel muestra "Reservar" solo con un link https (`utils/url.js`) y los dos `window.open` van con `noopener,noreferrer` | Ejecutor | — |
-| 7 | F3 backend (endpoint, `no_asistio_por`, `cierreDiario.js`) + avisos en el iPad y el Inicio | Ejecutor | SQL `no_asistio_por` |
+| 7a | ✅ **Hecha (2026-11-18, commiteada).** F3 backend. SQL corrido por el usuario: `turno.no_asistio_por` text nullable, sin default, `CONSTRAINT turno_no_asistio_por_valido CHECK ('barbero', 'admin', 'sistema')`. `cambiarEstado` lo guarda en su mismo UPDATE (`'barbero'` con `barberoId`, `'admin'` sin él) y `registrarCorte` lo vuelve a NULL al completar (es el único camino que saca un turno de `no_asistio`: panel e iPad). Nuevo `GET /api/turnos/sin-cobrar` (operativo y admin, misma respuesta) → 200 `{ turnos: [{ id, barbero_id, barbero_nombre, inicio, fin, cliente_nombre }], insistencia_minutos, cierre_hoy }`: los `reservado` de cualquier día cuyo `fin` pasó hace al menos `duracion_slot_minutos` + 10 min (`MARGEN_AVISO_SIN_COBRAR_MINUTOS`), por `inicio`, con el `now()` de Postgres; `cliente_nombre` null en un "Sin datos"; `insistencia_minutos` = `duracion_slot_minutos`; `cierre_hoy` = instante ISO (UTC) del `hora_fin` de hoy en hora argentina, null si hoy no abre o es feriado; 404 `{ error: 'Tenant no encontrado' }`. Dos queries, sobre `idx_turno_tenant_inicio` (sin índice nuevo). Sin log propio (decidido con el usuario: lectura que el iPad pide cada 5 min). `jobs/cierreDiario.js` + `services/turnosSinCobrarService.js` (`cerrarTurnosDelTenant`, `procesarCierreDiario`): una sentencia por tenant (`reservado` con `fin` antes de las 00:00 AR de hoy → `no_asistio`, `no_asistio_por = 'sistema'`), idempotente, sin mail ni Calendar, `conMonitorCron(MONITOR_CIERRE_URL)`. Históricos que cierra la primera corrida (2026-11-18): demo 31 (9 son los de prueba de Alejo), los demás 0 | Ejecutor | SQL `no_asistio_por` |
+| 7b | F3 avisos en el iPad (`MainScreen`) y el Inicio del panel, sobre `GET /api/turnos/sin-cobrar` | Ejecutor | — |
 | 8 | F4 socios | Ejecutor | — |
 | 9 | F2a traspasos: backend | Ejecutor | SQL `turno_traspaso` |
 | 10 | F2b traspasos: app del barbero | Ejecutor | — |
@@ -381,6 +382,17 @@ tablas nuevas. Post-deploy: lo de abajo y el alta del cron de cierre diario.
    columnas para que el backend de `main` siga mostrando el teléfono de un alta nueva) y la nota de transición
    del `SKILL.md` ("Mientras mejoras-operativas no esté en producción…"). Commit por PR.
 5. Recién con eso en `main`: `ALTER TABLE tenant DROP COLUMN telefono`, y actualizar `SQL_Schema.md`.
+
+**Deploy del cron de cierre diario (F3)** (pasa a `estado_actual.md` en el cierre), después del deploy del backend:
+1. Servicio cron nuevo en Railway con start command `node src/jobs/cierreDiario.js`, horario `0 6 * * *` (06:00 UTC,
+   03:00 AR), y las shared variables de la DB y de Sentry referenciadas en el servicio (`${{shared.SENTRY_DSN}}`, como el
+   cron de recordatorios).
+2. Check nuevo en healthchecks.io: mismo horario cron, zona UTC, margen de 30 min; su URL de ping va como
+   `MONITOR_CIERRE_URL` **solo** en ese servicio (no como shared variable: es un secreto).
+3. Correr el job una vez a mano apenas se deploya, para cerrar los históricos y que el aviso no arranque con todos ellos.
+   Al 2026-11-18: demo 31 (incluye los 9 de prueba de Alejo del 13/11 y el 17/11; si se quieren conservar como
+   `reservado`, sacarlos antes), kingsaistudio, luxuribarberclub y monte-sinai 0. Recontar antes con
+   `node backend/src/scripts/consultar.js` (la condición del job: `estado = 'reservado'` y `fin` antes de las 00:00 AR).
 
 ## 7. Verificación
 

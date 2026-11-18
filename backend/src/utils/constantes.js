@@ -42,6 +42,11 @@ export const RECORDATORIO_HORA_ENVIO = '20:30';
 // anterior. Lo usa el cálculo de la fecha objetivo del lote (luxon).
 export const RECORDATORIO_DIAS_ANTES = 1;
 
+// Aviso de turnos sin cobrar (F3): un turno 'reservado' entra al aviso cuando su
+// fin pasó hace al menos duracion_slot_minutos del tenant + este margen. Da tiempo
+// a cobrar el turno que recién terminó antes de avisar.
+export const MARGEN_AVISO_SIN_COBRAR_MINUTOS = 10;
+
 // Contacto del soporte (Facundo), para los mails que le dicen al dueño a quién
 // escribir: el aviso de cambio del mail de recuperación (enviarAvisoCambioEmail).
 // Son los mismos datos que muestra el panel en frontend/src/components/ui/ContactoSoporte.jsx
