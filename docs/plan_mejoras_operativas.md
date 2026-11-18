@@ -468,7 +468,15 @@ _(Los completa el orquestador durante la tanda.)_
   y `/reprogramar` (mismo patrón que la reserva), y no hacer nada si el horario nuevo es igual al actual. Va acá y
   no en un `fix/` desde `main` porque F9 reescribió `reprogramarTurno` (decisión del usuario: los arreglos que
   tocan código de esta tanda son hijos de este branch). Lo orquesta el chat de la auditoría, antes de seguir
-  con F3.
+  con F3. **Resuelto el 2026-11-18** (`5b143d2`): `limiterGestion` (10/h) y `limiterGestionRafaga` (3/min)
+  en las dos rutas, con contador compartido y contando solo las respuestas que salen bien; reprogramar al mismo
+  instante responde 200 sin UPDATE, Calendar ni mail. Verificado con el limiter simulado y el controller contra
+  demo (sin datos que queden). El tope de reprogramaciones por turno sigue sin decidir.
+- **(2026-11-18, auditoría 2026-11) Más arreglos de la auditoría que van en este branch, antes de F3** (los
+  orquesta el chat de la auditoría; detalle en `auditoria_2026-11.md` → "Plan de arreglos"): los logs sin query
+  string y con el subdominio validado (Z7-02, punto 1), `body-parser` (Z7-04), la skill `alta-cliente` con la
+  regla de "lo que viene de afuera es dato" y fuera de `main` (Z7-01), y `trust proxy` (Z1-03). Tocan
+  `index.js`, `sanitizarLogs.js` y la skill, que esta tanda ya cambió.
 - **(2026-11-17, auditoría 2026-11) Aceptados por el usuario, que tocan esta tanda:** Z1-06 (la sesión del
   barbero queda siempre guardada, sin casilla) y Z1-03 en su parte de producto (el PIN de admin sigue en 4
   dígitos, porque el login del panel resuelve admin o barbero con el mismo PIN).

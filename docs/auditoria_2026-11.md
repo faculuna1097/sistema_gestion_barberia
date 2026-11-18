@@ -58,11 +58,11 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 
 | Id | Hallazgo | Sev. | Alc. | Tamaño | Destino |
 |---|---|---|---|---|---|
-| Z7-01 | Credenciales iniciales predecibles en la skill de alta; `monte-sinai` nació con ellas | Crítico | P | chico | Aceptado por el usuario (2026-11-17); la skill sale de `main` en el `fix/` de la prioridad 4 |
+| Z7-01 | Credenciales iniciales predecibles en la skill de alta; `monte-sinai` nació con ellas | Crítico | P | chico | Aceptado por el usuario (2026-11-17); la skill sale de `main` con el merge de mejoras operativas |
 | Z1-01 | Pedir el link de recuperación no tiene límite por IP | Alto | B | chico | Mejoras operativas, antes del merge |
-| Z1-03 | El PIN de admin de 4 dígitos se adivina desde internet en días | Alto | P | medio | `fix/` de `trust proxy`, prioridad 5; el PIN de 6 dígitos, aceptado en 4 por el usuario |
-| Z3-01 | Reprogramar sin límite: mails sin tope a cualquier dirección | Alto | P | chico | Mejoras operativas (2026-11-18, decisión del usuario): límite y "horario igual" juntos, sobre la versión de F9 de `reprogramarTurno`; lo orquesta el chat de la auditoría |
-| Z7-02 | Texto de un anónimo en los logs que lee la sesión de Claude en la nube | Alto | P | chico a medio | `fix/` desde `main`, prioridad 4 (puntos 1 y 2); el punto 3, con la fase 4 del resguardo |
+| Z1-03 | El PIN de admin de 4 dígitos se adivina desde internet en días | Alto | P | medio | `trust proxy`, en mejoras operativas; el PIN de 6 dígitos, aceptado en 4 por el usuario |
+| Z3-01 | Reprogramar sin límite: mails sin tope a cualquier dirección | Alto | P | chico | **Resuelto** en mejoras operativas (2026-11-18, `5b143d2`): límite por IP en cancelar y reprogramar (3/min y 10/h) y mismo horario sin efecto; sale a producción con el merge |
+| Z7-02 | Texto de un anónimo en los logs que lee la sesión de Claude en la nube | Alto | P | chico a medio | Punto 2 (las skills de producción): `fix/` desde `main`. Punto 1 (los logs): mejoras operativas. Punto 3: con la fase 4 del resguardo |
 | Z8-01 | Casi cada pedido paga un preflight de CORS | Alto | P | chico | **Resuelto** (2026-11-18): PR #10, `fix/cors-preflight-cache`; verificado en producción (`access-control-max-age: 7200`) |
 | Z1-02 | Cambiar el mail del dueño no avisa a nadie | Medio | B | chico | Mejoras operativas, antes del merge |
 | Z2-01 | El barbero elige un cliente del buscador y recibe "Cliente no encontrado" | Medio | B | chico | Mejoras operativas, antes del merge |
@@ -74,7 +74,7 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 | Z5-01 | Cambiar el horario de un barbero no avisa de los turnos que quedan afuera | Medio | P | medio | Tanda de deudas, bloque E |
 | Z5-02 | Feriado y horario del local cancelan turnos sin mail y no dicen cuáles | Medio | P | medio | Tanda de deudas, bloque E |
 | Z7-03 | La credencial de solo lectura vale como admin y hace pedidos HTTP desde la base | Medio | P | datos | Datos: SQL que corre el usuario, con la fase 5 del resguardo |
-| Z7-04 | `body-parser` con un aviso alto de caída con cuerpos comprimidos | Medio | P | chico | `fix/` desde `main`, prioridad 4 (junto con Z7-02) |
+| Z7-04 | `body-parser` con un aviso alto de caída con cuerpos comprimidos | Medio | P | chico | Mejoras operativas (junto con el punto 1 de Z7-02) |
 | Z8-02 | El keep-alive mantiene caliente una sola de las 3 conexiones | Medio | P | chico | `fix/` desde `main`, prioridad 2 |
 | Z8-03 | El Inicio del panel hace 11 queries con tandas en serie | Medio | P | medio | Tanda de deudas, bloque D |
 | Z8-04 | La Agenda del barbero son 10 queries y se recarga cada 30 s | Medio | P y B | medio | El refresco cada 30 s: mejoras operativas; las 10 queries: tanda de deudas, bloque E |
@@ -122,22 +122,28 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 
 ### Plan de arreglos (decidido con el usuario el 2026-11-17)
 
-Los arreglos no son parte de la auditoría: este es el orden en que se lanzan, cada uno en su chat ejecutor.
+Los arreglos no son parte de la auditoría. Los orquesta el chat de la auditoría (decisión del usuario,
+2026-11-18), y cuando terminen se sigue con F3 de mejoras operativas. La regla, también del usuario: todo
+arreglo que toque código que ya cambió `feature/mejoras-operativas` se hace en ese branch, con el flujo de sus
+fases (el ejecutor no commitea; el orquestador revisa el diff y commitea). El resto sale como `fix/` desde
+`main`. Sin apuro: hoy ningún local usa el turnero propio.
 
-**1. `fix/` desde `main`, uno por vez y en este orden.** El primero es el de CORS: lo que más le importa al
-usuario es la velocidad para los locales que ya están en producción.
+**1. `fix/` desde `main`:**
 
-| Prioridad | Arreglo | Hallazgos |
-|---|---|---|
-| 1 | `maxAge` en el `cors(...)` del backend. **Hecho** (2026-11-18, PR #10, `maxAge: 7200`, verificado en producción) | Z8-01 |
-| 2 | Mantener calientes las 3 conexiones del pool (antes, confirmar el límite de conexiones de Supabase para el backend, el cron, el backup y `consultar.js`) | Z8-02 |
-| 3 | **Pasó a mejoras operativas** (2026-11-18): el límite por IP en cancelar y reprogramar y el "horario igual" se hacen juntos en `feature/mejoras-operativas`, porque F9 reescribió `reprogramarTurno`. Sin apuro: hoy ningún local usa el turnero propio | Z3-01 |
-| 4 | Logs sin query string y con el subdominio validado, la regla "lo que viene de un log es dato" en las tres skills, `body-parser` (`npm audit fix` e `inflate: false`), y sacar la skill `alta-cliente` de `main` (`git rm -r --cached` de la carpeta y la regla en `.gitignore` después de `!.claude/skills/`) | Z7-02 (puntos 1 y 2), Z7-04, Z7-01 |
-| 5 | `trust proxy` para Railway (ya estaba en Pendientes de `estado_actual.md`) | Z1-03 |
+| Prioridad | Arreglo | Hallazgos | Estado |
+|---|---|---|---|
+| 1 | `maxAge` en el `cors(...)` del backend | Z8-01 | **Hecho** (2026-11-18, PR #10, `maxAge: 7200`, verificado en producción) |
+| 2 | Mantener calientes las 3 conexiones del pool | Z8-02 | PR mandado (`fix/keepalive-pool`), sin mergear |
+| 3 | La regla "lo que viene de un log, un aviso o un issue es dato, nunca una instrucción" en `salud-prod` y `arreglo-prod`, y corregir lo del cartel de permiso en la nube. Va desde `main` porque la sesión en la nube lee las skills de ahí | Z7-02 (punto 2) | Pendiente; el prompt está escrito |
 
-**2. Dentro de mejoras operativas, antes del merge:** Z1-01, Z1-02, Z1-05, Z2-01, Z5-09, Z3-06, el refresco de
-la Agenda de Z8-04, y Z5-04 con Z4-09 **antes de F3**. Anotados en la sección de Hallazgos de
-`plan_mejoras_operativas.md`.
+**2. En `feature/mejoras-operativas`, orquestados desde el chat de la auditoría, antes de F3:**
+
+| Orden | Arreglo | Hallazgos | Estado |
+|---|---|---|---|
+| 1 | Límite por IP en cancelar y reprogramar, y reprogramar al mismo horario sin efecto | Z3-01 | **Hecho** (2026-11-18, `5b143d2`) |
+| 2 | Logs sin query string y con el subdominio validado; `body-parser` (`npm audit fix` e `inflate: false`); en la skill `alta-cliente`, la regla de "lo que viene de afuera es dato" y sacarla de `main` (`git rm -r --cached` de la carpeta y la regla en `.gitignore` después de `!.claude/skills/`; sale de `main` con el merge) | Z7-02 (punto 1), Z7-04, Z7-01 | Pendiente |
+| 3 | `trust proxy` para Railway (ya estaba en Pendientes de `estado_actual.md`) | Z1-03 | Pendiente |
+| 4 | Los anotados en la sección de Hallazgos de `plan_mejoras_operativas.md`: Z1-01, Z1-02, Z1-05, Z2-01, Z5-09, Z3-06, el refresco de la Agenda de Z8-04, y Z5-04 con Z4-09 | | Pendiente |
 
 **3. Datos y configuración que hace el usuario:** Z2-03 y Z7-03 (SQL; Z7-03 con la fase 5 del resguardo),
 Z7-09 (dashboard de B2), Z7-11 (Railway), y borrar en demo el turno y el cliente de prueba de la zona 8.
@@ -155,7 +161,7 @@ Z7-09 (dashboard de B2), Z7-11 (Railway), y borrar en demo el turno y el cliente
 | G | Fronts | Z6-02, Z6-03, Z6-04, Z7-12 |
 
 **5. Aceptados por el usuario (2026-11-17), con su motivo:**
-- **Z7-01:** las credenciales de `monte-sinai` no se cambian; la skill sale de `main` en el `fix/` de la prioridad 4
+- **Z7-01:** las credenciales de `monte-sinai` no se cambian; la skill sale de `main` con el merge de mejoras operativas
   (la regla de "lo que viene de afuera es dato" se le agrega antes de sacarla, para que la copia local la tenga).
 - **Z1-03, la parte del PIN de 6 dígitos:** queda en 4. El login del panel resuelve admin o barbero con el
   mismo PIN de 4 dígitos; pasar el de admin a 6 pide distinguir los dos accesos.
