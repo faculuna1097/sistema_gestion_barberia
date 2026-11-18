@@ -34,7 +34,7 @@
 
 import { rateLimit } from 'express-rate-limit';
 import { reportarAviso } from '../config/sentry.js';
-import { rutaSinDatosSensibles, enmascararTokensEnRuta } from '../utils/sanitizarLogs.js';
+import { rutaParaLog } from '../utils/sanitizarLogs.js';
 
 /**
  * crearHandler429
@@ -45,7 +45,10 @@ import { rutaSinDatosSensibles, enmascararTokensEnRuta } from '../utils/sanitiza
  *
  * Además manda un aviso a Sentry (tráfico inusual), agrupado en un issue por
  * tipo de límite (fingerprint). La IP queda solo en el log de Railway: a Sentry
- * van el límite y la ruta, sin query string ni token del turnero. El tenant
+ * van el límite y la ruta, sin query string ni token del turnero. En los dos
+ * lados la ruta sale de rutaParaLog (sin query string y recortada): la URL la
+ * escribe el cliente, y el log y el aviso los lee la sesión de diagnóstico
+ * (auditoría 2026-11, Z7-02). El tenant
  * llega solo por el scope del request cuando ya está resuelto (limiterGlobal
  * y los del alta corren antes de tenantMiddleware: ahí no hay tenant).
  *
@@ -53,9 +56,10 @@ import { rutaSinDatosSensibles, enmascararTokensEnRuta } from '../utils/sanitiza
  * @returns {Function} handler (req, res) para express-rate-limit
  */
 const crearHandler429 = (nombre) => (req, res) => {
-  console.warn(`[rateLimit] límite '${nombre}' excedido | ip: ${req.ip} | ruta: ${req.method} ${enmascararTokensEnRuta(req.originalUrl)}`);
+  const ruta = `${req.method} ${rutaParaLog(req.originalUrl)}`;
+  console.warn(`[rateLimit] límite '${nombre}' excedido | ip: ${req.ip} | ruta: ${ruta}`);
   reportarAviso(`rateLimit: ${nombre}`, {
-    tags: { limite: nombre, ruta: `${req.method} ${rutaSinDatosSensibles(req.originalUrl)}` },
+    tags: { limite: nombre, ruta },
     fingerprint: ['rateLimit', nombre],
   });
   res.status(429).json({ error: 'Demasiados intentos. Esperá unos minutos y probá de nuevo.' });

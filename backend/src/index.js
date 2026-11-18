@@ -11,7 +11,7 @@ import { verificarToken } from './middlewares/authMiddleware.js';
 import { tenantMiddleware, invalidar } from './middlewares/tenantMiddleware.js';
 import { verificarClavePlataforma } from './middlewares/plataformaAuthMiddleware.js';
 import { limiterGlobal, limiterLogin } from './middlewares/rateLimitMiddleware.js';
-import { sanitizarObjeto, enmascararTokensEnRuta } from './utils/sanitizarLogs.js';
+import { sanitizarObjeto, enmascararTokensEnRuta, rutaParaLog } from './utils/sanitizarLogs.js';
 import { registrarHandlerErrores, vaciarEventos } from './config/sentry.js';
 
 // --- Importación de rutas ---
@@ -115,20 +115,35 @@ app.use(cors({
 // ANTES de express.json (a un cliente ya bloqueado ni le parseamos el body).
 // Los límites finos de login y reserva se montan en sus rutas, más abajo.
 app.use(limiterGlobal);
-app.use(express.json());
+// inflate: false — no se aceptan cuerpos comprimidos (Content-Encoding gzip,
+// deflate o br). Ningún front los manda, y descomprimir es la parte de
+// body-parser con avisos de caída (auditoría 2026-11, Z7-04): así esa superficie
+// queda cerrada para todas las rutas. Un pedido comprimido recibe un 415
+// (handler de abajo).
+app.use(express.json({ inflate: false }));
 
 /**
  * Errores del parseo del body (handler de errores de Express: 4 parámetros).
  *
- * Por qué existe: sin él, un JSON mal formado o un body de más de 100 kB (el
- * límite por defecto de express.json) llegaba al handler final de Express, que
- * imprime el stack con console.error. captureConsoleIntegration (instrument.js)
- * lo manda a Sentry y de ahí a Discord: cualquiera que mandara un body roto
- * disparaba una alerta en el celular por un error del cliente, no nuestro. Y
- * la respuesta salía en HTML, sin el { error, codigo } que esperan los fronts.
+ * Por qué existe: sin él, un JSON mal formado, un body de más de 100 kB (el
+ * límite por defecto de express.json) o un body comprimido o con un charset que
+ * no es UTF-8 llegaba al handler final de Express, que imprime el stack con
+ * console.error. captureConsoleIntegration (instrument.js) lo manda a Sentry y de
+ * ahí a Discord: cualquiera que mandara un body así disparaba una alerta en el
+ * celular por un error del cliente, no nuestro. Y la respuesta salía en HTML, sin
+ * el { error, codigo } que esperan los fronts.
  *
- * Se loguea con console.warn (no llega a Sentry): método y ruta con los tokens
- * enmascarados. Nunca el body: no se pudo parsear y puede traer datos del cliente.
+ * Tipos de error de body-parser que se responden acá:
+ *   - entity.parse.failed  → 400 json_invalido
+ *   - entity.too.large     → 413 body_demasiado_grande
+ *   - encoding.unsupported → 415 codificacion_no_soportada (Content-Encoding
+ *     distinto de identity: con inflate: false, incluye gzip, deflate y br)
+ *   - charset.unsupported  → 415 charset_no_soportado (ej. charset=latin1)
+ *
+ * Se loguea con console.warn (no llega a Sentry): método y ruta sin query string,
+ * con los tokens enmascarados y recortada (rutaParaLog). La URL la escribe el
+ * cliente y este log lo lee la sesión de diagnóstico (Z7-02). Nunca el body: no
+ * se pudo parsear y puede traer datos del cliente.
  *
  * Cualquier otro error sigue de largo con next(err).
  */
@@ -138,9 +153,13 @@ app.use((err, req, res, next) => {
     respuesta = { status: 400, error: 'Los datos enviados no tienen un formato válido.', codigo: 'json_invalido' };
   } else if (err?.type === 'entity.too.large') {
     respuesta = { status: 413, error: 'Los datos enviados son demasiado grandes.', codigo: 'body_demasiado_grande' };
+  } else if (err?.type === 'encoding.unsupported') {
+    respuesta = { status: 415, error: 'Los datos enviados vienen comprimidos y no se aceptan así.', codigo: 'codificacion_no_soportada' };
+  } else if (err?.type === 'charset.unsupported') {
+    respuesta = { status: 415, error: 'Los datos enviados tienen que estar en UTF-8.', codigo: 'charset_no_soportado' };
   }
   if (!respuesta) return next(err);
-  console.warn(`[index] body rechazado | codigo: ${respuesta.codigo} | ${req.method} ${enmascararTokensEnRuta(req.originalUrl)}`);
+  console.warn(`[index] body rechazado | codigo: ${respuesta.codigo} | ${req.method} ${rutaParaLog(req.originalUrl)}`);
   return res.status(respuesta.status).json({ error: respuesta.error, codigo: respuesta.codigo });
 });
 // En Express 5 req.body queda undefined si no llega body: desestructurarlo tiraría

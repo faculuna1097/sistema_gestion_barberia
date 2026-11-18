@@ -25,6 +25,12 @@ Antes de arrancar, tener:
 cliente carga todo por su cuenta desde un link privado, y la skill arma la query de alta. Decisiones en
 [`decisiones_alta_clientes.md`](./decisiones_alta_clientes.md).
 
+> **La skill pasa a vivir solo en la PC de Facundo, fuera del repo** (auditoría 2026-11, Z7-01). La
+> carpeta `.claude/skills/alta-cliente/` (el `SKILL.md`, los tres scripts y `plantilla_alta.sql`) ya está
+> en `.gitignore`, y sus archivos se sacan del repo con el merge de mejoras operativas: desde ahí, un clon
+> nuevo no la trae y el repo público no la muestra. Guardá una copia de la carpeta fuera del repo. Las
+> rutas de esta guía son las de esa carpeta en la PC.
+
 1. **Crear la solicitud** (Supabase → SQL Editor). La referencia es para vos: de quién es.
    ```sql
    INSERT INTO solicitud_alta (referencia) VALUES ('Kings — Juan') RETURNING id;
