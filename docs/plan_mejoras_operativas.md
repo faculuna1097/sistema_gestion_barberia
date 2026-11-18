@@ -9,6 +9,10 @@
 > fases 0-2 del resguardo de la DB). Fases 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8), 2 (F6a), 3 (F6b), 4 (F5), 5 (F1a) y 6
 > (F1b) hechas y commiteadas. Próximo: fase 7 (F3), que espera el SQL de `no_asistio_por`.
 > **(2026-11-17)** La auditoría 2026-11 dejó nueve arreglos para esta tanda, dos de ellos antes de F3: ver §8.
+> **(2026-11-18)** El chat de la auditoría hizo en este branch Z3-01, los logs, `body-parser` y la regla de la skill
+> de alta (`5b143d2`, `baba229`) y pausó: **este orquestador retoma la tanda** con los nueve arreglos de §8 (Z5-04
+> con Z4-09 antes de F3), y antes del PR de merge corre dos pasos: sacar la skill de alta del repo y la fase 10
+> de la auditoría. Ver la última entrada de §8.
 > Antes, 2026-11-05: fase 0 hecha y la tanda en espera del monitoreo (`feature/monitoreo-prod`, ya en producción).
 
 ## 1. Contexto
@@ -490,3 +494,18 @@ _(Los completa el orquestador durante la tanda.)_
 - **(2026-11-17, auditoría 2026-11) Aceptados por el usuario, que tocan esta tanda:** Z1-06 (la sesión del
   barbero queda siempre guardada, sin casilla) y Z1-03 en su parte de producto (el PIN de admin sigue en 4
   dígitos, porque el login del panel resuelve admin o barbero con el mismo PIN).
+- **(2026-11-18, orquestador de la auditoría) Traspaso: lo que queda de la auditoría en esta tanda.** El usuario
+  decidió pausar los arreglos de la auditoría, completar este plan, mergear y después retomar `trust proxy` y la
+  tanda de deudas desde `main`. Lo que este orquestador toma, en orden:
+  1. **Antes de F3 (fase 7):** Z5-04 con Z4-09 (borrar un corte con turno; ver la entrada del 2026-11-17).
+  2. **En cualquier fase antes del merge:** Z1-01 (alto), Z1-02, Z1-05, Z2-01, Z5-09, Z3-06 y el refresco de la
+     Agenda de Z8-04 (misma entrada). Se pueden juntar en una fase propia o repartir en las que quedan.
+  3. **Justo antes del PR de merge:** sacar la skill `alta-cliente` del repo (la entrada anterior dice cómo, con
+     el respaldo) y la **fase 10 de la auditoría** (`plan_auditoria_2026-11.md` §7): una segunda pasada con los
+     mismos criterios sobre `git diff a03bdc0..HEAD`, que suma lo que salga a la sección "Segunda pasada" de
+     `auditoria_2026-11.md`. La puede hacer este orquestador o un ejecutor.
+  4. **Al rebasar sobre `main`:** entran el CORS (#10), el keep-alive del pool y las skills de producción, que
+     tocan `backend/src/index.js`, `backend/src/config/db.js`, `docs/performance_frontends.md` y las dos
+     `SKILL.md`. Este branch también tocó `index.js` (logs y `body-parser`): revisar ese archivo a mano.
+  5. **Al cerrar la tanda (fase 11):** marcar en `auditoria_2026-11.md` → "Plan de arreglos" cada uno de estos
+     arreglos como hecho, con su commit, y en la tabla de hallazgos su destino como resuelto.

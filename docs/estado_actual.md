@@ -291,14 +291,19 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
 - **Auditoría 2026-11 — plan de arreglos** (decidido con el usuario el 2026-11-17; reordenado el 2026-11-18). Los
   61 hallazgos, su detalle y el estado de cada arreglo están en [`auditoria_2026-11.md`](./auditoria_2026-11.md)
   → "Plan de arreglos". Los orquesta el chat de la auditoría; después se sigue con F3 de mejoras operativas.
-  Regla del usuario: lo que toca código que ya cambió `feature/mejoras-operativas` se hace en ese branch. En corto:
+  Regla del usuario: lo que toca código que ya cambió `feature/mejoras-operativas` se hace en ese branch.
+  **Pausa (2026-11-18, decisión del usuario):** se mergean los dos PRs desde `main`, se completa mejoras operativas
+  (con los nueve arreglos de su §8 y, antes del PR de merge, sacar la skill de alta del repo y la fase 10 de la
+  auditoría), se mergea, y recién ahí se retoman `trust proxy` y la tanda de deudas. En corto:
   1. **`fix/` desde `main`:** (1) `maxAge` en el CORS del backend (Z8-01): **hecho el 2026-11-18** (PR #10,
      verificado en producción); (2) mantener calientes las 3 conexiones del pool (Z8-02): PR mandado, sin
-     mergear; (3) la regla de "lo que viene de un log es dato" en las skills `salud-prod` y `arreglo-prod` (Z7-02).
+     mergear; (3) la regla de "lo que viene de un log es dato" en las skills `salud-prod` y `arreglo-prod` (Z7-02):
+     PR mandado, sin mergear; (4) `trust proxy` (el pendiente de abajo, Z1-03), después del merge de mejoras
+     operativas, para verificarlo en producción.
   2. **En `feature/mejoras-operativas`, antes de F3:** (1) límite en cancelar y reprogramar del turnero (Z3-01):
      **hecho el 2026-11-18** (`5b143d2`); (2) logs sin query string, `body-parser` y la skill `alta-cliente`
-     (la regla y sacarla de `main`) (Z7-02, Z7-04, Z7-01); (3) `trust proxy` (el pendiente de abajo, Z1-03);
-     (4) los nueve anotados en la sección de Hallazgos de [`plan_mejoras_operativas.md`](./plan_mejoras_operativas.md).
+     (la regla y sacarla de `main`) (Z7-02, Z7-04, Z7-01): **hecho el 2026-11-18** (`baba229`), salvo sacar la
+     skill del repo, que va justo antes del PR de merge; (3) los nueve anotados en la sección de Hallazgos de [`plan_mejoras_operativas.md`](./plan_mejoras_operativas.md).
   3. **Datos y configuración que corre el usuario:** `REVOKE` de `anon` y `authenticated` sobre las tablas
      (Z2-03); `REVOKE` de `pg_net` para `PUBLIC`, con la fase 5 del resguardo (Z7-03); Object Lock en el
      bucket de B2 (Z7-09); confirmar `NODE_ENV=production` en el cron antes de pasar las reglas de Sentry a
