@@ -194,8 +194,10 @@ rápido entre cliente y cliente. Por eso usan una escala más grande que la de
 textarea, 18 en los valores del resumen y el botón grande, 13 en las etiquetas
 mono del resumen, 15 en el subtítulo, 22 / 32 en la etiqueta y el monto del
 total, 40 / 56 en el campo de monto y 48 en el monto del éxito. Desde el
-2026-11-02 está escrita con nombre en `TAM_KIOSKO` (`screens/flows/wizardStyles.js`),
-local a los flujos (§7.1): si otra superficie la necesita, se promueve a `tokens.js`.
+2026-11-02 está escrita con nombre en `TAM_KIOSKO`. Primero fue local a los flujos
+(`screens/flows/wizardStyles.js`, §7.1); desde el 2026-11-18 vive en `theme/tokens.js`,
+porque la usa también el aviso de turnos sin cobrar de `MainScreen` (§6.1).
+`wizardStyles.js` la re-exporta, así los flujos la siguen importando de ahí.
 
 Reglas que cambian según densidad:
 - **Tipografía**: el turnero puede usar `sizeHeading` (18) generosamente; gestión prioriza `sizeBody` (14) incluso en títulos de card. **No bajar nunca de 14 en texto leíble**.
@@ -745,6 +747,28 @@ admin. Entre ellos:
   tono warning, con su texto ("Sin configurar", "Sin cargar").
 - `Button` acepta `ariaLabel` cuando el texto visible no alcanza (ej. "Cambiar"
   en una fila → "Cambiar el PIN de administrador"); empieza con el texto visible.
+- `Modal` con `botonCerrar` (desde el 2026-11-18, F3 de `plan_mejoras_operativas.md`):
+  una X de 48 × 48 en la esquina de la card (`etiquetaCerrar` es su nombre
+  accesible), para un modal que solo se lee y no tiene botón de cerrar propio. El
+  título deja 64 a la derecha para no pasar por debajo. Lo demás no cambia (ESC,
+  tocar afuera, foco).
+- Aviso de turnos sin cobrar (desde el 2026-11-18, F3 de `plan_mejoras_operativas.md`):
+  - `DetalleTurnosSinCobrar` es el detalle que comparten el iPad y el Inicio: un
+    `Modal` con `botonCerrar`, del tamaño de su contenido, con una columna por
+    barbero (ancho fijo, centradas como grupo, pasan a otra fila desde el cuarto) y
+    sus horarios pendientes apilados (hora de inicio en grande, el cliente debajo y,
+    si no es de hoy, la fecha arriba). Título, subtítulo, el aviso del modo alerta y
+    los nombres de los barberos quedan fijos; scrollean solo los horarios. El nombre
+    es `sticky` con `top: -16` para cubrir el padding de arriba del cuerpo del
+    `Modal`. Props: `kiosko` (tamaños de `TAM_KIOSKO`), `mostrarCliente` y
+    `onIrAlTurnero` (el botón del pie, solo el panel).
+  - El aviso de cada pantalla es propio, por la densidad: en el iPad, una pill
+    sólida abajo al centro, entre las esquinas inferiores (blanca; en modo alerta,
+    `warning` sólido con texto blanco y sin X, porque en esa pantalla el rojo es el
+    egreso); en el Inicio, una franja arriba de las cards (`surface`; en alerta,
+    `warningSoft` con borde `warning`).
+  - Los datos y el ocultado salen del hook `useTurnosSinCobrar` (`hooks/`); el tick
+    por minuto, de `useAhoraPorMinuto`, que comparte con el Reloj de `MainScreen`.
 
 **Gráficos, sin librería.** El proyecto no tiene librería de gráficos: las
 barras se hacen con divs de ancho proporcional y los tokens del tema.
@@ -955,7 +979,7 @@ la estrategia es duplicar**:
 
 | | `tokens.js` | `index.css` |
 |---|---|---|
-| **Panel** | La base de Luz más `neutralSoft`, `overlay` y `shadowLg` (`0 20px 40px rgba(0,0,0,0.15)`), solo de este front. | Geist y Geist Mono desde `public/fonts` (desde 2026-11-02). `om-fade` sube 4 px. Suma `om-shake`, `.om-fila-hover` (el hover de las tablas de reporte), `.om-rango` (el riel de `SelectorConBarra`, desde el 2026-11-12) y `spin`. |
+| **Panel** | La base de Luz más `neutralSoft`, `overlay` y `shadowLg` (`0 20px 40px rgba(0,0,0,0.15)`), solo de este front. Desde el 2026-11-18, también `TAM_KIOSKO` (§3.6), la escala del iPad. | Geist y Geist Mono desde `public/fonts` (desde 2026-11-02). `om-fade` sube 4 px. Suma `om-shake`, `.om-fila-hover` (el hover de las tablas de reporte), `.om-rango` (el riel de `SelectorConBarra`, desde el 2026-11-12) y `spin`. |
 | **Barbero** | La base de Luz: lo mismo que el panel, sin `neutralSoft`, `overlay` ni `shadowLg`. | Google Fonts. `om-fade` es solo opacidad (con `transform`, los modales se descentraban dentro de `PageContainer`). Su giro se llama `om-spin`. `om-shake` (los puntos del PIN, desde el 2026-11-13; antes era un `<style>` del login). `om-hoja-in` (la entrada de `HojaInferior`, con su versión para "reducir movimiento", desde el 2026-11-16). Sin `.om-fila-hover`. |
 | **Landing** | La base sin `neutralSoft`, `overlay` ni `maxWidth`. Suma `sizeDisplay`, `sizeSection`, `sizeSubheading`, `maxWidthWide`, `maxWidthText`, `sectionGapMin` y `sectionGapMax`. Tiene su propio `shadowLg` (`0 12px 32px rgba(0,0,0,0.10)`, para las capturas que flotan): mismo nombre que el del panel, otro valor. | Google Fonts, `scroll-behavior: smooth`, `om-reveal` y las clases `om-` de §4.1. Sin `om-stroke`, `om-overlay-in` ni `om-dialog-in`. |
 | **Turnero** | Diverge a propósito (§3.8): `bg`, `accent`, `accentHover`, `accentSoft` y los del hero. No tiene `shadowScroll`. | Diverge a propósito (§3.8): `overscroll-behavior`, los colores de su tema y el movimiento `tt-`. |
@@ -1047,7 +1071,9 @@ actualizá este doc.**
 
 ---
 
-*Última actualización: 2026-11-16 — F1 de mejoras operativas (fase 6): §6.3 suma `HojaInferior`, `AvisoError`, `AvatarIniciales` sin nombre y las piezas del cliente de un turno (`components/cliente/`); §8, `om-hoja-in` en el `index.css` del barbero.*
+*Última actualización: 2026-11-18 — F3 de mejoras operativas (fase 7b): §3.6 y §8, `TAM_KIOSKO` pasa a `tokens.js`; §6.1 suma `botonCerrar` en `Modal`, `DetalleTurnosSinCobrar` y los avisos de turnos sin cobrar del iPad y del Inicio.*
+
+*2026-11-16 — F1 de mejoras operativas (fase 6): §6.3 suma `HojaInferior`, `AvisoError`, `AvatarIniciales` sin nombre y las piezas del cliente de un turno (`components/cliente/`); §8, `om-hoja-in` en el `index.css` del barbero.*
 
 *2026-11-13 — F5 de mejoras operativas (fase 4): el login de la app del barbero con `FondoLocal` y `MarcoAcceso` (§6.3), la grilla de barberos, la sesión guardada en el celular, `useHoverPresion` (§4.2) y `om-shake` en el `index.css` del barbero (§8).*
 

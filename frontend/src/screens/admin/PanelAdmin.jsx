@@ -505,7 +505,9 @@ export default function PanelAdmin({ onCerrarSesion, avisosPago, nombreNegocio, 
           {SeccionActual && (
             <ErrorBoundary key={seccionActiva}>
               <Suspense fallback={<LoadingState />}>
-                <SeccionActual modoBarbero={esBarbero} barberoSesion={barberoSesion} />
+                {/* onIrASeccion: una sección puede llevar a otra (hoy, "Ir al
+                    Turnero" del aviso de turnos sin cobrar del Inicio). */}
+                <SeccionActual modoBarbero={esBarbero} barberoSesion={barberoSesion} onIrASeccion={elegirSeccion} />
               </Suspense>
             </ErrorBoundary>
           )}

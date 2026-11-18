@@ -284,6 +284,26 @@ export const getTurnosDelDia = async (barberoId, fecha) => {
 };
 
 /**
+ * getTurnosSinCobrar
+ * Aviso de turnos sin cobrar del local (F3): los reservados que terminaron hace
+ * rato, de cualquier día. El endpoint acepta el rol operativo y el admin con la
+ * misma respuesta, así que solo cambia qué token se manda: el iPad (MainScreen)
+ * usa el operativo y el Inicio del panel, el del panel.
+ * @param {'operativo'|'admin'} modo - Con qué token se pide.
+ * @returns {Promise<{ turnos: Array<{ id, barbero_id, barbero_nombre, inicio, fin,
+ *   cliente_nombre }>, insistencia_minutos: number, cierre_hoy: string|null }>}
+ *   cliente_nombre es null en un turno "Sin datos"; cierre_hoy, null si hoy el
+ *   local no abre.
+ * @throws {ErrorServidor} con el status de la respuesta (o el error de red).
+ */
+export const getTurnosSinCobrar = async (modo) => {
+  const pedir = modo === 'operativo' ? apiFetchOperativo : apiFetch;
+  const response = await pedir('/turnos/sin-cobrar');
+  if (!response.ok) throw await errorDeRespuesta(response);
+  return response.json();
+};
+
+/**
  * registrarCorte
  * Envía un nuevo corte al backend para guardarlo en la base de datos.
  * Si datos incluye turno_id, el backend vincula el corte al turno y lo marca

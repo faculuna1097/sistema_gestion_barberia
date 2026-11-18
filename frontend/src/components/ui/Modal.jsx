@@ -9,8 +9,13 @@
 // Foco (accesibilidad con teclado): al abrirse lleva el foco a la card, Tab y
 // Shift+Tab quedan encerrados adentro mientras está abierto, y al cerrarse el
 // foco vuelve al elemento que lo abrió.
+//
+// Con `botonCerrar` (desde el 2026-11-18, F3 de plan_mejoras_operativas.md) la
+// card suma una X en su esquina superior derecha, para los modales que solo se
+// leen y no tienen un botón de cerrar propio (el detalle de turnos sin cobrar).
 
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
 
 // Elementos que pueden recibir foco con Tab.
@@ -35,6 +40,49 @@ function enfocablesDe(contenedor) {
 }
 
 /**
+ * BotonCerrarEsquina
+ * La X de la esquina de la card (`botonCerrar`): 48 × 48 (más que los 44 de §5.4,
+ * porque también se toca de pie en el iPad), sin caja, con hover.
+ * @param {Object} props
+ * @param {Function} props.onClick - Cierra el modal.
+ * @param {boolean} props.disabled - true mientras el modal está en loading.
+ * @param {string} props.ariaLabel - Nombre accesible.
+ * @returns {JSX.Element}
+ */
+function BotonCerrarEsquina({ onClick, disabled, ariaLabel }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        zIndex: 1,
+        width: 48,
+        height: 48,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: 'none',
+        borderRadius: 999,
+        background: hover && !disabled ? theme.surfaceAlt : 'transparent',
+        color: theme.inkSoft,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        transition: `background ${theme.transitionFast}`,
+      }}
+    >
+      <X size={22} strokeWidth={1.75} aria-hidden="true" />
+    </button>
+  );
+}
+
+/**
  * Modal
  * Modal centrado con overlay. Cierra con ESC y click fuera salvo loading.
  *
@@ -47,6 +95,8 @@ function enfocablesDe(contenedor) {
  * @param {ReactNode} [props.footer] - Fila de acciones (típicamente <Button>s)
  * @param {boolean} [props.loading=false] - Si true, deshabilita ESC y click fuera
  * @param {number} [props.maxWidth=440]
+ * @param {boolean} [props.botonCerrar=false] - Suma la X en la esquina de la card.
+ * @param {string} [props.etiquetaCerrar='Cerrar'] - Nombre accesible de la X.
  */
 function Modal({
   open,
@@ -57,6 +107,8 @@ function Modal({
   footer,
   loading = false,
   maxWidth = 440,
+  botonCerrar = false,
+  etiquetaCerrar = 'Cerrar',
 }) {
   // id único por instancia para asociar el título con aria-labelledby
   // (evita colisión si dos modales se montaran a la vez — ver deuda #25).
@@ -141,6 +193,8 @@ function Modal({
         style={{
           // Sin anillo: la card no es un control, solo el punto de partida del foco.
           outline: 'none',
+          // Ancla de la X de la esquina (botonCerrar).
+          position: 'relative',
           background: theme.surface,
           border: `1px solid ${theme.hairline}`,
           borderRadius: theme.radiusLg,
@@ -157,8 +211,13 @@ function Modal({
           overflow: 'hidden',
         }}
       >
-        {/* Header fijo: padding sup/lados 20, sin inferior (el gap al body lo da el body) */}
-        <div style={{ flexShrink: 0, padding: '20px 20px 0' }}>
+        {botonCerrar && (
+          <BotonCerrarEsquina onClick={onClose} disabled={loading} ariaLabel={etiquetaCerrar} />
+        )}
+
+        {/* Header fijo: padding sup/lados 20, sin inferior (el gap al body lo da el body).
+            Con la X, 64 a la derecha para que el título no pase por debajo. */}
+        <div style={{ flexShrink: 0, padding: botonCerrar ? '20px 64px 0 20px' : '20px 20px 0' }}>
           <div
             id={titleId}
             style={{

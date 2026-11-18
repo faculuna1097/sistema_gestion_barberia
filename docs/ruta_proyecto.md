@@ -1,6 +1,6 @@
 # Ruta del proyecto - Sistema de Gestion de Barberia
 
-Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y completado el 2026-11-18 (mejoras operativas, fase 7a: `backend/src/jobs/cierreDiario.js` y `backend/src/services/turnosSinCobrarService.js`; antes, ese mismo día, fase 6d: `frontend/src/utils/url.js`). Antes, el 2026-11-17 (`docs/auditoria_2026-11.md` y `docs/plan_auditoria_2026-11.md`). Antes, el 2026-11-16 (mejoras operativas, F1b: en `frontend-barbero/src/` `components/agenda/HojaAsignarCliente.jsx` y `HojaReservar.jsx`, `components/cliente/`, `components/ui/AvisoError.jsx` y `HojaInferior.jsx`, `hooks/useBusquedaClientes.js` y `utils/clienteTurno.js`; en `frontend/src/` `hooks/useBusquedaClientes.js` y `screens/admin/sections/turnero/AsignarCliente.jsx`). Antes, el 2026-11-13 (mejoras operativas, F5: en `frontend-barbero/src/` `components/ui/FondoLocal.jsx` y `MarcoAcceso.jsx`, `utils/pantalla.js` y `utils/sesion.js`; F6b: en `frontend/src/` `components/ui/` `BotonEnlace.jsx`, `FilaAjuste.jsx`, `MarcoAcceso.jsx` y `PillSinConfigurar.jsx`, `screens/` `PantallaRecuperacion.jsx`, `SolicitudRecuperacion.jsx` y `admin/sections/gestion/BloqueContacto.jsx`, y `utils/` `contactoNegocio.js` y `credenciales.js`). Antes, el 2026-11-12 (mejoras operativas: F7, `frontend/src/components/ui/SelectorConBarra.jsx`; F9 y F11, en `frontend-turnero/src/`: `components/ui/` `HeroLocal.jsx`, `IconoMensaje.jsx`, `IconoTelefono.jsx`, `LineaContacto.jsx` y `MarcoLocal.jsx`, `hooks/usePantallaAncha.js` y `utils/estadoNegocio.js`). Antes, comparado de nuevo contra `git ls-files` el 2026-11-11 (resguardo de la base, fases 1 y 2: `backend/.env.lectura.example`, en `backend/src/scripts/` `conexionLectura.js` y `consultar.js`, y `.github/workflows/backup-db.yml` con `.github/scripts/backup-db.sh`; antes, ese mismo día, formulario de alta de clientes: `frontend-alta/` completo, en `backend/src/` `controllers/alta.js`, `routes/alta.js`, `utils/subdominio.js` y `utils/validarSolicitudAlta.js`, la skill `.claude/skills/alta-cliente/` y `docs/decisiones_alta_clientes.md` y `plan_alta_clientes.md`). Antes, el 2026-11-06 (monitoreo de producción: `backend/src/instrument.js`, `backend/src/config/sentry.js`, `.claude/settings.json`, las skills `.claude/skills/salud-prod/` y `arreglo-prod/`, y `docs/decisiones_monitoreo_prod.md`). Antes, el 2026-11-04 (se sumaron `frontend/src/utils/pantalla.js` y `frontend-landing/src/components/ui/IconoWhatsApp.jsx`, que faltaban). Antes, el 2026-11-03 (en `frontend-turnero/src/`: `components/ui/estilos.js`, `hooks/useHover.js` y `utils/errores.js`; y `frontend/src/hooks/usePantallaAngosta.js`). Antes, el 2026-11-02 (en `frontend/src/`: `components/ui/GrupoOpciones.jsx`, `ToastProvider.jsx`, `tonosFormaPago.js`, `estilos.js`, `utils/errores.js` y `utils/toast.js`). Antes, el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
+Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y completado el 2026-11-18 (mejoras operativas, fase 7b: en `frontend/src/` `components/ui/DetalleTurnosSinCobrar.jsx`, `hooks/useAhoraPorMinuto.js`, `hooks/useTurnosSinCobrar.js` y `utils/turnosSinCobrar.js`; antes, ese mismo día, fase 7a: `backend/src/jobs/cierreDiario.js` y `backend/src/services/turnosSinCobrarService.js`; antes, ese mismo día, fase 6d: `frontend/src/utils/url.js`). Antes, el 2026-11-17 (`docs/auditoria_2026-11.md` y `docs/plan_auditoria_2026-11.md`). Antes, el 2026-11-16 (mejoras operativas, F1b: en `frontend-barbero/src/` `components/agenda/HojaAsignarCliente.jsx` y `HojaReservar.jsx`, `components/cliente/`, `components/ui/AvisoError.jsx` y `HojaInferior.jsx`, `hooks/useBusquedaClientes.js` y `utils/clienteTurno.js`; en `frontend/src/` `hooks/useBusquedaClientes.js` y `screens/admin/sections/turnero/AsignarCliente.jsx`). Antes, el 2026-11-13 (mejoras operativas, F5: en `frontend-barbero/src/` `components/ui/FondoLocal.jsx` y `MarcoAcceso.jsx`, `utils/pantalla.js` y `utils/sesion.js`; F6b: en `frontend/src/` `components/ui/` `BotonEnlace.jsx`, `FilaAjuste.jsx`, `MarcoAcceso.jsx` y `PillSinConfigurar.jsx`, `screens/` `PantallaRecuperacion.jsx`, `SolicitudRecuperacion.jsx` y `admin/sections/gestion/BloqueContacto.jsx`, y `utils/` `contactoNegocio.js` y `credenciales.js`). Antes, el 2026-11-12 (mejoras operativas: F7, `frontend/src/components/ui/SelectorConBarra.jsx`; F9 y F11, en `frontend-turnero/src/`: `components/ui/` `HeroLocal.jsx`, `IconoMensaje.jsx`, `IconoTelefono.jsx`, `LineaContacto.jsx` y `MarcoLocal.jsx`, `hooks/usePantallaAncha.js` y `utils/estadoNegocio.js`). Antes, comparado de nuevo contra `git ls-files` el 2026-11-11 (resguardo de la base, fases 1 y 2: `backend/.env.lectura.example`, en `backend/src/scripts/` `conexionLectura.js` y `consultar.js`, y `.github/workflows/backup-db.yml` con `.github/scripts/backup-db.sh`; antes, ese mismo día, formulario de alta de clientes: `frontend-alta/` completo, en `backend/src/` `controllers/alta.js`, `routes/alta.js`, `utils/subdominio.js` y `utils/validarSolicitudAlta.js`, la skill `.claude/skills/alta-cliente/` y `docs/decisiones_alta_clientes.md` y `plan_alta_clientes.md`). Antes, el 2026-11-06 (monitoreo de producción: `backend/src/instrument.js`, `backend/src/config/sentry.js`, `.claude/settings.json`, las skills `.claude/skills/salud-prod/` y `arreglo-prod/`, y `docs/decisiones_monitoreo_prod.md`). Antes, el 2026-11-04 (se sumaron `frontend/src/utils/pantalla.js` y `frontend-landing/src/components/ui/IconoWhatsApp.jsx`, que faltaban). Antes, el 2026-11-03 (en `frontend-turnero/src/`: `components/ui/estilos.js`, `hooks/useHover.js` y `utils/errores.js`; y `frontend/src/hooks/usePantallaAngosta.js`). Antes, el 2026-11-02 (en `frontend/src/`: `components/ui/GrupoOpciones.jsx`, `ToastProvider.jsx`, `tonosFormaPago.js`, `estilos.js`, `utils/errores.js` y `utils/toast.js`). Antes, el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
 
 Este documento lista las carpetas y archivos del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP. Para mantenerlo, regenerar los arboles desde `git ls-files` en vez de parchearlos a mano.
 
@@ -296,6 +296,7 @@ frontend/
     |       |-- DataTable.jsx
     |       |-- DesgloseMontos.jsx
     |       |-- DetalleRecurso.jsx
+    |       |-- DetalleTurnosSinCobrar.jsx detalle del aviso de turnos sin cobrar (iPad e Inicio)
     |       |-- EmptyState.jsx
     |       |-- ErrorBoundary.jsx
     |       |-- estilos.js           estiloEtiquetaCampo (rótulo de Field y GrupoOpciones)
@@ -309,7 +310,7 @@ frontend/
     |       |-- LoadingState.jsx
     |       |-- LogoCirculo.jsx
     |       |-- MarcoAcceso.jsx      marco de los logins y la recuperación (+ EncabezadoAcceso)
-    |       |-- Modal.jsx
+    |       |-- Modal.jsx            con `botonCerrar`: la X en la esquina de la card
     |       |-- PageContainer.jsx
     |       |-- PillSinConfigurar.jsx marca de dato vacío ("Sin configurar", "Sin cargar")
     |       |-- ScreenHeader.jsx
@@ -330,8 +331,10 @@ frontend/
     |       |-- TogglePill.jsx
     |       `-- TopBar.jsx
     |-- hooks/
+    |   |-- useAhoraPorMinuto.js     instante actual con un tick por minuto (Reloj y aviso F3)
     |   |-- useBusquedaClientes.js   búsqueda de clientes con debounce (asignar cliente)
-    |   `-- usePantallaAngosta.js    ventana de menos de 1024 px (iPad vertical, Split View)
+    |   |-- usePantallaAngosta.js    ventana de menos de 1024 px (iPad vertical, Split View)
+    |   `-- useTurnosSinCobrar.js    aviso de turnos sin cobrar: carga, refresco, ocultado y alerta
     |-- screens/
     |   |-- MainScreen.jsx
     |   |-- PantallaLoginPanel.jsx      login por PIN del panel (admin o barbero)
@@ -371,7 +374,7 @@ frontend/
     |-- services/
     |   `-- api.js
     |-- theme/
-    |   `-- tokens.js
+    |   `-- tokens.js            tema Luz y TAM_KIOSKO (escala del iPad)
     `-- utils/
         |-- cargarChunk.js
         |-- colorMonto.js
@@ -385,6 +388,7 @@ frontend/
         |-- movimientos.js
         |-- pantalla.js          alto visible de la pantalla (100dvh con respaldo)
         |-- toast.js             API imperativa del toast (toast.show)
+        |-- turnosSinCobrar.js   cálculos del aviso F3: modo alerta, texto y agrupado por barbero
         `-- url.js               esUrlHttps: abrir solo links https (booking_url del iPad)
 ```
 

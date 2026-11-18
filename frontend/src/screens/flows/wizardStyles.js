@@ -4,27 +4,12 @@
 // Viven aparte de wizard.jsx para que ese archivo exporte solo componentes
 // (react-refresh/only-export-components).
 
-import { theme } from "../../theme/tokens.js";
+import { theme, TAM_KIOSKO } from "../../theme/tokens.js";
 
-/**
- * TAM_KIOSKO
- * Escala tipográfica de la superficie kiosko (sistema_de_disenio.md §3.6): más
- * grande que la de tokens.js porque los flujos se leen de pie, a un brazo del
- * iPad. Es una excepción escrita, no un descuido. Local a los flujos (§7.1): si
- * otra superficie la necesita, se promueve a tokens.js.
- */
-export const TAM_KIOSKO = {
-  opcion:          19, // BotonOpcion y CampoTexto
-  botonGrande:     18, // wizardStyles.btnGrande
-  valorResumen:    18, // valor de FilaResumen
-  etiquetaResumen: 13, // etiqueta mono de FilaResumen
-  subtitulo:       15, // subtítulo de PanelWizard
-  etiquetaTotal:   22, // etiqueta de FilaTotal
-  montoTotal:      32, // monto de FilaTotal
-  signoMonto:      40, // "$" de CampoMonto
-  campoMonto:      56, // input de CampoMonto
-  montoExito:      48, // monto de PantallaExito
-};
+// TAM_KIOSKO (la escala de la superficie kiosko, §3.6) vive en tokens.js desde el
+// 2026-11-18: la usan también el aviso de turnos sin cobrar de MainScreen y su
+// detalle. Se re-exporta acá para que los flujos sigan importándola de este archivo.
+export { TAM_KIOSKO };
 
 export const wizardStyles = {
   // Grilla de opciones: flex wrap centrado (la última fila incompleta queda centrada).

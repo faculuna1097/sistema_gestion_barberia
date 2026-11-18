@@ -2,6 +2,7 @@
 // Sección Inicio del Panel de Administrador.
 // Layout: grid 2 columnas arriba (Hoy + Mes) + Stock full-width abajo.
 // Los 3 endpoints se llaman en paralelo con Promise.all al montar.
+// Arriba de todo, el aviso de turnos sin cobrar (F3), solo cuando hay.
 
 import { useState, useEffect } from 'react';
 import {
@@ -12,6 +13,8 @@ import {
   RefreshCw,
   Sun,
   CalendarRange,
+  ChevronRight,
+  X,
 } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
@@ -25,7 +28,10 @@ import {
   Button,
   LoadingState,
   BadgeVariacion,
+  DetalleTurnosSinCobrar,
 } from '../../../components/ui';
+import { useTurnosSinCobrar } from '../../../hooks/useTurnosSinCobrar';
+import { textoCantidadSinCobrar } from '../../../utils/turnosSinCobrar';
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
 
@@ -395,6 +401,114 @@ function CardStock({ productos }) {
   );
 }
 
+// ─── Aviso — Turnos sin cobrar ────────────────────────────────────────────────
+
+/**
+ * AvisoSinCobrar
+ * Franja del aviso de turnos sin cobrar (F3 de plan_mejoras_operativas.md), arriba
+ * del contenido del Inicio, con la densidad del panel. Tocarla abre el detalle; la
+ * X la oculta un rato (useTurnosSinCobrar). En modo alerta pasa a `warningSoft`
+ * con borde `warning` (como el banner de pago), suma que a la noche se cierran
+ * solos y pierde la X.
+ * @param {Object} props
+ * @param {number} props.cantidad - Turnos sin cobrar (> 0).
+ * @param {boolean} props.enAlerta - Modo alerta.
+ * @param {Function} props.onAbrir - Abre el detalle.
+ * @param {Function} props.onOcultar - Oculta el aviso (no se usa en alerta).
+ * @returns {JSX.Element}
+ */
+function AvisoSinCobrar({ cantidad, enAlerta, onAbrir, onOcultar }) {
+  const [hover, setHover] = useState(false);
+  const [hoverX, setHoverX] = useState(false);
+  const texto = textoCantidadSinCobrar(cantidad);
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'stretch',
+      flexShrink: 0,
+      marginBottom: 16,
+      background: enAlerta ? theme.warningSoft : theme.surface,
+      border: `1px solid ${enAlerta ? theme.warning : theme.hairline}`,
+      borderRadius: theme.radius,
+      overflow: 'hidden',
+    }}>
+      <button
+        type="button"
+        onClick={onAbrir}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        aria-label={`${texto}. Ver el detalle`}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 44,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '8px 12px',
+          // En alerta el hover no puede ir a surfaceAlt (perdería el color de alerta).
+          background: hover && !enAlerta ? theme.surfaceAlt : 'transparent',
+          filter: hover && enAlerta ? 'brightness(0.98)' : 'none',
+          border: 'none',
+          cursor: 'pointer',
+          fontFamily: theme.body,
+          fontSize: theme.sizeBody,
+          color: theme.ink,
+          textAlign: 'left',
+          transition: `background ${theme.transitionFast}`,
+        }}
+      >
+        <span style={{ color: theme.warning, display: 'inline-flex', flexShrink: 0 }}>
+          <IconoAlerta size={20} />
+        </span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ fontWeight: theme.weightMedium }}>{texto}</span>
+          {enAlerta && (
+            <span style={{ color: theme.inkSoft }}> · Esta noche se cierran solos como «no asistió».</span>
+          )}
+        </span>
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
+          flexShrink: 0,
+          color: theme.accent,
+          fontWeight: theme.weightMedium,
+        }}>
+          Ver detalle
+          <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
+        </span>
+      </button>
+      {!enAlerta && (
+        <button
+          type="button"
+          onClick={onOcultar}
+          onMouseEnter={() => setHoverX(true)}
+          onMouseLeave={() => setHoverX(false)}
+          aria-label="Ocultar el aviso de turnos sin cobrar"
+          title="Ocultar"
+          style={{
+            width: 44,
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: hoverX ? theme.surfaceAlt : 'transparent',
+            border: 'none',
+            borderLeft: `1px solid ${theme.hairline}`,
+            color: theme.muted,
+            cursor: 'pointer',
+            transition: `background ${theme.transitionFast}`,
+          }}
+        >
+          <X size={16} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 /**
@@ -414,9 +528,13 @@ async function leerJson(path) {
 /**
  * SeccionInicio
  * Carga los 3 endpoints en paralelo al montarse. Muestra LoadingState
- * mientras carga y EmptyState con acción "Reintentar" si algo falla.
+ * mientras carga y EmptyState con acción "Reintentar" si algo falla. El aviso de
+ * turnos sin cobrar va arriba en los tres casos: tiene su propia carga.
+ * @param {Object} props
+ * @param {(id: string) => void} [props.onIrASeccion] - Cambia de sección del panel
+ *   (PanelAdmin); lo usa "Ir al Turnero" del detalle de turnos sin cobrar.
  */
-export default function SeccionInicio() {
+export default function SeccionInicio({ onIrASeccion }) {
   const [resumen,     setResumen]     = useState(null);
   const [comparativo, setComparativo] = useState(null);
   const [stockBajo,   setStockBajo]   = useState(null);
@@ -425,6 +543,11 @@ export default function SeccionInicio() {
 
   // Trigger para reintentar manualmente. Cambiar el valor re-ejecuta el efecto.
   const [intento, setIntento] = useState(0);
+
+  // Aviso de turnos sin cobrar (F3), con el token del panel. El ocultado vive en
+  // esta sección: al volver de otra, se remonta y el aviso vuelve.
+  const sinCobrar = useTurnosSinCobrar({ modo: 'admin' });
+  const [detalleAbierto, setDetalleAbierto] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -471,9 +594,32 @@ export default function SeccionInicio() {
     flexDirection: 'column',
   };
 
+  // Aviso y detalle: arriba del contenido, en cualquiera de los tres estados.
+  const avisoSinCobrar = (
+    <>
+      {sinCobrar.visible && (
+        <AvisoSinCobrar
+          cantidad={sinCobrar.turnos.length}
+          enAlerta={sinCobrar.enAlerta}
+          onAbrir={() => setDetalleAbierto(true)}
+          onOcultar={sinCobrar.ocultar}
+        />
+      )}
+      <DetalleTurnosSinCobrar
+        open={detalleAbierto && sinCobrar.turnos.length > 0}
+        onClose={() => setDetalleAbierto(false)}
+        turnos={sinCobrar.turnos}
+        enAlerta={sinCobrar.enAlerta}
+        mostrarCliente
+        onIrAlTurnero={onIrASeccion ? () => onIrASeccion('turnero') : undefined}
+      />
+    </>
+  );
+
   if (cargando) {
     return (
       <div style={contenedor}>
+        {avisoSinCobrar}
         <LoadingState />
       </div>
     );
@@ -482,6 +628,7 @@ export default function SeccionInicio() {
   if (error) {
     return (
       <div style={contenedor}>
+        {avisoSinCobrar}
         <EmptyState
           tone="danger"
           glyph={<IconoAlerta />}
@@ -504,6 +651,7 @@ export default function SeccionInicio() {
 
   return (
     <div style={contenedor}>
+      {avisoSinCobrar}
       {/* Columna flex que llena el contenedor: las 2 cards KPI quedan a su alto
           natural (flexShrink:0) y la card de stock toma el sobrante (flex:1). */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>

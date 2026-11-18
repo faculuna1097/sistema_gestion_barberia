@@ -54,5 +54,6 @@ export { default as MarcoAcceso, EncabezadoAcceso } from './MarcoAcceso.jsx';
 export { default as BotonEnlace }      from './BotonEnlace.jsx';
 export { default as PillSinConfigurar } from './PillSinConfigurar.jsx';
 export { default as FilaAjuste }       from './FilaAjuste.jsx';
+export { default as DetalleTurnosSinCobrar } from './DetalleTurnosSinCobrar.jsx';
 export { TONOS_FORMA_PAGO, OPCIONES_FORMA_PAGO_TONO } from './tonosFormaPago.js';
 export { estiloEtiquetaCampo }         from './estilos.js';
