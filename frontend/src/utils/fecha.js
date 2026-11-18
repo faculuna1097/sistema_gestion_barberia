@@ -187,6 +187,16 @@ export const formatInstante = (iso) =>
   `${formatFechaCorta(fechaDeInstante(iso))} · ${formatHora(iso)}`;
 
 /**
+ * formatInstanteCorto
+ * Como formatInstante, pero sin el día si el instante es de hoy (timezone
+ * Argentina): la hora sola alcanza.
+ * @param {string} iso - Timestamp ISO
+ * @returns {string} Ej: '15:00' (hoy), 'Jueves 12/11 · 15:00' (otro día)
+ */
+export const formatInstanteCorto = (iso) =>
+  fechaDeInstante(iso) === getFechaHoy() ? formatHora(iso) : formatInstante(iso);
+
+/**
  * formatDuracion
  * Una cantidad de minutos como duración legible.
  * @param {number} mins - Minutos (≥ 0)
