@@ -5,17 +5,24 @@
 > Las líneas y archivos citados en §3 son del 2026-11-05: confirmalos al escribir cada prompt, porque las fases
 > anteriores los mueven. Aprobar el plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
-> **Estado (2026-11-13):** **en curso.** Branch rebasado sobre `main` (`3931843`: monitoreo, formulario de alta y
-> fases 0-2 del resguardo de la DB). Fases 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8), 2 (F6a), 3 (F6b), 4 (F5), 5 (F1a) y 6
-> (F1b) hechas y commiteadas. Próximo: fase 7 (F3), que espera el SQL de `no_asistio_por`.
-> **(2026-11-17)** La auditoría 2026-11 dejó nueve arreglos para esta tanda, dos de ellos antes de F3: ver §8.
-> **(2026-11-18)** El chat de la auditoría hizo en este branch Z3-01, los logs, `body-parser` y la regla de la skill
-> de alta (`5b143d2`, `baba229`) y pausó: **este orquestador retoma la tanda** con los nueve arreglos de §8 (Z5-04
-> con Z4-09 antes de F3), y antes del PR de merge corre dos pasos: sacar la skill de alta del repo y la fase 10
-> de la auditoría. Ver la última entrada de §8.
-> **(2026-11-18, este orquestador)** Retomada. Los arreglos de la auditoría se reparten en tres fases chicas antes
-> de F3: **6b** (Z5-04 + Z4-09, hecha), **6c** (arreglos de F1: Z2-01, Z5-09, refresco de Z8-04, hecha) y **6d**
-> (arreglos de F6: Z1-01, Z1-02, Z1-05, y Z3-06). Después, fases 7 a 10, los dos pasos previos al PR y el cierre.
+> **Estado (2026-11-18):** **en curso.** Hechas y commiteadas: 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8), 2 (F6a),
+> 3 (F6b), 4 (F5), 5 (F1a), 6 (F1b) y, de la auditoría 2026-11, 6b (Z5-04 + Z4-09, `fefd8fa`) y 6c (Z2-01, Z5-09 y el
+> refresco de Z8-04, `a301d55`). **Próximo: fase 6d** (arreglos de F6: Z1-01 alto, Z1-02, Z1-05 y Z3-06; detalle en
+> la fila 6d de §5 y en `auditoria_2026-11.md`). Después: 7 (F3, el SQL de `no_asistio_por` lo arma su ejecutor y
+> lo corre el usuario), 8 (F4), 9 y 10 (F2), los dos pasos previos al PR (sacar la skill `alta-cliente` con su
+> respaldo y la fase 10 de la auditoría: segunda pasada sobre `git diff a03bdc0..HEAD`) y 11 (cierre, que también
+> marca los arreglos como hechos en `auditoria_2026-11.md`).
+> **Branch sin pushear** desde el rebase del 2026-11-12: `main` avanzó (landing de captación #9, CORS #10,
+> keep-alive del pool, skills de producción). Antes del PR: rebase sobre `main` revisando `backend/src/index.js` a
+> mano (lo tocaron las dos partes) y `git push --force-with-lease origin feature/mejoras-operativas` (lo corre el
+> usuario).
+> **Cómo se trabaja desde el 2026-11-13** (además de §2): el SQL de cada fase lo arma su chat ejecutor y lo corre el
+> usuario; el orquestador revisa el diff, completa los docs que falten (`ruta_proyecto.md`, `SQL_Schema.md`,
+> `estado_actual.md`) y commitea con el OK del usuario. Regla de §8: si una prueba local cambia versiones de token
+> de demo, reiniciar el servicio web de producción al terminar.
+> Historia: el 2026-11-17 la auditoría 2026-11 dejó nueve arreglos para esta tanda y el 2026-11-18 su chat hizo
+> Z3-01, los logs, `body-parser` y la regla de la skill de alta (`5b143d2`, `baba229`) y devolvió la tanda (última
+> entrada de §8).
 > Antes, 2026-11-05: fase 0 hecha y la tanda en espera del monitoreo (`feature/monitoreo-prod`, ya en producción).
 
 ## 1. Contexto
