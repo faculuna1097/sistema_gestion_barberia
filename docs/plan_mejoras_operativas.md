@@ -14,7 +14,7 @@
 > con Z4-09 antes de F3), y antes del PR de merge corre dos pasos: sacar la skill de alta del repo y la fase 10
 > de la auditoría. Ver la última entrada de §8.
 > **(2026-11-18, este orquestador)** Retomada. Los arreglos de la auditoría se reparten en tres fases chicas antes
-> de F3: **6b** (Z5-04 + Z4-09, hecha), **6c** (arreglos de F1: Z2-01, Z5-09, refresco de Z8-04) y **6d**
+> de F3: **6b** (Z5-04 + Z4-09, hecha), **6c** (arreglos de F1: Z2-01, Z5-09, refresco de Z8-04, hecha) y **6d**
 > (arreglos de F6: Z1-01, Z1-02, Z1-05, y Z3-06). Después, fases 7 a 10, los dos pasos previos al PR y el cierre.
 > Antes, 2026-11-05: fase 0 hecha y la tanda en espera del monitoreo (`feature/monitoreo-prod`, ya en producción).
 
@@ -196,18 +196,21 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
 - **Backend:** `POST /api/admin/turnos` acepta `sin_cliente: true` (sin nombre ni contacto) → turno sin cliente.
   Los 4 `JOIN cliente` pasan a `LEFT JOIN`; mails y Calendar toleran cliente nulo. Endpoint nuevo para **asignar
   un cliente** a un turno (existente por id, o crear uno nuevo con nombre/teléfono/email); con rol barbero, solo
-  turnos propios y clientes propios (los de sus turnos). **Corregido (2026-11-17, auditoría Z2-01):** el
-  barbero puede elegir cualquier cliente del local; sigue tocando solo sus turnos.
+  turnos propios. El cliente puede ser cualquiera del local, con cualquier rol (auditoría Z2-01, decisión del
+  usuario: hay clientes que no se cortan siempre con el mismo barbero; arreglado en la fase 6c, que sacó el
+  filtro de "cliente suyo" del alta y de la asignación). El admin puede **cambiar** el cliente de un turno que ya
+  tiene uno (`reemplazar: true` + `cliente_actual_id`, auditoría Z5-09, fase 6c); el barbero no.
 - **App del barbero:**
   - Paso del cliente: botón destacado "Sin datos" que confirma sin nombre.
   - Wizard: días en chips (hoy, mañana, …) en lugar del input nativo; fecha y horario en un mismo paso.
   - **Atajo en la Agenda:** con slots elegidos, el footer ofrece "Reservar turno" además de "Marcar descanso" →
     hoja con servicio + cliente (buscar / nuevo / "Sin datos") que arranca en el primer slot elegido.
   - Detalle del turno: "Asignar cliente" si no tiene (buscar entre los clientes del local o crear; ver Z2-01 en §8).
-  - **Refresco de la Agenda:** recarga silenciosa cada 30 s con la app visible y al volver al primer plano
-    (`visibilitychange`), sin perder la selección ni el modal abierto.
+  - **Refresco de la Agenda:** recarga silenciosa cada 60 s (antes 30 s; auditoría Z8-04, fase 6c) con la app
+    visible y al volver al primer plano (`visibilitychange`), sin perder la selección ni el modal abierto.
   - Todo turno sin cliente se muestra como "Sin datos".
-- **Panel:** detalle del turno en Gestión → Turnero con "Asignar cliente" (todos los clientes del local).
+- **Panel:** detalle del turno en Gestión → Turnero con "Asignar cliente" (todos los clientes del local) y, solo
+  el admin, "Cambiar" en un turno que ya tiene cliente.
 - **iPad:** el selector de turno al cobrar muestra "Sin datos" cuando corresponde.
 
 ### F3 — Turnos sin cobrar: aviso y cierre diario
@@ -339,7 +342,7 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
 | 5 | ✅ **Hecha (2026-11-13, commiteada).** F1a backend. SQL corrido por el usuario: `turno.cliente_id` nullable. `POST /api/admin/turnos` con `sin_cliente: true` (400 si además trae nombre o contacto); `LEFT JOIN cliente` en `getTurnoPorToken`, `sqlTurnoEnriquecido`, `listarTurnos` y `listarTurnosOperativos` (`planillaService` ya lo era); Calendar nombra "Sin datos" (`NOMBRE_SIN_CLIENTE`), la API devuelve el cliente en `null`. Nuevo `PATCH /api/admin/turnos/:id/cliente` con `{ cliente_id }` o `{ nombre, telefono?, email? }` → 200 `{ id, cliente_id, cliente_nombre, cliente_email, cliente_telefono }`; 400 (ninguno, los dos o contacto inválido); 404 turno o cliente (inexistente, de otro local o, con rol barbero, ajeno); 409 `codigo: 'turno_con_cliente'`; 409 si el estado no es `reservado` ni `completado`. Una sola sentencia, no pisa un cliente ya asignado; sin mail; Calendar best-effort | Ejecutor | SQL `cliente_id` nullable |
 | 6 | ✅ **Hecha (2026-11-16, commiteada).** F1b fronts. App del barbero: `textoCliente` ("Sin datos" en toda la app), wizard de 3 pasos (servicio · día en chips de 14 días con los que no tienen lugar en gris + "Otra fecha" y horario · cliente con "Sin datos" destacado), atajo "Reservar turno" en la Agenda (`HojaReservar`), "Asignar cliente" en el detalle (`HojaAsignarCliente`) y refresco cada 30 s y al volver al primer plano; centralizado en `components/cliente/`, `HojaInferior`, `AvisoError`, `useBusquedaClientes` y `utils/clienteTurno.js`. Panel: "Sin datos" en Turnero, Planillas y Gestión → Barberos, y "Asignar" en el detalle del turno (`turnero/AsignarCliente.jsx`, también en modo barbero). iPad: "Sin datos" en el selector y el resumen de `FlujoCorte`. Distinto al prompt, decidido con el usuario: `POST /api/admin/turnos` acepta `{ cliente_id }` (antes, elegir un cliente del buscador creaba otro igual; con rol barbero, uno suyo o 404) y borra el cliente sin mail recién creado si el alta falla (`borrarClienteSinTurnos`) | Ejecutor | — |
 | 6b | ✅ **Hecha (2026-11-18, commiteada).** Auditoría Z5-04 + Z4-09: borrar en Caja un corte con turno. La lógica pasó a `eliminarCorte` (`services/movimientosService.js`): el turno vuelve a `reservado`; si su horario ya es de otro (`23P01`), queda `cancelado` (`cancelado_por = 'admin'`, sin mail, y se borra su evento de Calendar recién con el corte borrado), con compensación si el borrado falla. El `DELETE` de un corte responde `{ ok, turno: { id, estado } \| null, aviso? }`. La lista de Caja suma `turno_inicio`, `turno_estado` y `turno_cliente_nombre`; el diálogo muestra la fila "Turno" y que queda pendiente de cobro (y, si es de un día anterior, que no aparece en el iPad y que esa noche pasa a "no asistió"); el `aviso` sale como toast | Ejecutor | — |
-| 6c | Arreglos de F1 (auditoría): Z2-01 (el buscador de clientes no filtra por barbero: sacar el filtro de "cliente suyo"), Z5-09 (el admin puede cambiar el cliente asignado) y el refresco de la Agenda de Z8-04 | Ejecutor | — |
+| 6c | ✅ **Hecha (2026-11-18, commiteada).** Arreglos de F1 (auditoría). Z2-01: el cliente del alta y de la asignación alcanza con que sea del local, con cualquier rol (se borró `sqlClienteDelBarbero`); el barbero sigue tocando solo sus turnos. Z5-09: el admin cambia el cliente con `PATCH /api/admin/turnos/:id/cliente` + `{ reemplazar: true, cliente_actual_id }` (403 con otro rol; 409 `cliente_cambio` si el turno ya no tiene ese cliente; una sola sentencia que además rota `token_gestion` si el cliente cambia, para que el link del anterior deje de servir; el cliente anterior no se borra; un turno con cliente no vuelve a "Sin datos"), con "Cambiar" en el detalle del panel. Z8-04: la Agenda se refresca cada 60 s | Ejecutor | — |
 | 6d | Arreglos de F6 (auditoría): Z1-01 (alto: limiter propio y tope diario de links de recuperación), Z1-02 (aviso al mail anterior y anular links pendientes), Z1-05 (enmascarar también el dominio) y Z3-06 (`booking_url` solo `https://`) | Ejecutor | — |
 | 7 | F3 backend (endpoint, `no_asistio_por`, `cierreDiario.js`) + avisos en el iPad y el Inicio | Ejecutor | SQL `no_asistio_por` |
 | 8 | F4 socios | Ejecutor | — |

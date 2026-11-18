@@ -86,9 +86,9 @@ const hayDatoDeContacto = (body) =>
  * POST /api/admin/turnos
  * Reserva manual desde backoffice. El cliente es uno de tres:
  * - nuevo: `nombre` y, opcionales, `telefono` y `email` (upsertCliente);
- * - existente: `cliente_id` (sin nombre ni contacto). Con rol barbero, uno suyo
- *   (clienteUsable); uno ajeno responde 404, igual que uno inexistente. Así elegir
- *   un cliente del buscador no crea otro igual;
+ * - existente: `cliente_id` (sin nombre ni contacto), del local con cualquier rol
+ *   (clienteUsable); uno de otro local responde 404, igual que uno inexistente.
+ *   Así elegir un cliente del buscador no crea otro igual;
  * - ninguno: `sin_cliente: true` (cliente "Sin datos", turno.cliente_id NULL). No
  *   sale mail. El cliente se le puede asignar después (PATCH /:id/cliente).
  * Si rol=barbero, barbero_id del body se ignora y se usa req.barbero_id.
@@ -97,7 +97,7 @@ const hayDatoDeContacto = (body) =>
  *   { nombre, telefono?, email? }, { cliente_id } o { sin_cliente: true }
  * @returns {JSON} 201 { turno_id, token_gestion }; 400 si se combinan dos formas de
  *   cliente (sin_cliente o cliente_id con nombre o contacto, o sin_cliente con
- *   cliente_id); 404 si el cliente_id no existe o no es del local (o del barbero)
+ *   cliente_id); 404 si el cliente_id no existe o no es del local
  */
 export const crearTurnoAdmin = async (req, res) => {
   const { servicio_id, inicio, cliente_id: clienteIdBody } = req.body;
@@ -181,17 +181,15 @@ export const crearTurnoAdmin = async (req, res) => {
       return res.status(422).json(CUERPO_422_FERIADO);
     }
 
-    // ── Cliente: uno existente (del local y, con rol barbero, suyo), uno nuevo
-    //    (upsert, datos ya normalizados por validarContacto) o ninguno ("Sin
-    //    datos", cliente_id NULL). ──────────────────────────────────────────
+    // ── Cliente: uno existente (del local), uno nuevo (upsert, datos ya
+    //    normalizados por validarContacto) o ninguno ("Sin datos", cliente_id
+    //    NULL). ─────────────────────────────────────────────────────────────
     let cliente_id = null;
     // Un cliente sin email siempre es una fila nueva (upsertCliente): si el turno
     // no se inserta, se borra para no dejar clientes sin turnos (uno por reintento).
     let clienteCreadoAca = false;
     if (traeClienteId) {
-      const usable = await clienteUsable({
-        clienteId: clienteIdBody, tenantId: req.tenant_id, barberoId: barberoSegunRol(req, null),
-      });
+      const usable = await clienteUsable({ clienteId: clienteIdBody, tenantId: req.tenant_id });
       if (!usable) {
         return res.status(404).json({ error: MENSAJE_CLIENTE_NO_ENCONTRADO });
       }
@@ -353,21 +351,43 @@ export const completarTurno = async (req, res) => {
 /**
  * PATCH /api/admin/turnos/:id/cliente
  * Asigna un cliente a un turno "Sin datos" (cliente_id NULL), reservado o completado.
- * El cliente es uno existente ({ cliente_id }) o uno nuevo ({ nombre, telefono?,
- * email? }, con las mismas reglas que el alta). No pisa un cliente ya asignado ni
- * manda mail. Con rol barbero: solo turnos propios y, si el cliente es existente,
- * uno suyo (de alguno de sus turnos); lo ajeno responde 404, igual que lo inexistente.
+ * El cliente es uno existente ({ cliente_id }, del local) o uno nuevo ({ nombre,
+ * telefono?, email? }, con las mismas reglas que el alta). No manda mail. Con rol
+ * barbero, solo turnos propios: uno ajeno responde 404, igual que uno inexistente.
+ *
+ * Reemplazo (auditoría 2026-11, Z5-09): con `reemplazar: true` y
+ * `cliente_actual_id` (el cliente que muestra la pantalla), cambia el cliente de
+ * un turno que ya tiene uno. Solo el admin: con otro rol responde 403. Si el turno
+ * ya no tiene ese cliente (otro lo cambió), 409 'cliente_cambio'. Sin
+ * `reemplazar`, no pisa un cliente ya asignado.
+ *
  * Después, best-effort, actualiza el evento de Calendar.
- * @param {Object} req.body - { cliente_id } o { nombre, telefono?, email? }
+ * @param {Object} req.body - { cliente_id } o { nombre, telefono?, email? }; para
+ *   reemplazar, además { reemplazar: true, cliente_actual_id }
  * @returns {JSON} 200 { id, cliente_id, cliente_nombre, cliente_email, cliente_telefono };
- *   400 si no viene ninguno de los dos, vienen los dos o el contacto es inválido;
- *   404 si el turno o el cliente no existen (o no son del local, o del barbero);
- *   409 con codigo 'turno_con_cliente' si el turno ya tiene cliente, o 409 si su
- *   estado no lo permite
+ *   400 si no viene ninguno de los dos, vienen los dos, el contacto es inválido o,
+ *   al reemplazar, falta cliente_actual_id (o no es un UUID);
+ *   403 si un rol que no es admin pide reemplazar;
+ *   404 si el turno o el cliente no existen (o no son del local, o el turno no es
+ *   del barbero);
+ *   409 con codigo 'turno_con_cliente' si el turno ya tiene cliente, con codigo
+ *   'cliente_cambio' si al reemplazar el cliente ya no es el que se vio, o 409 si
+ *   su estado no lo permite
  */
 export const asignarCliente = async (req, res) => {
   if (!esUUID(req.params.id)) {
     return res.status(404).json({ error: MENSAJE_TURNO_NO_ENCONTRADO });
+  }
+
+  // ── Reemplazo: solo el admin, y con el cliente que está viendo ─────────────
+  const reemplazar = req.body.reemplazar === true;
+  if (reemplazar && req.rol !== 'admin') {
+    console.warn('[turnos] asignarCliente — reemplazo sin rol admin | rol:', req.rol, '| turno_id:', req.params.id);
+    return res.status(403).json({ error: 'Solo el dueño puede cambiar el cliente de un turno' });
+  }
+  const clienteActualId = reemplazar ? req.body.cliente_actual_id : null;
+  if (reemplazar && !esUUID(clienteActualId)) {
+    return res.status(400).json({ error: 'cliente_actual_id es requerido para cambiar el cliente' });
   }
 
   const { cliente_id } = req.body;
@@ -403,6 +423,7 @@ export const asignarCliente = async (req, res) => {
       barberoId,
       clienteId: traeClienteId ? cliente_id : undefined,
       contacto,
+      clienteActualId,
     });
   } catch (err) {
     if (err.code === 'NO_ENCONTRADO' || err.code === 'CLIENTE_NO_ENCONTRADO') {
@@ -412,6 +433,10 @@ export const asignarCliente = async (req, res) => {
       console.warn('[turnos] asignarCliente — el turno ya tiene cliente | turno_id:', req.params.id);
       return res.status(409).json({ error: err.message, codigo: 'turno_con_cliente' });
     }
+    if (err.code === 'CLIENTE_CAMBIO') {
+      console.warn('[turnos] asignarCliente — el cliente cambió antes del reemplazo | turno_id:', req.params.id);
+      return res.status(409).json({ error: err.message, codigo: 'cliente_cambio' });
+    }
     if (err.code === 'ESTADO_INVALIDO') {
       console.warn('[turnos] asignarCliente — estado no permite asignar | turno_id:', req.params.id);
       return res.status(409).json({ error: err.message });
@@ -419,7 +444,12 @@ export const asignarCliente = async (req, res) => {
     console.error('[turnos] Error en asignarCliente:', err);
     return res.status(500).json({ error: 'Error al asignar el cliente al turno' });
   }
-  console.log('[turnos] asignarCliente completado | turno_id:', resultado.id, '| cliente_id:', resultado.cliente_id);
+  if (clienteActualId) {
+    console.log('[turnos] asignarCliente — cliente reemplazado | turno_id:', resultado.id,
+      '| cliente_anterior_id:', clienteActualId, '| cliente_id:', resultado.cliente_id);
+  } else {
+    console.log('[turnos] asignarCliente completado | turno_id:', resultado.id, '| cliente_id:', resultado.cliente_id);
+  }
 
   // ── Best-effort: el evento de Calendar pasa de "Sin datos" al cliente ──────
   try {

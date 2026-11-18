@@ -1086,15 +1086,18 @@ const totalValorStyle = {
  *     completado" directo, que cambiaba el estado sin dejar registro financiero.
  *   - 'confirmando': vista de confirmación para cancelar (sin anidar modales).
  *   - 'asignando': "Asignar cliente" a un turno "Sin datos" (AsignarCliente).
- *     Está también en modo barbero: el servidor lo scopea a sus turnos y clientes.
+ *     Está también en modo barbero: el servidor lo scopea a sus turnos.
+ *   - 'cambiando': "Cambiar cliente" de un turno que ya tiene uno (el mismo
+ *     AsignarCliente, con `reemplazando`). Solo el admin (auditoría 2026-11, Z5-09).
  * @param {Array} servicios - catálogo de servicios del tenant ({ id, nombre,
  *   precio, activo }). Fuente del selector de servicio y del precio. Si está
  *   vacío (no cargó), el form degrada a precio editable a mano.
  * @param {boolean} [readonly=false] - Si true (modo barbero, D1), el modal es de
  *   solo lectura: oculta las acciones (completar/no asistió/cancelar) y, por ende,
  *   los modos 'completando'/'confirmando' quedan inalcanzables. "Asignar cliente"
- *   sí se ofrece (decisión del usuario, 2026-11-16).
- * @param {(respuesta: Object) => void} onClienteAsignado - con la respuesta del PATCH
+ *   sí se ofrece (decisión del usuario, 2026-11-16); "Cambiar", no.
+ * @param {(respuesta: Object, cambio: boolean) => void} onClienteAsignado - con la
+ *   respuesta del PATCH; `cambio` dice si se reemplazó un cliente
  * @param {(err: Error) => void} onConflictoCliente - el 409 al asignar
  */
 function ModalDetalleTurno({
@@ -1150,6 +1153,7 @@ function ModalDetalleTurno({
     completando: 'Completar turno',
     confirmando: 'Cancelar este turno',
     asignando: 'Asignar cliente',
+    cambiando: 'Cambiar cliente',
   }[modo];
 
   const esReservado = turno.estado === 'reservado';
@@ -1166,7 +1170,13 @@ function ModalDetalleTurno({
   const yaComenzo = new Date(turno.inicio) <= new Date();
   // Un turno "Sin datos" recibe un cliente si está reservado o completado (se
   // anota después de cobrar); cancelado o "no asistió" ya no se toca.
-  const puedeAsignar = !turno.cliente_id && (esReservado || turno.estado === 'completado');
+  const admiteCliente = esReservado || turno.estado === 'completado';
+  const puedeAsignar = !turno.cliente_id && admiteCliente;
+  // Con cliente, en los mismos estados, el admin lo puede cambiar (se eligió mal).
+  const puedeCambiar = !readonly && Boolean(turno.cliente_id) && admiteCliente;
+  const accionCliente = puedeAsignar
+    ? { texto: 'Asignar', modo: 'asignando' }
+    : puedeCambiar ? { texto: 'Cambiar', modo: 'cambiando' } : null;
 
   // Filas estáticas del DetalleRecurso (label/valor simples).
   const filasBase = [
@@ -1177,12 +1187,14 @@ function ModalDetalleTurno({
     { label: 'Barbero',   valor: turno.barbero_nombre },
     {
       label: 'Cliente',
-      valor: puedeAsignar ? (
+      valor: accionCliente ? (
         // El margen negativo compensa el alto del BotonEnlace (44 px, el
         // área táctil): así la fila mide lo mismo que las otras y no se desalinea.
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, margin: '-12px -8px -12px 0' }}>
           {textoCliente(turno.cliente_nombre)}
-          <BotonEnlace onClick={() => setModo('asignando')} disabled={accionando}>Asignar</BotonEnlace>
+          <BotonEnlace onClick={() => setModo(accionCliente.modo)} disabled={accionando}>
+            {accionCliente.texto}
+          </BotonEnlace>
         </span>
       ) : textoCliente(turno.cliente_nombre),
     },
@@ -1204,12 +1216,13 @@ function ModalDetalleTurno({
       loading={accionando || asignandoCliente}
       maxWidth={460}
     >
-      {modo === 'asignando' ? (
+      {modo === 'asignando' || modo === 'cambiando' ? (
         <AsignarCliente
           turno={turno}
+          reemplazando={modo === 'cambiando'}
           onVolver={() => setModo('detalle')}
           onEnviando={setAsignandoCliente}
-          onAsignado={(respuesta) => { onClienteAsignado(respuesta); setModo('detalle'); }}
+          onAsignado={(respuesta) => { onClienteAsignado(respuesta, modo === 'cambiando'); setModo('detalle'); }}
           onConflicto={onConflictoCliente}
         />
       ) : modo === 'detalle' ? (
@@ -1671,16 +1684,17 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
 
   /**
    * clienteAsignado
-   * Dibuja el cliente asignado con lo que devolvió el servidor, en la agenda y en
-   * el detalle abierto (convenciones §8).
+   * Dibuja el cliente asignado (o el nuevo, si se cambió) con lo que devolvió el
+   * servidor, en la agenda y en el detalle abierto (convenciones §8).
    * @param {Object} respuesta - { id, cliente_id, cliente_nombre, cliente_email, cliente_telefono }
+   * @param {boolean} [cambio=false] - true si se reemplazó el cliente que tenía
    */
-  const clienteAsignado = (respuesta) => {
+  const clienteAsignado = (respuesta, cambio = false) => {
     const { id, cliente_id, cliente_nombre, cliente_email, cliente_telefono } = respuesta;
     const cliente = { cliente_id, cliente_nombre, cliente_email, cliente_telefono };
     setTurnos((prev) => prev.map((t) => (t.id === id ? { ...t, ...cliente } : t)));
     setTurnoSeleccionado((prev) => (prev && prev.id === id ? { ...prev, ...cliente } : prev));
-    toast.exito('Cliente asignado.');
+    toast.exito(cambio ? 'Cliente cambiado.' : 'Cliente asignado.');
   };
 
   /**
@@ -1691,9 +1705,11 @@ export default function SeccionTurnero({ modoBarbero = false, barberoSesion = nu
    */
   const conflictoAlAsignar = (err) => {
     setTurnoSeleccionado(null);
-    mostrarErrorAccion(err.codigo === 'turno_con_cliente'
-      ? 'Otro ya le cargó el cliente a este turno.'
-      : textoErrorAccion('No se pudo asignar el cliente', err));
+    const textos = {
+      turno_con_cliente: 'Otro ya le cargó el cliente a este turno.',
+      cliente_cambio: 'Otro cambió el cliente de este turno mientras lo editabas.',
+    };
+    mostrarErrorAccion(textos[err.codigo] ?? textoErrorAccion('No se pudo guardar el cliente', err));
     recargarTurnosEnSilencio();
   };
 

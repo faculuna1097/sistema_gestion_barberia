@@ -22,7 +22,8 @@ router.patch('/:id/estado', patchEstado);
 router.post('/:id/completar', completarTurno);
 
 // PATCH  /api/admin/turnos/:id/cliente  — asigna un cliente a un turno "Sin datos"
-//        ({ cliente_id } existente o { nombre, telefono?, email? } nuevo)
+//        ({ cliente_id } existente o { nombre, telefono?, email? } nuevo); el admin
+//        también lo cambia con { reemplazar: true, cliente_actual_id }
 router.patch('/:id/cliente', asignarCliente);
 
 // DELETE /api/admin/turnos/:id  — cancela

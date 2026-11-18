@@ -12,8 +12,8 @@ const MINIMO_LETRAS = 2;
 
 /**
  * useBusquedaClientes
- * Busca clientes del local (con rol barbero, el servidor devuelve solo los suyos)
- * a medida que se escribe. Espera ESPERA_MS sin teclas antes de pedir, y descarta
+ * Busca clientes de todo el local (no solo los del barbero: auditoría 2026-11,
+ * Z2-01) a medida que se escribe. Espera ESPERA_MS sin teclas antes de pedir, y descarta
  * la respuesta de una búsqueda vieja que llega después de una nueva.
  * @param {string} texto - lo escrito en el buscador
  * @returns {{ resultados: Array, buscando: boolean, error: boolean, buscado: boolean }}

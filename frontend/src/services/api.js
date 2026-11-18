@@ -591,13 +591,17 @@ export const cancelarAdminTurno = async (turnoId) => {
 /**
  * asignarClienteAdminTurno
  * Le asigna un cliente a un turno "Sin datos" (reservado o completado): uno
- * existente ({ cliente_id }) o uno nuevo ({ nombre, telefono?, email? }).
+ * existente ({ cliente_id }) o uno nuevo ({ nombre, telefono?, email? }). Con
+ * { reemplazar: true, cliente_actual_id } cambia el cliente que ya tiene (solo
+ * el admin).
  * @param {string} turnoId
- * @param {Object} datos - { cliente_id } o { nombre, telefono?, email? }
+ * @param {Object} datos - { cliente_id } o { nombre, telefono?, email? }; para
+ *   cambiar el cliente, además { reemplazar: true, cliente_actual_id }
  * @returns {Promise<Object>} { id, cliente_id, cliente_nombre, cliente_email, cliente_telefono }
  * @throws {ErrorServidor} con `status` y `codigo`: 409 'turno_con_cliente' si
- *   otro ya le asignó uno; 409 sin código si el estado ya no lo permite; 404
- *   turno o cliente; 400 contacto inválido
+ *   otro ya le asignó uno; 409 'cliente_cambio' si, al cambiarlo, otro lo cambió
+ *   antes; 409 sin código si el estado ya no lo permite; 404 turno o cliente;
+ *   403 si cambia el cliente un rol que no es admin; 400 contacto inválido
  */
 export const asignarClienteAdminTurno = async (turnoId, datos) => {
   const res = await apiFetch(`/admin/turnos/${turnoId}/cliente`, {
@@ -611,7 +615,7 @@ export const asignarClienteAdminTurno = async (turnoId, datos) => {
 /**
  * buscarClientesAdmin
  * Busca clientes del local por nombre, email o teléfono (hasta 50). Con rol
- * barbero, el servidor devuelve solo los suyos.
+ * barbero, también los de todo el local.
  * @param {string} busqueda - al menos 2 caracteres
  * @returns {Promise<Array>} [{ id, nombre, email, telefono }]
  * @throws {ErrorServidor}

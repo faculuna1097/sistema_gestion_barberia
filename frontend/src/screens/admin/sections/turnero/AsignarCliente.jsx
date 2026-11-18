@@ -1,8 +1,10 @@
 // /frontend/src/screens/admin/sections/turnero/AsignarCliente.jsx
 // "Asignar cliente" a un turno "Sin datos" desde su detalle en el Turnero: buscar
-// un cliente del local (con rol barbero, uno suyo) o cargar uno nuevo
-// (PATCH /admin/turnos/:id/cliente). Es el modo 'asignando' de ModalDetalleTurno:
-// se dibuja adentro del mismo Modal, sin anidar otro.
+// un cliente del local (también en modo barbero) o cargar uno nuevo
+// (PATCH /admin/turnos/:id/cliente). Con `reemplazando`, el mismo formulario
+// cambia el cliente que ya tiene el turno (solo el admin; auditoría 2026-11,
+// Z5-09). Son los modos 'asignando' y 'cambiando' de ModalDetalleTurno: se dibuja
+// adentro del mismo Modal, sin anidar otro.
 
 import { useState } from 'react';
 
@@ -78,14 +80,19 @@ function OpcionCliente({ cliente, elegido, deshabilitado, onClick }) {
  * servidor avisa a quien lo abrió, que dibuja el cliente (convenciones §8). Un
  * 409 también lo resuelve quien lo abrió (cierra, avisa y recarga); el resto de
  * los errores quedan acá, sin perder lo cargado.
- * @param {Object} props.turno - el turno ({ id })
+ * @param {Object} props.turno - el turno ({ id, cliente_id })
+ * @param {boolean} [props.reemplazando=false] - true para cambiar el cliente que
+ *   ya tiene: manda `reemplazar` con el cliente que se ve (turno.cliente_id), y
+ *   el actual no se ofrece en la búsqueda
  * @param {() => void} props.onVolver - vuelve al detalle
  * @param {(enviando: boolean) => void} props.onEnviando - para bloquear el cierre del Modal
  * @param {(respuesta: Object) => void} props.onAsignado - { id, cliente_id, cliente_nombre, ... }
  * @param {(err: Error) => void} props.onConflicto - el 409
  * @returns {JSX.Element}
  */
-export default function AsignarCliente({ turno, onVolver, onEnviando, onAsignado, onConflicto }) {
+export default function AsignarCliente({
+  turno, reemplazando = false, onVolver, onEnviando, onAsignado, onConflicto,
+}) {
   const [busqueda, setBusqueda] = useState('');
   const [elegido, setElegido] = useState(null);
   const [nuevo, setNuevo] = useState({ nombre: '', telefono: '', email: '' });
@@ -93,9 +100,10 @@ export default function AsignarCliente({ turno, onVolver, onEnviando, onAsignado
   const [error, setError] = useState(null);
   const { resultados, buscando, error: errorBusqueda, buscado } = useBusquedaClientes(busqueda);
 
-  // Lo que va a la API: el elegido, o el nuevo si tiene nombre.
+  // Lo que va a la API: el elegido, o el nuevo si tiene nombre. Al cambiar el
+  // cliente, además el que se ve ahora (el servidor no pisa si otro lo cambió).
   const nombreNuevo = nuevo.nombre.trim();
-  const datos = elegido
+  const cliente = elegido
     ? { cliente_id: elegido.id }
     : nombreNuevo
       ? {
@@ -104,6 +112,9 @@ export default function AsignarCliente({ turno, onVolver, onEnviando, onAsignado
         ...(nuevo.email.trim() ? { email: nuevo.email.trim() } : {}),
       }
       : null;
+  const datos = cliente && reemplazando
+    ? { ...cliente, reemplazar: true, cliente_actual_id: turno.cliente_id }
+    : cliente;
 
   /**
    * asignar
@@ -123,18 +134,22 @@ export default function AsignarCliente({ turno, onVolver, onEnviando, onAsignado
         onConflicto(err);
         return;
       }
-      setError(mensajeDeError(err, 'No se pudo asignar el cliente. Intentá de nuevo.'));
+      setError(mensajeDeError(err, reemplazando
+        ? 'No se pudo cambiar el cliente. Intentá de nuevo.'
+        : 'No se pudo asignar el cliente. Intentá de nuevo.'));
     } finally {
       setEnviando(false);
       onEnviando(false);
     }
   };
 
-  const sinResultados = buscado && !errorBusqueda && resultados.length === 0 && busqueda.trim().length >= 2;
+  // Al cambiar el cliente, el que ya tiene el turno no se ofrece.
+  const encontrados = reemplazando ? resultados.filter((c) => c.id !== turno.cliente_id) : resultados;
+  const sinResultados = buscado && !errorBusqueda && encontrados.length === 0 && busqueda.trim().length >= 2;
   // El elegido queda a la vista aunque el texto de búsqueda cambie.
-  const lista = elegido && !resultados.some((c) => c.id === elegido.id)
-    ? [elegido, ...resultados]
-    : resultados;
+  const lista = elegido && !encontrados.some((c) => c.id === elegido.id)
+    ? [elegido, ...encontrados]
+    : encontrados;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -209,7 +224,9 @@ export default function AsignarCliente({ turno, onVolver, onEnviando, onAsignado
           Volver
         </Button>
         <Button variant="primary" full={false} onClick={asignar} disabled={enviando || !datos}>
-          {enviando ? 'Asignando…' : 'Asignar cliente'}
+          {reemplazando
+            ? (enviando ? 'Cambiando…' : 'Cambiar cliente')
+            : (enviando ? 'Asignando…' : 'Asignar cliente')}
         </Button>
       </div>
     </div>

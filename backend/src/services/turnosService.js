@@ -588,46 +588,27 @@ export const cancelarTurnoPorId = async (turnoId, canceladoPor, tenantId, barber
 
 // ─── Asignar un cliente a un turno "Sin datos" (F1) ──────────────────────────
 
-// Estados en los que un turno sin cliente puede recibir uno: reservado (todavía no
-// vino) y completado (se anota al cliente después de cobrar). Un turno cancelado o
-// con "no asistió" ya no se toca.
+// Estados en los que a un turno se le puede asignar o cambiar el cliente: reservado
+// (todavía no vino) y completado (se anota al cliente después de cobrar). Un turno
+// cancelado o con "no asistió" ya no se toca.
 const ESTADOS_ASIGNABLES = ['reservado', 'completado'];
 
 /**
- * Fragmento SQL que dice si un cliente es "del barbero": tuvo al menos un turno
- * reservado o completado con él. Es el mismo criterio que getMisClientes
- * (controllers/clientes.js): si cambia uno, cambia el otro.
- * @param {string} aliasCliente - alias de la tabla cliente en la query (ej. 'c')
- * @param {string} paramBarbero - placeholder del barbero_id (ej. '$3')
- * @returns {string} condición EXISTS lista para un WHERE
- */
-const sqlClienteDelBarbero = (aliasCliente, paramBarbero) =>
-  `EXISTS (
-     SELECT 1 FROM turno tb
-     WHERE tb.cliente_id = ${aliasCliente}.id
-       AND tb.tenant_id  = ${aliasCliente}.tenant_id
-       AND tb.barbero_id = ${paramBarbero}
-       AND tb.estado IN ('completado', 'reservado')
-   )`;
-
-/**
- * Dice si un cliente existente se puede usar en un turno: es del local y, si quien
- * lo elige es un barbero, es "suyo" (sqlClienteDelBarbero). Lo usan el alta del
- * turno con `cliente_id` y la asignación de un cliente a un turno "Sin datos".
+ * Dice si un cliente existente se puede usar en un turno: alcanza con que sea del
+ * local, con cualquier rol. El buscador de clientes devuelve los de todo el local
+ * (decisión del usuario, auditoría 2026-11 Z2-01: hay clientes que no se cortan
+ * siempre con el mismo barbero). Lo usan el alta del turno con `cliente_id` y la
+ * asignación de un cliente a un turno.
  * @param {Object} datos
  * @param {string} datos.clienteId - id ya validado como UUID
  * @param {string} datos.tenantId
- * @param {string|null} datos.barberoId - el barbero del token con rol barbero; null para admin
  * @returns {Promise<boolean>} true si el cliente se puede usar
  */
-export const clienteUsable = async ({ clienteId, tenantId, barberoId }) => {
-  const params = [clienteId, tenantId];
-  let where = 'c.id = $1 AND c.tenant_id = $2';
-  if (barberoId) {
-    where += ` AND ${sqlClienteDelBarbero('c', '$3')}`;
-    params.push(barberoId);
-  }
-  const res = await query(`SELECT 1 FROM cliente c WHERE ${where}`, params);
+export const clienteUsable = async ({ clienteId, tenantId }) => {
+  const res = await query(
+    'SELECT 1 FROM cliente c WHERE c.id = $1 AND c.tenant_id = $2',
+    [clienteId, tenantId]
+  );
   return res.rows.length > 0;
 };
 
@@ -657,7 +638,8 @@ export const borrarClienteSinTurnos = async (clienteId, tenantId, origen) => {
 
 /**
  * Arma un error tipado de la asignación de cliente, que el controller mapea a su status.
- * @param {string} code    - 'NO_ENCONTRADO' | 'CLIENTE_NO_ENCONTRADO' | 'TURNO_CON_CLIENTE' | 'ESTADO_INVALIDO'
+ * @param {string} code    - 'NO_ENCONTRADO' | 'CLIENTE_NO_ENCONTRADO' | 'TURNO_CON_CLIENTE'
+ *   | 'CLIENTE_CAMBIO' | 'ESTADO_INVALIDO'
  * @param {string} mensaje - texto para el usuario
  * @returns {Error}
  */
@@ -668,15 +650,18 @@ const errorAsignacion = (code, mensaje) => {
 };
 
 /**
- * Lee un turno con el scoping del rol y, si no admite que se le asigne un cliente,
- * tira el error que corresponde.
+ * Lee un turno con el scoping del rol y, si no admite el cambio de cliente que se
+ * pide, tira el error que corresponde. Sin clienteActualId es una asignación: el
+ * turno tiene que estar "Sin datos". Con clienteActualId es un reemplazo: el turno
+ * tiene que seguir con ese cliente (el que vio quien lo pide).
  * @param {string} turnoId
  * @param {string} tenantId
  * @param {string|null} barberoId - con rol barbero, solo sus turnos (uno ajeno = no encontrado)
+ * @param {string|null} clienteActualId - el cliente que se reemplaza; null = asignación
  * @returns {Promise<void>}
- * @throws {{ code: 'NO_ENCONTRADO' | 'TURNO_CON_CLIENTE' | 'ESTADO_INVALIDO' }}
+ * @throws {{ code: 'NO_ENCONTRADO' | 'TURNO_CON_CLIENTE' | 'CLIENTE_CAMBIO' | 'ESTADO_INVALIDO' }}
  */
-const verificarTurnoAsignable = async (turnoId, tenantId, barberoId) => {
+const verificarTurnoAsignable = async (turnoId, tenantId, barberoId, clienteActualId) => {
   const params = [turnoId, tenantId];
   let where = 't.id = $1 AND t.tenant_id = $2';
   if (barberoId) {
@@ -688,31 +673,40 @@ const verificarTurnoAsignable = async (turnoId, tenantId, barberoId) => {
     throw errorAsignacion('NO_ENCONTRADO', 'Turno no encontrado');
   }
   const { estado, cliente_id } = res.rows[0];
-  if (cliente_id !== null) {
+  if (!clienteActualId && cliente_id !== null) {
     throw errorAsignacion('TURNO_CON_CLIENTE', 'El turno ya tiene un cliente asignado');
   }
+  if (clienteActualId && cliente_id !== clienteActualId) {
+    throw errorAsignacion('CLIENTE_CAMBIO', 'El cliente del turno cambió mientras lo editabas');
+  }
   if (!ESTADOS_ASIGNABLES.includes(estado)) {
-    throw errorAsignacion('ESTADO_INVALIDO', `El turno está en estado "${estado}" y no se le puede asignar un cliente`);
+    throw errorAsignacion('ESTADO_INVALIDO', `El turno está en estado "${estado}" y no se le puede cambiar el cliente`);
   }
 };
 
 /**
- * Asigna un cliente a un turno que no tiene (turno "Sin datos", cliente_id NULL).
- * El cliente es uno existente (clienteId) o uno nuevo (contacto, que pasa por
- * upsertCliente como en el alta: con un email que ya existe en el local, devuelve
- * ese cliente).
+ * Asigna un cliente a un turno "Sin datos" (cliente_id NULL) o, con
+ * clienteActualId, reemplaza el cliente que tiene (solo el admin: el controller
+ * lo controla). El cliente es uno existente (clienteId) o uno nuevo (contacto, que
+ * pasa por upsertCliente como en el alta: con un email que ya existe en el local,
+ * devuelve ese cliente).
  *
- * Scoping: todo por tenant. Con rol barbero, solo turnos propios y, si el cliente
- * es existente, solo uno "suyo" (sqlClienteDelBarbero); uno ajeno responde igual
- * que uno inexistente.
+ * Scoping: todo por tenant; con rol barbero, solo turnos propios. El cliente
+ * existente alcanza con que sea del local (clienteUsable).
  *
- * La asignación es una sola sentencia (UPDATE ... FROM cliente) con todas las
- * reglas en el WHERE, incluido cliente_id IS NULL: si dos asignaciones llegan a la
- * vez, la segunda espera a la primera, vuelve a evaluar la fila y no la pisa. La
- * lectura previa solo sirve para devolver el error justo; si el UPDATE no toca
- * nada (perdió una carrera), se relee para elegir el error. Si en ese caso se había
- * creado un cliente sin email (siempre es una fila nueva), se borra: cleanup manual
- * en vez de transacción (Session Pooler, convenciones §6).
+ * El cambio es una sola sentencia (UPDATE ... FROM cliente) con todas las reglas
+ * en el WHERE, incluido el cliente que tiene el turno: NULL en una asignación, el
+ * que vio quien pide en un reemplazo. Si dos llegan a la vez, la segunda espera a
+ * la primera, vuelve a evaluar la fila y no la pisa. La lectura previa solo sirve
+ * para devolver el error justo; si el UPDATE no toca nada (perdió una carrera), se
+ * relee para elegir el error. Si en ese caso se había creado un cliente sin email
+ * (siempre es una fila nueva), se borra: cleanup manual en vez de transacción
+ * (Session Pooler, convenciones §6).
+ *
+ * Al reemplazar, si el cliente cambia de verdad, se genera un token_gestion nuevo
+ * en la misma sentencia: el link del mail del cliente anterior deja de servir para
+ * cancelar o reprogramar un turno que ya no es suyo. El cliente anterior no se
+ * toca, aunque se quede sin turnos (es un dato real del local).
  *
  * @param {Object} datos
  * @param {string} datos.turnoId
@@ -720,17 +714,18 @@ const verificarTurnoAsignable = async (turnoId, tenantId, barberoId) => {
  * @param {string|null} datos.barberoId - id del barbero si el rol es barbero; null = admin
  * @param {string} [datos.clienteId] - cliente existente (UUID ya validado)
  * @param {Object} [datos.contacto] - cliente nuevo, ya normalizado por validarContacto
+ * @param {string|null} [datos.clienteActualId] - el cliente a reemplazar (UUID ya
+ *   validado); null o ausente = asignación a un turno "Sin datos"
  * @returns {Promise<{ id, cliente_id, cliente_nombre, cliente_email, cliente_telefono }>}
- * @throws {{ code: 'NO_ENCONTRADO' | 'CLIENTE_NO_ENCONTRADO' | 'TURNO_CON_CLIENTE' | 'ESTADO_INVALIDO' }}
+ * @throws {{ code: 'NO_ENCONTRADO' | 'CLIENTE_NO_ENCONTRADO' | 'TURNO_CON_CLIENTE'
+ *   | 'CLIENTE_CAMBIO' | 'ESTADO_INVALIDO' }}
  */
-export const asignarClienteATurno = async ({ turnoId, tenantId, barberoId, clienteId, contacto }) => {
-  await verificarTurnoAsignable(turnoId, tenantId, barberoId);
+export const asignarClienteATurno = async ({
+  turnoId, tenantId, barberoId, clienteId, contacto, clienteActualId = null,
+}) => {
+  await verificarTurnoAsignable(turnoId, tenantId, barberoId, clienteActualId);
 
-  // El filtro de "cliente suyo" se aplica solo a un cliente existente que elige un
-  // barbero: uno nuevo lo está cargando él.
-  const filtrarClienteDelBarbero = Boolean(barberoId && clienteId);
-
-  if (clienteId && !(await clienteUsable({ clienteId, tenantId, barberoId }))) {
+  if (clienteId && !(await clienteUsable({ clienteId, tenantId }))) {
     throw errorAsignacion('CLIENTE_NO_ENCONTRADO', 'Cliente no encontrado');
   }
 
@@ -742,22 +737,28 @@ export const asignarClienteATurno = async ({ turnoId, tenantId, barberoId, clien
   }
 
   const params = [turnoId, tenantId, idCliente, ESTADOS_ASIGNABLES];
+  let set = 'cliente_id = c.id';
+  let condicionCliente = 't.cliente_id IS NULL';
+  if (clienteActualId) {
+    params.push(clienteActualId);
+    condicionCliente = `t.cliente_id = $${params.length}`;
+    // Reemplazar por el mismo cliente no rota el token: su link sigue valiendo.
+    params.push(crypto.randomUUID());
+    set += `, token_gestion = CASE WHEN t.cliente_id = c.id THEN t.token_gestion ELSE $${params.length} END`;
+  }
   let filtros = '';
   if (barberoId) {
     params.push(barberoId);
     filtros += ` AND t.barbero_id = $${params.length}`;
-    if (filtrarClienteDelBarbero) {
-      filtros += ` AND ${sqlClienteDelBarbero('c', `$${params.length}`)}`;
-    }
   }
 
   const updateRes = await query(
     `UPDATE turno t
-        SET cliente_id = c.id
+        SET ${set}
        FROM cliente c
       WHERE t.id = $1 AND t.tenant_id = $2
         AND c.id = $3 AND c.tenant_id = $2
-        AND t.cliente_id IS NULL
+        AND ${condicionCliente}
         AND t.estado = ANY($4::text[])${filtros}
      RETURNING t.id, c.id AS cliente_id, c.nombre AS cliente_nombre,
                c.email AS cliente_email, c.telefono AS cliente_telefono`,
@@ -772,7 +773,7 @@ export const asignarClienteATurno = async ({ turnoId, tenantId, barberoId, clien
   if (clienteCreadoAca) {
     await borrarClienteSinTurnos(idCliente, tenantId, 'asignarClienteATurno');
   }
-  await verificarTurnoAsignable(turnoId, tenantId, barberoId);
+  await verificarTurnoAsignable(turnoId, tenantId, barberoId, clienteActualId);
   // El turno sigue asignable: lo que dejó de valer es el cliente.
   throw errorAsignacion('CLIENTE_NO_ENCONTRADO', 'Cliente no encontrado');
 };

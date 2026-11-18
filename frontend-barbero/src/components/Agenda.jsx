@@ -64,7 +64,7 @@ import HojaAsignarCliente from './agenda/HojaAsignarCliente.jsx';
 const INTERVALO_AHORA_MS = 30 * 1000;
 
 // Cada cuánto se recarga la agenda por detrás con la app visible.
-const INTERVALO_REFRESCO_MS = 30 * 1000;
+const INTERVALO_REFRESCO_MS = 60 * 1000;
 
 // Cuánto queda a la vista un aviso de error en el footer.
 const DURACION_AVISO_MS = 5000;
