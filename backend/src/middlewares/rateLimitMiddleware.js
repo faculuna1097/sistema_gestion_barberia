@@ -1,9 +1,11 @@
 // /backend/src/middlewares/rateLimitMiddleware.js
 // Rate limiting por IP con express-rate-limit (auditoría 2026-07: hallazgos
-// 3.1, 1.2 y 4.1). Cuatro capas:
+// 3.1, 1.2 y 4.1; auditoría 2026-11: Z3-01). Cinco capas:
 //   - limiterLogin:         estricto, para los 3 endpoints de login (fuerza bruta de PIN).
 //   - limiterReserva (+ ráfaga): para la reserva pública del turnero (email
 //     bombing / spam / agotar agenda).
+//   - limiterGestion (+ ráfaga): para cancelar y reprogramar un turno desde el
+//     link de gestión (email bombing con el token de un turno propio).
 //   - limiterAlta / limiterAltaEnvio: para el formulario de alta de clientes
 //     (autoguardado holgado, envío estricto).
 //   - limiterGlobal:        backstop holgado para toda la API (protege el pool
@@ -90,9 +92,10 @@ export const limiterLogin = rateLimit({
  * un mail desde el dominio autenticado del negocio, así que el techo debe ser
  * bajo; 10/hora cubre de sobra el uso legítimo (una familia reservando varios
  * turnos desde el mismo celular) y corta el email bombing y el llenado masivo
- * de agenda. Cancelar/reprogramar no pasan por acá (exigen un token_gestion
- * válido, no son automatizables a ciegas) y los GET del turnero tampoco (el
- * wizard navega con muchas lecturas; solo los cubre el backstop global).
+ * de agenda. Cancelar y reprogramar tienen su propio límite (limiterGestion):
+ * exigen un token_gestion, pero quien reserva lo recibe en la respuesta, así
+ * que el token solo no frena el abuso. Los GET del turnero no tienen límite
+ * propio (el wizard navega con muchas lecturas; solo los cubre el backstop global).
  */
 export const limiterReserva = rateLimit({
   ...base,
@@ -113,6 +116,50 @@ export const limiterReservaRafaga = rateLimit({
   windowMs: 60 * 1000,
   limit: 3,
   handler: crearHandler429('reserva-rafaga'),
+});
+
+/**
+ * limiterGestion — para POST /api/turnero/turnos/:token/{cancelar,reprogramar} [Z3-01]
+ * 10 gestiones por IP por hora, compartidas entre cancelar y reprogramar (la
+ * misma instancia va en las dos rutas, así que el contador es uno solo).
+ * Quien reserva recibe el token_gestion en la respuesta y el mail del cliente
+ * no se verifica: sin este límite, con un solo turno se podía reprogramar en
+ * bucle y mandar un mail por llamada a cualquier dirección, gastando la cuota
+ * diaria de Resend que comparten todos los locales.
+ *
+ * skipFailedRequests: solo cuentan las respuestas que salen bien (status < 400),
+ * que son las que mandan mail (reprogramar al mismo horario también cuenta,
+ * aunque no manda nada). Un cliente que recibe "horario ocupado" (409) o un 422
+ * al elegir no gasta cupo. Es lo contrario de limiterLogin, donde lo que cuenta
+ * son los fallos. Con esto, como mucho 10 mails por hora por IP: lo mismo que
+ * la reserva.
+ *
+ * Holgado a propósito por la deuda de trust proxy (estado_actual.md): hoy
+ * req.ip es la de un proxy de Railway y los clientes que caen en el mismo nodo
+ * comparten el cupo. Un tope más bajo podría bloquearle la gestión a un cliente
+ * real.
+ */
+export const limiterGestion = rateLimit({
+  ...base,
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  skipFailedRequests: true,
+  handler: crearHandler429('gestion'),
+});
+
+/**
+ * limiterGestionRafaga — anti-ráfaga para las mismas rutas [Z3-01]
+ * 3 gestiones por IP por minuto, con el mismo criterio de conteo que
+ * limiterGestion (solo las que salen bien). Sin esto, un script podría clavar
+ * las 10 gestiones de la hora en un segundo. Ningún cliente cancela o
+ * reprograma más de 3 veces en un minuto.
+ */
+export const limiterGestionRafaga = rateLimit({
+  ...base,
+  windowMs: 60 * 1000,
+  limit: 3,
+  skipFailedRequests: true,
+  handler: crearHandler429('gestion-rafaga'),
 });
 
 /**

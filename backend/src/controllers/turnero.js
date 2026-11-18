@@ -544,12 +544,14 @@ export const cancelarTurno = async (req, res) => {
  * barbero, devuelve 409. Lo mismo si choca con una suspensión vigente del
  * barbero: el UPDATE lleva un NOT EXISTS y no escribe nada. Solo se reprograma
  * un turno que todavía no empezó (`inicio > now()` del turno actual, con el
- * reloj de la base).
+ * reloj de la base). Si el `inicio` pedido es el mismo instante que ya tiene el
+ * turno, no cambia nada: responde 200 sin UPDATE, sin Calendar y sin mail.
  *
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @param {string} req.params.token
  * @param {string} req.body.inicio   - ISO con offset
- * @returns {JSON} { ok: true, turno: { id, inicio, fin } }; 400 si `inicio` no es
+ * @returns {JSON} { ok: true, turno: { id, inicio, fin } } (con el mismo horario,
+ *   los datos actuales del turno); 400 si `inicio` no es
  *   futuro o queda fuera de los próximos DIAS_RESERVABLES días; 404 si no existe;
  *   409 `{ error }` si el turno ya no está reservado; 409
  *   `{ error, codigo: 'turno_ya_empezo' }` si está reservado pero ya empezó; 422
@@ -596,6 +598,26 @@ export const reprogramarTurno = async (req, res) => {
     if (r.empezo) {
       console.warn('[turnero] reprogramarTurno — el turno ya empezó | turno_id:', r.id);
       return res.status(409).json(CUERPO_409_TURNO_YA_EMPEZO);
+    }
+
+    // ── Mismo horario: no hay nada que cambiar [auditoría 2026-11, Z3-01] ───
+    // Sin esto, "reprogramar" al horario que ya tiene el turno hacía el UPDATE y
+    // mandaba el mail y el aviso de Calendar igual: con un solo turno se podían
+    // mandar mails en bucle. Se responde 200 con la forma de siempre y los datos
+    // actuales, sin UPDATE, sin Calendar y sin mail. Va después del 404 y de los
+    // 409 (esas respuestas no cambian) y antes del horario y del feriado: si el
+    // local cambió su horario después de la reserva, dejar el turno donde está no
+    // es un error. Se comparan instantes, no strings: el pedido llega con offset
+    // y pg devuelve un Date.
+    if (inicioDT.toMillis() === r.inicio.getTime()) {
+      return res.json({
+        ok: true,
+        turno: {
+          id: r.id,
+          inicio: DateTime.fromJSDate(r.inicio).setZone(TZ).toISO(),
+          fin: DateTime.fromJSDate(r.fin).setZone(TZ).toISO(),
+        },
+      });
     }
 
     const finDT = inicioDT.plus({ minutes: r.duracion_minutos });

@@ -15,7 +15,9 @@ import {
   cancelarTurno,
   reprogramarTurno,
 } from '../controllers/turnero.js';
-import { limiterReserva, limiterReservaRafaga } from '../middlewares/rateLimitMiddleware.js';
+import {
+  limiterReserva, limiterReservaRafaga, limiterGestion, limiterGestionRafaga,
+} from '../middlewares/rateLimitMiddleware.js';
 
 const router = Router();
 
@@ -29,10 +31,16 @@ router.get('/dias-disponibles',             getDiasDisponibles);
 // real y dispara un mail → rate limit doble [auditoría 3.1]: ráfaga (3/min)
 // primero, después el techo horario (10/h). Los GET de arriba quedan sin límite
 // propio a propósito (el wizard navega con muchas lecturas; los cubre el
-// backstop global). Cancelar/reprogramar exigen token_gestion válido.
+// backstop global).
 router.post('/turnos',                      limiterReservaRafaga, limiterReserva, crearTurno);
+// Ver el turno es una lectura: sin límite propio, como los GET de arriba.
 router.get('/turnos/:token',                getTurnoPorToken);
-router.post('/turnos/:token/cancelar',      cancelarTurno);
-router.post('/turnos/:token/reprogramar',   reprogramarTurno);
+// Cancelar y reprogramar exigen el token_gestion, pero quien reserva lo recibe
+// en la respuesta: el token solo no frena el abuso, y cada llamada que sale bien
+// manda un mail [auditoría 2026-11, Z3-01]. Mismo esquema doble que la reserva
+// (3/min y 10/h, contando solo las que salen bien), con un contador compartido
+// entre las dos rutas.
+router.post('/turnos/:token/cancelar',      limiterGestionRafaga, limiterGestion, cancelarTurno);
+router.post('/turnos/:token/reprogramar',   limiterGestionRafaga, limiterGestion, reprogramarTurno);
 
 export default router;
