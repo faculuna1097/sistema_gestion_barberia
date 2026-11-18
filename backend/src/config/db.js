@@ -33,6 +33,11 @@ console.log(`[db] Inicializando pool — host: ${process.env.DB_HOST} | port: ${
 // usuario), seguro de interpolar.
 const STATEMENT_TIMEOUT_MS = 5000;
 
+// Tamaño del pool: máximo de conexiones simultáneas (límite plan gratuito Supabase).
+// Constante aparte porque la usa también iniciarKeepAlive, que mantiene calientes
+// todas las conexiones.
+const POOL_MAX = 3;
+
 /**
  * aplicarStatementTimeout
  * Hook onConnect del pool: pg-pool lo espera antes de entregar la conexión, así que
@@ -57,7 +62,7 @@ const pool = new Pool({
   user:     process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   ssl: { ca: supabaseCA, rejectUnauthorized: true }, // [auditoría 4.3] valida el cert del server contra la CA de Supabase (cierra el MITM del rejectUnauthorized:false)
-  max: 3,                             // máximo 3 conexiones simultáneas (límite plan gratuito Supabase)
+  max: POOL_MAX,                      // máximo de conexiones simultáneas (ver POOL_MAX)
   idleTimeoutMillis: 30000,           // cierra conexiones inactivas después de 30s
   connectionTimeoutMillis: 5000,      // falla si no conecta en 5s (evita colgar el servidor)
   keepAlive: true,                    // TCP keep-alive a nivel socket: evita que un NAT/firewall corte la conexión ociosa (complementa el SELECT 1 periódico de iniciarKeepAlive)
@@ -176,34 +181,66 @@ export const testConnection = async () => {
 };
 
 /**
- * iniciarKeepAlive
- * Mantiene caliente una conexión del pool ejecutando un `SELECT 1` periódico.
- * El intervalo es deliberadamente MENOR que idleTimeoutMillis (30s): así la
- * conexión nunca llega a estar ociosa 30s y el pool no la cierra, evitando que
- * la próxima request pague el establecimiento completo (TCP + TLS + auth del
- * Session Pooler) contra Supabase en us-west-2 — ese cold connection es el
- * grueso de los ~2s fríos del bootstrap (ver docs/performance_frontends.md).
+ * pingearConexionesLibres
+ * Una vuelta del keep-alive: lanza a la vez un `SELECT 1` por cada lugar libre del
+ * pool (las conexiones ociosas más las que faltan para llegar a POOL_MAX). Con
+ * pedidos simultáneos, pg-pool reparte uno por conexión ociosa y abre conexiones
+ * nuevas para el resto mientras no llegue a `max`, así que la vuelta deja las
+ * POOL_MAX conexiones abiertas y con su contador de inactividad en cero.
  *
- * El ping corre en background y es tolerante a fallos: si un tick falla (blip de
- * red a Oregon) se loguea como degradación recuperable y se reintenta en el
- * siguiente — nunca tira el proceso. El interval va con .unref() para no ser por
- * sí mismo la razón de que el proceso siga vivo: lo mantiene vivo app.listen, y
- * así no interfiere con un cierre limpio (ej. cerrarPool() en el cron de
- * recordatorios).
+ * Las conexiones en uso no se pinguean: el tráfico real ya las renueva al liberarlas,
+ * y un ping de más haría cola detrás de esas queries sin servir de nada. Por lo
+ * mismo, si hay pedidos esperando conexión, la vuelta no hace nada: el pool está
+ * ocupado y no le sumamos cola.
+ *
+ * Tolerante a fallos: cada ping que falla se loguea con console.warn (degradación
+ * recuperable, no llega a Sentry) y nunca rechaza. Si el ping dio con una conexión
+ * muerta, pg-pool la descarta y la vuelta siguiente abre otra.
+ *
+ * @returns {Promise<void>} resuelve cuando terminaron todos los pings de la vuelta.
+ */
+const pingearConexionesLibres = async () => {
+  if (pool.waitingCount > 0) return;
+  const enUso = pool.totalCount - pool.idleCount;
+  const libres = POOL_MAX - enUso;
+  if (libres <= 0) return;
+
+  const pings = Array.from({ length: libres }, () => pool.query('SELECT 1'));
+  const resultados = await Promise.allSettled(pings);
+  for (const r of resultados) {
+    if (r.status === 'rejected') {
+      console.warn('[db] keep-alive: ping falló, se reintenta en el próximo tick:', r.reason?.message);
+    }
+  }
+};
+
+/**
+ * iniciarKeepAlive
+ * Mantiene calientes las POOL_MAX conexiones del pool con un `SELECT 1` periódico
+ * en cada conexión libre (ver pingearConexionesLibres). El intervalo es MENOR que
+ * idleTimeoutMillis (30s): así ninguna conexión llega a estar ociosa 30s y el pool
+ * no la cierra.
+ *
+ * Por qué todas (auditoría 2026-11, Z8-02): abrir una conexión cuesta unos 7 viajes
+ * a la base (TCP, SSL, TLS, login SCRAM contra el pooler y el SET de onConnect).
+ * Antes había un solo `SELECT 1`, y pg-pool se lo daba siempre a la última conexión
+ * liberada: esa era la única que sobrevivía. Eso salvaba la primera query después
+ * de un rato quieto, pero no las que van en paralelo: cada pantalla que pide varias
+ * cosas a la vez (Inicio y Caja del panel, Agenda del barbero, disponibilidad y
+ * landing del turnero) abría 1 o 2 conexiones nuevas, de 150 a 270 ms más en
+ * producción.
+ *
+ * Corre en background y nunca tira el proceso. El interval va con .unref() para no
+ * ser por sí mismo la razón de que el proceso siga vivo: lo mantiene vivo
+ * app.listen. Solo lo arranca index.js; el cron de recordatorios no lo usa.
  *
  * @param {number} intervaloMs - Cada cuánto pinguear, en ms. Default 20000 (20s),
  *   con margen cómodo bajo los 30s del idleTimeoutMillis.
  * @returns {NodeJS.Timeout} el handle del interval (por si hace falta cancelarlo).
  */
 export const iniciarKeepAlive = (intervaloMs = 20000) => {
-  const handle = setInterval(async () => {
-    try {
-      await pool.query('SELECT 1');
-    } catch (err) {
-      console.warn('[db] keep-alive: ping falló, se reintenta en el próximo tick:', err.message);
-    }
-  }, intervaloMs);
+  const handle = setInterval(pingearConexionesLibres, intervaloMs);
   handle.unref();
-  console.log(`[db] ✅ keep-alive iniciado | intervalo: ${intervaloMs / 1000}s`);
+  console.log(`[db] ✅ keep-alive iniciado | conexiones: ${POOL_MAX} | intervalo: ${intervaloMs / 1000}s`);
   return handle;
 };

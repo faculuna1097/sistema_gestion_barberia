@@ -50,5 +50,9 @@ La sospecha inicial era el bundle/JS. **Estaba al revés:**
   en free tier (recrear el proyecto + migrar datos) → decisión de infraestructura aparte.
 - **Validar en prod** el impacto real de las optimizaciones de backend ya implementadas (keep-alive
   del pool, `getTenant` paralelizado) — registrado en `estado_actual.md`.
+  - **Diagnóstico corregido del keep-alive (2026-11-18, auditoría Z8-02):** con un solo `SELECT 1`
+    sobrevivía una sola de las 3 conexiones: salvaba la primera query, pero cada pantalla que pide en
+    paralelo abría 1 o 2 conexiones nuevas (+150 a 270 ms). Desde `fix/keepalive-pool` mantiene
+    calientes las 3; se confirma con el p90 de los `GET` de una sola query en los logs de Railway.
 
 *— Fin del documento —*
