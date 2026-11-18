@@ -324,8 +324,8 @@ registrarHandlerErrores(app);
 const startServer = async () => {
   console.log('[index] Verificando conexión a la base de datos...');
   await testConnection();
-  // Mantiene caliente la conexión a Supabase (evita el cold connection del pool
-  // tras 30s de inactividad). Ver docs/performance_frontends.md.
+  // Mantiene calientes las 3 conexiones del pool (evita abrir conexiones nuevas
+  // tras 30s de inactividad, también en las pantallas que piden en paralelo). Ver iniciarKeepAlive en config/db.js.
   iniciarKeepAlive();
   app.listen(PORT, () => {
     console.log(`[index] ✅ Servidor corriendo en http://localhost:${PORT}`);
