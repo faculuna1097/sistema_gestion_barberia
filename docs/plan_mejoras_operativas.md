@@ -462,6 +462,13 @@ _(Los completa el orquestador durante la tanda.)_
     al que se le borró el corte pasaría a "no asistió" aunque el cliente vino y pagó. Arreglo: el diálogo de
     Caja dice de qué turno se trata (hora y cliente) y que queda pendiente de cobro; ante el `23P01`, el corte
     se borra igual y el turno queda cancelado (`cancelado_por = 'admin'`, sin mail), con un aviso en Caja.
+- **(2026-11-18, auditoría 2026-11) Z3-01 (alto, en producción) también se arregla en esta tanda.** Reprogramar
+  por el link del mail no tiene límite propio: con un solo turno se mandan mails sin tope a cualquier dirección
+  y se agota la cuota de Resend de todos los locales. Arreglo: un limiter por IP en `POST /api/turnero/turnos/:token/cancelar`
+  y `/reprogramar` (mismo patrón que la reserva), y no hacer nada si el horario nuevo es igual al actual. Va acá y
+  no en un `fix/` desde `main` porque F9 reescribió `reprogramarTurno` (decisión del usuario: los arreglos que
+  tocan código de esta tanda son hijos de este branch). Lo orquesta el chat de la auditoría, antes de seguir
+  con F3.
 - **(2026-11-17, auditoría 2026-11) Aceptados por el usuario, que tocan esta tanda:** Z1-06 (la sesión del
   barbero queda siempre guardada, sin casilla) y Z1-03 en su parte de producto (el PIN de admin sigue en 4
   dígitos, porque el login del panel resuelve admin o barbero con el mismo PIN).
