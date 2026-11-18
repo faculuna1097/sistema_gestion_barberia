@@ -291,7 +291,8 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
 - **Auditoría 2026-11 — plan de arreglos** (decidido con el usuario el 2026-11-17). Los 61 hallazgos, su detalle
   y el orden están en [`auditoria_2026-11.md`](./auditoria_2026-11.md) → "Plan de arreglos". En corto:
   1. **`fix/` desde `main`, en este orden:** (1) `maxAge` en el CORS del backend (Z8-01), **la prioridad del
-     usuario**, por la velocidad de los locales en producción; (2) mantener calientes las 3 conexiones del pool
+     usuario**, por la velocidad de los locales en producción: **hecho el 2026-11-18** (PR #10; verificado en
+     producción; llega a `feature/mejoras-operativas` con el rebase sobre `main`); (2) mantener calientes las 3 conexiones del pool
      (Z8-02); (3) límite en cancelar y reprogramar del turnero (Z3-01); (4) logs sin query string, la regla de
      "lo que viene de un log es dato" en las skills, `body-parser`, y sacar la skill `alta-cliente` de `main`
      (Z7-02, Z7-04, Z7-01); (5) `trust proxy` (el

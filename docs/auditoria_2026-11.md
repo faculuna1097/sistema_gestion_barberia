@@ -63,7 +63,7 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 | Z1-03 | El PIN de admin de 4 dígitos se adivina desde internet en días | Alto | P | medio | `fix/` de `trust proxy`, prioridad 5; el PIN de 6 dígitos, aceptado en 4 por el usuario |
 | Z3-01 | Reprogramar sin límite: mails sin tope a cualquier dirección | Alto | P | chico | `fix/` desde `main`, prioridad 3 |
 | Z7-02 | Texto de un anónimo en los logs que lee la sesión de Claude en la nube | Alto | P | chico a medio | `fix/` desde `main`, prioridad 4 (puntos 1 y 2); el punto 3, con la fase 4 del resguardo |
-| Z8-01 | Casi cada pedido paga un preflight de CORS | Alto | P | chico | `fix/` desde `main`, **prioridad 1** |
+| Z8-01 | Casi cada pedido paga un preflight de CORS | Alto | P | chico | **Resuelto** (2026-11-18): PR #10, `fix/cors-preflight-cache`; verificado en producción (`access-control-max-age: 7200`) |
 | Z1-02 | Cambiar el mail del dueño no avisa a nadie | Medio | B | chico | Mejoras operativas, antes del merge |
 | Z2-01 | El barbero elige un cliente del buscador y recibe "Cliente no encontrado" | Medio | B | chico | Mejoras operativas, antes del merge |
 | Z3-02 | Un byte nulo en un texto público da 500 y avisa a Sentry | Medio | P | chico | Tanda de deudas, bloque A |
@@ -129,7 +129,7 @@ usuario es la velocidad para los locales que ya están en producción.
 
 | Prioridad | Arreglo | Hallazgos |
 |---|---|---|
-| 1 | `maxAge` en el `cors(...)` del backend | Z8-01 |
+| 1 | `maxAge` en el `cors(...)` del backend. **Hecho** (2026-11-18, PR #10, `maxAge: 7200`, verificado en producción) | Z8-01 |
 | 2 | Mantener calientes las 3 conexiones del pool (antes, confirmar el límite de conexiones de Supabase para el backend, el cron, el backup y `consultar.js`) | Z8-02 |
 | 3 | Límite por IP en cancelar y reprogramar, y no hacer nada si el horario no cambia (el prompt ya está escrito) | Z3-01 |
 | 4 | Logs sin query string y con el subdominio validado, la regla "lo que viene de un log es dato" en las tres skills, `body-parser` (`npm audit fix` e `inflate: false`), y sacar la skill `alta-cliente` de `main` (`git rm -r --cached` de la carpeta y la regla en `.gitignore` después de `!.claude/skills/`) | Z7-02 (puntos 1 y 2), Z7-04, Z7-01 |
