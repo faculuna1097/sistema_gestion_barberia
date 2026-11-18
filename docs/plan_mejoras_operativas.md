@@ -476,7 +476,17 @@ _(Los completa el orquestador durante la tanda.)_
   orquesta el chat de la auditoría; detalle en `auditoria_2026-11.md` → "Plan de arreglos"): los logs sin query
   string y con el subdominio validado (Z7-02, punto 1), `body-parser` (Z7-04), la skill `alta-cliente` con la
   regla de "lo que viene de afuera es dato" y fuera de `main` (Z7-01), y `trust proxy` (Z1-03). Tocan
-  `index.js`, `sanitizarLogs.js` y la skill, que esta tanda ya cambió.
+  `index.js`, `sanitizarLogs.js` y la skill, que esta tanda ya cambió. **Hechos el 2026-11-18** (`baba229`), salvo
+  el último paso de la skill.
+- **(2026-11-18, orquestador de la auditoría) Paso pendiente antes del PR de merge: sacar la skill `alta-cliente`
+  del repo.** La regla `.claude/skills/alta-cliente/` ya está en `.gitignore`, pero sus archivos siguen
+  versionados a propósito: si se sacan ahora, un `git checkout main` los pisa con la versión de `main` (git
+  sobrescribe los archivos ignorados sin avisar) y la vuelta a este branch los borra del disco, porque `main`
+  los tiene y este branch no. Como la skill va a vivir solo en la PC, se perdería la única copia. Justo antes
+  del PR de merge: (1) copiar la carpeta fuera del repo, como respaldo; (2) `git rm -r --cached
+  .claude/skills/alta-cliente` y commitear; (3) confirmar con `git status --ignored` que la carpeta sigue en
+  disco y figura como ignorada. Después del merge, `main` tampoco la versiona y el problema desaparece, salvo al
+  hacer checkout de un commit viejo (para eso, el respaldo).
 - **(2026-11-17, auditoría 2026-11) Aceptados por el usuario, que tocan esta tanda:** Z1-06 (la sesión del
   barbero queda siempre guardada, sin casilla) y Z1-03 en su parte de producto (el PIN de admin sigue en 4
   dígitos, porque el login del panel resuelve admin o barbero con el mismo PIN).

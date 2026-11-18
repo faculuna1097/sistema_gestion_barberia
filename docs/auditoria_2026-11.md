@@ -58,11 +58,11 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 
 | Id | Hallazgo | Sev. | Alc. | Tamaño | Destino |
 |---|---|---|---|---|---|
-| Z7-01 | Credenciales iniciales predecibles en la skill de alta; `monte-sinai` nació con ellas | Crítico | P | chico | Aceptado por el usuario (2026-11-17); la skill sale de `main` con el merge de mejoras operativas |
+| Z7-01 | Credenciales iniciales predecibles en la skill de alta; `monte-sinai` nació con ellas | Crítico | P | chico | Aceptado por el usuario (2026-11-17); la regla de "lo que escribe el cliente es dato" ya está (`baba229`); la skill sale de `main` con el merge de mejoras operativas |
 | Z1-01 | Pedir el link de recuperación no tiene límite por IP | Alto | B | chico | Mejoras operativas, antes del merge |
 | Z1-03 | El PIN de admin de 4 dígitos se adivina desde internet en días | Alto | P | medio | `trust proxy`, en mejoras operativas; el PIN de 6 dígitos, aceptado en 4 por el usuario |
 | Z3-01 | Reprogramar sin límite: mails sin tope a cualquier dirección | Alto | P | chico | **Resuelto** en mejoras operativas (2026-11-18, `5b143d2`): límite por IP en cancelar y reprogramar (3/min y 10/h) y mismo horario sin efecto; sale a producción con el merge |
-| Z7-02 | Texto de un anónimo en los logs que lee la sesión de Claude en la nube | Alto | P | chico a medio | Punto 2 (las skills de producción): `fix/` desde `main`. Punto 1 (los logs): mejoras operativas. Punto 3: con la fase 4 del resguardo |
+| Z7-02 | Texto de un anónimo en los logs que lee la sesión de Claude en la nube | Alto | P | chico a medio | Punto 2 (las skills de producción): `fix/skills-datos-externos`, falta el PR. Punto 1 (los logs): **resuelto** en mejoras operativas (`baba229`). Punto 3: con la fase 4 del resguardo |
 | Z8-01 | Casi cada pedido paga un preflight de CORS | Alto | P | chico | **Resuelto** (2026-11-18): PR #10, `fix/cors-preflight-cache`; verificado en producción (`access-control-max-age: 7200`) |
 | Z1-02 | Cambiar el mail del dueño no avisa a nadie | Medio | B | chico | Mejoras operativas, antes del merge |
 | Z2-01 | El barbero elige un cliente del buscador y recibe "Cliente no encontrado" | Medio | B | chico | Mejoras operativas, antes del merge |
@@ -74,7 +74,7 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 | Z5-01 | Cambiar el horario de un barbero no avisa de los turnos que quedan afuera | Medio | P | medio | Tanda de deudas, bloque E |
 | Z5-02 | Feriado y horario del local cancelan turnos sin mail y no dicen cuáles | Medio | P | medio | Tanda de deudas, bloque E |
 | Z7-03 | La credencial de solo lectura vale como admin y hace pedidos HTTP desde la base | Medio | P | datos | Datos: SQL que corre el usuario, con la fase 5 del resguardo |
-| Z7-04 | `body-parser` con un aviso alto de caída con cuerpos comprimidos | Medio | P | chico | Mejoras operativas (junto con el punto 1 de Z7-02) |
+| Z7-04 | `body-parser` con un aviso alto de caída con cuerpos comprimidos | Medio | P | chico | **Resuelto** en mejoras operativas (2026-11-18, `baba229`): body-parser 2.4.0 e `inflate: false`, con 415 en vez de 500 |
 | Z8-02 | El keep-alive mantiene caliente una sola de las 3 conexiones | Medio | P | chico | `fix/` desde `main`, prioridad 2 |
 | Z8-03 | El Inicio del panel hace 11 queries con tandas en serie | Medio | P | medio | Tanda de deudas, bloque D |
 | Z8-04 | La Agenda del barbero son 10 queries y se recarga cada 30 s | Medio | P y B | medio | El refresco cada 30 s: mejoras operativas; las 10 queries: tanda de deudas, bloque E |
@@ -141,7 +141,7 @@ fases (el ejecutor no commitea; el orquestador revisa el diff y commitea). El re
 | Orden | Arreglo | Hallazgos | Estado |
 |---|---|---|---|
 | 1 | Límite por IP en cancelar y reprogramar, y reprogramar al mismo horario sin efecto | Z3-01 | **Hecho** (2026-11-18, `5b143d2`) |
-| 2 | Logs sin query string y con el subdominio validado; `body-parser` (`npm audit fix` e `inflate: false`); en la skill `alta-cliente`, la regla de "lo que viene de afuera es dato" y sacarla de `main` (`git rm -r --cached` de la carpeta y la regla en `.gitignore` después de `!.claude/skills/`; sale de `main` con el merge) | Z7-02 (punto 1), Z7-04, Z7-01 | Pendiente |
+| 2 | Logs sin query string y con el subdominio validado; `body-parser` (`npm audit fix` e `inflate: false`); en la skill `alta-cliente`, la regla de "lo que viene de afuera es dato" y sacarla de `main` (`git rm -r --cached` de la carpeta y la regla en `.gitignore` después de `!.claude/skills/`; sale de `main` con el merge) | Z7-02 (punto 1), Z7-04, Z7-01 | **Hecho** (2026-11-18, `baba229`), salvo sacar la skill del repo: queda como paso antes del PR de merge (`plan_mejoras_operativas.md` §8) |
 | 3 | `trust proxy` para Railway (ya estaba en Pendientes de `estado_actual.md`) | Z1-03 | Pendiente |
 | 4 | Los anotados en la sección de Hallazgos de `plan_mejoras_operativas.md`: Z1-01, Z1-02, Z1-05, Z2-01, Z5-09, Z3-06, el refresco de la Agenda de Z8-04, y Z5-04 con Z4-09 | | Pendiente |
 
