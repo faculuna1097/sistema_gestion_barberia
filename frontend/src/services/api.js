@@ -459,7 +459,7 @@ const pedirRecuperacion = async (accion, cuerpo) => {
  * @param {'operativo'|'pin_admin'} tipo
  * @returns {Promise<{ enviado: boolean, email?: string }>} enviado: false si el
  *   local no tiene mail del dueño cargado; si no, el mail enmascarado (ej.
- *   'fa•••@gmail.com').
+ *   'fa•••@g•••.com').
  */
 export const solicitarRecuperacion = (tipo) => pedirRecuperacion('solicitar', { tipo });
 

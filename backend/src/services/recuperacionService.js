@@ -23,6 +23,12 @@ export const TIPOS_RECUPERACION = ['operativo', 'pin_admin'];
 // se manda otro mail.
 const MINUTOS_ENTRE_MAILS = 2;
 
+// Tope por local que no depende de la IP (auditoría 2026-11, Z1-01): como mucho
+// estos links por tenant en las últimas 24 horas, contando los dos tipos. Un dueño
+// pide uno o dos; con el freno de 2 minutos solo, un script podía mandar 60 mails
+// por hora por local. Llegar al tope es señal de abuso (ver solicitarRecuperacion).
+export const MAX_LINKS_POR_DIA = 6;
+
 // 32 bytes en base64url sin relleno = 43 caracteres de [A-Za-z0-9_-].
 const REGEX_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 
@@ -49,9 +55,15 @@ export const esFormatoToken = (token) => typeof token === 'string' && REGEX_TOKE
 
 /**
  * enmascararEmail
- * Tapa la mayor parte del usuario del mail para mostrarlo en pantalla (y en el log):
- * 'kingsai@gmail.com' → 'ki•••@gmail.com'. Con un usuario de 1 o 2 letras deja solo
- * la primera.
+ * Tapa la mayor parte del mail para mostrarlo en pantalla, en el log y en el aviso de
+ * cambio de mail. La respuesta de solicitar lo muestra sin pedir nada a cambio, así
+ * que el dominio también va tapado (auditoría 2026-11, Z1-05): con un dominio propio
+ * era casi el mail entero.
+ *   - Usuario: las dos primeras letras + '•••'; con 1 o 2 letras, solo la primera.
+ *   - Dominio: la primera letra + '•••' + el resto desde el primer punto. Sin punto,
+ *     la primera letra + '•••'.
+ * Ej.: 'facundo@gmail.com' → 'fa•••@g•••.com'; 'juan@mibarberia.com.ar' →
+ * 'ju•••@m•••.com.ar'. El dueño lo sigue reconociendo.
  * @param {string} email - Mail completo.
  * @returns {string} El mail enmascarado.
  */
@@ -60,7 +72,11 @@ export const enmascararEmail = (email) => {
   const usuario = email.slice(0, arroba);
   const dominio = email.slice(arroba + 1);
   const visible = usuario.length > 2 ? usuario.slice(0, 2) : usuario.slice(0, 1);
-  return `${visible}•••@${dominio}`;
+  const punto = dominio.indexOf('.');
+  const dominioVisible = punto > 0
+    ? `${dominio.slice(0, 1)}•••${dominio.slice(punto)}`
+    : `${dominio.slice(0, 1)}•••`;
+  return `${visible}•••@${dominioVisible}`;
 };
 
 /**
@@ -91,40 +107,68 @@ export const armarLinkRecuperacion = (req, token) =>
 
 /**
  * emitirToken
- * En una sola sentencia: si no hay un link de ese tenant y tipo creado hace menos de
- * MINUTOS_ENTRE_MAILS, anula los anteriores sin usar (les pone vence_en = now(): se
- * conservan, pero dejan de valer) y guarda el nuevo. Si lo hay, no hace nada.
- * Las tres partes ven la misma foto de la tabla: el UPDATE no toca la fila nueva.
+ * En una sola sentencia (el pooler no admite transacciones):
+ *   1. Mira dos frenos: si hay un link de ese tenant y tipo creado hace menos de
+ *      MINUTOS_ENTRE_MAILS ('frenado'), y si el tenant ya tiene MAX_LINKS_POR_DIA
+ *      links creados en las últimas 24 horas, de los dos tipos ('tope').
+ *   2. Si ninguno corta, anula los links anteriores sin usar de ese tipo (les pone
+ *      vence_en = now(): se conservan, pero dejan de valer) y guarda el nuevo.
+ * Las partes ven la misma foto de la tabla: el UPDATE no toca la fila nueva, y la
+ * fila nueva no cuenta para los frenos de este mismo pedido.
+ *
+ * Índice: las dos cuentas usan token_recuperacion_tenant_tipo (tenant_id, tipo,
+ * created_at). La del tope pide `tipo = ANY(<los dos tipos>)` en vez de omitir el
+ * tipo, para que Postgres pueda bajar por el índice con las tres columnas (una
+ * pasada por tipo) y no tenga que filtrar created_at fila por fila.
+ *
+ * Dos pedidos exactamente simultáneos pueden pasar los dos frenos a la vez (cada
+ * uno ve la foto previa al otro): como mucho, un link de más. Lo acota
+ * limiterRecuperacion, y es la misma carrera que ya tenía el freno de 2 minutos.
+ *
  * @param {string} tenantId - UUID del tenant.
  * @param {'operativo'|'pin_admin'} tipo
  * @param {string} tokenHash - hashToken(token).
- * @returns {Promise<boolean>} true si guardó el token nuevo; false si lo frenó el
- *   anti-spam (hay que responder lo mismo, sin mandar el mail).
+ * @returns {Promise<'creado'|'frenado'|'tope'>} 'creado' si guardó el token nuevo;
+ *   'frenado' si ya se mandó uno de ese tipo hace menos de 2 minutos; 'tope' si el
+ *   tenant llegó al tope del día. Si se cumplen los dos, 'frenado' (es el caso común
+ *   de un doble toque, no una señal de abuso). En los dos últimos no se guarda nada y
+ *   hay que responder lo mismo que con 'creado', sin mandar el mail.
  */
 export async function emitirToken(tenantId, tipo, tokenHash) {
   const resultado = await query(
-    `WITH reciente AS (
-       SELECT EXISTS (
-         SELECT 1 FROM token_recuperacion
-         WHERE tenant_id = $1 AND tipo = $2
-           AND created_at > now() - make_interval(mins => $4)
-       ) AS hay
+    `WITH frenos AS (
+       SELECT
+         EXISTS (
+           SELECT 1 FROM token_recuperacion
+           WHERE tenant_id = $1 AND tipo = $2
+             AND created_at > now() - make_interval(mins => $4)
+         ) AS reciente,
+         (
+           SELECT count(*) FROM token_recuperacion
+           WHERE tenant_id = $1 AND tipo = ANY($5::text[])
+             AND created_at > now() - interval '24 hours'
+         ) >= $6 AS tope
      ),
      anulados AS (
        UPDATE token_recuperacion SET vence_en = now()
        WHERE tenant_id = $1 AND tipo = $2 AND usado_en IS NULL AND vence_en > now()
-         AND NOT (SELECT hay FROM reciente)
+         AND NOT (SELECT reciente OR tope FROM frenos)
        RETURNING id
      ),
      nuevo AS (
        INSERT INTO token_recuperacion (tenant_id, tipo, token_hash)
-       SELECT $1, $2, $3 WHERE NOT (SELECT hay FROM reciente)
+       SELECT $1, $2, $3 WHERE NOT (SELECT reciente OR tope FROM frenos)
        RETURNING id
      )
-     SELECT (SELECT count(*) FROM nuevo) AS creados, (SELECT count(*) FROM anulados) AS anulados`,
-    [tenantId, tipo, tokenHash, MINUTOS_ENTRE_MAILS]
+     SELECT (SELECT count(*) FROM nuevo) AS creados,
+            (SELECT count(*) FROM anulados) AS anulados,
+            reciente, tope
+     FROM frenos`,
+    [tenantId, tipo, tokenHash, MINUTOS_ENTRE_MAILS, TIPOS_RECUPERACION, MAX_LINKS_POR_DIA]
   );
-  return Number(resultado.rows[0].creados) === 1;
+  const { creados, reciente } = resultado.rows[0];
+  if (Number(creados) === 1) return 'creado';
+  return reciente ? 'frenado' : 'tope';
 }
 
 /**

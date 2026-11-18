@@ -5,10 +5,14 @@
 
 import { Router } from 'express';
 import { solicitarRecuperacion, validarRecuperacion, usarRecuperacion } from '../controllers/authRecuperar.js';
+import { limiterRecuperacion } from '../middlewares/rateLimitMiddleware.js';
 
 const router = Router();
 
-router.post('/solicitar', solicitarRecuperacion);
+// Pedir el link manda un mail y responde siempre 200: limiterLogin (que cuenta
+// solo los fallos) no lo frena. Lleva su propio límite, que cuenta todos los
+// pedidos [auditoría 2026-11, Z1-01]. El tope por local vive en emitirToken.
+router.post('/solicitar', limiterRecuperacion, solicitarRecuperacion);
 router.post('/validar',   validarRecuperacion);
 router.post('/usar',      usarRecuperacion);
 

@@ -6,11 +6,12 @@
 //
 // Pasos:
 //   confirmar → explica a dónde llega el link y que vence en 1 hora.
-//   enviado   → "Te mandamos un mail a fa•••@gmail.com".
+//   enviado   → "Te mandamos un mail a fa•••@g•••.com".
 //   sinMail   → el local no tiene mail del dueño cargado: escribir al soporte.
 //   falla     → sin red, servidor caído, demasiados intentos (429): la causa.
-// El backend responde lo mismo aunque el mail no salga, o si ya se pidió uno hace
-// menos de 2 minutos: la pantalla no puede (ni debe) distinguirlo.
+// El backend responde lo mismo aunque el mail no salga, si ya se pidió uno hace
+// menos de 2 minutos o si el local llegó al tope de links del día: la pantalla no
+// puede (ni debe) distinguirlo.
 
 import { useEffect, useRef, useState } from 'react';
 import { MailCheck } from 'lucide-react';

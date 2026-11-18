@@ -3,6 +3,8 @@
 // (plan_mejoras_operativas.md, F6). Tres endpoints públicos bajo /api/auth/recuperar,
 // con limiterLogin (index.js):
 //   - solicitar: manda el mail al dueño (tenant.email_duenio) con un link de un solo uso.
+//     Además lleva limiterRecuperacion (routes/authRecuperar.js) y el tope por local
+//     de emitirToken.
 //   - validar:   dice si un token sirve y de qué tipo es (el front elige la pantalla).
 //   - usar:      cambia la credencial y consume el token.
 //
@@ -16,6 +18,7 @@
 // Lo que no es HTTP (token, hash, link, queries) vive en services/recuperacionService.js.
 
 import { query } from '../config/db.js';
+import { reportarAviso } from '../config/sentry.js';
 import { invalidar } from '../middlewares/tenantMiddleware.js';
 import { enviarRecuperacion } from '../services/mail/mailer.js';
 import {
@@ -28,6 +31,7 @@ import {
   emitirToken,
   leerTipoTokenVigente,
   usarToken,
+  MAX_LINKS_POR_DIA,
 } from '../services/recuperacionService.js';
 import {
   esPasswordOperativaValida,
@@ -64,6 +68,10 @@ const rechazarToken = (res, nombreFuncion, tenantId) => {
  * - Con mail: genera el token (anula los anteriores sin usar de ese tipo), manda el
  *   mail y responde el mail enmascarado. Si ya se mandó uno hace menos de 2 minutos,
  *   responde lo mismo sin generar ni mandar nada (freno anti-spam).
+ * - Si el local ya tiene MAX_LINKS_POR_DIA links en las últimas 24 horas (tope de
+ *   emitirToken, auditoría 2026-11 Z1-01): la misma respuesta, sin mail. Es señal de
+ *   abuso: además del warn, va un aviso a Sentry (llega a Discord), agrupado en un
+ *   solo issue como los cortes del rate limiter.
  * El envío es best-effort como el resto del mailer: si Resend falla, el error llega a
  * Sentry (console.error de enviarMail) y la respuesta es la misma (decidido con el
  * usuario el 2026-11-13).
@@ -97,10 +105,18 @@ export async function solicitarRecuperacion(req, res) {
 
     const email = enmascararEmail(email_duenio);
     const token = generarToken();
-    const creado = await emitirToken(tenantId, tipo, hashToken(token));
+    const emision = await emitirToken(tenantId, tipo, hashToken(token));
 
-    if (!creado) {
+    if (emision === 'frenado') {
       console.warn('[authRecuperar] solicitarRecuperacion — frenado: ya se mandó un link hace menos de 2 minutos | tenant:', tenantId, '| tipo:', tipo);
+      return res.json({ enviado: true, email });
+    }
+    if (emision === 'tope') {
+      console.warn(`[authRecuperar] solicitarRecuperacion — tope: el local ya tiene ${MAX_LINKS_POR_DIA} links en 24 horas | tenant:`, tenantId, '| tipo:', tipo);
+      reportarAviso('recuperacion: tope diario de links', {
+        tags: { tipo },
+        fingerprint: ['recuperacion', 'tope-diario'],
+      });
       return res.json({ enviado: true, email });
     }
 

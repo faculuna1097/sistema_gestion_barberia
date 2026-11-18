@@ -1,7 +1,10 @@
 // /backend/src/middlewares/rateLimitMiddleware.js
 // Rate limiting por IP con express-rate-limit (auditoría 2026-07: hallazgos
-// 3.1, 1.2 y 4.1; auditoría 2026-11: Z3-01). Cinco capas:
-//   - limiterLogin:         estricto, para los 3 endpoints de login (fuerza bruta de PIN).
+// 3.1, 1.2 y 4.1; auditoría 2026-11: Z3-01 y Z1-01). Seis capas:
+//   - limiterLogin:         estricto, para los 3 endpoints de login (fuerza bruta de PIN)
+//     y para /api/auth/recuperar (cuentan los tokens inválidos).
+//   - limiterRecuperacion:  para pedir el link de recuperación (mails al dueño
+//     y cuota de Resend compartida).
 //   - limiterReserva (+ ráfaga): para la reserva pública del turnero (email
 //     bombing / spam / agotar agenda).
 //   - limiterGestion (+ ráfaga): para cancelar y reprogramar un turno desde el
@@ -88,6 +91,36 @@ export const limiterLogin = rateLimit({
   limit: 10,
   skipSuccessfulRequests: true,
   handler: crearHandler429('login'),
+});
+
+/**
+ * limiterRecuperacion — para POST /api/auth/recuperar/solicitar [Z1-01]
+ * 5 pedidos por IP por hora, contando todos. Ese endpoint responde siempre 200
+ * (no dice si el mail salió ni si lo frenó algo), así que con limiterLogin, que
+ * cuenta solo los fallos, no tenía límite real por IP: cada pedido podía mandar
+ * un mail al dueño y gastar la cuota diaria de Resend que comparten todos los
+ * locales. Por eso acá no hay skipSuccessfulRequests ni skipFailedRequests.
+ *
+ * Por qué 5: un dueño que se olvidó la contraseña del iPad o el PIN pide uno o
+ * dos links (uno por tipo, y quizás otro si no le llegó). 5 por hora le deja
+ * margen y corta el script.
+ *
+ * Este cupo no es el freno que importa. Con la deuda de trust proxy
+ * (estado_actual.md → Pendientes), req.ip es la IP de un proxy de Railway: los
+ * que caen en el mismo nodo comparten el cupo, y un atacante reparte sus pedidos
+ * entre nodos. El freno que no depende de la IP es el tope por local de
+ * emitirToken (services/recuperacionService.js): 6 links por día entre los dos
+ * tipos, además de uno cada 2 minutos por tipo.
+ *
+ * Va montado solo en la ruta de solicitar (routes/authRecuperar.js), como
+ * limiterReserva en el turnero. validar y usar siguen con limiterLogin, que
+ * viene del mount de index.js y también corre en solicitar.
+ */
+export const limiterRecuperacion = rateLimit({
+  ...base,
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  handler: crearHandler429('recuperacion'),
 });
 
 /**

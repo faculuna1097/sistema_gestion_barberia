@@ -16,6 +16,7 @@ import { Loader2 } from "lucide-react";
 import { theme } from "./theme/tokens.js";
 import { EmptyState, Button, IconoAlerta, ErrorBoundary, ContactoSoporte } from "./components/ui";
 import { problemaDeAcceso } from "./utils/errores";
+import { esUrlHttps } from "./utils/url.js";
 import FondoLocal from "./components/ui/FondoLocal.jsx";
 import {
   getBarberosOperativo,
@@ -252,7 +253,9 @@ export default function App() {
         getNegocio(),
         getImagenesNegocio(),
       ]);
-      setBookingUrl(negocio.booking_url || null);
+      // Solo un link https: cualquier otra cosa (un `javascript:`, un texto suelto)
+      // cuenta como que no hay, y el iPad no muestra el botón Reservar (Z3-06).
+      setBookingUrl(esUrlHttps(negocio.booking_url) ? negocio.booking_url.trim() : null);
       setNombreNegocio(negocio.nombre_negocio || '');
       if (negocio.nombre_negocio) document.title = negocio.nombre_negocio;
 

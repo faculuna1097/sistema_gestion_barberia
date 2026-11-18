@@ -1,5 +1,6 @@
 // Envío de mails transaccionales del turnero (y el aviso interno de una solicitud
-// de alta, ver enviarAvisoSolicitudAlta). Arma el HTML (sistema de diseño
+// de alta, ver enviarAvisoSolicitudAlta; y los del dueño: la recuperación y el
+// aviso de cambio del mail de recuperación). Arma el HTML (sistema de diseño
 // "Luz") y delega el transporte en la capa de proveedor (mailProvider →
 // resendProvider), que envía vía la API HTTP de Resend. No conoce el proveedor
 // concreto ni su API key.
@@ -10,7 +11,7 @@
 // tipografía neutra. Geist no carga de forma confiable en clientes de mail,
 // así que se usa el stack de fallback de los tokens.
 
-import { TZ } from '../../utils/constantes.js';
+import { TZ, SOPORTE } from '../../utils/constantes.js';
 import * as mailProvider from './mailProvider.js';
 
 // Espejo (parcial) de los tokens del tema "Luz". El backend no puede importar
@@ -609,6 +610,57 @@ export const enviarRecuperacion = async ({ tipo, destino, destinoEnmascarado, li
     intro: `${intro} ${ignorar}`,
     filas,
     cta: { label: esOperativo ? 'Elegir contraseña nueva' : 'Elegir PIN nuevo', url: link },
+  });
+
+  return enviarMail({
+    destino, asunto, texto, html, nombreFuncion,
+    remitente: nombreNegocio,
+    destinoLog: destinoEnmascarado,
+  });
+};
+
+/**
+ * Aviso al mail ANTERIOR del dueño de que el mail de recuperación del local cambió
+ * (Gestión → Negocio → Contacto; auditoría 2026-11, Z1-02). Sin el aviso, alguien que
+ * supo el PIN de admin podía poner su mail y quedarse con la recuperación sin que el
+ * dueño se enterara. Dice a qué mail nuevo (enmascarado) y que, si no fue el dueño,
+ * le escriba al soporte (SOPORTE, utils/constantes.js).
+ * Best-effort como el resto: sin credenciales loguea un warn (con los datos ya
+ * enmascarados, para poder revisar la llamada) y devuelve false; si el envío falla,
+ * enviarMail loguea el error (llega a Sentry) y devuelve false. Ninguno de los dos
+ * mails se escribe entero en el log.
+ *
+ * @param {Object} datos
+ * @param {string} datos.destino - Mail anterior del dueño (a dónde va el aviso)
+ * @param {string} datos.destinoEnmascarado - El mismo mail enmascarado, para el log
+ * @param {string} datos.emailNuevoEnmascarado - El mail nuevo, enmascarado (enmascararEmail)
+ * @param {string} datos.nombreNegocio - Nombre del negocio (título y remitente)
+ * @returns {Promise<boolean>} true si se envió, false si se salteó o falló
+ */
+export const enviarAvisoCambioEmail = async ({ destino, destinoEnmascarado, emailNuevoEnmascarado, nombreNegocio }) => {
+  const nombreFuncion = 'enviarAvisoCambioEmail';
+  if (!mailProvider.estaConfigurado) {
+    console.warn(`[mailer] ${nombreFuncion} — saltado: faltan credenciales | to: ${destinoEnmascarado} | mail nuevo: ${emailNuevoEnmascarado} | tenant: ${nombreNegocio}`);
+    return false;
+  }
+
+  const asunto = `Cambió el mail de recuperación de ${nombreNegocio}`;
+  const intro = `El mail al que llegan los links para recuperar la contraseña del iPad y el PIN de administrador de ${nombreNegocio} cambió a ${emailNuevoEnmascarado}. Desde ahora, esos links ya no llegan a este mail.`;
+  const siNoFuiste = 'Si no lo cambiaste vos, escribile cuanto antes al soporte de BarberManager.';
+
+  const texto = `${intro}\n\n${siNoFuiste}\nWhatsApp: ${SOPORTE.whatsapp}\nMail: ${SOPORTE.email}`;
+
+  const html = construirHtml({
+    eyebrow: 'Mail de recuperación',
+    eyebrowColor: paleta.danger,
+    titulo: nombreNegocio,
+    intro: `${intro} ${siNoFuiste}`,
+    filas: [
+      { label: 'Mail nuevo', valor: emailNuevoEnmascarado },
+      { label: 'WhatsApp del soporte', valor: SOPORTE.whatsapp, href: SOPORTE.whatsappLink },
+      { label: 'Mail del soporte', valor: SOPORTE.email, href: `mailto:${SOPORTE.email}` },
+    ],
+    cta: null,
   });
 
   return enviarMail({

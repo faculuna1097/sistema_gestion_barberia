@@ -263,7 +263,8 @@ app.use('/api/auth/barbero',   limiterLogin, authBarberoRoutes);
 app.use('/api/auth/panel',     limiterLogin, authPanelRoutes);
 // Recuperación por mail de la contraseña del iPad y del PIN admin. Mismo limiter:
 // los tokens inválidos cuentan como intentos fallidos. El pedido del mail siempre
-// responde 200 (no consume cupo): lo frena el anti-spam de 2 minutos por tenant y tipo.
+// responde 200, así que acá no consume cupo: lo frenan limiterRecuperacion (5 por
+// hora por IP, en routes/authRecuperar.js) y el tope por local de emitirToken.
 app.use('/api/auth/recuperar', limiterLogin, authRecuperarRoutes);
 app.use('/api/turnero',    turneroRoutes);
 // GET /api/negocio — datos públicos del negocio (nombre, booking_url).

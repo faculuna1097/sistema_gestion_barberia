@@ -6,10 +6,10 @@
 > anteriores los mueven. Aprobar el plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
 > **Estado (2026-11-18):** **en curso.** Hechas y commiteadas: 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8), 2 (F6a),
-> 3 (F6b), 4 (F5), 5 (F1a), 6 (F1b) y, de la auditoría 2026-11, 6b (Z5-04 + Z4-09, `fefd8fa`) y 6c (Z2-01, Z5-09 y el
-> refresco de Z8-04, `a301d55`). **Próximo: fase 6d** (arreglos de F6: Z1-01 alto, Z1-02, Z1-05 y Z3-06; detalle en
-> la fila 6d de §5 y en `auditoria_2026-11.md`). Después: 7 (F3, el SQL de `no_asistio_por` lo arma su ejecutor y
-> lo corre el usuario), 8 (F4), 9 y 10 (F2), los dos pasos previos al PR (sacar la skill `alta-cliente` con su
+> 3 (F6b), 4 (F5), 5 (F1a), 6 (F1b) y, de la auditoría 2026-11, 6b (Z5-04 + Z4-09, `fefd8fa`), 6c (Z2-01, Z5-09 y el
+> refresco de Z8-04, `a301d55`) y 6d (Z1-01, Z1-02, Z1-05 y Z3-06). Con eso están hechos los nueve arreglos de la
+> auditoría que le tocaban a esta tanda. **Próximo: fase 7** (F3; el SQL de `no_asistio_por` lo arma su ejecutor y
+> lo corre el usuario). Después: 8 (F4), 9 y 10 (F2), los dos pasos previos al PR (sacar la skill `alta-cliente` con su
 > respaldo y la fase 10 de la auditoría: segunda pasada sobre `git diff a03bdc0..HEAD`) y 11 (cierre, que también
 > marca los arreglos como hechos en `auditoria_2026-11.md`).
 > **Branch sin pushear** desde el rebase del 2026-11-12: `main` avanzó (landing de captación #9, CORS #10,
@@ -350,7 +350,7 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
 | 6 | ✅ **Hecha (2026-11-16, commiteada).** F1b fronts. App del barbero: `textoCliente` ("Sin datos" en toda la app), wizard de 3 pasos (servicio · día en chips de 14 días con los que no tienen lugar en gris + "Otra fecha" y horario · cliente con "Sin datos" destacado), atajo "Reservar turno" en la Agenda (`HojaReservar`), "Asignar cliente" en el detalle (`HojaAsignarCliente`) y refresco cada 30 s y al volver al primer plano; centralizado en `components/cliente/`, `HojaInferior`, `AvisoError`, `useBusquedaClientes` y `utils/clienteTurno.js`. Panel: "Sin datos" en Turnero, Planillas y Gestión → Barberos, y "Asignar" en el detalle del turno (`turnero/AsignarCliente.jsx`, también en modo barbero). iPad: "Sin datos" en el selector y el resumen de `FlujoCorte`. Distinto al prompt, decidido con el usuario: `POST /api/admin/turnos` acepta `{ cliente_id }` (antes, elegir un cliente del buscador creaba otro igual; con rol barbero, uno suyo o 404) y borra el cliente sin mail recién creado si el alta falla (`borrarClienteSinTurnos`) | Ejecutor | — |
 | 6b | ✅ **Hecha (2026-11-18, commiteada).** Auditoría Z5-04 + Z4-09: borrar en Caja un corte con turno. La lógica pasó a `eliminarCorte` (`services/movimientosService.js`): el turno vuelve a `reservado`; si su horario ya es de otro (`23P01`), queda `cancelado` (`cancelado_por = 'admin'`, sin mail, y se borra su evento de Calendar recién con el corte borrado), con compensación si el borrado falla. El `DELETE` de un corte responde `{ ok, turno: { id, estado } \| null, aviso? }`. La lista de Caja suma `turno_inicio`, `turno_estado` y `turno_cliente_nombre`; el diálogo muestra la fila "Turno" y que queda pendiente de cobro (y, si es de un día anterior, que no aparece en el iPad y que esa noche pasa a "no asistió"); el `aviso` sale como toast | Ejecutor | — |
 | 6c | ✅ **Hecha (2026-11-18, commiteada).** Arreglos de F1 (auditoría). Z2-01: el cliente del alta y de la asignación alcanza con que sea del local, con cualquier rol (se borró `sqlClienteDelBarbero`); el barbero sigue tocando solo sus turnos. Z5-09: el admin cambia el cliente con `PATCH /api/admin/turnos/:id/cliente` + `{ reemplazar: true, cliente_actual_id }` (403 con otro rol; 409 `cliente_cambio` si el turno ya no tiene ese cliente; una sola sentencia que además rota `token_gestion` si el cliente cambia, para que el link del anterior deje de servir; el cliente anterior no se borra; un turno con cliente no vuelve a "Sin datos"), con "Cambiar" en el detalle del panel. Z8-04: la Agenda se refresca cada 60 s | Ejecutor | — |
-| 6d | Arreglos de F6 (auditoría): Z1-01 (alto: limiter propio y tope diario de links de recuperación), Z1-02 (aviso al mail anterior y anular links pendientes), Z1-05 (enmascarar también el dominio) y Z3-06 (`booking_url` solo `https://`) | Ejecutor | — |
+| 6d | ✅ **Hecha (2026-11-18, commiteada).** Arreglos de F6 (auditoría). Z1-01: `limiterRecuperacion` (5 por hora por IP, cuenta todos los pedidos) solo en `POST /api/auth/recuperar/solicitar`, y tope por local en la misma sentencia de `emitirToken` (`MAX_LINKS_POR_DIA = 6` en 24 h, los dos tipos; usa el índice `token_recuperacion_tenant_tipo` con las tres columnas, sin DDL), que ahora devuelve `'creado' \| 'frenado' \| 'tope'` (con los dos frenos a la vez, `'frenado'`); ante el tope, la misma respuesta sin mail, `console.warn` y `reportarAviso` (fingerprint `['recuperacion', 'tope-diario']`). Z1-02: `editarContactoNegocio` lee el mail anterior, guarda y, si el mail cambió, anula los links pendientes del tenant en una sola sentencia; si había mail anterior, le manda `enviarAvisoCambioEmail` (mail nuevo enmascarado y contacto del soporte, `SOPORTE` en `utils/constantes.js`); la respuesta no cambia. Z1-05: `enmascararEmail` tapa también el dominio (`fa•••@g•••.com`). Z3-06: `editarNegocio` responde 400 `{ error, campo: 'booking_url' }` si no es texto o no pasa `esUrlHttps` (vacío o solo espacios → `null`) y, decidido con el usuario de paso, 400 `{ error, campo: 'nombre_negocio' }` si el nombre no es texto o es solo espacios (antes, un número daba 500); el panel muestra "Reservar" solo con un link https (`utils/url.js`) y los dos `window.open` van con `noopener,noreferrer` | Ejecutor | — |
 | 7 | F3 backend (endpoint, `no_asistio_por`, `cierreDiario.js`) + avisos en el iPad y el Inicio | Ejecutor | SQL `no_asistio_por` |
 | 8 | F4 socios | Ejecutor | — |
 | 9 | F2a traspasos: backend | Ejecutor | SQL `turno_traspaso` |
@@ -507,6 +507,13 @@ _(Los completa el orquestador durante la tanda.)_
   .claude/skills/alta-cliente` y commitear; (3) confirmar con `git status --ignored` que la carpeta sigue en
   disco y figura como ignorada. Después del merge, `main` tampoco la versiona y el problema desaparece, salvo al
   hacer checkout de un commit viejo (para eso, el respaldo).
+- **(2026-11-18, fase 6d) Dos cosas que deja la fase:**
+  - **El contacto del soporte está en tres lugares** que no comparten código: `frontend/src/components/ui/ContactoSoporte.jsx`
+    (panel), `frontend-landing/src/config/landing.js` y, desde esta fase, `SOPORTE` en `backend/src/utils/constantes.js`
+    (lo usa el aviso de cambio de mail). Si cambia el WhatsApp o el mail del soporte, se cambian los tres.
+  - **El aviso del tope diario de recuperación en Sentry** (`recuperacion: tope diario de links`) es un issue propio,
+    no un `rateLimit: …`. Avisa a Discord por la regla de issue nuevo; si se quiere que avise también cuando se repite,
+    como los cortes del rate limiter, hay que revisar el filtro de la regla "Rate limiter sigue" en Sentry.
 - **(2026-11-17, auditoría 2026-11) Aceptados por el usuario, que tocan esta tanda:** Z1-06 (la sesión del
   barbero queda siempre guardada, sin casilla) y Z1-03 en su parte de producto (el PIN de admin sigue en 4
   dígitos, porque el login del panel resuelve admin o barbero con el mismo PIN).

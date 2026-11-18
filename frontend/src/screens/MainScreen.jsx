@@ -25,7 +25,9 @@
 //   imagenLogo        — URL del logo (tenant_imagen tipo='logo'). Se muestra en
 //                       un círculo en la esquina superior derecha si existe.
 //   imagenLocal       — URL de la foto del local (fondo). Fallback: surfaceAlt.
-//   bookingUrl        — URL de reservas (si existe, muestra el botón Reservar).
+//   bookingUrl        — URL de reservas (si existe, muestra el botón Reservar). Llega
+//                       ya filtrada por App.jsx: solo https (Z3-06). Se abre sin
+//                       opener ni referrer, como YouTube.
 
 import { useState, useEffect } from "react";
 import { Scissors, Package, Receipt, CalendarDays, Lock, LogOut } from "lucide-react";
@@ -66,7 +68,7 @@ const abrirYouTube = () => {
   const inicio = Date.now();
   const timer = setTimeout(() => {
     if (Date.now() - inicio < 600) {
-      window.open(YOUTUBE_WEB_URL, "_blank");
+      window.open(YOUTUBE_WEB_URL, "_blank", "noopener,noreferrer");
     }
   }, 500);
   const cancelarFallback = () => {
@@ -452,7 +454,7 @@ export default function MainScreen({
       }}>
         {bookingUrl && (
           <BotonEsquina
-            onClick={() => window.open(bookingUrl, "_blank")}
+            onClick={() => window.open(bookingUrl, "_blank", "noopener,noreferrer")}
             ariaLabel="Reservar turno"
             color={theme.accent}
           >

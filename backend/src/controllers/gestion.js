@@ -12,6 +12,9 @@ import { esMontoValido, esEnteroNoNegativo, ENTERO_MAXIMO, mensajeMontoInvalido 
 import { invalidar } from '../middlewares/tenantMiddleware.js';
 import { esComisionValida, MENSAJE_COMISION_INVALIDA } from '../utils/comision.js';
 import { validarContactoNegocio } from '../utils/contactoNegocio.js';
+import { esUrlHttps } from '../utils/validarTexto.js';
+import { enmascararEmail } from '../services/recuperacionService.js';
+import { enviarAvisoCambioEmail } from '../services/mail/mailer.js';
 
 const SALT_ROUNDS = 10;
 const MENSAJE_PRECIO_INVALIDO = mensajeMontoInvalido('precio');
@@ -506,6 +509,15 @@ export const getNegocioAdmin = async (req, res) => {
  * Pide el PIN de administrador siempre (re-autenticación, como las credenciales
  * operativas): quien cambia este mail decide a dónde llega la recuperación de las
  * credenciales. El log no lleva los datos (son personales): solo el tenant.
+ *
+ * Si el mail del dueño cambia (auditoría 2026-11, Z1-02):
+ *   - En la misma sentencia que guarda, se anulan los links de recuperación
+ *     pendientes del tenant, de los dos tipos (vence_en = now(), como emitirToken):
+ *     un link mandado al mail viejo deja de servir.
+ *   - Si había un mail anterior, se le manda un aviso (enviarAvisoCambioEmail) con
+ *     el mail nuevo enmascarado y el contacto del soporte. Es best-effort: si no
+ *     sale, la respuesta es la misma (el error llega a Sentry desde enviarMail).
+ * Cambiar solo los teléfonos no anula ni avisa nada.
  * @param {string}  req.tenant_id              - Inyectado por verificarToken
  * @param {string}  req.body.pin_admin         - PIN de administrador, para confirmar
  * @param {string}  req.body.email_duenio      - Obligatorio; se guarda recortado y en minúsculas
@@ -536,18 +548,55 @@ export const editarContactoNegocio = async (req, res) => {
       return res.status(403).json({ error: 'El PIN de administrador es incorrecto', codigo: CODIGO_PIN_ADMIN_INCORRECTO, campo: 'pin_admin' });
     }
 
+    // Una sola sentencia (sin transacciones por el pooler). Todas las partes ven la
+    // foto de la tabla previa al UPDATE: `anterior` lee el mail de antes, y
+    // `anulados` compara ese con el que quedó guardado.
     const result = await query(
-      `UPDATE tenant
-       SET email_duenio = $1, telefono_duenio = $2, telefono_local = $3
-       WHERE id = $4
-       RETURNING email_duenio, telefono_duenio, telefono_local`,
+      `WITH anterior AS (
+         SELECT email_duenio FROM tenant WHERE id = $4
+       ),
+       guardado AS (
+         UPDATE tenant
+         SET email_duenio = $1, telefono_duenio = $2, telefono_local = $3
+         WHERE id = $4
+         RETURNING email_duenio, telefono_duenio, telefono_local, nombre_negocio
+       ),
+       anulados AS (
+         UPDATE token_recuperacion SET vence_en = now()
+         WHERE tenant_id = $4 AND usado_en IS NULL AND vence_en > now()
+           AND (SELECT email_duenio FROM anterior)
+               IS DISTINCT FROM (SELECT email_duenio FROM guardado)
+         RETURNING id
+       )
+       SELECT g.email_duenio, g.telefono_duenio, g.telefono_local, g.nombre_negocio,
+              (SELECT email_duenio FROM anterior) AS email_anterior,
+              (SELECT count(*) FROM anulados) AS links_anulados
+       FROM guardado g`,
       [email_duenio, telefono_duenio, telefono_local, req.tenant_id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Tenant no encontrado' });
     }
-    console.log('[gestion] editarContactoNegocio completado | tenant:', req.tenant_id);
-    res.json(result.rows[0]);
+    const fila = result.rows[0];
+    const mailCambiado = fila.email_anterior !== fila.email_duenio;
+
+    console.log('[gestion] editarContactoNegocio completado | tenant:', req.tenant_id,
+      '| mail cambiado:', mailCambiado ? 'sí' : 'no', '| links anulados:', Number(fila.links_anulados));
+
+    if (mailCambiado && fila.email_anterior) {
+      await enviarAvisoCambioEmail({
+        destino: fila.email_anterior,
+        destinoEnmascarado: enmascararEmail(fila.email_anterior),
+        emailNuevoEnmascarado: enmascararEmail(fila.email_duenio),
+        nombreNegocio: fila.nombre_negocio,
+      });
+    }
+
+    res.json({
+      email_duenio: fila.email_duenio,
+      telefono_duenio: fila.telefono_duenio,
+      telefono_local: fila.telefono_local,
+    });
   } catch (err) {
     console.error('[gestion] Error en editarContactoNegocio:', err);
     res.status(500).json({ error: 'Error al guardar el contacto del negocio' });
@@ -557,16 +606,35 @@ export const editarContactoNegocio = async (req, res) => {
 /**
  * editarNegocio
  * Actualiza nombre_negocio y booking_url del tenant.
+ * booking_url tiene que ser una URL https (auditoría 2026-11, Z3-06): el botón
+ * "Reservar" del iPad lo abre con window.open, y un `javascript:` guardado acá
+ * corría en el origen del panel, donde viven las sesiones del iPad y del barbero.
  * @param {string}  req.tenant_id           - Inyectado por verificarToken
- * @param {string}  req.body.nombre_negocio - Nombre del negocio (requerido, se recorta)
- * @param {string} [req.body.booking_url]   - URL de reservas (opcional, se recorta; null si vacío)
- * @returns {JSON} { nombre_negocio, booking_url } | 404 si el tenant no existe
+ * @param {string}  req.body.nombre_negocio - Nombre del negocio (requerido, texto no vacío; se recorta)
+ * @param {string} [req.body.booking_url]   - URL de reservas https (opcional, se recorta;
+ *   null si viene vacío, solo espacios o no viene)
+ * @returns {JSON} { nombre_negocio, booking_url }
+ *   | 400 { error, campo: 'nombre_negocio' } (falta, no es texto o es solo espacios)
+ *   | 400 { error, campo: 'booking_url' } (no es texto o no es una URL https)
+ *   | 404 si el tenant no existe
  */
 export const editarNegocio = async (req, res) => {
   const { nombre_negocio, booking_url } = req.body;
 
-  if (!nombre_negocio) {
-    return res.status(400).json({ error: 'nombre_negocio es requerido' });
+  // Tiene que ser texto con algo escrito: un número daba 500 en el .trim(), y un
+  // nombre de solo espacios se guardaba vacío.
+  if (typeof nombre_negocio !== 'string' || nombre_negocio.trim() === '') {
+    return res.status(400).json({ error: 'nombre_negocio es requerido', campo: 'nombre_negocio' });
+  }
+
+  // Vacío o ausente → null. Si vino algo, tiene que ser texto (un número daba 500
+  // en el .trim()) y una URL https.
+  let bookingUrl = null;
+  if (booking_url !== undefined && booking_url !== null && booking_url !== '') {
+    if (typeof booking_url !== 'string' || (booking_url.trim() !== '' && !esUrlHttps(booking_url))) {
+      return res.status(400).json({ error: 'El link de reservas tiene que ser una dirección que empiece con https://', campo: 'booking_url' });
+    }
+    bookingUrl = booking_url.trim() || null;
   }
 
   try {
@@ -576,7 +644,7 @@ export const editarNegocio = async (req, res) => {
            booking_url    = $2
        WHERE id = $3
        RETURNING nombre_negocio, booking_url`,
-      [nombre_negocio.trim(), booking_url ? booking_url.trim() : null, req.tenant_id]
+      [nombre_negocio.trim(), bookingUrl, req.tenant_id]
     );
     // Sin esta guarda, un tenant_id inexistente devolvía rows vacío y el log de
     // abajo (result.rows[0].nombre_negocio) tiraba un 500 en vez de un 404 limpio.
