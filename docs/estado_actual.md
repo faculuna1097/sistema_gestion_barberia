@@ -301,8 +301,8 @@ Aplica solo si la suscripción no se renovó (`suscripcion_vigente_hasta` anteri
      **hecho el 2026-11-18** (PR #12); (4) `trust proxy` (el pendiente de abajo, Z1-03), después del merge de mejoras
      operativas, para verificarlo en producción.
   2. **En `feature/mejoras-operativas`, antes de F3:** (1) límite en cancelar y reprogramar del turnero (Z3-01):
-     **hecho el 2026-11-18** (`5b143d2`); (2) logs sin query string, `body-parser` y la skill `alta-cliente`
-     (la regla y sacarla de `main`) (Z7-02, Z7-04, Z7-01): **hecho el 2026-11-18** (`baba229`), salvo sacar la
+     **hecho el 2026-11-18** (`0860534`); (2) logs sin query string, `body-parser` y la skill `alta-cliente`
+     (la regla y sacarla de `main`) (Z7-02, Z7-04, Z7-01): **hecho el 2026-11-18** (`4cc1895`), salvo sacar la
      skill del repo, que va justo antes del PR de merge; (3) los nueve anotados en la sección de Hallazgos de [`plan_mejoras_operativas.md`](./plan_mejoras_operativas.md).
   3. **Datos y configuración que corre el usuario:** `REVOKE` de `anon` y `authenticated` sobre las tablas
      (Z2-03); `REVOKE` de `pg_net` para `PUBLIC`, con la fase 5 del resguardo (Z7-03); Object Lock en el

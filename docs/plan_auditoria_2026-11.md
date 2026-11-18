@@ -6,7 +6,7 @@
 >
 > **Estado (2026-11-17):** fases 0 a 9 hechas. Las 8 zonas, revisadas por el orquestador; los 61 hallazgos, con
 > destino decidido por el usuario, y el plan de arreglos escrito en `auditoria_2026-11.md`. Queda la fase 10
-> (segunda pasada sobre lo que se haga de mejoras operativas después de `f986081`, antes del PR de merge).
+> (segunda pasada sobre lo que se haga de mejoras operativas después de `473e1c4`, antes del PR de merge).
 
 ## 1. Contexto
 
@@ -31,7 +31,7 @@ Desde entonces se construyó mucho, y casi nada de eso pasó por una auditoría:
   turno sin cliente y asignar cliente (F1). Faltan fases (la próxima es F3).
 
 **La auditoría corre en paralelo con ese plan, sin frenarlo.** Se audita el branch `feature/mejoras-operativas`
-tal como esté: contiene todo `main` (`3931843`) más las fases hechas. Al escribir este plan, HEAD es `35a23f5`
+tal como esté: contiene todo `main` (`3931843`) más las fases hechas. Al escribir este plan, HEAD es `d36d15e`
 (17 commits y 114 archivos sobre `main`).
 
 ## 2. Decisiones cerradas (2026-11-16)

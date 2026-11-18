@@ -6,22 +6,26 @@
 > anteriores los mueven. Aprobar el plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
 > **Estado (2026-11-18):** **en curso.** Hechas y commiteadas: 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8), 2 (F6a),
-> 3 (F6b), 4 (F5), 5 (F1a), 6 (F1b) y, de la auditoría 2026-11, 6b (Z5-04 + Z4-09, `fefd8fa`), 6c (Z2-01, Z5-09 y el
-> refresco de Z8-04, `a301d55`) y 6d (Z1-01, Z1-02, Z1-05 y Z3-06). Con eso están hechos los nueve arreglos de la
+> 3 (F6b), 4 (F5), 5 (F1a), 6 (F1b) y, de la auditoría 2026-11, 6b (Z5-04 + Z4-09, `edc3919`), 6c (Z2-01, Z5-09 y el
+> refresco de Z8-04, `45c0e8a`) y 6d (Z1-01, Z1-02, Z1-05 y Z3-06, `cb0573a`). Con eso están hechos los nueve arreglos de la
 > auditoría que le tocaban a esta tanda. **Próximo: fase 7** (F3; el SQL de `no_asistio_por` lo arma su ejecutor y
 > lo corre el usuario). Después: 8 (F4), 9 y 10 (F2), los dos pasos previos al PR (sacar la skill `alta-cliente` con su
-> respaldo y la fase 10 de la auditoría: segunda pasada sobre `git diff a03bdc0..HEAD`) y 11 (cierre, que también
+> respaldo y la fase 10 de la auditoría: segunda pasada sobre `git diff 3138425..HEAD`) y 11 (cierre, que también
 > marca los arreglos como hechos en `auditoria_2026-11.md`).
-> **Branch sin pushear** desde el rebase del 2026-11-12: `main` avanzó (landing de captación #9, CORS #10,
-> keep-alive del pool, skills de producción). Antes del PR: rebase sobre `main` revisando `backend/src/index.js` a
-> mano (lo tocaron las dos partes) y `git push --force-with-lease origin feature/mejoras-operativas` (lo corre el
-> usuario).
+> **Rebasado sobre `main` el 2026-11-18** (`origin/main` en `fb1fc19`: landing de captación #9, CORS #10, monitor del
+> cron #8, keep-alive del pool #11 y skills de producción #12), antes de la fase 7 para que F3 use `conMonitorCron`.
+> El resultado se comparó contra la combinación simulada de los dos lados (`git merge-tree`): idéntico salvo los dos
+> docs que chocaron (`CLAUDE.md` y `estado_actual.md`), integrados a mano en `c5e0aa0`; `backend/src/index.js`
+> revisado a mano. Los hashes de los commits del branch cambiaron: los docs ya citan los nuevos. Respaldo local del
+> branch de antes: `respaldo/mejoras-pre-rebase-2026-11-18` (borrarlo cuando el push esté hecho). **Falta el push**
+> (lo corre el usuario): `git push --force-with-lease origin feature/mejoras-operativas`. Si `main` avanza otra vez
+> antes del PR, otro rebase (chico).
 > **Cómo se trabaja desde el 2026-11-13** (además de §2): el SQL de cada fase lo arma su chat ejecutor y lo corre el
 > usuario; el orquestador revisa el diff, completa los docs que falten (`ruta_proyecto.md`, `SQL_Schema.md`,
 > `estado_actual.md`) y commitea con el OK del usuario. Regla de §8: si una prueba local cambia versiones de token
 > de demo, reiniciar el servicio web de producción al terminar.
 > Historia: el 2026-11-17 la auditoría 2026-11 dejó nueve arreglos para esta tanda y el 2026-11-18 su chat hizo
-> Z3-01, los logs, `body-parser` y la regla de la skill de alta (`5b143d2`, `baba229`) y devolvió la tanda (última
+> Z3-01, los logs, `body-parser` y la regla de la skill de alta (`0860534`, `4cc1895`) y devolvió la tanda (última
 > entrada de §8).
 > Antes, 2026-11-05: fase 0 hecha y la tanda en espera del monitoreo (`feature/monitoreo-prod`, ya en producción).
 
@@ -355,7 +359,7 @@ es de otro contexto o es grande: el orquestador no se carga con cosas menores. T
 | 8 | F4 socios | Ejecutor | — |
 | 9 | F2a traspasos: backend | Ejecutor | SQL `turno_traspaso` |
 | 10 | F2b traspasos: app del barbero | Ejecutor | — |
-| 11 | Cierre: `decisiones_mejoras_operativas.md`, `estado_actual.md` (estado, pendientes resueltos, pasos de deploy y post-deploy: los de F6 de §6, cron nuevo, conteo de históricos), `SQL_Schema.md`, `onboarding.md`, `decisiones_alta_clientes.md` D13 (ya hay recuperación de PIN), `ruta_proyecto.md`, `plan_app_barbero.md`, mapa del `CLAUDE.md`; resumen | Orquestador | — |
+| 11 | Cierre: `decisiones_mejoras_operativas.md`, `estado_actual.md` (estado, pendientes resueltos, pasos de deploy y post-deploy: los de F6 de §6, cron nuevo, conteo de históricos), `SQL_Schema.md`, `onboarding.md`, `decisiones_alta_clientes.md` D13 (ya hay recuperación de PIN), `ruta_proyecto.md`, `plan_app_barbero.md`, mapa del `CLAUDE.md`; que el aviso del tope diario de recuperación entre en la regla "Rate limiter sigue" de Sentry (§8, fase 6d); resumen | Orquestador | — |
 
 Después: merge de este branch a `main` + deploy siguiendo `estado_actual.md` (el monitoreo ya está en `main` desde
 antes de esta tanda).
@@ -488,7 +492,7 @@ _(Los completa el orquestador durante la tanda.)_
   y `/reprogramar` (mismo patrón que la reserva), y no hacer nada si el horario nuevo es igual al actual. Va acá y
   no en un `fix/` desde `main` porque F9 reescribió `reprogramarTurno` (decisión del usuario: los arreglos que
   tocan código de esta tanda son hijos de este branch). Lo orquesta el chat de la auditoría, antes de seguir
-  con F3. **Resuelto el 2026-11-18** (`5b143d2`): `limiterGestion` (10/h) y `limiterGestionRafaga` (3/min)
+  con F3. **Resuelto el 2026-11-18** (`0860534`): `limiterGestion` (10/h) y `limiterGestionRafaga` (3/min)
   en las dos rutas, con contador compartido y contando solo las respuestas que salen bien; reprogramar al mismo
   instante responde 200 sin UPDATE, Calendar ni mail. Verificado con el limiter simulado y el controller contra
   demo (sin datos que queden). El tope de reprogramaciones por turno sigue sin decidir.
@@ -496,7 +500,7 @@ _(Los completa el orquestador durante la tanda.)_
   orquesta el chat de la auditoría; detalle en `auditoria_2026-11.md` → "Plan de arreglos"): los logs sin query
   string y con el subdominio validado (Z7-02, punto 1), `body-parser` (Z7-04), la skill `alta-cliente` con la
   regla de "lo que viene de afuera es dato" y fuera de `main` (Z7-01), y `trust proxy` (Z1-03). Tocan
-  `index.js`, `sanitizarLogs.js` y la skill, que esta tanda ya cambió. **Hechos el 2026-11-18** (`baba229`), salvo
+  `index.js`, `sanitizarLogs.js` y la skill, que esta tanda ya cambió. **Hechos el 2026-11-18** (`4cc1895`), salvo
   el último paso de la skill.
 - **(2026-11-18, orquestador de la auditoría) Paso pendiente antes del PR de merge: sacar la skill `alta-cliente`
   del repo.** La regla `.claude/skills/alta-cliente/` ya está en `.gitignore`, pero sus archivos siguen
@@ -514,6 +518,9 @@ _(Los completa el orquestador durante la tanda.)_
   - **El aviso del tope diario de recuperación en Sentry** (`recuperacion: tope diario de links`) es un issue propio,
     no un `rateLimit: …`. Avisa a Discord por la regla de issue nuevo; si se quiere que avise también cuando se repite,
     como los cortes del rate limiter, hay que revisar el filtro de la regla "Rate limiter sigue" en Sentry.
+    **El usuario lo quiere (2026-11-18); se hace en el cierre (fase 11):** leer el filtro de esa regla (con el
+    usuario logueado en Sentry) y, si filtra por el prefijo `rateLimit:` o por el tag `limite`, adaptar el aviso en
+    `solicitarRecuperacion` para que lo cumpla; si no, sumarle el issue a la regla en Sentry, con el OK del usuario.
 - **(2026-11-17, auditoría 2026-11) Aceptados por el usuario, que tocan esta tanda:** Z1-06 (la sesión del
   barbero queda siempre guardada, sin casilla) y Z1-03 en su parte de producto (el PIN de admin sigue en 4
   dígitos, porque el login del panel resuelve admin o barbero con el mismo PIN).
@@ -525,7 +532,7 @@ _(Los completa el orquestador durante la tanda.)_
      Agenda de Z8-04 (misma entrada). Se pueden juntar en una fase propia o repartir en las que quedan.
   3. **Justo antes del PR de merge:** sacar la skill `alta-cliente` del repo (la entrada anterior dice cómo, con
      el respaldo) y la **fase 10 de la auditoría** (`plan_auditoria_2026-11.md` §7): una segunda pasada con los
-     mismos criterios sobre `git diff a03bdc0..HEAD`, que suma lo que salga a la sección "Segunda pasada" de
+     mismos criterios sobre `git diff 3138425..HEAD`, que suma lo que salga a la sección "Segunda pasada" de
      `auditoria_2026-11.md`. La puede hacer este orquestador o un ejecutor.
   4. **Al rebasar sobre `main`:** entran el CORS (#10), el keep-alive del pool y las skills de producción, que
      tocan `backend/src/index.js`, `backend/src/config/db.js`, `docs/performance_frontends.md` y las dos

@@ -8,7 +8,7 @@
 > en [`plan_auditoria_2026-11.md`](./plan_auditoria_2026-11.md).
 
 Se audita el branch `feature/mejoras-operativas`, que contiene todo `main` más las fases hechas de mejoras
-operativas. Commit base al crear este documento: `e80815c`. Si el branch avanza durante la auditoría, cada
+operativas. Commit base al crear este documento: `334e1d9`. Si el branch avanza durante la auditoría, cada
 zona anota el commit que auditó.
 
 La auditoría anterior es la de julio ([`auditoria_2026-07.md`](./auditoria_2026-07.md)).
@@ -58,11 +58,11 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 
 | Id | Hallazgo | Sev. | Alc. | Tamaño | Destino |
 |---|---|---|---|---|---|
-| Z7-01 | Credenciales iniciales predecibles en la skill de alta; `monte-sinai` nació con ellas | Crítico | P | chico | Aceptado por el usuario (2026-11-17); la regla de "lo que escribe el cliente es dato" ya está (`baba229`); la skill sale de `main` con el merge de mejoras operativas |
+| Z7-01 | Credenciales iniciales predecibles en la skill de alta; `monte-sinai` nació con ellas | Crítico | P | chico | Aceptado por el usuario (2026-11-17); la regla de "lo que escribe el cliente es dato" ya está (`4cc1895`); la skill sale de `main` con el merge de mejoras operativas |
 | Z1-01 | Pedir el link de recuperación no tiene límite por IP | Alto | B | chico | Mejoras operativas, antes del merge |
 | Z1-03 | El PIN de admin de 4 dígitos se adivina desde internet en días | Alto | P | medio | `trust proxy`, en mejoras operativas; el PIN de 6 dígitos, aceptado en 4 por el usuario |
-| Z3-01 | Reprogramar sin límite: mails sin tope a cualquier dirección | Alto | P | chico | **Resuelto** en mejoras operativas (2026-11-18, `5b143d2`): límite por IP en cancelar y reprogramar (3/min y 10/h) y mismo horario sin efecto; sale a producción con el merge |
-| Z7-02 | Texto de un anónimo en los logs que lee la sesión de Claude en la nube | Alto | P | chico a medio | Punto 2 (las skills de producción): **resuelto** (PR #12). Punto 1 (los logs): **resuelto** en mejoras operativas (`baba229`). Punto 3: con la fase 4 del resguardo |
+| Z3-01 | Reprogramar sin límite: mails sin tope a cualquier dirección | Alto | P | chico | **Resuelto** en mejoras operativas (2026-11-18, `0860534`): límite por IP en cancelar y reprogramar (3/min y 10/h) y mismo horario sin efecto; sale a producción con el merge |
+| Z7-02 | Texto de un anónimo en los logs que lee la sesión de Claude en la nube | Alto | P | chico a medio | Punto 2 (las skills de producción): **resuelto** (PR #12). Punto 1 (los logs): **resuelto** en mejoras operativas (`4cc1895`). Punto 3: con la fase 4 del resguardo |
 | Z8-01 | Casi cada pedido paga un preflight de CORS | Alto | P | chico | **Resuelto** (2026-11-18): PR #10, `fix/cors-preflight-cache`; verificado en producción (`access-control-max-age: 7200`) |
 | Z1-02 | Cambiar el mail del dueño no avisa a nadie | Medio | B | chico | Mejoras operativas, antes del merge |
 | Z2-01 | El barbero elige un cliente del buscador y recibe "Cliente no encontrado" | Medio | B | chico | Mejoras operativas, antes del merge |
@@ -74,7 +74,7 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 | Z5-01 | Cambiar el horario de un barbero no avisa de los turnos que quedan afuera | Medio | P | medio | Tanda de deudas, bloque E |
 | Z5-02 | Feriado y horario del local cancelan turnos sin mail y no dicen cuáles | Medio | P | medio | Tanda de deudas, bloque E |
 | Z7-03 | La credencial de solo lectura vale como admin y hace pedidos HTTP desde la base | Medio | P | datos | Datos: SQL que corre el usuario, con la fase 5 del resguardo |
-| Z7-04 | `body-parser` con un aviso alto de caída con cuerpos comprimidos | Medio | P | chico | **Resuelto** en mejoras operativas (2026-11-18, `baba229`): body-parser 2.4.0 e `inflate: false`, con 415 en vez de 500 |
+| Z7-04 | `body-parser` con un aviso alto de caída con cuerpos comprimidos | Medio | P | chico | **Resuelto** en mejoras operativas (2026-11-18, `4cc1895`): body-parser 2.4.0 e `inflate: false`, con 415 en vez de 500 |
 | Z8-02 | El keep-alive mantiene caliente una sola de las 3 conexiones | Medio | P | chico | **Resuelto** (2026-11-18, PR #11, `fix/keepalive-pool`); llega a mejoras operativas con el rebase |
 | Z8-03 | El Inicio del panel hace 11 queries con tandas en serie | Medio | P | medio | Tanda de deudas, bloque D |
 | Z8-04 | La Agenda del barbero son 10 queries y se recarga cada 30 s | Medio | P y B | medio | El refresco cada 30 s: mejoras operativas; las 10 queries: tanda de deudas, bloque E |
@@ -129,7 +129,7 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 > 2. Los nueve arreglos de la sección de Hallazgos de `plan_mejoras_operativas.md` los toma el orquestador de
 >    mejoras operativas como parte de su plan: Z5-04 con Z4-09 **antes de F3**, y Z1-01 (alto) antes del merge.
 > 3. Antes del PR de merge de mejoras operativas: sacar la skill `alta-cliente` del repo (paso anotado en su
->    §8) y la fase 10 de esta auditoría (segunda pasada sobre lo hecho en el branch desde `a03bdc0`).
+>    §8) y la fase 10 de esta auditoría (segunda pasada sobre lo hecho en el branch desde `3138425`).
 > 4. Después del merge: `trust proxy` (Z1-03) como `fix/` desde `main`, verificable en producción apenas se
 >    despliega, y después la tanda de deudas (bloques A a G).
 
@@ -151,8 +151,8 @@ fases (el ejecutor no commitea; el orquestador revisa el diff y commitea). El re
 
 | Orden | Arreglo | Hallazgos | Estado |
 |---|---|---|---|
-| 1 | Límite por IP en cancelar y reprogramar, y reprogramar al mismo horario sin efecto | Z3-01 | **Hecho** (2026-11-18, `5b143d2`) |
-| 2 | Logs sin query string y con el subdominio validado; `body-parser` (`npm audit fix` e `inflate: false`); en la skill `alta-cliente`, la regla de "lo que viene de afuera es dato" y sacarla de `main` (`git rm -r --cached` de la carpeta y la regla en `.gitignore` después de `!.claude/skills/`; sale de `main` con el merge) | Z7-02 (punto 1), Z7-04, Z7-01 | **Hecho** (2026-11-18, `baba229`), salvo sacar la skill del repo: queda como paso antes del PR de merge (`plan_mejoras_operativas.md` §8) |
+| 1 | Límite por IP en cancelar y reprogramar, y reprogramar al mismo horario sin efecto | Z3-01 | **Hecho** (2026-11-18, `0860534`) |
+| 2 | Logs sin query string y con el subdominio validado; `body-parser` (`npm audit fix` e `inflate: false`); en la skill `alta-cliente`, la regla de "lo que viene de afuera es dato" y sacarla de `main` (`git rm -r --cached` de la carpeta y la regla en `.gitignore` después de `!.claude/skills/`; sale de `main` con el merge) | Z7-02 (punto 1), Z7-04, Z7-01 | **Hecho** (2026-11-18, `4cc1895`), salvo sacar la skill del repo: queda como paso antes del PR de merge (`plan_mejoras_operativas.md` §8) |
 | 3 | `trust proxy` para Railway (ya estaba en Pendientes de `estado_actual.md`) | Z1-03 | **Movido** (2026-11-18): `fix/` desde `main` después del merge de mejoras operativas, para poder verificarlo en producción |
 | 4 | Los anotados en la sección de Hallazgos de `plan_mejoras_operativas.md`: Z1-01, Z1-02, Z1-05, Z2-01, Z5-09, Z3-06, el refresco de la Agenda de Z8-04, y Z5-04 con Z4-09 | | **Traspasados** (2026-11-18) al orquestador de mejoras operativas: Z5-04 con Z4-09 antes de F3; el resto antes del merge |
 
@@ -188,14 +188,14 @@ Z7-09 (dashboard de B2), Z7-11 (Railway), y borrar en demo el turno y el cliente
 
 | Zona | Área | Commit auditado | Estado | Crítico | Alto | Medio | Bajo |
 |---|---|---|---|---|---|---|---|
-| 1 | Autenticación, sesiones y recuperación | `fef2fd0` | Revisada | 0 | 2 | 1 | 5 |
-| 2 | Aislamiento entre tenants y permisos por rol | `cb87b60` | Revisada | 0 | 0 | 1 | 3 |
-| 3 | Superficie pública: turnero, alta y mails | `cb87b60` | Revisada | 0 | 1 | 1 | 4 |
-| 4 | Plata: caja, planillas, balances y stock | `1e148fb` | Revisada | 0 | 0 | 4 | 6 |
-| 5 | Agenda, turnos y concurrencia | `dd99386` | Revisada | 0 | 0 | 2 | 7 |
-| 6 | Panel de gestión y app del barbero (front) | `9ad3ec9` | Revisada | 0 | 0 | 0 | 4 |
-| 7 | Operación, infraestructura y dependencias | `b4b21b3` | Revisada | 1 | 1 | 2 | 8 |
-| 8 | Rendimiento y consumo del backend | `f986081` | Revisada | 0 | 1 | 5 | 2 |
+| 1 | Autenticación, sesiones y recuperación | `88d3196` | Revisada | 0 | 2 | 1 | 5 |
+| 2 | Aislamiento entre tenants y permisos por rol | `e74d9a2` | Revisada | 0 | 0 | 1 | 3 |
+| 3 | Superficie pública: turnero, alta y mails | `e74d9a2` | Revisada | 0 | 1 | 1 | 4 |
+| 4 | Plata: caja, planillas, balances y stock | `4b029c0` | Revisada | 0 | 0 | 4 | 6 |
+| 5 | Agenda, turnos y concurrencia | `c2a1704` | Revisada | 0 | 0 | 2 | 7 |
+| 6 | Panel de gestión y app del barbero (front) | `b018c88` | Revisada | 0 | 0 | 0 | 4 |
+| 7 | Operación, infraestructura y dependencias | `083cf16` | Revisada | 1 | 1 | 2 | 8 |
+| 8 | Rendimiento y consumo del backend | `473e1c4` | Revisada | 0 | 1 | 5 | 2 |
 
 Estados: **Pendiente** (sin empezar), **Escrita** (el ejecutor terminó su sección) y **Revisada** (el
 orquestador la revisó contra el código y la commiteó).
@@ -214,7 +214,7 @@ zona" (lo que se encontró de paso y le toca a otra).
 
 ## Zona 1. Autenticación, sesiones y recuperación
 
-**Commit auditado:** `fef2fd0` (`feature/mejoras-operativas`), 2026-11-16. Solo lectura: código, docs y la DB
+**Commit auditado:** `88d3196` (`feature/mejoras-operativas`), 2026-11-16. Solo lectura: código, docs y la DB
 con el rol `resguardo_lectura`. No se escribió nada en demo ni se hicieron pedidos a producción. Lo único que
 se ejecutó fuera de la lectura fue una prueba local de la librería `bcrypt` (sin base ni servidor), para
 confirmar Z1-04.
@@ -573,7 +573,7 @@ sigue cerrado (detalle en "Verificado correcto").
 
 ## Zona 2. Aislamiento entre tenants y permisos por rol
 
-Commit auditado: `cb87b60`. Hecha en dos tandas (código primero; base y fronts después). Lo poco que quedó
+Commit auditado: `e74d9a2`. Hecha en dos tandas (código primero; base y fronts después). Lo poco que quedó
 sin mirar está en "Sin revisar", al final de la sección.
 
 **Revisión del orquestador (2026-11-16):** los cuatro hallazgos se confirmaron contra el código y la base
@@ -744,7 +744,7 @@ clientes queda abierto a todo el local, y el hallazgo pasa a ser el bug de F1.
 
 ## Zona 3. Superficie pública: turnero, alta y mails
 
-**Commit auditado:** `cb87b60` (`feature/mejoras-operativas`), 2026-11-16. Solo lectura: código, docs y la DB
+**Commit auditado:** `e74d9a2` (`feature/mejoras-operativas`), 2026-11-16. Solo lectura: código, docs y la DB
 con el rol `resguardo_lectura`. No se reprodujo nada contra demo ni contra producción.
 
 **Resumen:** 6 hallazgos (0 críticos, 1 alto, 1 medio, 4 bajos). Los seis están en producción. La pregunta
@@ -1021,7 +1021,7 @@ escapado al mail de sus clientes y solo le falta un tope de largo.
 
 ## Zona 4. Plata: caja, planillas, balances y stock
 
-Commit auditado: `1e148fb`. Todo lo que registra o calcula plata es igual en `main` y en el branch
+Commit auditado: `4b029c0`. Todo lo que registra o calcula plata es igual en `main` y en el branch
 (`git diff main...HEAD` sobre los controllers, services y utils de la zona solo muestra F7 en `gestion.js` y
 `comision.js`, y cambios de texto en `FlujoCorte`, `SeccionPlanillas` y `MiPlanilla`): los diez hallazgos están
 **en producción**. No se reprodujo nada en demo ni se escribió en la base; los datos salen de `consultar.js`
@@ -1329,7 +1329,7 @@ contenedor de Railway (Z4-06).
 
 ## Zona 5. Agenda, turnos y concurrencia
 
-**Commit auditado:** `dd99386` (`feature/mejoras-operativas`), 2026-11-16/17. Solo lectura: código, docs y la
+**Commit auditado:** `c2a1704` (`feature/mejoras-operativas`), 2026-11-16/17. Solo lectura: código, docs y la
 DB con el rol `resguardo_lectura`. No se reprodujo nada en demo: ningún hallazgo es alto ni crítico.
 
 **Resumen:** 9 hallazgos (0 críticos, 0 altos, 2 medios, 7 bajos). Ocho están en producción y uno solo en el
@@ -1668,7 +1668,7 @@ slots se revisaron leyendo, sin casos de prueba.
 
 ## Zona 6. Panel de gestión y app del barbero (front)
 
-**Commit auditado:** `9ad3ec9` (`feature/mejoras-operativas`), 2026-11-17. Solo lectura: código de los tres fronts
+**Commit auditado:** `b018c88` (`feature/mejoras-operativas`), 2026-11-17. Solo lectura: código de los tres fronts
 y del backend donde hizo falta, y la DB con el rol `resguardo_lectura` (solo conteos). No se levantó nada ni se
 abrió ningún front: todo lo que depende de cómo se ve queda **sin confirmar en pantalla**.
 
@@ -1926,7 +1926,7 @@ corrí `eslint`. Nada se confirmó en pantalla.
 
 ## Zona 7. Operación, infraestructura y dependencias
 
-**Commit auditado:** `b4b21b3` (`feature/mejoras-operativas`), 2026-11-17. Solo lectura: código, historial de git,
+**Commit auditado:** `083cf16` (`feature/mejoras-operativas`), 2026-11-17. Solo lectura: código, historial de git,
 docs, la DB con el rol `resguardo_lectura` (catálogo, más un conteo por tenant autorizado por el usuario para
 Z7-01), `npm audit` sin `fix` y las cabeceras reales de los fronts con `curl` (GET, solo cabeceras). No se hizo
 ningún request a la API de producción. Para Z7-04 se probó la librería `body-parser` aislada, en memoria, sin
@@ -2386,7 +2386,7 @@ en Z7-01, ver la nota del orquestador dentro del hallazgo.
 
 ## Zona 8. Rendimiento y consumo del backend
 
-**Commit auditado:** `f986081` (`feature/mejoras-operativas`), 2026-11-17. Solo lectura: código, historial de git,
+**Commit auditado:** `473e1c4` (`feature/mejoras-operativas`), 2026-11-17. Solo lectura: código, historial de git,
 docs y la DB con el rol `resguardo_lectura` (catálogo, `pg_indexes`, `pg_stat_user_tables`,
 `pg_stat_user_indexes`, conteos por tenant y `EXPLAIN` sin `ANALYZE`). No se hizo ningún request a producción ni
 se levantó ningún servidor. Se midieron en local, aislados (sin base, sin red y sin servidor), tres cosas:
@@ -2642,7 +2642,7 @@ landing, que en frío abre una sola conexión, la muestra limpia: unos 160 ms m�
   `frontend-barbero/src/components/Agenda.jsx:67` y `:235-260` (refresco cada 30 s y al volver al primer plano).
   `GET /api/admin/agenda`.
 - **Alcance:** la carga de 10 queries, en producción. El refresco automático, solo en el branch (F1b,
-  `35a23f5`; en `main` la Agenda no tiene `setInterval` de recarga).
+  `d36d15e`; en `main` la Agenda no tiene `setInterval` de recarga).
 - **Costo:** para un barbero, 1 query de revocación en `verificarToken` (en serie, antes de todo) y después 9 en
   paralelo: `listarTurnos`, `listarSuspensiones`, `listarBloquesDescanso` y las 6 de `calcularGrillaDelDia`
   (tenant, horario del barbero, turnos, suspensiones, horario del local y feriados). Con el pool de 3: 4 tandas
