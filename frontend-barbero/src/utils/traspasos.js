@@ -204,13 +204,37 @@ export function resultadosParaA(datos) {
 }
 
 /**
+ * volvioAlBarbero
+ * Si una solicitud aceptada que mandó el barbero quedó vieja porque el turno le
+ * volvió (A → B → A, o A → B → C → A): en `recibidos` hay, del mismo turno, una
+ * aceptada respondida después que la suya. Sin ese dato no se distingue del rato
+ * en que B ya aceptó y la Agenda de A todavía no se recargó (ahí el turno también
+ * figura como de A, y "Traspasar" tiene que seguir bloqueado).
+ * @param {Object} enviada - solicitud de `enviados`
+ * @param {Array} recibidos - `recibidos` de la respuesta (la más nueva por turno)
+ * @returns {boolean} true si la enviada es una aceptada vieja de un turno que volvió
+ */
+function volvioAlBarbero(enviada, recibidos) {
+  if (enviada.estado !== 'aceptado') return false;
+  return recibidos.some((r) => r.turno.id === enviada.turno.id
+    && r.estado === 'aceptado'
+    && Date.parse(r.respondido_en) > Date.parse(enviada.respondido_en));
+}
+
+/**
  * enviadaPorTurno
- * La solicitud más nueva de A para cada turno, para el detalle y la Agenda.
- * @param {{ enviados: Array }|null} datos
+ * La solicitud vigente de A para cada turno, para el detalle y la Agenda: la más
+ * nueva que mandó, salvo una aceptada de un turno que después le volvió
+ * (volvioAlBarbero, S-B-02 de auditoria_2026-11.md). Esa no se muestra como estado
+ * del turno ni bloquea "Traspasar"; su aviso sigue en `resultadosParaA`.
+ * @param {{ enviados: Array, recibidos: Array }|null} datos
  * @returns {Map<string, Object>} turno_id → solicitud
  */
 export function enviadaPorTurno(datos) {
-  return new Map((datos?.enviados ?? []).map((s) => [s.turno.id, s]));
+  const recibidos = datos?.recibidos ?? [];
+  return new Map((datos?.enviados ?? [])
+    .filter((s) => !volvioAlBarbero(s, recibidos))
+    .map((s) => [s.turno.id, s]));
 }
 
 /**

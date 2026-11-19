@@ -65,7 +65,14 @@ const errorCorte = (code, mensaje) => {
  * @param {string} [datos.turnoId]   - UUID del turno asociado (null para walk-ins)
  * @param {string[]} [datos.estadosCompletables] - estados del turno que pasan a
  *   completado (default: solo 'reservado'). 'no_asistio' corrige una falta mal
- *   marcada: el cliente vino.
+ *   marcada: el cliente vino. Un 'no_asistio' se completa solo el mismo día del
+ *   turno, salvo con `noAsistioDelSistemaCualquierDia`.
+ * @param {boolean} [datos.noAsistioDelSistemaCualquierDia] - permite completar en
+ *   cualquier día un 'no_asistio' que puso el cierre nocturno (no_asistio_por =
+ *   'sistema'): el turno quedó sin cobrar, no fue una falta marcada por una persona
+ *   (S-A-01 de auditoria_2026-11.md). Solo lo pasa el admin (default: false). Los
+ *   marcados por un barbero o el admin (o NULL, de antes de F3) siguen con la
+ *   regla del mismo día.
  * @param {boolean} [datos.canceladoComoSinTurno] - si el turno está cancelado,
  *   registrar el corte sin turno en vez de rechazarlo (default: false)
  * @returns {Promise<{ corte_id: string, monto_total: number, turno_vinculado: boolean }>}
@@ -76,7 +83,8 @@ const errorCorte = (code, mensaje) => {
  */
 export const registrarCorte = async ({
   tenantId, barberoId, servicioId, precio, formaPago, propina, turnoId,
-  estadosCompletables = ['reservado'], canceladoComoSinTurno = false,
+  estadosCompletables = ['reservado'], noAsistioDelSistemaCualquierDia = false,
+  canceladoComoSinTurno = false,
 }) => {
   const monto_total = Number(precio) + Number(propina || 0);
 
@@ -87,14 +95,17 @@ export const registrarCorte = async ({
     // El corte guarda el % de comisión que tiene el barbero en este momento
     // (corte.comision_porcentaje): un cambio de % posterior no lo toca (utils/comision.js).
     // Un turno marcado 'no_asistio' solo se completa el mismo día del turno (hora
-    // argentina, $11): pasado ese día, la marca queda como está. Al completarlo se
-    // borra quién lo había marcado (no_asistio_por): ya no es un "no asistió".
+    // argentina, $11): pasado ese día, la marca queda como está. La excepción ($12)
+    // es el que cerró el cierre nocturno ('sistema'): ese se completa cualquier día.
+    // Al completarlo se borra quién lo había marcado (no_asistio_por): ya no es un
+    // "no asistió".
     result = await query(
       `WITH completado AS (
          UPDATE turno SET estado = 'completado', servicio_id = $3::uuid, no_asistio_por = NULL
           WHERE id = $8::uuid AND tenant_id = $1::uuid AND barbero_id = $2::uuid
             AND estado = ANY($9::text[])
             AND (estado <> 'no_asistio'
+                 OR ($12::boolean AND no_asistio_por = 'sistema')
                  OR (inicio AT TIME ZONE $11)::date = (now() AT TIME ZONE $11)::date)
          RETURNING id
        ), nuevo AS (
@@ -113,7 +124,8 @@ export const registrarCorte = async ({
        )
        SELECT id, turno_id FROM nuevo`,
       [tenantId, barberoId, servicioId, Number(precio), formaPago, Number(propina || 0),
-        monto_total, turnoId || null, estadosCompletables, Boolean(canceladoComoSinTurno), TZ],
+        monto_total, turnoId || null, estadosCompletables, Boolean(canceladoComoSinTurno), TZ,
+        Boolean(noAsistioDelSistemaCualquierDia)],
       { reintentar: false }
     );
   } catch (err) {
@@ -157,7 +169,7 @@ export const registrarCorte = async ({
 
   // No se insertó (solo pasa con turnoId): averiguar por qué, con el mismo scoping.
   const fila = await query(
-    `SELECT estado,
+    `SELECT estado, no_asistio_por,
             (inicio AT TIME ZONE $4)::date = (now() AT TIME ZONE $4)::date AS es_de_hoy
      FROM turno WHERE id = $1 AND tenant_id = $2 AND barbero_id = $3`,
     [turnoId, tenantId, barberoId, TZ]
@@ -170,11 +182,19 @@ export const registrarCorte = async ({
   if (estado === 'completado') {
     throw errorCorte('TURNO_YA_COMPLETADO', 'Este turno ya figura como completado. Si su cobro no está cargado, registralo como cliente sin turno');
   }
-  if (estado === 'no_asistio' && estadosCompletables.includes('no_asistio') && !fila.rows[0].es_de_hoy) {
-    throw errorCorte('ESTADO_INVALIDO', 'Un turno marcado como "no asistió" solo se puede completar el mismo día del turno');
+  // Un "no asistió" completable que no entró: si es de otro día y no lo exceptúa
+  // la regla del cierre nocturno, es la regla del mismo día. Si no, cambió en el medio.
+  const noAsistioCompletable = estado === 'no_asistio' && estadosCompletables.includes('no_asistio');
+  const exceptuadoPorSistema = noAsistioDelSistemaCualquierDia && fila.rows[0].no_asistio_por === 'sistema';
+  if (noAsistioCompletable && !fila.rows[0].es_de_hoy && !exceptuadoPorSistema) {
+    // Con la excepción disponible (el admin), la regla del mismo día queda solo para
+    // las faltas marcadas por una persona, y el mensaje lo dice.
+    throw errorCorte('ESTADO_INVALIDO', noAsistioDelSistemaCualquierDia
+      ? 'Un turno marcado como "no asistió" por una persona solo se puede completar el mismo día del turno'
+      : 'Un turno marcado como "no asistió" solo se puede completar el mismo día del turno');
   }
-  if (estado === 'reservado') {
-    // Seguía reservado: cambió entre que empezó la sentencia y el UPDATE (carrera de ms).
+  if (estado === 'reservado' || noAsistioCompletable) {
+    // Seguía completable: cambió entre que empezó la sentencia y el UPDATE (carrera de ms).
     throw errorCorte('ESTADO_INVALIDO', 'El turno cambió mientras se registraba el corte. Intentá de nuevo');
   }
   throw errorCorte('ESTADO_INVALIDO', `El turno está en estado "${estado}" y no se puede completar`);

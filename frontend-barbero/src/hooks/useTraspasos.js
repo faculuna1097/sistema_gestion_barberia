@@ -30,7 +30,7 @@ const INTERVALO_MS = 60 * 1000;
  *   resultados: Array,        // los avisos de A (aceptado, rechazado, vencido)
  *   vistos: Set<string>,      // ids de resultados ya vistos en este celular
  *   contador: number,         // pendientes + resultados no vistos (la campanita)
- *   porTurno: Map<string, Object>, // turno_id → solicitud de A más nueva
+ *   porTurno: Map<string, Object>, // turno_id → solicitud vigente de A (enviadaPorTurno)
  *   firmaAceptados: string,   // cambia cuando un turno pasó de una Agenda a otra
  *   recargar: () => Promise<void>,
  *   aplicar: (solicitud: Object) => void,

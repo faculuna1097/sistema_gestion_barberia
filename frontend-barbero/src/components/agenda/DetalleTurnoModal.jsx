@@ -58,8 +58,9 @@ function EstadoTraspaso({ solicitud }) {
  * Overlay con los datos del turno y, si está reservado, las acciones.
  * No se renderiza si turno es null.
  * @param {Object|null} props.turno
- * @param {Object|null} [props.traspaso] - la solicitud de traspaso más nueva de
- *   este turno (useTraspasos → porTurno), si tiene
+ * @param {Object|null} [props.traspaso] - la solicitud de traspaso vigente de
+ *   este turno (useTraspasos → porTurno), si tiene. Una aceptada de un turno que
+ *   después volvió a este barbero no llega acá (enviadaPorTurno)
  * @param {boolean} [props.procesando=false] - una acción del detalle en curso
  *   (retirar): bloquea el cierre y los botones
  * @param {() => void} props.onCerrar
@@ -88,7 +89,8 @@ export default function DetalleTurnoModal({
 
   // Traspaso: solo un turno reservado que no empezó. Con una oferta pendiente se
   // puede retirar; si el otro ya aceptó (el turno todavía no salió de esta
-  // Agenda), no hay nada que hacer; si no, se puede ofrecer (de nuevo).
+  // Agenda), no hay nada que hacer; si no, se puede ofrecer (de nuevo). Si el
+  // turno volvió a este barbero, su aceptada vieja ya no viene en `traspaso`.
   const traspasable = esReservado && esFuturo;
   const pendiente = traspaso?.estado === 'pendiente';
   const aceptado = traspaso?.estado === 'aceptado';

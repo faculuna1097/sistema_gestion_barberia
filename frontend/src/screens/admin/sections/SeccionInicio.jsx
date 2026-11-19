@@ -544,10 +544,10 @@ export default function SeccionInicio({ onIrASeccion }) {
   // Trigger para reintentar manualmente. Cambiar el valor re-ejecuta el efecto.
   const [intento, setIntento] = useState(0);
 
-  // Aviso de turnos sin cobrar (F3), con el token del panel. El ocultado vive en
-  // esta sección: al volver de otra, se remonta y el aviso vuelve.
+  // Aviso de turnos sin cobrar (F3), con el token del panel. El ocultado y el
+  // detalle abierto viven en el hook: al volver de otra sección, se remonta y el
+  // aviso vuelve.
   const sinCobrar = useTurnosSinCobrar({ modo: 'admin' });
-  const [detalleAbierto, setDetalleAbierto] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -601,13 +601,13 @@ export default function SeccionInicio({ onIrASeccion }) {
         <AvisoSinCobrar
           cantidad={sinCobrar.turnos.length}
           enAlerta={sinCobrar.enAlerta}
-          onAbrir={() => setDetalleAbierto(true)}
+          onAbrir={sinCobrar.abrirDetalle}
           onOcultar={sinCobrar.ocultar}
         />
       )}
       <DetalleTurnosSinCobrar
-        open={detalleAbierto && sinCobrar.turnos.length > 0}
-        onClose={() => setDetalleAbierto(false)}
+        open={sinCobrar.detalleAbierto}
+        onClose={sinCobrar.cerrarDetalle}
         turnos={sinCobrar.turnos}
         enAlerta={sinCobrar.enAlerta}
         mostrarCliente

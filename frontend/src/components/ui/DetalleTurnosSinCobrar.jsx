@@ -7,9 +7,11 @@
 //
 // Una columna por barbero con sus horarios pendientes apilados (decidido con el
 // usuario el 2026-11-18): se lee como "Alejo: 10:00 y 12:30" y sigue el orden del
-// cobro, que en "Ingresar Corte" elige primero el barbero y después el turno. En
-// la práctica son todos de hoy (el cierre nocturno cierra los de días anteriores);
-// si queda uno de otro día, lleva la fecha arriba de la hora.
+// cobro de los de hoy, que en "Ingresar Corte" elige primero el barbero y después
+// el turno. En la práctica son todos de hoy (el cierre nocturno cierra los de días
+// anteriores); si queda uno de otro día, lleva la fecha arriba de la hora, y el
+// texto del iPad dice que ese se cobra en el panel ("Ingresar Corte" lista solo
+// los de hoy).
 //
 // Lo que cambia entre las dos superficies va por props:
 //   - kiosko: los tamaños grandes del iPad (TAM_KIOSKO, §3.6).
@@ -186,6 +188,22 @@ function AvisoCierre({ kiosko }) {
 }
 
 /**
+ * textoQueHacer
+ * El subtítulo del detalle: dónde se resuelve cada turno. En el iPad, "Ingresar
+ * Corte" lista solo los turnos de hoy: si hay alguno de otro día, el texto lo
+ * separa y manda ese al panel (S-B-01 de auditoria_2026-11.md).
+ * @param {boolean} kiosko - Es el iPad.
+ * @param {boolean} hayDeOtroDia - Algún turno no es de hoy.
+ * @returns {string}
+ */
+function textoQueHacer(kiosko, hayDeOtroDia) {
+  if (!kiosko) return 'Cobralos o marcalos como «no asistió» en Turnero.';
+  return hayDeOtroDia
+    ? 'Los de hoy se cobran con «Ingresar Corte». Los de otros días y el «no asistió», en el panel, en Turnero.'
+    : 'Se cobran con «Ingresar Corte». El «no asistió» se marca en el panel, en Turnero.';
+}
+
+/**
  * DetalleTurnosSinCobrar
  * Modal con los turnos sin cobrar, una columna por barbero (por nombre) y sus
  * horarios por hora de inicio. Título, subtítulo (y el aviso del modo alerta) y
@@ -212,10 +230,9 @@ function DetalleTurnosSinCobrar({
   onIrAlTurnero,
 }) {
   const grupos = agruparPorBarbero(turnos);
-
-  const queHacer = kiosko
-    ? 'Se cobran con «Ingresar Corte». El «no asistió» se marca en el panel, en Turnero.'
-    : 'Cobralos o marcalos como «no asistió» en Turnero.';
+  // agruparPorBarbero deja `dia` en null solo en los turnos de hoy.
+  const hayDeOtroDia = grupos.some((grupo) => grupo.turnos.some((turno) => turno.dia));
+  const queHacer = textoQueHacer(kiosko, hayDeOtroDia);
 
   return (
     <Modal

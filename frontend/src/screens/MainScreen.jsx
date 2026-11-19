@@ -30,7 +30,7 @@
 //                       ya filtrada por App.jsx: solo https (Z3-06). Se abre sin
 //                       opener ni referrer, como YouTube.
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { Scissors, Package, Receipt, CalendarDays, Lock, LogOut, ChevronRight, X } from "lucide-react";
 import { theme, TAM_KIOSKO } from "../theme/tokens.js";
 import { formatHora, getFechaHoy, DIAS, MESES } from "../utils/fecha.js";
@@ -402,10 +402,10 @@ export default function MainScreen({
     img.src = "/mercadopago.png";
   }, []);
 
-  // Aviso de turnos sin cobrar (F3), con el token del iPad. El ocultado vive en
-  // este componente: al volver de un flujo, MainScreen se remonta y el aviso vuelve.
+  // Aviso de turnos sin cobrar (F3), con el token del iPad. El ocultado y el
+  // detalle abierto viven en el hook: al volver de un flujo, MainScreen se remonta
+  // y el aviso vuelve.
   const sinCobrar = useTurnosSinCobrar({ modo: "operativo" });
-  const [detalleAbierto, setDetalleAbierto] = useState(false);
 
   return (
     // esperarImagen: MainScreen es la superficie ambiental de ENTRADA. Retiene
@@ -574,15 +574,15 @@ export default function MainScreen({
         <AvisoSinCobrar
           cantidad={sinCobrar.turnos.length}
           enAlerta={sinCobrar.enAlerta}
-          onAbrir={() => setDetalleAbierto(true)}
+          onAbrir={sinCobrar.abrirDetalle}
           onOcultar={sinCobrar.ocultar}
         />
       )}
       {/* El detalle se puede abrir también en alerta. Con el cliente: decidido
           con el usuario (2026-11-18), aunque la pantalla está a la vista del local. */}
       <DetalleTurnosSinCobrar
-        open={detalleAbierto && sinCobrar.turnos.length > 0}
-        onClose={() => setDetalleAbierto(false)}
+        open={sinCobrar.detalleAbierto}
+        onClose={sinCobrar.cerrarDetalle}
         turnos={sinCobrar.turnos}
         enAlerta={sinCobrar.enAlerta}
         kiosko

@@ -46,6 +46,7 @@ import {
   Hourglass,
   RefreshCw,
   Coffee,
+  Info,
 } from 'lucide-react';
 
 import {
@@ -1159,10 +1160,14 @@ function ModalDetalleTurno({
   const esReservado = turno.estado === 'reservado';
   // Un turno marcado "no asistió" se puede completar igual (el cliente vino y
   // la falta estaba mal marcada): registra el cobro y pasa a completado. Solo
-  // el mismo día del turno, y solo el admin (el backend controla las dos cosas;
-  // el modo barbero es de solo lectura).
+  // el admin, y el mismo día del turno; o cualquier día si lo cerró el cierre
+  // nocturno (no_asistio_por = 'sistema'): el turno quedó sin cobrar, no fue una
+  // falta marcada por una persona. El backend controla las dos cosas; el modo
+  // barbero es de solo lectura.
   const esNoAsistio = turno.estado === 'no_asistio';
-  const completableNoAsistio = esNoAsistio && fechaDeInstante(turno.inicio) === getFechaHoy();
+  const loCerroElSistema = esNoAsistio && turno.no_asistio_por === 'sistema';
+  const completableNoAsistio = esNoAsistio
+    && (loCerroElSistema || fechaDeInstante(turno.inicio) === getFechaHoy());
   // Si el turno ya comenzó (hora de inicio <= ahora) ocultamos "Cancelar
   // turno" — a esa altura las opciones reales son completado o no asistió.
   // Antes de que empiece, al revés: "No asistió" no aparece (el servidor
@@ -1249,6 +1254,23 @@ function ModalDetalleTurno({
               {turno.cliente_email && (
                 <FilaDetalleConCopia label="Email" valor={turno.cliente_email} Icon={Mail} />
               )}
+            </div>
+          )}
+
+          {/* Por qué figura como "no asistió" un turno que nadie marcó: lo cerró
+              el sistema a la noche. También en el modo barbero (solo informa). */}
+          {loCerroElSistema && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+              marginTop: 12,
+              fontFamily: theme.body,
+              fontSize: theme.sizeBody,
+              color: theme.muted,
+            }}>
+              <Info size={14} strokeWidth={1.75} style={{ flexShrink: 0, marginTop: 2 }} aria-hidden="true" />
+              <span>Lo cerró el sistema a la noche, porque quedó sin cobrar.</span>
             </div>
           )}
 

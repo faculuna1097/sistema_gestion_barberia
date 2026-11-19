@@ -307,13 +307,15 @@ export const listarTurnos = async ({ tenantId, fecha, desde, hasta, barberoId })
   // completados (o completados sin corte) devuelven forma_pago/monto_total = null.
   // LEFT JOIN cliente: un turno "Sin datos" (cliente_id NULL, F1) trae cliente_id,
   // cliente_nombre, cliente_email y cliente_telefono en null; el front muestra "Sin datos".
+  // no_asistio_por (F3): quién marcó un 'no_asistio' ('barbero', 'admin', 'sistema' o
+  // NULL); el panel lo usa para ofrecer "Completar" en uno que cerró el sistema.
   const result = await query(
     `SELECT t.id, t.inicio, t.fin, t.estado, t.origen_creacion,
             b.id AS barbero_id, b.nombre AS barbero_nombre,
             s.id AS servicio_id, s.nombre AS servicio_nombre,
             c.id AS cliente_id, c.nombre AS cliente_nombre,
             c.email AS cliente_email, c.telefono AS cliente_telefono,
-            co.forma_pago, co.monto_total
+            co.forma_pago, co.monto_total, t.no_asistio_por
      FROM turno t
      JOIN barbero  b ON b.id = t.barbero_id
      JOIN servicio s ON s.id = t.servicio_id
@@ -437,7 +439,9 @@ export const cambiarEstado = async (turnoId, nuevoEstado, tenantId, barberoId) =
  * iPad: completar = registrar el corte. Valida (scoped) que el turno exista y siga
  * 'reservado'; el admin también puede completar uno marcado 'no_asistio' (el
  * cliente vino y la falta estaba mal marcada; registrarCorte deja
- * no_asistio_por en NULL en la misma sentencia). El servicio
+ * no_asistio_por en NULL en la misma sentencia): el mismo día del turno, o
+ * cualquier día si lo cerró el cierre nocturno (no_asistio_por = 'sistema',
+ * S-A-01 de auditoria_2026-11.md). El servicio
  * del corte es por defecto el del turno; opcionalmente se acepta un override
  * (servicioId) que se valida contra el catálogo (tenant + activo). Delega en
  * registrarCorte (cortesService), que inserta el corte, marca el turno
@@ -474,9 +478,11 @@ export const completarTurnoConCorte = async ({ turnoId, tenantId, barberoId, for
     throw err;
   }
 
-  // Estados que se pueden completar: reservado y, solo el admin, no_asistio (este
-  // solo el mismo día del turno: lo controla registrarCorte en la misma sentencia).
-  const estadosCompletables = barberoId ? ['reservado'] : ['reservado', 'no_asistio'];
+  // Estados que se pueden completar: reservado y, solo el admin, no_asistio (este,
+  // el mismo día del turno o, si lo cerró el sistema a la noche, cualquier día: lo
+  // controla registrarCorte en la misma sentencia).
+  const esAdmin = !barberoId;
+  const estadosCompletables = esAdmin ? ['reservado', 'no_asistio'] : ['reservado'];
 
   const turno = lookupRes.rows[0];
   if (!estadosCompletables.includes(turno.estado)) {
@@ -514,6 +520,7 @@ export const completarTurnoConCorte = async ({ turnoId, tenantId, barberoId, for
     propina,
     turnoId,
     estadosCompletables,
+    noAsistioDelSistemaCualquierDia: esAdmin,
   });
 
   return { id: turnoId, estado: 'completado', servicio_id: servicioFinal, corte_id, monto_total };
