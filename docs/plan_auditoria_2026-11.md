@@ -4,9 +4,10 @@
 > orquestar. Las decisiones de §2 están cerradas con el usuario (2026-11-16). Aprobar el plan no es arrancar: el
 > orquestador confirma con el usuario antes de cada fase.
 >
-> **Estado (2026-11-17):** fases 0 a 9 hechas. Las 8 zonas, revisadas por el orquestador; los 61 hallazgos, con
-> destino decidido por el usuario, y el plan de arreglos escrito en `auditoria_2026-11.md`. Queda la fase 10
-> (segunda pasada sobre lo que se haga de mejoras operativas después de `473e1c4`, antes del PR de merge).
+> **Estado (2026-11-19):** fases 0 a 10 hechas. Las 8 zonas, revisadas por el orquestador; los 61 hallazgos, con
+> destino decidido por el usuario, y el plan de arreglos escrito en `auditoria_2026-11.md`. La fase 10 (segunda
+> pasada sobre `git diff 3138425..b32cc5b` de mejoras operativas, en dos partes: backend y fronts) dejó 5 hallazgos
+> bajos con su destino, en la sección "Segunda pasada". Pasa a "Archivado" en el cierre de mejoras operativas.
 
 ## 1. Contexto
 

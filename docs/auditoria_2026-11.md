@@ -2936,8 +2936,406 @@ salen con 23 µs de diferencia, aunque en el medio hubo un envío de mail).
 
 ## Segunda pasada
 
-*Pendiente: se escribe en la fase 10, antes del PR de merge de `feature/mejoras-operativas`, sobre el diff de
-las fases hechas después de esta auditoría.*
+### Parte A: backend, DB y cron
+
+**Commit auditado:** `b32cc5b` (`feature/mejoras-operativas`), 2026-11-19. Diff revisado: `git diff 3138425..HEAD`,
+solo `backend/` y `backend/.env.example` (27 archivos, unas 2.000 líneas): los arreglos de la auditoría
+(`edc3919`, `45c0e8a`, `cb0573a`), F3 (`cb58c4b`), F4 (`f2194b6`) y F2 backend (`99ca9f9`). Solo lectura: código,
+docs y la DB con el rol `resguardo_lectura` (conteos, constraints, índices y RLS). No se escribió nada en demo
+ni se hicieron pedidos a producción: ningún hallazgo llegó a alto, así que no hizo falta reproducir.
+
+**Resumen:** 2 hallazgos, los dos bajos y solo en el branch. Los nueve arreglos de la auditoría que tocaban el
+backend cierran lo que describía cada hallazgo y no abren otro problema; de Z1-02 queda sin destino su punto 3
+(opcional). F2, F3 y F4 respetan el aislamiento por tenant y por rol, y sus escrituras llevan las reglas en la
+misma sentencia. Lo que sale es de producto: el cierre nocturno de F3 le quita al dueño una salida que antes
+tenía (S-A-01), y el tope diario de la recuperación, que cierra Z1-01, lo puede gastar un anónimo (S-A-02).
+
+#### S-A-01 [BAJO] Un turno que el cierre nocturno pasó a "no asistió" ya no se puede cobrar con su turno
+
+- **Dónde:** `backend/src/services/turnosSinCobrarService.js:116` (`cerrarTurnosDelTenant`) junto con
+  `backend/src/services/cortesService.js:98` y `:174` (`registrarCorte`: un `no_asistio` se completa solo el mismo
+  día del turno) y `backend/src/services/turnosService.js:479` (`completarTurnoConCorte`). Rutas:
+  `POST /api/admin/turnos/:id/completar` (Turnero del panel) y `POST /api/cortes` con `turno_id` (iPad).
+- **Alcance:** solo en el branch (el cron es de F3).
+- **Qué pasa:** un cliente viene a las 19:00, se corta y paga, pero el cobro no se carga en el iPad antes del
+  cierre (pasa: "lo cargo mañana"). A las 03:00 el cron pasa el turno a `no_asistio` con `no_asistio_por =
+  'sistema'`. A la mañana el dueño va al Turnero del panel, abre el día anterior y toca "Completar": el backend
+  responde 409 "Un turno marcado como «no asistió» solo se puede completar el mismo día del turno". La única
+  salida es cargar el corte como cliente sin turno: la plata queda bien, pero el turno queda para siempre como
+  una falta del cliente, puesta por el sistema, aunque vino. Antes de F3 ese turno seguía `reservado` y se podía
+  completar desde el panel cualquier día. La regla del mismo día se pensó para una falta marcada a mano el día
+  del turno; el cron marca todas las de ayer, así que con F3 esa regla le pega a todos los turnos sin cobrar. El
+  aviso del iPad y del Inicio dice que "esta noche se cierran solos como no asistió", pero no que después ya no
+  se pueden cobrar con su turno. Pesa más cuando llegue la "Base de clientes" (`estado_actual.md` → Pendientes),
+  que va a contar las faltas en la ficha del cliente.
+- **Evidencia:** leído (`cerrarTurnosDelTenant` → `registrarCorte` con `estadosCompletables` `['reservado',
+  'no_asistio']` en `completarTurnoConCorte` y en `createCorte`; la condición de la línea 98 y el mensaje de la
+  174). Consultado en la DB: la primera corrida cerraría hoy 31 turnos de demo y 0 en los demás locales.
+- **Arreglo propuesto** (chico): en la condición de `registrarCorte`, aceptar también un `no_asistio` de otro día
+  si lo marcó el sistema: `AND (estado <> 'no_asistio' OR no_asistio_por = 'sistema' OR (inicio AT TIME ZONE
+  $11)::date = (now() AT TIME ZONE $11)::date)`, y lo mismo en el chequeo que arma el 409 (línea 173). La falta
+  que marcó a mano un barbero o el admin sigue con la regla del mismo día. Alternativa: dejarlo como está y que el
+  aviso de alerta lo diga ("después ya no se pueden cobrar con su turno"); no se recomienda, porque deja la falta
+  mal puesta.
+- **Novedad:** nuevo. Es la combinación de F3 con la regla del mismo día (zona 5, "Verificado correcto", fila
+  `no_asistio` → `completado`).
+
+#### S-A-02 [BAJO] Un anónimo puede gastar el tope diario de links de recuperación de un local, y el dueño ve "te mandamos el mail"
+
+- **Dónde:** `backend/src/services/recuperacionService.js:30` (`MAX_LINKS_POR_DIA = 6`) y `:137` (`emitirToken`),
+  `backend/src/controllers/authRecuperar.js:114-121` (rama `'tope'`). Ruta: `POST /api/auth/recuperar/solicitar`.
+  Pantallas: "¿Olvidaste tu contraseña?" y "¿Olvidaste tu PIN?".
+- **Alcance:** solo en el branch (F6 y su arreglo de Z1-01).
+- **Qué pasa:** el tope por local de Z1-01 (6 links en 24 horas, de los dos tipos) no distingue quién los pide.
+  Un anónimo que sabe el subdominio pide 6 links (uno cada 2 minutos por tipo; `limiterRecuperacion` le deja 5
+  por hora por IP, así que le alcanzan dos IP, o una sola en algo más de una hora, y con la deuda de `trust
+  proxy` el cupo por IP ni siquiera se cumple). Desde ahí, durante
+  24 horas, el dueño que de verdad se olvidó el PIN o la contraseña del iPad pide su link y la pantalla le
+  responde lo mismo que siempre (`{ enviado: true, email }`), pero el mail no sale. Repetido una vez por día,
+  el local queda sin recuperación por mail mientras el atacante quiera, con 6 pedidos diarios. No toma la
+  cuenta ni frena la operación (el iPad y el panel ya abiertos siguen andando), y el aviso de Sentry por el
+  tope le llega a Facundo, que puede atender al dueño por soporte. Es el costo del arreglo: sin el tope, el
+  mismo anónimo mandaba 60 mails por hora (Z1-01).
+- **Evidencia:** leído (`limiterLogin` + `limiterRecuperacion` → `solicitarRecuperacion` → `emitirToken`: los dos
+  frenos cuentan todas las filas del tenant, sin importar quién las pidió; con `'tope'` la respuesta es la de
+  `'creado'`).
+- **Arreglo propuesto** (chico): que la respuesta del tope lo diga, con un `codigo` (`'tope_diario'`) y un texto en
+  la pantalla del estilo "Ya se mandaron varios links hoy. Revisá tu casilla (también spam) o escribinos al
+  soporte". Decirlo no le da nada al atacante (ya sabe que pidió 6). El tope en sí queda: es lo que protege la
+  cuota de mail. Opcional, para después del `fix/` de `trust proxy`: no contar en el tope los pedidos de una IP
+  que ya se frenó por `limiterRecuperacion`.
+- **Novedad:** nuevo; efecto lateral del arreglo de Z1-01.
+
+#### Verificado correcto
+
+Arreglos de la auditoría:
+- **Z5-04 y Z4-09** (`edc3919`): `eliminarCorte` devuelve el turno a `reservado` con el guard `estado = 'completado'`;
+  ante el `23P01` lo deja `cancelado` (`cancelado_por = 'admin'`, sin mail) y borra su evento de Calendar recién con
+  el corte borrado; la compensación vuelve a `completado` desde los dos estados, con su guard; un `DELETE` que
+  perdió una carrera responde 404 sin tocar el turno de más. El turno de un día anterior que vuelve a `reservado`
+  aparece en `GET /api/turnos/sin-cobrar`, como pedía el arreglo. `getMovimientosDia` suma hora, estado y cliente
+  del turno con los `LEFT JOIN` por tenant. Cerrados.
+- **Z2-01** (`45c0e8a`): `clienteUsable` y el `UPDATE … FROM cliente` de `asignarClienteATurno` exigen solo que el
+  cliente sea del local; el scoping del turno por barbero sigue en el `WHERE`. `sqlClienteDelBarbero` no queda en
+  ningún lado. Cerrado.
+- **Z5-09** (`45c0e8a`): el reemplazo exige rol admin (403 antes de tocar la DB) y `cliente_actual_id` UUID; el
+  cliente que se vio va en el `WHERE` de la misma sentencia (dos reemplazos a la vez: el segundo da 409
+  `cliente_cambio`); rota `token_gestion` (con `crypto.randomUUID`, como el alta) solo si el cliente cambia. Cerrado.
+- **Z1-01** (`cb0573a`): `limiterRecuperacion` (5 por hora por IP, sin `skip*`) montado solo en `solicitar`, después
+  de `limiterLogin`; el tope por local va en la misma sentencia que anula e inserta, sobre
+  `token_recuperacion_tenant_tipo` (confirmado en `pg_indexes`). Cerrado (ver S-A-02).
+- **Z1-02** (`cb0573a`): una sola sentencia guarda el contacto, lee el mail anterior y anula los links pendientes
+  solo si el mail cambió; el aviso va al mail anterior con los dos mails enmascarados en el log; `enviarMail` no
+  tira, así que un fallo del aviso no cambia la respuesta. Cerrados sus puntos 1 y 2. **El punto 3** (avisar al mail
+  del dueño cuando cambian el PIN de admin o la contraseña del iPad, y anular los links de ese tipo; "en la tanda de
+  deudas" según el hallazgo) **no figura en ningún bloque del plan de arreglos**: decidir si va al bloque B.
+- **Z1-05** (`cb0573a`): `enmascararEmail` tapa el dominio hasta el primer punto (también sin punto). Cerrado.
+- **Z3-06** (`cb0573a`, parte backend): `editarNegocio` rechaza un `booking_url` que no es texto o no pasa
+  `esUrlHttps` (que recorta antes de parsear), y vacío o solo espacios da `null`; `nombre_negocio` no texto o vacío
+  da 400 en vez de 500. Hoy no hay ningún `booking_url` guardado que no empiece con `https://` (zona 3). Cerrado del
+  lado del backend; el del panel es de la parte B.
+
+F3:
+- `GET /api/turnos/sin-cobrar`: montado con `verificarToken` y `requiereRol('operativo', 'admin')`; un barbero
+  recibe 403. Las dos queries filtran por tenant, del cliente devuelven solo el nombre, y usan el índice parcial de
+  reservados. Costo: 2 queries cada 5 minutos por iPad o Inicio abierto. `cierre_hoy` es `null` un feriado o un día
+  que no abre (`EXTRACT(DOW)` y `fecha + hora_fin AT TIME ZONE`, correctos).
+- `turno.no_asistio_por`: `cambiarEstado` lo escribe en el mismo `UPDATE` (barbero o admin) y `registrarCorte` lo
+  vuelve a `NULL` al completar, que es el único camino que saca un turno de `no_asistio`. CHECK de valores en la DB
+  (`turno_no_asistio_por_valido`, consultado).
+- `jobs/cierreDiario.js`: corrido dos veces, la segunda no encuentra nada (`estado = 'reservado'` en el `WHERE`); un
+  feriado no cambia nada (cierra los turnos de días anteriores, sin mirar el día de la corrida); el corte de las
+  00:00 AR (`date_trunc('day', now() AT TIME ZONE tz) AT TIME ZONE tz`) es correcto; recorre solo tenants activos,
+  con `conEtiquetas`, try/catch por tenant, `conMonitorCron`, `cerrarPool` y `vaciarEventos`; loguea solo conteos.
+  Sin mail ni Calendar. La primera corrida cerraría hoy 31 turnos de demo (incluye los de prueba de Alejo del 13/11
+  y el 17/11, que el plan §6 ya dice sacar antes si se conservan) y 0 en los demás.
+
+F4:
+- `POST` y `PATCH /api/admin/socios`: solo admin; todas las lecturas y escrituras filtran por tenant; el barbero
+  se valida con `barberoEnTenant` (UUID y tenant) y el `FK (tenant_id, barbero_id)` lo respalda. Nombre repetido sin
+  distinguir mayúsculas, último socio activo y socio inactivo con barbero van en el `WHERE` de la misma sentencia;
+  `barbero_ya_vinculado` sale del `UNIQUE (barbero_id)`. Las carreras que quedan (dos desactivaciones de los dos
+  últimos socios a la vez, dos altas "Juan" y "juan" a la vez) necesitan dos pedidos del mismo admin en el mismo
+  instante: no se reportan. En la DB: 0 socios inactivos con barbero vinculado.
+- `esSocioSql`: `EXISTS` con tenant y `activo = true`; en `getMovimientosDia` y en la lista, el alta y la edición de
+  barberos. `comision_valor` sigue en la respuesta de Caja (ya anotado para sacarlo después del deploy, plan §8).
+- Un `\u0000` en el nombre de un socio o del negocio da 500: solo lo puede mandar un admin, y lo cubre el middleware
+  que propone Z3-02.
+
+F2 backend:
+- Rol y scoping: `/api/admin/traspasos` con `requiereRol('barbero')` (el admin, 403). A solo lee y ofrece sus turnos
+  (`barbero_id` del token en la lectura y en el `INSERT … SELECT`); B solo acepta o rechaza lo que le llegó
+  (`a_barbero_id` del token); A solo retira lo suyo; un tercero no ve ni toca nada (404, igual que un id mal
+  formado). La columna de `cerrarTraspaso` es un fragmento fijo, no input. `FK (tenant_id, …)` en turno y en los dos
+  barberos, y RLS sin policies en `turno_traspaso` (consultado).
+- Aceptar: el CTE bloquea la solicitud con `FOR UPDATE` (un retirar o un rechazar a la vez espera y después ve que
+  ya no está pendiente), mueve el turno solo si sigue reservado, futuro, de A, con `inicio = turno_inicio` y sin
+  suspensión ni descanso de B, y marca `aceptado` solo si lo movió. El `23P01` (B se ocupó) y la sentencia que no
+  toca nada terminan en `vencido` y 409. Ningún camino cancela un turno ni manda un mail al cliente. Lo que queda
+  entre la revalidación con `barberoLibreEnRango` y el CTE (un cambio del horario de B en esos milisegundos) es el
+  TOCTOU aceptado de julio (deuda diferida 1).
+- Estado efectivo: `MOTIVO_SQL` en una sola expresión para todas las lecturas, y la disponibilidad de B con una
+  sola carga de `cargarDatosAgenda` para todas las pendientes; nunca escribe al leer. Crear cierra la pendiente
+  vencida en los hechos antes de insertar, y el índice único parcial frena dos ofertas a la vez (`23505` → 409).
+- `barberoLibreEnRango`: la misma definición de "libre" que el turnero (día abierto y no feriado, bloque del barbero
+  que contiene el rango, sin turno reservado ni suspensión con su fin efectivo), pura.
+- Validación: `turno_id`, `a_barbero_id` y `:id` pasan por `esUUID` antes de la DB; A a sí mismo, 400.
+- Costo del `GET` en cada refresco: verificación del token + 1 query sobre los índices `_recibidos` y `_enviados`;
+  solo con pendientes vigentes, una carga de disponibilidad (6 queries) para todas juntas.
+- Logs: solo ids y códigos, sin datos de clientes.
+- Calendar después de aceptar: si B no tiene mail, el evento sigue invitando a A (warn). Hoy solo demo usa Calendar
+  (1 barbero activo con mail; los otros locales, ninguno): no es un riesgo real todavía, pero conviene tenerlo en
+  cuenta el día que un local cargue mails de barberos.
+
+Generales del diff: ningún `console.error` nuevo para un rechazo esperado (los 404 y 409 nuevos van con
+`console.warn` o sin log); ningún `BEGIN`, `pool.connect` ni `DELETE` + `INSERT`; `TZ` desde `constantes.js` en todo
+el código nuevo; las rutas nuevas, en la tabla de roles del código (`index.js:297`, `:342`, `:345`).
+
+#### Para la parte B
+
+- Con el arreglo de S-A-01, el aviso de alerta del iPad y del Inicio puede quedar igual; sin él, conviene que diga
+  que después ya no se cobran con su turno. Con el de S-A-02, la pantalla de "¿Olvidaste…?" tiene que mostrar el
+  `codigo` del tope.
+- Confirmar el lado del panel de Z3-06 (`utils/url.js` y los `window.open` con `noopener,noreferrer`) y el de Z5-04
+  (fila "Turno" del diálogo de Caja y el toast del `aviso`).
+- La app del barbero pide `GET /api/admin/traspasos` cada 60 s además del refresco de la Agenda: revisar que no se
+  pidan dos veces en el mismo momento (al volver al primer plano, después de una acción).
+
+### Parte B: panel y app del barbero
+
+**Commit auditado:** `b32cc5b` (`feature/mejoras-operativas`), 2026-11-19. Diff revisado:
+`git diff 3138425..HEAD -- frontend/ frontend-barbero/` (48 archivos, ~3.100 líneas). Solo lectura: el código de
+los dos fronts, y el backend donde hizo falta cerrar un camino (`traspasosService.js`, `turnosService.js`,
+`turnosOperativo.js`, `controllers/turnos.js`). Sin servidores, sin requests, sin datos. `npx eslint .` pasa
+limpio en los dos fronts y `npm run build` también. Nada se miró en pantalla.
+
+**Resumen:** 3 hallazgos (0 críticos, 0 altos, 0 medios, 3 bajos), los tres solo en el branch. Los cinco
+arreglos de la auditoría que tocan el front quedaron confirmados. No hay sinks nuevos de XSS: el barrido da lo
+mismo que en la zona 6, con `booking_url` ya filtrado. Lo que encontré son textos o estados que no coinciden con
+lo que pasa: el iPad manda a cobrar con "Ingresar Corte" un turno que no lista (S-B-01), un turno que vuelve a
+su barbero después de dos traspasos queda marcado como traspasado y no se puede volver a ofrecer (S-B-02), y el
+detalle de turnos sin cobrar se puede reabrir solo (S-B-03).
+
+#### S-B-01 [BAJO] El iPad dice que un turno sin cobrar de otro día se cobra con "Ingresar Corte", pero "Ingresar Corte" solo lista los de hoy
+
+- **Dónde:** `frontend/src/components/ui/DetalleTurnosSinCobrar.jsx:217` (el texto del detalle en el iPad),
+  `frontend/src/screens/flows/FlujoCorte.jsx:103` (pide los turnos con `getFechaHoy()`) y
+  `backend/src/services/turnosService.js:346` (`listarTurnosOperativos` filtra `DATE(t.inicio) = $3`).
+  Pantalla: el aviso de turnos sin cobrar del iPad → su detalle.
+- **Alcance:** solo en el branch (F3).
+- **Qué pasa:** el detalle del iPad dice "Se cobran con «Ingresar Corte»" para todos los turnos, y muestra la
+  fecha cuando el turno es de otro día. Pero el paso "Turno" de "Ingresar Corte" lista solo los reservados de
+  hoy, así que ese turno no aparece. Quien está en el mostrador cobra el corte "sin turno". Esa noche el cierre
+  diario pasa el turno a "no asistió" (`no_asistio_por = 'sistema'`), y con S-A-01 ya no hay vuelta: el cliente
+  vino y pagó, y queda con una falta. El corte queda sin turno en la planilla.
+  Es raro, porque el cierre nocturno deja solo turnos de hoy. Hay dos caminos reales para que aparezca uno de
+  otro día: borrar en Caja el corte de un turno de un día anterior (Z5-04; el diálogo de Caja sí dice "No
+  aparece en el iPad: se cobra desde Turnero", `SeccionCaja.jsx:684`, y el detalle del iPad lo contradice), o
+  una noche en que el cron no corra.
+- **Evidencia:** leído (detalle → `FlujoCorte` → `getTurnosDelDia` → `GET /api/turnos?barbero_id&fecha` →
+  `listarTurnosOperativos`). Sin confirmar en pantalla.
+- **Arreglo propuesto** (chico): en el iPad, cuando hay algún turno de otro día, cambiar el texto. Por ejemplo:
+  "Los de hoy se cobran con «Ingresar Corte». Los de otros días, desde el panel, en Turnero." Es el mismo
+  criterio que ya usa el diálogo de Caja. La otra opción es que "Ingresar Corte" liste también los pendientes
+  de días anteriores, pero es más grande (backend y flujo) y no hace falta.
+- **Novedad:** nuevo. Se cruza con Z5-04 (ya resuelto del lado de Caja) y con S-A-01.
+
+#### S-B-02 [BAJO] Un turno que vuelve a su barbero después de dos traspasos queda como "{B} aceptó el traspaso" y sin "Traspasar"
+
+- **Dónde:** `frontend-barbero/src/components/agenda/DetalleTurnoModal.jsx:94-95` y `:128`, la marca que usa el
+  detalle. Viene de `frontend-barbero/src/utils/traspasos.js:212` (`enviadaPorTurno`: la solicitud más nueva que
+  el barbero mandó por turno) y de `backend/src/services/traspasosService.js:523-526`. Pantalla: Agenda → detalle
+  de un turno.
+- **Alcance:** solo en el branch (F2).
+- **Qué pasa:** Alejo le ofrece su turno de las 16:00 a Facundo, y Facundo acepta. Más tarde Facundo no puede
+  y se lo ofrece de vuelta a Alejo, que también acepta. El turno vuelve a la Agenda de Alejo, pero
+  `enviados` sigue trayendo su solicitud vieja (Alejo → Facundo, `aceptado`) hasta que el turno empieza. El
+  detalle la toma como el estado actual del turno. Muestra "Facundo aceptó el traspaso" en un turno que es de
+  Alejo, y como `aceptado` bloquea el botón, Alejo ya no puede volver a ofrecerlo desde la app. Pasa lo mismo
+  si el turno da la vuelta por un tercero (A → B → C → A). El backend sí lo permitiría: `crearTraspaso` solo
+  frena con una `pendiente` vigente. El bloqueo existe solo en el front. Cancelar y "no asistió" siguen
+  funcionando.
+- **Evidencia:** leído (`listarTraspasos` → `useTraspasos.porTurno` → `DetalleTurnoModal`, y `crearTraspaso`
+  para confirmar que el backend no lo frena). Sin probar en demo. La verificación en pantalla de la fase 10 de
+  mejoras operativas no cubrió este recorrido.
+- **Arreglo propuesto** (chico). Opciones:
+  1. **Recomendada:** en `enviadaPorTurno`, ignorar la enviada `aceptado` de un turno si en `recibidos` hay, para
+     el mismo turno, una `aceptado` más nueva (`respondido_en` posterior). Así el turno volvió, y el estado que
+     vale es el de recibido. Es solo front y no cambia la API.
+  2. Que `listarTraspasos` no devuelva en `enviados` una `aceptado` cuyo turno ya no es de A
+     (`t.barbero_id <> de_barbero_id`), salvo que se quiera conservar el aviso "{B} aceptó tu turno". Como ese
+     aviso se usa, la 1 es más simple.
+- **Novedad:** nuevo.
+
+#### S-B-03 [BAJO] El detalle de turnos sin cobrar se cierra solo cuando la lista queda vacía, pero se vuelve a abrir solo cuando aparece otro turno
+
+- **Dónde:** `frontend/src/screens/MainScreen.jsx:584` y
+  `frontend/src/screens/admin/sections/SeccionInicio.jsx:609` (`open={detalleAbierto && sinCobrar.turnos.length > 0}`).
+  Pantallas: el iPad y el Inicio del panel.
+- **Alcance:** solo en el branch (F3).
+- **Qué pasa:** el detalle queda abierto en el iPad. Mientras tanto, el dueño cobra o marca desde el panel los
+  turnos pendientes, o un barbero marca "no asistió" desde su app. Con el refresco de 5 minutos la lista queda
+  vacía y el modal se cierra, pero `detalleAbierto` sigue en `true`. Cuando otro turno pasa el umbral (otro
+  refresco), el modal se abre solo, sin que nadie toque el aviso. En el iPad eso tapa la pantalla principal con
+  la lista de nombres de clientes hasta que alguien lo cierre.
+- **Evidencia:** leído. Sin confirmar en pantalla.
+- **Arreglo propuesto** (chico): bajar `detalleAbierto` a `false` cuando la lista llega vacía. Con un efecto
+  sobre `turnos.length === 0`, o con el cierre en el mismo lugar que hoy oculta el modal. Va en las dos
+  superficies.
+- **Novedad:** nuevo.
+
+#### Verificado correcto
+
+**Arreglos de la auditoría, lado del front**
+
+- **Z3-06 (`cb0573a`): cerrado.** `App.jsx:258` guarda `booking_url` solo si pasa `esUrlHttps`
+  (`utils/url.js`: string, `new URL(trim)` y protocolo `https:`). Si no pasa, queda en `null` y el botón
+  "Reservar" no se dibuja. El `window.open` de "Reservar" (`MainScreen.jsx:560`) y el de YouTube (`:77`) van con
+  `noopener,noreferrer`. Es el único lugar de los dos fronts que usa `booking_url`. El tercer `window.open`
+  (Spotify, `App.jsx:479`) no lleva `noopener`, pero abre una URL fija: no es un sink.
+- **Z5-09 (`45c0e8a`): cerrado.** El panel muestra "Cambiar" solo con rol admin (`!readonly`) y en un turno
+  reservado o completado con cliente. `AsignarCliente` manda `reemplazar: true` y `cliente_actual_id` (el que
+  se ve en pantalla), y no ofrece al cliente actual en la búsqueda. El 409 `cliente_cambio` cierra el detalle,
+  lo explica y recarga. Con rol barbero el backend responde 403, y la app del barbero no tiene "Cambiar".
+- **Z8-04, el refresco (`45c0e8a`): cerrado.** `Agenda.jsx` recarga cada 60 s (`INTERVALO_REFRESCO_MS`).
+- **Z5-04 (`edc3919`): cerrado.** El diálogo de borrar un corte con turno suma la fila "Turno" (hora; la fecha
+  si no es de hoy; el cliente o "Sin datos") y dice que el turno queda pendiente de cobro. Si el turno es de un
+  día anterior, agrega que no aparece en el iPad y que esa noche pasa a "No asistió". Solo lo muestra cuando el
+  turno está `completado` (lo único que el backend revierte). El `aviso` del caso Z4-09 sale como toast
+  `warning`.
+- **Z2-01 (comentarios):** los tres comentarios que anotó la zona 6 ("solo los suyos") están corregidos.
+
+**F3 en el panel (`579ac13`)**
+
+- `useTurnosSinCobrar`: carga al montar, cada 5 min y con `visibilitychange`. Limpia el intervalo y el listener
+  al desmontar, y con `activo` no escribe después. Si un pedido falla, se queda con el último dato. El ocultado
+  y el modo alerta son puros (`utils/turnosSinCobrar.js`), y en alerta no se puede ocultar.
+- **401 del iPad durante el refresco:** pasa por `apiFetchOperativo`, que borra el token y llama a
+  `onUnauthorizedOperativo`. El iPad va al login y `MainScreen` se desmonta, con lo que el hook corta. Es el
+  mismo camino que cualquier otro pedido del iPad. El efecto de F3 es bueno: el iPad se entera de un cambio de
+  contraseña en 5 minutos, y no recién en la próxima acción. Un error de la base no da 401 (julio). Lo de las
+  versiones de token de demo en caché ya está en `plan_mejoras_operativas.md` §8.
+- **El cliente a la vista en el iPad:** fue decisión del usuario (fase 7b). El endpoint devuelve solo
+  `cliente_nombre`, sin teléfono ni mail. Con el mismo token, "Ingresar Corte" ya mostraba los nombres de los
+  turnos de hoy. Lo único nuevo son los nombres de los pendientes de días anteriores, y el cierre nocturno los
+  deja en cero. No agrega un riesgo real. Los nombres se dibujan como texto (React) y los largos cortan con
+  `overflowWrap: anywhere`.
+- `Modal` con `botonCerrar`: la X mide 48 × 48 y está deshabilitada en `loading`. El header deja 64 px para que
+  el título no pase por debajo, y el foco, Tab, Escape y tocar afuera siguen como antes. Su único uso es
+  `DetalleTurnosSinCobrar`.
+- Contraste: el blanco sobre `warning` (pill en alerta del iPad) da ~5:1, y `warning` sobre `warningSoft`
+  (texto del detalle del traspaso en la app del barbero) da 4,5:1. Los dos pasan AA. Los toques: la pill mide
+  56, la X 56 (iPad) y 44 (panel), y la franja del Inicio 44.
+- Pedidos: el iPad suma un `GET /api/turnos/sin-cobrar` cada 5 min y al volver de cada flujo (se remonta
+  `MainScreen`). Son 2 queries cada vez, unas 150 por día en un local normal. No pesa.
+- `useAhoraPorMinuto` reemplaza el tick del `Reloj` sin cambiar cómo se ve. `TAM_KIOSKO` pasó a `tokens.js` y
+  `wizardStyles.js` lo re-exporta, así que los flujos no cambiaron. "Ir al Turnero" cierra el modal y cambia de
+  sección (`onIrASeccion`).
+
+**F4 en el panel (`f2194b6`)**
+
+- `TabSocios`: el alta, la edición, la desactivación con confirmación en el mismo modal y "Reactivarlo" (con el
+  `socio_id` que viene en `err.datos`) dibujan con la respuesta del servidor. Los 409 (`barbero_ya_vinculado`,
+  `ultimo_socio`, `socio_inactivo`) se ven en el modal sin perder lo cargado, y el nombre repetido va al campo.
+  El selector no ofrece barberos de otro socio y mantiene el vinculado aunque esté inactivo. Si falla la carga,
+  muestra `EmptyState` con "Reintentar".
+- Caja: "Solo Barberos" filtra por `es_socio`. La nota inline dice qué se saca. "Hoy" queda deshabilitado en
+  hoy y la carga del día sigue descartando respuestas viejas. Que el Excel de Caja ignore el filtro ya es Z4-10.
+- **Primitivas compartidas, por uso:**
+  - `Tabs`: Caja (pasó de `borderBottom: 'none'` a `boxShadow: 'none'`), Balances, Planillas, Gestión y el
+    modal de barbero en `TabBarberos`. Ninguno pisaba el borde salvo Caja, que se adaptó. El `scrollIntoView`
+    con `nearest` no mueve nada si la pestaña está a la vista.
+  - `StatusPill`: pasa de 10 a 11 px. Su único uso en el panel es la marca "Socio" (`TabBarberos.jsx:1211`).
+  - `BotonExportarExcel`: sus 6 usos le pasan solo `onClick` y `disabled`, y el nombre queda en `ariaLabel` y
+    en `title`.
+  - `TogglePill`: lo usan Caja, Balances y Planillas, y su API no cambió.
+  - `SelectorDia`: `botonHoy` es opcional. El Turnero no lo usa.
+  - `Button`: ya recibía `style` y `ariaLabel`.
+- `ErrorServidor` con `datos`: un solo lugar lo construye en cada front (`errorDeRespuesta`), así que no hay
+  llamadas con los argumentos corridos. Guarda el cuerpo de un error, sin datos sensibles.
+
+**F2 en la app del barbero (`f0c41f6`)**
+
+- **Sinks:** ninguno nuevo. Los nombres de los barberos y clientes, y los textos de los motivos, se dibujan
+  como texto o van a un `aria-label`. `encodeURIComponent` en `turno_id`, y los ids de las rutas son UUID del
+  servidor.
+- **`localStorage`:** suma `barbero_avisos_vistos:<barbero_id>`, un arreglo de ids de solicitudes, sin datos
+  personales. Si está roto o no hay acceso, cae a vacío. Se poda a los ids vigentes cada vez que se marca algo.
+  Queda al cerrar sesión, sin riesgo (ids opacos, del mismo local).
+- **Los 409:** los de la hoja de avisos (`traspaso_vencido` con su motivo, `traspaso_ya_respondido` según el
+  estado, 404) quedan en la tarjeta como finales y recargan. Un error de red deja los botones para reintentar,
+  y el reintento de un aceptar que sí entró da "Ya respondiste esta oferta". En "Traspasar", un error del turno
+  cierra la hoja con un aviso y recarga la Agenda. Uno del candidato avisa en la hoja y vuelve a pedir la lista.
+  "Retirar" con un 409 cierra el detalle con "{B} ya aceptó el turno". Ningún camino muestra "Load failed": sin
+  `status`, sale el texto genérico en castellano.
+- **401:** `useTraspasos` usa el `apiFetch` de la app: un 401 borra la sesión, `barberoId` pasa a `null` y el
+  hook vacía todo. `refPedido` descarta la respuesta de un pedido de la sesión anterior.
+- **Pantalla vieja:** un aceptado cambia `firmaAceptados`, y eso recarga "Hoy" y la Agenda de los dos lados.
+  Cancelar desde la Agenda recarga las solicitudes y marca como vista la oferta que venció. Lo de cancelar
+  desde "Hoy" ya está anotado en `plan_mejoras_operativas.md` §8.
+- **Accesibilidad:**
+  - El bloque con una oferta pendiente lleva un nombre accesible completo, y la campanita y "Hoy" dicen la
+    cantidad en su `aria-label`.
+  - Los toques: candidatos 56, campanita 44.
+  - `HojaInferior` maneja el foco al abrir y al cerrar, y también Escape, pero no encierra el Tab. Viene así
+    desde F1 y en un celular no pesa, así que no lo abro como hallazgo.
+- **Los dos refrescos de 60 s:** son independientes y no van alineados. Por celular con la app a la vista:
+  - La Agenda: 10 queries por minuto, y solo cuando está montada.
+  - Los traspasos, con la app en cualquier pantalla: sin ofertas pendientes son 2 queries por minuto (la
+    revocación y el listado). Con una pendiente vigente, de un lado o del otro, suman `cargarDatosAgenda`: unas
+    8 queries por minuto en el celular de A y en el de B, mientras la oferta siga pendiente.
+  - En el peor caso son unas 18 queries por minuto por celular con la Agenda abierta. Antes de los arreglos
+    eran 20 (la Agenda cada 30 s), así que no es un hallazgo.
+  - Ninguno de los dos corre con la app en segundo plano.
+
+**Lo que pidió la parte A**
+
+- **Z3-06 y Z5-04, del lado del panel:** confirmados (arriba).
+- **¿Se pide dos veces lo mismo a la vez?** No, del mismo endpoint. `useTraspasos` no arranca un refresco con
+  otro en curso (`refCargando`), y cada acción dispara una sola recarga de solicitudes. Al volver al primer
+  plano salen juntos la Agenda y los traspasos, que son dos endpoints distintos. El único doble es la Agenda
+  justo después de un aceptado: el refresco normal más la recarga por `firmaAceptados`. Pasa una vez por
+  traspaso y la respuesta vieja se descarta (`refPedido`).
+- **El texto de alerta con S-A-01:** el iPad dice "Esta noche se cierran solos como «no asistió»"
+  (`MainScreen.jsx`, `AvisoCierre` de `DetalleTurnosSinCobrar.jsx`), y el Inicio lo mismo. Si S-A-01 no se
+  arregla, conviene sumar "y después ya no se cobran con su turno". Con el arreglo, queda como está.
+- **El código del tope de S-A-02:** hoy `SolicitudRecuperacion` no distingue el tope, porque el backend
+  responde lo mismo. Si el arreglo de S-A-02 suma un `codigo`, la pantalla lo tiene que mostrar en su paso
+  `falla`. No hay nada que revisar hasta que exista.
+
+**Lint y build:** `npx eslint .` y `npm run build` pasan en `frontend/` y `frontend-barbero/`.
+
+**Sin confirmar en pantalla:**
+- los anchos nuevos de Caja ("Hoy", Exportar solo con el ícono, `TogglePill` de 44) en Balances y Planillas;
+- el `scrollIntoView` de `Tabs` en Safari;
+- la pill del aviso en el iPad vertical.
+
+Están en la prueba del usuario antes del merge (§8 del plan).
+
+#### Para la parte A
+
+- S-B-02 tiene también un arreglo de backend (`listarTraspasos` sin las `aceptado` de un turno que volvió a A).
+  La recomendación es arreglarlo en el front.
+
+### Destinos (decididos con el usuario el 2026-11-19)
+
+Revisión del orquestador de mejoras operativas: S-A-01 y S-B-03 se confirmaron en el código
+(`registrarCorte` completa un `no_asistio` solo el mismo día; el detalle se abre con
+`detalleAbierto && turnos.length > 0` y `detalleAbierto` no vuelve a `false`). No se sacó ninguno ni cambió
+ninguna severidad.
+
+| Id | Qué | Destino |
+|---|---|---|
+| S-A-01 | Un turno que el cierre nocturno pasó a "no asistió" ya no se cobra con su turno | Mejoras operativas, fase 10b, antes del merge: el admin completa en cualquier día un `no_asistio` con `no_asistio_por = 'sistema'`; los marcados por una persona siguen con la regla del mismo día |
+| S-B-01 | El iPad dice que se cobran con "Ingresar Corte", que solo lista los de hoy | Fase 10b: el texto dice que los de hoy se cobran con "Ingresar Corte" y los de otros días desde el panel, en Turnero |
+| S-B-02 | Un turno que vuelve a su barbero (A → B → A) queda sin "Traspasar" | Fase 10b, en el front |
+| S-B-03 | El detalle de turnos sin cobrar se vuelve a abrir solo | Fase 10b |
+| S-A-02 | Un anónimo puede gastar el tope diario de links de recuperación de un local | Aceptado: es el costo del tope que cierra Z1-01; decir "llegaste al tope" en pantalla le confirmaría al atacante que funcionó. Pasa a Deudas técnicas conocidas de `estado_actual.md` en el cierre, para revisarlo junto con `trust proxy` |
+| Z1-02, punto 3 | Avisar al dueño cuando cambian el PIN de admin o la contraseña del iPad | Tanda de deudas, bloque B |
+| (nota) | Después de aceptar un traspaso, si B no tiene mail, el evento de Calendar sigue invitando a A | Aceptado: hoy solo demo usa Calendar. Queda anotado en las deudas en el cierre |
+
+Con esto, la fase 10 del plan de la auditoría queda hecha. El plan pasa a "Archivado" en el cierre de mejoras
+operativas, cuando estén los arreglos de la 10b.
 
 ---
 
