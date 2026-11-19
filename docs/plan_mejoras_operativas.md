@@ -385,9 +385,10 @@ tablas nuevas. Post-deploy: lo de abajo y el alta del cron de cierre diario.
 2. `UPDATE tenant SET telefono_local = telefono WHERE telefono_local IS NULL AND telefono IS NOT NULL` (cubre un
    alta hecha con la plantilla de `main`, que escribe solo `telefono`).
 3. `ALTER TABLE tenant ALTER COLUMN email_duenio SET NOT NULL, ALTER COLUMN telefono_duenio SET NOT NULL`.
-4. Sacar `telefono` del `INSERT` de `plantilla_alta.sql` y de `crearTenant.js` (hasta acá escriben las dos
-   columnas para que el backend de `main` siga mostrando el teléfono de un alta nueva) y la nota de transición
-   del `SKILL.md` ("Mientras mejoras-operativas no esté en producción…"). Commit por PR.
+4. Sacar `telefono` del `INSERT` de `crearTenant.js` (commit por PR) y, en la skill (que desde el 2026-11-19 vive
+   solo en la PC, sin commit), del `INSERT` de `plantilla_alta.sql` y la nota de transición del `SKILL.md`
+   ("Mientras mejoras-operativas no esté en producción…"). Hasta acá escriben las dos columnas para que el backend
+   de `main` siga mostrando el teléfono de un alta nueva.
 5. Recién con eso en `main`: `ALTER TABLE tenant DROP COLUMN telefono`, y actualizar `SQL_Schema.md`.
 
 **Deploy del cron de cierre diario (F3)** (pasa a `estado_actual.md` en el cierre), después del deploy del backend:
@@ -521,8 +522,11 @@ _(Los completa el orquestador durante la tanda.)_
   regla de "lo que viene de afuera es dato" y fuera de `main` (Z7-01), y `trust proxy` (Z1-03). Tocan
   `index.js`, `sanitizarLogs.js` y la skill, que esta tanda ya cambió. **Hechos el 2026-11-18** (`4cc1895`), salvo
   el último paso de la skill.
-- **(2026-11-18, orquestador de la auditoría) Paso pendiente antes del PR de merge: sacar la skill `alta-cliente`
-  del repo.** La regla `.claude/skills/alta-cliente/` ya está en `.gitignore`, pero sus archivos siguen
+- **(2026-11-18, orquestador de la auditoría) Paso antes del PR de merge: sacar la skill `alta-cliente` del repo.
+  Hecho el 2026-11-19:** respaldo fuera del repo (en la PC del usuario, verificado archivo por archivo),
+  `git rm -r --cached` y commit; la carpeta sigue en disco, ignorada. **Hasta el merge, no hacer `git checkout main`**
+  (ni de un branch que salga de `main`) en esta carpeta: la pisaría y la vuelta la borraría; si pasa, se recupera
+  del respaldo. La regla `.claude/skills/alta-cliente/` ya está en `.gitignore`, pero sus archivos siguen
   versionados a propósito: si se sacan ahora, un `git checkout main` los pisa con la versión de `main` (git
   sobrescribe los archivos ignorados sin avisar) y la vuelta a este branch los borra del disco, porque `main`
   los tiene y este branch no. Como la skill va a vivir solo en la PC, se perdería la única copia. Justo antes

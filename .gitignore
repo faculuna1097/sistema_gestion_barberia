@@ -35,11 +35,11 @@ backend/scripts/
 !.claude/skills/
 # La skill de alta de clientes va a vivir solo en la PC de Facundo (auditoría
 # 2026-11, Z7-01): corre en local y el repo es público. Va DESPUÉS de
-# !.claude/skills/: antes, esa excepción la volvería a incluir. Mientras sus
-# archivos sigan versionados, esta regla no hace nada: se sacan del repo con
-# `git rm -r --cached` justo antes del PR de merge de mejoras operativas (ver
-# plan_mejoras_operativas.md §8). Sacarlos antes haría que un checkout de main
-# los pise y la vuelta a este branch los borre del disco.
+# !.claude/skills/: antes, esa excepción la volvería a incluir. Sus archivos se
+# sacaron del repo con `git rm -r --cached` el 2026-11-19, antes del PR de merge
+# de mejoras operativas (ver plan_mejoras_operativas.md §8). Hasta ese merge,
+# `main` todavía los versiona: un checkout de main los pisa y la vuelta a este
+# branch los borra del disco (hay un respaldo fuera del repo).
 .claude/skills/alta-cliente/
 
 

@@ -19,7 +19,7 @@ sistema-gestion-barberia/
 |-- frontend-landing/   Landing de marketing (React + Vite, barbermanager.app)
 |-- frontend-alta/      Formulario de alta de clientes (React + Vite, alta.barbermanager.app)
 |-- docs/               Documentacion tecnica
-|-- .claude/            Config compartida de Claude Code: settings.json (permisos allow/deny) y skills/ (salud-prod, arreglo-prod y, hasta el merge de mejoras operativas, alta-cliente)
+|-- .claude/            Config compartida de Claude Code: settings.json (permisos allow/deny) y skills/ (salud-prod y arreglo-prod; alta-cliente vive solo en la PC, ignorada)
 |-- .github/            Backup diario de la base: workflows/backup-db.yml y scripts/backup-db.sh (GitHub Actions)
 |-- .gitignore
 |-- CLAUDE.md
@@ -790,7 +790,7 @@ frontend-alta/
 - App barbero: `frontend-barbero/src/App.jsx`
 - Landing: `frontend-landing/src/App.jsx`
 - Formulario de alta: `frontend-alta/src/App.jsx`
-- Skill de alta de clientes (revisa la solicitud, arma la query y el mensaje): `.claude/skills/alta-cliente/` (sale del repo con el merge de mejoras operativas y queda solo en la PC de Facundo; ya está en `.gitignore`)
+- Skill de alta de clientes (revisa la solicitud, arma la query y el mensaje): `.claude/skills/alta-cliente/` (fuera del repo desde el 2026-11-19: vive solo en la PC de Facundo, ignorada en `.gitignore`)
 - Consultar la base con el rol de solo lectura: `backend/src/scripts/consultar.js` (conexión en `conexionLectura.js`, credenciales en `backend/.env.lectura`)
 
 ---
