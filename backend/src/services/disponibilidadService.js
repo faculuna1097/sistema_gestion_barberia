@@ -201,7 +201,9 @@ const parsearRango = (desde, hasta) => {
  *   duracionSlotMin: number, duracionServicioMin: number }
  * @throws {DisponibilidadError} 'tenant_no_encontrado' | 'servicio_no_encontrado'
  */
-const cargarDatosAgenda = async ({ tenantId, servicioId, barberoIds, desde, hasta }) => {
+// Exportada para el traspaso de turnos (traspasosService), que la combina con
+// barberoLibreEnRango.
+export const cargarDatosAgenda = async ({ tenantId, servicioId, barberoIds, desde, hasta }) => {
   const barberos = barberoIds
     ? barberoIds.map(id => ({ id }))
     : await listarBarberosActivos(tenantId);
@@ -566,6 +568,44 @@ export const calcularDiasConDisponibilidad = ({ tenantId, barberoId, servicioId,
  */
 export const calcularDiasCualquiera = ({ tenantId, servicioId, desde, hasta }) =>
   calcularDias({ tenantId, servicioId, desde, hasta });
+
+// ─── Barbero libre en un rango (traspaso de turnos, F2) ─────────────────────
+
+/**
+ * barberoLibreEnRango
+ * Indica si un barbero puede atender exactamente [inicio, fin). Usa la misma
+ * definición de "libre" que el turnero: el local atiende ese día (no es feriado y
+ * abre ese día de la semana), un bloque del horario del barbero contiene el rango
+ * entero, y no lo pisa ningún turno reservado ni ninguna suspensión o descanso
+ * (con su rango efectivo).
+ *
+ * A diferencia de slotsDelBarberoEnElDia, mira un rango dado y no la grilla. El
+ * rango es el de un turno que ya existe: manda su duración real (si el servicio
+ * cambió de duración después de reservar, cuenta la del turno) y no hace falta
+ * que caiga alineado a los slots del barbero. Tampoco aplica
+ * ANTELACION_MINIMA_MINUTOS: que el turno no haya empezado lo decide quien llama.
+ * Función pura: no toca la DB.
+ *
+ * @param {Object} params
+ * @param {Object} params.datos - Resultado de cargarDatosAgenda, con el día del rango cargado
+ * @param {Object} params.agenda - La agenda del barbero, una de `datos.agendas`
+ * @param {DateTime} params.inicio - Inicio del rango
+ * @param {DateTime} params.fin - Fin del rango
+ * @returns {boolean} true si el barbero tiene el rango libre
+ */
+export const barberoLibreEnRango = ({ datos, agenda, inicio, fin }) => {
+  const fechaArg = inicio.setZone(TZ).startOf('day');
+  if (!negocioAtiendeElDia(datos, fechaArg)) return false;
+
+  const bloques = agenda.bloquesPorDia.get(fechaArg.weekday % 7) ?? [];
+  const dentroDeUnBloque = bloques.some(b =>
+    armarDateTime(fechaArg, b.hora_inicio) <= inicio && fin <= armarDateTime(fechaArg, b.hora_fin)
+  );
+  if (!dentroDeUnBloque) return false;
+
+  if (agenda.turnos.some(t => solapa(inicio, fin, t.inicio, t.fin))) return false;
+  return !agenda.suspensiones.some(s => solapa(inicio, fin, s.inicio, s.fin));
+};
 
 // ─── Grilla de la Agenda (app del barbero) ──────────────────────────────────
 // La dibuja la Agenda y valida la creación de un descanso.

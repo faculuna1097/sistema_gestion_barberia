@@ -13,11 +13,16 @@
 --   - barbero_suspension: índice (barbero_id, desde, hasta).
 --   - token_recuperacion: índice token_recuperacion_tenant_tipo (tenant_id, tipo,
 --     created_at), para el freno anti-spam de 2 minutos.
+--   - turno_traspaso: índice único parcial turno_traspaso_una_pendiente (turno_id)
+--     WHERE estado = 'pendiente' (una pendiente por turno; violación → 23505), e
+--     índices turno_traspaso_recibidos (tenant_id, a_barbero_id, turno_inicio) y
+--     turno_traspaso_enviados (tenant_id, de_barbero_id, turno_inicio).
 --   - Comisión: siempre un porcentaje sobre el precio del servicio (decisión de
 --     negocio del 2026-09-29). El tipo 'fijo' se sacó del CHECK el 2026-11-03. La
 --     fórmula vive solo en backend/src/utils/comision.js.
---   - Row Level Security ACTIVADO y sin policies en las 20 tablas (desde 2026-09-30;
---     solicitud_alta se creó con RLS el 2026-11-10 y token_recuperacion el 2026-11-13).
+--   - Row Level Security ACTIVADO y sin policies en las 21 tablas (desde 2026-09-30;
+--     solicitud_alta se creó con RLS el 2026-11-10, token_recuperacion el 2026-11-13
+--     y turno_traspaso el 2026-11-19).
 --     Cierra la API automática de Supabase (roles anon / authenticated); el backend
 --     entra como owner (postgres) y RLS no le aplica. Toda tabla nueva se crea con
 --     ALTER TABLE ... ENABLE ROW LEVEL SECURITY (el SQL editor no lo activa solo).
@@ -425,6 +430,58 @@ CREATE TABLE public.token_recuperacion (
   CONSTRAINT token_recuperacion_pkey PRIMARY KEY (id),
   CONSTRAINT token_recuperacion_hash_unico UNIQUE (token_hash),
   CONSTRAINT token_recuperacion_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
+);
+-- Traspaso de turnos entre barberos (F2 de mejoras operativas, 2026-11-19): el
+-- barbero A (de_barbero_id) le ofrece uno de sus turnos reservados y futuros a otro
+-- barbero B (a_barbero_id), que lo acepta o lo rechaza. Aceptar cambia
+-- turno.barbero_id a B y marca la fila 'aceptado' en una sola sentencia. Nunca se
+-- cancela un turno por un traspaso. La leen y escriben solo
+-- controllers/traspasos.js y services/traspasosService.js (rol barbero).
+-- Estado efectivo, calculado al leer (como el rango efectivo de barbero_suspension):
+-- una 'pendiente' guardada se muestra como pendiente solo si el turno sigue
+-- reservado, futuro, de A y con inicio = turno_inicio, y B sigue activo y libre en
+-- ese horario; si no, la API la muestra 'vencido' con su motivo sin escribirlo. Se
+-- guarda 'vencido' recién cuando alguien actúa sobre ella (aceptar, o pedir otro
+-- traspaso del mismo turno).
+CREATE TABLE public.turno_traspaso (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tenant_id uuid NOT NULL,
+  turno_id uuid NOT NULL,
+  de_barbero_id uuid NOT NULL,
+  a_barbero_id uuid NOT NULL,
+  -- Inicio del turno cuando se pidió el traspaso. Si el turno se mueve (el cliente
+  -- lo reprograma desde el link), la solicitud vence: B nunca acepta un horario
+  -- distinto del que le ofrecieron.
+  turno_inicio timestamp with time zone NOT NULL,
+  estado text NOT NULL DEFAULT 'pendiente'
+    CONSTRAINT turno_traspaso_estado_valido
+    CHECK (estado = ANY (ARRAY['pendiente','aceptado','rechazado','retirado','vencido']::text[])),
+  -- Por qué venció (solo en un 'vencido'). Los textos los arma la app del barbero:
+  --   turno_no_reservado → el turno se canceló, se cobró o quedó como "no asistió"
+  --   turno_reasignado   → el turno ya no es de A
+  --   turno_reprogramado → el inicio del turno ya no es turno_inicio
+  --   turno_empezado     → llegó la hora del turno sin respuesta
+  --   barbero_inactivo   → B se desactivó
+  --   horario_ocupado    → B ya no tiene libre el horario (turno, descanso, ausencia,
+  --                        cambio de horario o el local no atiende ese día)
+  motivo_vencimiento text
+    CONSTRAINT turno_traspaso_motivo_valido
+    CHECK (motivo_vencimiento = ANY (ARRAY['turno_no_reservado','turno_empezado','turno_reasignado',
+                                           'turno_reprogramado','barbero_inactivo','horario_ocupado']::text[])),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  -- Cuándo dejó de estar pendiente (aceptado, rechazado, retirado o vencido).
+  respondido_en timestamp with time zone,
+  CONSTRAINT turno_traspaso_pkey PRIMARY KEY (id),
+  CONSTRAINT turno_traspaso_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  -- FK compuestos con tenant_id (mismo estándar que auditoría 2.1).
+  CONSTRAINT turno_traspaso_turno_tenant_fkey FOREIGN KEY (tenant_id, turno_id) REFERENCES public.turno(tenant_id, id),
+  CONSTRAINT turno_traspaso_de_barbero_tenant_fkey FOREIGN KEY (tenant_id, de_barbero_id) REFERENCES public.barbero(tenant_id, id),
+  CONSTRAINT turno_traspaso_a_barbero_tenant_fkey FOREIGN KEY (tenant_id, a_barbero_id) REFERENCES public.barbero(tenant_id, id),
+  CONSTRAINT turno_traspaso_barberos_distintos CHECK (de_barbero_id <> a_barbero_id),
+  -- El motivo va solo (y siempre) en un vencido.
+  CONSTRAINT turno_traspaso_motivo_si_vencido CHECK ((estado = 'vencido') = (motivo_vencimiento IS NOT NULL)),
+  -- respondido_en va solo (y siempre) fuera de pendiente.
+  CONSTRAINT turno_traspaso_respondido_coherente CHECK ((estado = 'pendiente') = (respondido_en IS NULL))
 );
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Web de Kingsai (sitio aparte, no es parte de este repo). Vive solo en la DB;

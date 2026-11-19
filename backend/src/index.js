@@ -49,6 +49,7 @@ import adminHorarioAtencionRoutes from './routes/adminHorarioAtencion.js';
 import adminFeriadosRoutes from './routes/adminFeriados.js';
 import adminImagenesRoutes from './routes/adminImagenes.js';
 import adminSociosRoutes from './routes/adminSocios.js';
+import adminTraspasosRoutes from './routes/adminTraspasos.js';
 import { requiereRol } from './middlewares/requiereRolMiddleware.js';
 import { getNegocio } from './controllers/gestion.js';
 import { getImagenes } from './controllers/imagenes.js';
@@ -339,6 +340,9 @@ app.use('/api/admin/feriados',         verificarToken, requiereRol('admin'), adm
 app.use('/api/admin/imagenes',         verificarToken, requiereRol('admin'), adminImagenesRoutes);
 // socios: los dueños del negocio (el selector de aportes y retiros de Caja y Gestión → Socios).
 app.use('/api/admin/socios',           verificarToken, requiereRol('admin'), adminSociosRoutes);
+// traspasos: un barbero le ofrece un turno suyo a otro, que lo acepta o lo rechaza.
+// Solo rol barbero: el admin no interviene (403).
+app.use('/api/admin/traspasos',        verificarToken, requiereRol('barbero'), adminTraspasosRoutes);
 
 // --- Handler de errores de Sentry ---
 // Después de la última ruta: reporta lo que escape de un handler (los catch de
