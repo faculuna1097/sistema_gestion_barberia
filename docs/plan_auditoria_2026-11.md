@@ -7,7 +7,8 @@
 > **Estado (2026-11-19):** fases 0 a 10 hechas. Las 8 zonas, revisadas por el orquestador; los 61 hallazgos, con
 > destino decidido por el usuario, y el plan de arreglos escrito en `auditoria_2026-11.md`. La fase 10 (segunda
 > pasada sobre `git diff 3138425..b32cc5b` de mejoras operativas, en dos partes: backend y fronts) dejó 5 hallazgos
-> bajos con su destino, en la sección "Segunda pasada". Pasa a "Archivado" en el cierre de mejoras operativas.
+> bajos con su destino, en la sección "Segunda pasada", y sus arreglos están hechos (`0490ee0`). **Archivado
+> (2026-11-19).**
 
 ## 1. Contexto
 

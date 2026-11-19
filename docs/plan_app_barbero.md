@@ -10,6 +10,7 @@ Creado: 2026-10-15.
 |---|---|---|
 | 1 | Grilla de slots y descansos en la Agenda | Hecha (2026-10-29), en producción desde el 2026-11-05. Decisiones en [`decisiones_descansos.md`](./decisiones_descansos.md) |
 | 2 | Planillas: cortes con turno vs. sin turno | Hecha (2026-10-15), en producción desde el 2026-11-05. Decisiones en [`decisiones_descansos.md`](./decisiones_descansos.md) → "Feature 2" |
+| 3 | Turno rápido "Sin datos", traspasos entre barberos y login nuevo (mejoras operativas F1, F2 y F5) | Hecha (2026-11-19), sin deploy. Decisiones en [`decisiones_mejoras_operativas.md`](./decisiones_mejoras_operativas.md). |
 
 Las dos están en `feature/descansos-agenda`; el merge y el deploy, en
 [`estado_actual.md`](./estado_actual.md) → Pendientes.

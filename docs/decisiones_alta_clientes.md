@@ -33,7 +33,7 @@ La prioridad fue la experiencia: que completarlo no se sienta como trabajo y se 
 | Suscripción (D9) | No se pide: la fecha la decide Facundo en la query (por defecto, fin de mes). | Decisión de Facundo. |
 | Pausa del mediodía (D11) | Solo parte en dos el horario de los barberos "igual al local". Un horario propio puede cubrir la pausa; el front lo precarga ya partido. | En la DB el local tiene un rango por día: la pausa no es un dato, es un atajo para armar `barbero_horario`. Hay barberos que trabajan de corrido. |
 | Largo del turno (D12) | De 10 a 60 min de a 5, con una barra (antes, 15/20/30/40/45/60). | Decisión de Facundo. `duracion_slot_minutos` acepta de 1 a 240 y el sistema ya anda con largos que no dividen la hora. |
-| Alta (D13) | Skill de proyecto `alta-cliente`: con el id del mail lee y verifica la solicitud, propone credenciales **simples** (todavía no hay recuperación de PIN), arma la query y, después del alta, la verifica y arma el mensaje de WhatsApp para el cliente. Nunca escribe en la DB. | Un flujo repetible con las reglas escritas, en lugar de armar la query a mano en cada alta. |
+| Alta (D13) | Skill de proyecto `alta-cliente`: con el id del mail lee y verifica la solicitud, propone credenciales **simples** (cuando se decidió no había recuperación de PIN; desde mejoras operativas, F6, el dueño recupera por mail la contraseña del iPad y el PIN de admin), arma la query y, después del alta, la verifica y arma el mensaje de WhatsApp para el cliente. Nunca escribe en la DB. | Un flujo repetible con las reglas escritas, en lugar de armar la query a mano en cada alta. |
 
 ## Decisiones técnicas que salieron de la implementación
 

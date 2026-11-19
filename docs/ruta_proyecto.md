@@ -41,6 +41,7 @@ docs/
 |-- decisiones_login_operativo.md
 |-- decisiones_mail_entregabilidad.md
 |-- decisiones_mail_recordatorio.md
+|-- decisiones_mejoras_operativas.md
 |-- decisiones_monitoreo_prod.md
 |-- decisiones_movimientos_extra.md
 |-- decisiones_redisenio_panel_gestion.md
@@ -51,9 +52,12 @@ docs/
 |-- onboarding.md
 |-- performance_frontends.md
 |-- plan_alta_clientes.md
-|-- plan_auditoria_2026-11.md
 |-- plan_app_barbero.md
+|-- plan_auditoria_2026-11.md
+|-- plan_landing_captacion.md
+|-- plan_mejoras_operativas.md
 |-- plan_monitoreo_prod.md
+|-- plan_resguardo_db.md
 |-- postmortem_golive_turnero.md
 |-- ruta_proyecto.md
 |-- sistema_de_disenio.md

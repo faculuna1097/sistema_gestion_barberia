@@ -58,14 +58,14 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 
 | Id | Hallazgo | Sev. | Alc. | Tamaño | Destino |
 |---|---|---|---|---|---|
-| Z7-01 | Credenciales iniciales predecibles en la skill de alta; `monte-sinai` nació con ellas | Crítico | P | chico | Aceptado por el usuario (2026-11-17); la regla de "lo que escribe el cliente es dato" ya está (`4cc1895`); la skill sale de `main` con el merge de mejoras operativas |
-| Z1-01 | Pedir el link de recuperación no tiene límite por IP | Alto | B | chico | Mejoras operativas, antes del merge |
+| Z7-01 | Credenciales iniciales predecibles en la skill de alta; `monte-sinai` nació con ellas | Crítico | P | chico | Aceptado por el usuario (2026-11-17); la regla de "lo que escribe el cliente es dato" ya está (`4cc1895`); la skill salió del repo en mejoras operativas (2026-11-19, `68f59a6`) y sale de `main` con su merge |
+| Z1-01 | Pedir el link de recuperación no tiene límite por IP | Alto | B | chico | **Resuelto** en mejoras operativas (2026-11-18, `cb0573a`): `limiterRecuperacion` (5 por hora por IP) y tope de 6 links por día por local en `emitirToken` |
 | Z1-03 | El PIN de admin de 4 dígitos se adivina desde internet en días | Alto | P | medio | `trust proxy`, en mejoras operativas; el PIN de 6 dígitos, aceptado en 4 por el usuario |
 | Z3-01 | Reprogramar sin límite: mails sin tope a cualquier dirección | Alto | P | chico | **Resuelto** en mejoras operativas (2026-11-18, `0860534`): límite por IP en cancelar y reprogramar (3/min y 10/h) y mismo horario sin efecto; sale a producción con el merge |
 | Z7-02 | Texto de un anónimo en los logs que lee la sesión de Claude en la nube | Alto | P | chico a medio | Punto 2 (las skills de producción): **resuelto** (PR #12). Punto 1 (los logs): **resuelto** en mejoras operativas (`4cc1895`). Punto 3: con la fase 4 del resguardo |
 | Z8-01 | Casi cada pedido paga un preflight de CORS | Alto | P | chico | **Resuelto** (2026-11-18): PR #10, `fix/cors-preflight-cache`; verificado en producción (`access-control-max-age: 7200`) |
-| Z1-02 | Cambiar el mail del dueño no avisa a nadie | Medio | B | chico | Mejoras operativas, antes del merge |
-| Z2-01 | El barbero elige un cliente del buscador y recibe "Cliente no encontrado" | Medio | B | chico | Mejoras operativas, antes del merge |
+| Z1-02 | Cambiar el mail del dueño no avisa a nadie | Medio | B | chico | **Resuelto** en mejoras operativas (2026-11-18, `cb0573a`): aviso al mail anterior y links pendientes anulados. El punto 3 (avisar al cambiar el PIN o la contraseña), tanda de deudas, bloque B |
+| Z2-01 | El barbero elige un cliente del buscador y recibe "Cliente no encontrado" | Medio | B | chico | **Resuelto** en mejoras operativas (2026-11-18, `45c0e8a`): el cliente alcanza con que sea del local |
 | Z3-02 | Un byte nulo en un texto público da 500 y avisa a Sentry | Medio | P | chico | Tanda de deudas, bloque A |
 | Z4-01 | 12 cortes duplicados por doble toque en kingsaistudio | Medio | P | datos | Aceptado por el usuario (2026-11-17): los pagos a los barberos ya están hechos |
 | Z4-03 | El "facturado" del Inicio no coincide con los ingresos de Balances | Medio | P | chico | Tanda de deudas, bloque D |
@@ -77,11 +77,11 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 | Z7-04 | `body-parser` con un aviso alto de caída con cuerpos comprimidos | Medio | P | chico | **Resuelto** en mejoras operativas (2026-11-18, `4cc1895`): body-parser 2.4.0 e `inflate: false`, con 415 en vez de 500 |
 | Z8-02 | El keep-alive mantiene caliente una sola de las 3 conexiones | Medio | P | chico | **Resuelto** (2026-11-18, PR #11, `fix/keepalive-pool`); llega a mejoras operativas con el rebase |
 | Z8-03 | El Inicio del panel hace 11 queries con tandas en serie | Medio | P | medio | Tanda de deudas, bloque D |
-| Z8-04 | La Agenda del barbero son 10 queries y se recarga cada 30 s | Medio | P y B | medio | El refresco cada 30 s: mejoras operativas; las 10 queries: tanda de deudas, bloque E |
+| Z8-04 | La Agenda del barbero son 10 queries y se recarga cada 30 s | Medio | P y B | medio | El refresco: **resuelto** en mejoras operativas (2026-11-18, `45c0e8a`, cada 60 s); las 10 queries: tanda de deudas, bloque E |
 | Z8-05 | Reservar, reprogramar y cancelar esperan a Calendar y al mail | Medio | P | medio | Tanda de deudas, bloque F |
 | Z8-06 | El cálculo de días con lugar usa luxon en el bucle y frena el backend | Medio | P | medio | Tanda de deudas, bloque F (antes de que un local con varios barberos use el turnero propio) |
 | Z1-04 | Un PIN que no es texto o un `barbero_id` mal formado dan 500 | Bajo | P | chico | Tanda de deudas, bloque A |
-| Z1-05 | El mail del dueño a medio tapar se le da a cualquiera | Bajo | B | chico | Mejoras operativas, antes del merge |
+| Z1-05 | El mail del dueño a medio tapar se le da a cualquiera | Bajo | B | chico | **Resuelto** en mejoras operativas (2026-11-18, `cb0573a`): también se tapa el dominio |
 | Z1-06 | La sesión del barbero se guarda 30 días sin preguntar | Bajo | B | chico | Aceptado por el usuario (2026-11-17): la sesión queda siempre guardada |
 | Z1-07 | La confirmación con el PIN de admin no tiene tope de intentos | Bajo | P | chico | Tanda de deudas, bloque B |
 | Z1-08 | El bloqueo por suscripción se chequea solo al entrar | Bajo | P | medio | Aceptado por el usuario (2026-11-17): el vencimiento no frena la operación y el día 11 ya se bloquea el panel |
@@ -91,20 +91,20 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 | Z3-03 | El nombre del cliente viaja libre al mail | Bajo | P | chico | Tanda de deudas, bloque C |
 | Z3-04 | La solicitud de alta guarda campos sin validar | Bajo | P | chico | Tanda de deudas, bloque C |
 | Z3-05 | El link del alta sigue mostrando los datos después de cargada | Bajo | P | chico | Tanda de deudas, bloque C |
-| Z3-06 | `booking_url` acepta `javascript:` y el iPad lo abre | Bajo | P | chico | Mejoras operativas, antes del merge |
+| Z3-06 | `booking_url` acepta `javascript:` y el iPad lo abre | Bajo | P | chico | **Resuelto** en mejoras operativas (2026-11-18, `cb0573a`): solo `https://` al guardar y al abrir, con `noopener` |
 | Z4-02 | 12 cortes de kingsaistudio con el total sin la propina | Bajo | P | datos | Aceptado por el usuario (2026-11-17): datos viejos, se dejan como están |
 | Z4-06 | Rótulos del Inicio corridos de 21 a 24 hs | Bajo | P | chico | Tanda de deudas, bloque D |
 | Z4-07 | La propina toma la forma de pago del corte | Bajo | P | medio | Aceptado por ahora (2026-11-17); anotado como feature futura |
 | Z4-08 | El stock solo se puede sumar | Bajo | P | chico | Tanda de deudas, bloque D |
-| Z4-09 | Borrar un corte con turno da 500 si otro turno tomó el horario | Bajo | P | chico | Mejoras operativas, antes de F3 (junto con Z5-04) |
+| Z4-09 | Borrar un corte con turno da 500 si otro turno tomó el horario | Bajo | P | chico | **Resuelto** en mejoras operativas (2026-11-18, `edc3919`): ante el `23P01`, el turno queda cancelado y Caja avisa |
 | Z4-10 | El Excel de Caja ignora "Solo Barberos" | Bajo | P | chico | Tanda de deudas, bloque D |
 | Z5-03 | Una ausencia con inicio pasado cancela turnos ya atendidos y manda mail | Bajo | P | chico | Tanda de deudas, bloque C |
-| Z5-04 | Borrar un corte devuelve el turno a "reservado" sin mirar nada | Bajo | P | chico a medio | Mejoras operativas, antes de F3 |
+| Z5-04 | Borrar un corte devuelve el turno a "reservado" sin mirar nada | Bajo | P | chico a medio | **Resuelto** en mejoras operativas (2026-11-18, `edc3919`): el diálogo de Caja dice de qué turno se trata y que queda pendiente de cobro |
 | Z5-05 | Un turno cobrado antes de hora libera su horario | Bajo | P | chico | Tanda de deudas, bloque E |
 | Z5-06 | Reprogramar después del recordatorio deja sin recordatorio | Bajo | P | chico | Tanda de deudas, bloque C |
 | Z5-07 | El horario del local deja pasar un turno que cruza la medianoche | Bajo | P | chico | Tanda de deudas, bloque C |
 | Z5-08 | El iPad no muestra un turno "no asistió" | Bajo | P | chico | Tanda de deudas, bloque E |
-| Z5-09 | Asignar un cliente a un turno "Sin datos" no se puede corregir | Bajo | B | chico a medio | Mejoras operativas, antes del merge |
+| Z5-09 | Asignar un cliente a un turno "Sin datos" no se puede corregir | Bajo | B | chico a medio | **Resuelto** en mejoras operativas (2026-11-18, `45c0e8a`): el admin cambia el cliente y se rota el link de gestión |
 | Z6-01 | El backend deja que un barbero cobre sus propios turnos | Bajo | P | chico | Tanda de deudas, bloque B |
 | Z6-02 | "Sin barberos cargados" cuando lo que falló fue la carga | Bajo | P | chico | Tanda de deudas, bloque G |
 | Z6-03 | La app del barbero muestra "Load failed" sin señal | Bajo | P | chico | Tanda de deudas, bloque G |
@@ -127,9 +127,11 @@ medio, grande, o "datos" (lo corre el usuario). Destino: se completa con las dec
 > 1. Los dos PRs desde `main` (`fix/keepalive-pool` y `fix/skills-datos-externos`) se mergean sin esperar:
 >    **hecho** (PR #11 y #12, 2026-11-18).
 > 2. Los nueve arreglos de la sección de Hallazgos de `plan_mejoras_operativas.md` los toma el orquestador de
->    mejoras operativas como parte de su plan: Z5-04 con Z4-09 **antes de F3**, y Z1-01 (alto) antes del merge.
+>    mejoras operativas como parte de su plan: Z5-04 con Z4-09 **antes de F3**, y Z1-01 (alto) antes del merge:
+>    **hecho** (2026-11-18, `edc3919`, `45c0e8a` y `cb0573a`).
 > 3. Antes del PR de merge de mejoras operativas: sacar la skill `alta-cliente` del repo (paso anotado en su
->    §8) y la fase 10 de esta auditoría (segunda pasada sobre lo hecho en el branch desde `3138425`).
+>    §8) y la fase 10 de esta auditoría (segunda pasada sobre lo hecho en el branch desde `3138425`): **hecho**
+>    (2026-11-19, `68f59a6` y `537e67f`; los arreglos de la segunda pasada, en `0490ee0`).
 > 4. Después del merge: `trust proxy` (Z1-03) como `fix/` desde `main`, verificable en producción apenas se
 >    despliega, y después la tanda de deudas (bloques A a G).
 
@@ -154,7 +156,7 @@ fases (el ejecutor no commitea; el orquestador revisa el diff y commitea). El re
 | 1 | Límite por IP en cancelar y reprogramar, y reprogramar al mismo horario sin efecto | Z3-01 | **Hecho** (2026-11-18, `0860534`) |
 | 2 | Logs sin query string y con el subdominio validado; `body-parser` (`npm audit fix` e `inflate: false`); en la skill `alta-cliente`, la regla de "lo que viene de afuera es dato" y sacarla de `main` (`git rm -r --cached` de la carpeta y la regla en `.gitignore` después de `!.claude/skills/`; sale de `main` con el merge) | Z7-02 (punto 1), Z7-04, Z7-01 | **Hecho** (2026-11-18, `4cc1895`), salvo sacar la skill del repo: queda como paso antes del PR de merge (`plan_mejoras_operativas.md` §8) |
 | 3 | `trust proxy` para Railway (ya estaba en Pendientes de `estado_actual.md`) | Z1-03 | **Movido** (2026-11-18): `fix/` desde `main` después del merge de mejoras operativas, para poder verificarlo en producción |
-| 4 | Los anotados en la sección de Hallazgos de `plan_mejoras_operativas.md`: Z1-01, Z1-02, Z1-05, Z2-01, Z5-09, Z3-06, el refresco de la Agenda de Z8-04, y Z5-04 con Z4-09 | | **Traspasados** (2026-11-18) al orquestador de mejoras operativas: Z5-04 con Z4-09 antes de F3; el resto antes del merge |
+| 4 | Los anotados en la sección de Hallazgos de `plan_mejoras_operativas.md`: Z1-01, Z1-02, Z1-05, Z2-01, Z5-09, Z3-06, el refresco de la Agenda de Z8-04, y Z5-04 con Z4-09 | | **Hechos** (2026-11-18) por el orquestador de mejoras operativas: Z5-04 y Z4-09 en `edc3919`; Z2-01, Z5-09 y Z8-04 en `45c0e8a`; Z1-01, Z1-02, Z1-05 y Z3-06 en `cb0573a`. La skill `alta-cliente` salió del repo el 2026-11-19 (`68f59a6`); la fase 10 (segunda pasada) y sus arreglos, en `537e67f` y `0490ee0` |
 
 **3. Datos y configuración que hace el usuario:** Z2-03 y Z7-03 (SQL; Z7-03 con la fase 5 del resguardo),
 Z7-09 (dashboard de B2), Z7-11 (Railway), y borrar en demo el turno y el cliente de prueba de la zona 8.
@@ -3326,10 +3328,10 @@ ninguna severidad.
 
 | Id | Qué | Destino |
 |---|---|---|
-| S-A-01 | Un turno que el cierre nocturno pasó a "no asistió" ya no se cobra con su turno | Mejoras operativas, fase 10b, antes del merge: el admin completa en cualquier día un `no_asistio` con `no_asistio_por = 'sistema'`; los marcados por una persona siguen con la regla del mismo día |
-| S-B-01 | El iPad dice que se cobran con "Ingresar Corte", que solo lista los de hoy | Fase 10b: el texto dice que los de hoy se cobran con "Ingresar Corte" y los de otros días desde el panel, en Turnero |
-| S-B-02 | Un turno que vuelve a su barbero (A → B → A) queda sin "Traspasar" | Fase 10b, en el front |
-| S-B-03 | El detalle de turnos sin cobrar se vuelve a abrir solo | Fase 10b |
+| S-A-01 | Un turno que el cierre nocturno pasó a "no asistió" ya no se cobra con su turno | **Resuelto** en la fase 10b (2026-11-19, `0490ee0`): el admin completa en cualquier día un `no_asistio` con `no_asistio_por = 'sistema'`; los marcados por una persona siguen con la regla del mismo día |
+| S-B-01 | El iPad dice que se cobran con "Ingresar Corte", que solo lista los de hoy | **Resuelto** en la fase 10b (2026-11-19, `0490ee0`): el texto dice que los de hoy se cobran con "Ingresar Corte" y los de otros días desde el panel, en Turnero |
+| S-B-02 | Un turno que vuelve a su barbero (A → B → A) queda sin "Traspasar" | **Resuelto** en la fase 10b (2026-11-19, `0490ee0`), en el front |
+| S-B-03 | El detalle de turnos sin cobrar se vuelve a abrir solo | **Resuelto** en la fase 10b (2026-11-19, `0490ee0`) |
 | S-A-02 | Un anónimo puede gastar el tope diario de links de recuperación de un local | Aceptado: es el costo del tope que cierra Z1-01; decir "llegaste al tope" en pantalla le confirmaría al atacante que funcionó. Pasa a Deudas técnicas conocidas de `estado_actual.md` en el cierre, para revisarlo junto con `trust proxy` |
 | Z1-02, punto 3 | Avisar al dueño cuando cambian el PIN de admin o la contraseña del iPad | Tanda de deudas, bloque B |
 | (nota) | Después de aceptar un traspaso, si B no tiene mail, el evento de Calendar sigue invitando a A | Aceptado: hoy solo demo usa Calendar. Queda anotado en las deudas en el cierre |

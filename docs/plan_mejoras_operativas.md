@@ -5,15 +5,19 @@
 > Las líneas y archivos citados en §3 son del 2026-11-05: confirmalos al escribir cada prompt, porque las fases
 > anteriores los mueven. Aprobar el plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
-> **Estado (2026-11-19):** **en curso; todas las fases de código hechas.** Hechas y commiteadas: 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8), 2 (F6a),
+> **Archivado (2026-11-19): terminada, sin deploy.** El núcleo de decisiones está en
+> [`decisiones_mejoras_operativas.md`](./decisiones_mejoras_operativas.md); la prueba del usuario, el merge, el deploy y
+> el post-deploy, en `estado_actual.md` → Pendientes (la lista de la prueba, en §7 de acá).
+>
+> **Estado (2026-11-19):** **todas las fases hechas, con el cierre (11).** Hechas y commiteadas: 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8), 2 (F6a),
 > 3 (F6b), 4 (F5), 5 (F1a), 6 (F1b) y, de la auditoría 2026-11, 6b (Z5-04 + Z4-09, `edc3919`), 6c (Z2-01, Z5-09 y el
 > refresco de Z8-04, `45c0e8a`) y 6d (Z1-01, Z1-02, Z1-05 y Z3-06, `cb0573a`). Con eso están hechos los nueve arreglos de la
 > auditoría que le tocaban a esta tanda. También 7a (F3 backend: `turno.no_asistio_por`, `GET /api/turnos/sin-cobrar` y
 > `jobs/cierreDiario.js`), 7b (sus avisos en el iPad y en el Inicio del panel), 8 (F4 socios) y 9 (F2a traspasos, backend, con la
 > tabla `turno_traspaso`) y 10 (F2b, los traspasos en la app del barbero). La skill `alta-cliente` salió del repo
 > (`68f59a6`) y la segunda pasada de la auditoría está hecha (5 hallazgos bajos, destinos en `auditoria_2026-11.md`).
-> También 10b (S-A-01, S-B-01, S-B-02 y S-B-03 de la segunda pasada). **Próximo: 11** (cierre, que también marca
-> los arreglos como hechos en `auditoria_2026-11.md`), la prueba del usuario y el PR.
+> También 10b (S-A-01, S-B-01, S-B-02 y S-B-03 de la segunda pasada) y 11 (cierre). **Próximo: la prueba del
+> usuario (§7) y el PR.**
 > **Rebasado sobre `main` el 2026-11-18** (`origin/main` en `fb1fc19`: landing de captación #9, CORS #10, monitor del
 > cron #8, keep-alive del pool #11 y skills de producción #12), antes de la fase 7 para que F3 use `conMonitorCron`.
 > El resultado se comparó contra la combinación simulada de los dos lados (`git merge-tree`): idéntico salvo los dos
@@ -415,6 +419,29 @@ tablas nuevas. Post-deploy: lo de abajo y el alta del cron de cierre diario.
 - **Fronts:** `vite preview` en 127.0.0.1 contra demo (ver memoria "Probar un front contra demo" y "Probar la app
   del barbero en local"), modo celular para la app del barbero, tamaño iPad para el operativo; capturas en el reporte.
 - **Orquestador:** revisa contra `git diff` antes de cada commit.
+
+### Prueba del usuario antes del merge (2026-11-19)
+
+Lo que se probó solo con datos armados o por API, y lo que el usuario pidió revisar. En demo, con el backend local
+(127.0.0.1, puerto fuera de 5173–5176) y los fronts apuntando a él, porque producción todavía no tiene los
+endpoints nuevos. Los datos de prueba que quedaron en demo (24/11: turnos de Alejo, dos traspasados a Facundo, y
+descansos de Facundo) sirven para F2.
+1. **Panel, Gestión:** Seguridad (sus modales y anchos), Negocio → Contacto (pide el PIN de admin), Socios (alta,
+   vínculo, desactivar y "Reactivarlo"), Barberos (marca "Socio", barra de 5 en 5, columna de días con horario y su
+   cartel) y las 7 pestañas en una ventana angosta y en Safari.
+2. **Panel, Caja y reportes:** "Solo Barberos" con su nota, "Hoy", "+ Movimiento", Exportar solo con el ícono y los
+   botones de 44 en Caja, Ventas, Gastos, Balances y Planillas; "Sin datos" en Planillas y en Gestión → Barberos;
+   borrar un corte con turno (la fila "Turno" y el aviso).
+3. **Turnos sin cobrar:** el aviso en el iPad (horizontal y vertical) y en el Inicio, el detalle, cerrarlo y que
+   vuelva, y que no se reabra solo cuando se vacía; en el Turnero, completar un "no asistió" que haya cerrado el
+   sistema (hace falta correr el cierre en demo o esperar al deploy).
+4. **App del barbero:** login nuevo; reservar "Sin datos" y asignarle cliente; traspasar, retirar, aceptar y
+   rechazar con dos barberos (dos sesiones: `127.0.0.1` y `localhost`); los avisos y el contador.
+5. **Recuperación:** "¿Olvidaste tu contraseña?" del iPad y "¿Olvidaste tu PIN?" del panel con el mail de demo, el
+   link y la pantalla para elegir la nueva. **Ojo:** usar el link cambia las versiones de token de demo; después,
+   reiniciar el servicio web de producción (§8, 2026-11-13).
+6. **Turnero:** en compu y en iPad (panel del local a la izquierda), el éxito liviano, y que un turno que ya empezó
+   no se pueda cancelar ni reprogramar desde el link.
 
 ## 8. Hallazgos
 

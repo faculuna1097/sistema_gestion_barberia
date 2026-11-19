@@ -153,8 +153,9 @@ limpia el caché.
 ## Paso 2b — Dueños del negocio (socios)
 
 Los aportes y retiros que se cargan en Caja van contra un dueño elegido de una lista (tabla
-`socio`). Sin dueños cargados, el formulario no deja guardarlos. No hay pantalla de alta: se
-cargan por SQL (Supabase → SQL Editor).
+`socio`). Sin dueños cargados, el formulario no deja guardarlos. Desde el deploy de mejoras operativas
+se cargan en Gestión → Socios (alta, vínculo con su barbero, activar y desactivar); hasta entonces, y como
+referencia, por SQL (Supabase → SQL Editor).
 
 ```sql
 -- Dueño que no corta (o cuyos barberos todavía no están cargados):
@@ -170,7 +171,8 @@ UPDATE socio SET barbero_id = '<barbero_id>'
 WHERE id = '<socio_id>' AND tenant_id = '<tenant_uuid>';
 ```
 
-- El vínculo con `barbero` es opcional y hoy no lo lee ningún código.
+- El vínculo con `barbero` es opcional. Desde mejoras operativas lo usan la marca "Socio" de Gestión → Barberos y
+  el filtro "Solo Barberos" de Caja, que saca los cortes de los barberos vinculados a un socio activo.
 - Un dueño no se borra: se desactiva con `UPDATE socio SET activo = false WHERE id = '<socio_id>'`.
   Sus movimientos lo siguen referenciando.
 - Comisión 100% no implica ser dueño: un barbero que alquila el sillón también la tiene.
