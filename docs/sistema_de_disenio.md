@@ -816,7 +816,7 @@ componente se comparte recién cuando un segundo front lo necesita).
 
 | Componente | Para qué |
 |---|---|
-| `BottomNav` | Barra de navegación inferior fija, mobile. |
+| `BottomNav` | Barra de navegación inferior fija, mobile. Un ítem acepta `badge` (desde el 2026-11-19, F2 de `plan_mejoras_operativas.md`): el número de `ContadorAvisos` sobre el ícono y en el nombre accesible ("Hoy, 2 avisos"). |
 | `KPI` | Tarjeta de métrica (label + valor grande + tono semántico). |
 | `TurnoListItem` | Card de turno: hora/cliente/servicio + acciones según estado. |
 | `SearchInput` | Input de búsqueda con lupa + botón limpiar. |
@@ -824,6 +824,7 @@ componente se comparte recién cuando un segundo front lo necesita).
 | `MarcoAcceso` / `EncabezadoAcceso` | Marco del login: `FondoLocal`, un overlay con scroll propio y la card centrada (380), con `esquina` para el "Volver". Copia del panel sin `onSubmit`; la bajada de `EncabezadoAcceso` es `aria-live`, así se anuncia "PIN incorrecto". |
 | `HojaInferior` | Hoja que sube desde abajo (ancho de la columna, hasta 90 % del alto) para una tarea corta sin salir de la pantalla: encabezado con título, subtítulo y X; cuerpo con scroll propio; `pie` fijo con el error y el botón, que queda a la vista aunque suba el teclado. Cierra con Escape, la X o tocando afuera, salvo `bloqueada`; lleva el foco a la hoja y lo devuelve al cerrar. Entra con `om-hoja-in`. La usan el atajo "Reservar turno" y "Asignar cliente" de la Agenda (desde el 2026-11-16, F1 de `plan_mejoras_operativas.md`). |
 | `AvisoError` | Caja de error en línea (`dangerSoft`, borde y texto `danger`, `role="alert"`). La usan el wizard de turno, las hojas y los avisos de la Agenda. |
+| `ContadorAvisos` | Círculo de 18 en `accent` con borde blanco y el número ("9+" desde 10), arriba a la derecha de un ícono (el padre va `position: relative`). Solo dibuja (`aria-hidden`): el número para el lector lo pone el botón que lo lleva. Lo usan la campanita de "Hoy" y el `badge` de `BottomNav` (desde el 2026-11-19). |
 
 `AvatarIniciales` sin nombre (un turno "Sin datos") dibuja el ícono de persona
 sobre `accentSoft`, el mismo del botón "Sin datos".
@@ -837,6 +838,28 @@ valor y su conversión para la API en `utils/clienteTurno.js`), `BotonSinDatos`
 `useBusquedaClientes`. Las comparten el wizard de turno, la hoja del atajo y
 "Asignar cliente". El texto de un turno sin cliente es siempre "Sin datos"
 (`textoCliente` en `utils/formato.js`).
+
+**Avisos y traspasos (desde el 2026-11-19, F2 de `plan_mejoras_operativas.md`).**
+Piezas de dominio, como las del cliente:
+- **Avisos** (`components/avisos/`): `BotonAvisos` es la campanita de 44 × 44, arriba a
+  la derecha de "Hoy", con `ContadorAvisos`; el mismo número va sobre "Hoy" en la barra.
+  Abre `HojaAvisos`, el modal de avisos (una `HojaInferior` con X, que monta `App`), con
+  un bloque por tipo: "Te ofrecen" (tarjeta con quién ofrece, día y horario, servicio y
+  cliente, y Rechazar / Aceptar; lo respondido queda a la vista hasta cerrar: "Aceptado"
+  con "Ver en la Agenda", "Rechazaste este turno" o el motivo en un `AvisoError`) y "Tus
+  traspasos" (cómo terminaron los que ofreció, con ícono por resultado; los ya vistos van
+  en `muted` y sin negrita). Un aviso nuevo de otro tipo se suma como otro bloque y otra
+  cuenta en el número. Sin aviso: `EmptyState`.
+- **Traspasar** (`components/traspasos/HojaTraspasar.jsx`): `HojaInferior` con los
+  barberos que tienen libre el horario (filas de 56 con `aria-pressed` y tilde; la elegida
+  en `accentSoft` con borde `accent`) y "Ofrecer a {B}" en el pie. Sin candidatos,
+  `EmptyState` que dice qué tiene que estar libre.
+- **En la Agenda:** el bloque de un turno con una oferta pendiente suma `⇄ {B}`
+  (`ArrowRightLeft` de 16) en el renglón de la hora, y su nombre accesible lo dice. El
+  detalle muestra una línea con el estado de la última oferta (pendiente en `accentSoft`,
+  aceptada en `successSoft`, rechazada en `surfaceAlt`, vencida en `warningSoft`; siempre
+  con el texto), "Retirar" si está pendiente y "Traspasar" o "Traspasar a otro".
+- Los textos de los motivos salen de `utils/traspasos.js`, y los datos de `useTraspasos`.
 
 **Login (desde el 2026-11-13, F5 de `plan_mejoras_operativas.md`).** Las dos
 fases del login comparten `MarcoAcceso`: la misma "puerta" que el login del

@@ -27,3 +27,4 @@ export { default as FondoLocal }      from './FondoLocal.jsx';
 export { default as MarcoAcceso, EncabezadoAcceso } from './MarcoAcceso.jsx';
 export { default as HojaInferior }    from './HojaInferior.jsx';
 export { default as AvisoError }      from './AvisoError.jsx';
+export { default as ContadorAvisos }  from './ContadorAvisos.jsx';

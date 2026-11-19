@@ -502,3 +502,73 @@ export const buscarClientes = async (busqueda) => {
   if (!res.ok) throw new Error('Error al buscar clientes');
   return res.json();
 };
+
+// ─── TRASPASOS DE TURNOS (F2, solo rol barbero) ─────────────────────────────
+// Todos devuelven la "solicitud" con la misma forma:
+//   { id, estado, motivo, turno_inicio, created_at, respondido_en,
+//     turno: { id, inicio, fin, servicio_nombre, cliente_nombre (null = "Sin datos") },
+//     de_barbero: { id, nombre }, a_barbero: { id, nombre } }
+// `estado` es el efectivo (pendiente | aceptado | rechazado | retirado | vencido)
+// y `motivo` va solo en un vencido. Los errores salen como ErrorServidor, con
+// `codigo` y el cuerpo entero en `datos` (ej. `motivo` de un traspaso_vencido).
+
+/**
+ * getTraspasos
+ * Las solicitudes de traspaso del barbero autenticado, de turnos que todavía no
+ * empezaron: de cada turno, la más nueva de cada lista, ordenadas por inicio.
+ * @returns {Promise<{ enviados: Array<Object>, recibidos: Array<Object> }>}
+ * @throws {ErrorServidor}
+ */
+export const getTraspasos = async () => {
+  const res = await apiFetch('/admin/traspasos');
+  if (!res.ok) throw await errorDeRespuesta(res);
+  return res.json();
+};
+
+/**
+ * getCandidatosTraspaso
+ * Barberos a los que se les puede ofrecer un turno: activos, distintos del
+ * autenticado y con el horario del turno libre.
+ * @param {string} turnoId
+ * @returns {Promise<Array<{ barbero_id: string, nombre: string }>>} por nombre
+ * @throws {ErrorServidor} 404 turno_no_encontrado, 409 turno_no_traspasable
+ */
+export const getCandidatosTraspaso = async (turnoId) => {
+  const res = await apiFetch(`/admin/traspasos/candidatos?turno_id=${encodeURIComponent(turnoId)}`);
+  if (!res.ok) throw await errorDeRespuesta(res);
+  return res.json();
+};
+
+/**
+ * crearTraspaso
+ * Le ofrece un turno propio a otro barbero.
+ * @param {string} turnoId
+ * @param {string} aBarberoId
+ * @returns {Promise<Object>} la solicitud creada (estado 'pendiente')
+ * @throws {ErrorServidor} 404 turno_no_encontrado / barbero_no_encontrado; 409
+ *   turno_no_traspasable, no_es_candidato, traspaso_pendiente (con traspaso_id)
+ */
+export const crearTraspaso = async (turnoId, aBarberoId) => {
+  const res = await apiFetch('/admin/traspasos', {
+    method: 'POST',
+    body: JSON.stringify({ turno_id: turnoId, a_barbero_id: aBarberoId }),
+  });
+  if (!res.ok) throw await errorDeRespuesta(res);
+  return res.json();
+};
+
+/**
+ * responderTraspaso
+ * Cierra una solicitud: la retira quien la ofreció, o la rechaza o la acepta
+ * quien la recibió.
+ * @param {string} traspasoId
+ * @param {'retirar'|'rechazar'|'aceptar'} accion
+ * @returns {Promise<Object>} la solicitud con su estado nuevo
+ * @throws {ErrorServidor} 404 traspaso_no_encontrado; 409 traspaso_ya_respondido
+ *   (con estado) o traspaso_vencido (con motivo)
+ */
+export const responderTraspaso = async (traspasoId, accion) => {
+  const res = await apiFetch(`/admin/traspasos/${traspasoId}/${accion}`, { method: 'POST' });
+  if (!res.ok) throw await errorDeRespuesta(res);
+  return res.json();
+};

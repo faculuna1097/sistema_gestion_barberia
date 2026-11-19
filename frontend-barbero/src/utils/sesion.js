@@ -6,6 +6,7 @@
 //     el backend responde 401 y la app vuelve al login (onUnauthorized en App).
 //   - el id del último barbero que entró desde este celular, que el selector
 //     del login muestra primero.
+//   - los avisos de traspasos que cada barbero ya vio (abajo de todo).
 // Mismo criterio que el token del iPad en el panel (frontend/src/App.jsx).
 // Agregado el 2026-11-13 (F5 de plan_mejoras_operativas.md).
 //
@@ -124,5 +125,44 @@ export function guardarUltimoBarbero(barberoId) {
     localStorage.setItem(CLAVE_ULTIMO, barberoId);
   } catch (err) {
     console.warn('[sesion] guardarUltimoBarbero — localStorage inaccesible:', err.message);
+  }
+}
+
+// ─── Avisos ya vistos ───────────────────────────────────────────────────────
+// Los resultados de los traspasos que ofreció el barbero (aceptado, rechazado,
+// vencido) dejan de sumar en el contador de la campanita cuando los vio. Se
+// guardan los ids por barbero: en un mismo celular pueden entrar varios.
+// Si localStorage falla, vuelven a contar como nuevos (se ven una vez más).
+
+const PREFIJO_AVISOS_VISTOS = 'barbero_avisos_vistos:';
+
+/**
+ * leerAvisosVistos
+ * Ids de los avisos que el barbero ya vio en este celular.
+ * @param {string} barberoId
+ * @returns {string[]}
+ */
+export function leerAvisosVistos(barberoId) {
+  try {
+    const crudo = localStorage.getItem(PREFIJO_AVISOS_VISTOS + barberoId);
+    const ids = crudo ? JSON.parse(crudo) : [];
+    return Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : [];
+  } catch (err) {
+    console.warn('[sesion] leerAvisosVistos — localStorage inaccesible o dato roto:', err.message);
+    return [];
+  }
+}
+
+/**
+ * guardarAvisosVistos
+ * Reemplaza los ids de avisos vistos del barbero.
+ * @param {string} barberoId
+ * @param {string[]} ids
+ */
+export function guardarAvisosVistos(barberoId, ids) {
+  try {
+    localStorage.setItem(PREFIJO_AVISOS_VISTOS + barberoId, JSON.stringify(ids));
+  } catch (err) {
+    console.warn('[sesion] guardarAvisosVistos — localStorage inaccesible:', err.message);
   }
 }

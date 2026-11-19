@@ -4,6 +4,9 @@
 // Con token → PageContainer + sección activa + BottomNav (cuando aplica).
 // La sesión queda guardada en el celular (utils/sesion.js): al abrir la app con
 // una sesión vigente, se entra directo, sin PIN.
+// Los traspasos de turnos (F2) se cargan acá, una sola vez (useTraspasos): el
+// número sobre "Hoy" en la barra, la campanita de "Hoy" y su modal de avisos
+// (HojaAvisos, montado acá), y la marca y el detalle de los turnos en la Agenda.
 
 import { useState, useCallback, useEffect } from 'react';
 import { CalendarDays, CalendarRange, ClipboardList, MoreHorizontal } from 'lucide-react';
@@ -21,6 +24,8 @@ import MiPlanilla from './components/MiPlanilla.jsx';
 import Gestion from './components/Gestion.jsx';
 import Clientes from './components/Clientes.jsx';
 import Mas from './components/Mas.jsx';
+import HojaAvisos from './components/avisos/HojaAvisos.jsx';
+import useTraspasos from './hooks/useTraspasos.js';
 
 // IDs de sección del state machine.
 const SECCION = {
@@ -34,6 +39,7 @@ const SECCION = {
 };
 
 // Items del BottomNav. El ID coincide con SECCION para que `activo` matchee directo.
+// "Hoy" suma el número de avisos sin atender en el render (la campanita vive ahí).
 const NAV_ITEMS = [
   { id: SECCION.DASHBOARD, label: 'Hoy',      icon: CalendarDays },
   { id: SECCION.AGENDA,    label: 'Agenda',   icon: CalendarRange },
@@ -97,6 +103,13 @@ function App() {
   const [marca, setMarca] = useState({
     cargando: true, nombreNegocio: null, logoUrl: null, imagenLocal: null,
   });
+  // Día con el que abre la Agenda cuando se llega desde "Ver en la Agenda" de
+  // un aviso; null = hoy (la navegación normal lo vuelve a null).
+  const [fechaAgenda, setFechaAgenda] = useState(null);
+  const [avisosAbiertos, setAvisosAbiertos] = useState(false);
+
+  // Solicitudes de traspaso del barbero de la sesión (sin sesión, no pide nada).
+  const traspasos = useTraspasos(token ? barbero?.id ?? null : null);
 
   // Registra el handler que api.js dispara cuando apiFetch recibe 401 (token
   // expirado o revocado: cambio de PIN o barbero desactivado). El token del
@@ -109,6 +122,7 @@ function App() {
       setToken(null);
       setBarbero(null);
       setSeccion(SECCION.DASHBOARD);
+      setAvisosAbiertos(false);
     });
     return () => setOnUnauthorized(null);
   }, []);
@@ -168,6 +182,7 @@ function App() {
     clearAuthToken();
     setBarbero(null);
     setSeccion(SECCION.DASHBOARD);
+    setAvisosAbiertos(false);
   }, []);
 
   if (!token) {
@@ -178,10 +193,45 @@ function App() {
 
   /**
    * navegar
-   * Cambia la sección activa.
+   * Cambia la sección activa. La Agenda abre en hoy.
    * @param {string} nuevaSeccion
    */
-  const navegar = (nuevaSeccion) => setSeccion(nuevaSeccion);
+  const navegar = (nuevaSeccion) => {
+    setFechaAgenda(null);
+    setSeccion(nuevaSeccion);
+  };
+
+  /**
+   * cerrarAvisos
+   * Cierra el modal de avisos y da por vistos los resultados que mostraba.
+   * @param {string[]} idsVistos
+   */
+  const cerrarAvisos = (idsVistos) => {
+    traspasos.marcarVistos(idsVistos);
+    setAvisosAbiertos(false);
+  };
+
+  /**
+   * avisoRespondido
+   * Después de aceptar o rechazar un traspaso desde el modal: dibuja la
+   * respuesta del servidor (si vino) y recarga las solicitudes. Un aceptado
+   * cambia `firmaAceptados`, y "Hoy" y la Agenda recargan sus turnos.
+   * @param {Object|null} solicitud
+   */
+  const avisoRespondido = (solicitud) => {
+    if (solicitud) traspasos.aplicar(solicitud);
+    traspasos.recargar();
+  };
+
+  /**
+   * verEnAgenda
+   * Va a la Agenda en el día de un turno aceptado.
+   * @param {string} fecha - 'YYYY-MM-DD'
+   */
+  const verEnAgenda = (fecha) => {
+    setFechaAgenda(fecha);
+    setSeccion(SECCION.AGENDA);
+  };
 
   /**
    * renderSeccion
@@ -196,6 +246,8 @@ function App() {
             barbero={barbero}
             onCrearTurno={() => navegar(SECCION.CREAR_TURNO)}
             onVerAgenda={() => navegar(SECCION.AGENDA)}
+            avisos={{ cantidad: traspasos.contador, onAbrir: () => setAvisosAbiertos(true) }}
+            firmaTraspasos={traspasos.firmaAceptados}
           />
         );
       case SECCION.CREAR_TURNO:
@@ -207,7 +259,7 @@ function App() {
           />
         );
       case SECCION.AGENDA:
-        return <Agenda barbero={barbero} />;
+        return <Agenda barbero={barbero} traspasos={traspasos} fechaInicial={fechaAgenda} />;
       case SECCION.PLANILLA:
         return <MiPlanilla />;
       case SECCION.MAS:
@@ -245,9 +297,23 @@ function App() {
 
       {mostrarNav && (
         <BottomNav
-          items={NAV_ITEMS}
+          items={NAV_ITEMS.map((item) => (
+            item.id === SECCION.DASHBOARD ? { ...item, badge: traspasos.contador } : item
+          ))}
           activo={seccion}
           onChange={navegar}
+        />
+      )}
+
+      {/* Modal de avisos (lo abre la campanita de "Hoy") */}
+      {avisosAbiertos && (
+        <HojaAvisos
+          pendientes={traspasos.pendientes}
+          resultados={traspasos.resultados}
+          vistos={traspasos.vistos}
+          onCerrar={cerrarAvisos}
+          onRespondida={avisoRespondido}
+          onVerEnAgenda={verEnAgenda}
         />
       )}
     </PageContainer>

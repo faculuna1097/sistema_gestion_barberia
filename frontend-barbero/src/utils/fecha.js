@@ -97,3 +97,17 @@ export function fmtHora(iso) {
 export function fmtFechaHora(iso) {
   return `${fmtFechaLarga(fechaDeISO(iso))} · ${fmtHora(iso)} hs`;
 }
+
+/**
+ * fmtDiaRelativo
+ * El día de un instante dicho corto: "hoy", "mañana" o la fecha corta.
+ * @param {string} iso - ISO timestamp
+ * @returns {string} Ej: "hoy", "mañana", "jue 20/11"
+ */
+export function fmtDiaRelativo(iso) {
+  const fecha = fechaDeISO(iso);
+  const hoy = fechaHoyISO();
+  if (fecha === hoy) return 'hoy';
+  if (fecha === sumarDias(hoy, 1)) return 'mañana';
+  return fmtFechaCorta(fecha);
+}

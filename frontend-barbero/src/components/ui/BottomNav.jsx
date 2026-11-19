@@ -5,6 +5,7 @@
 
 import { theme } from '../../theme/tokens.js';
 import { useHover } from '../../hooks/useHover.js';
+import ContadorAvisos from './ContadorAvisos.jsx';
 
 // Alto de cada ítem (≥ 44 de touch target, MD §5.4).
 const ALTO_ITEM = 56;
@@ -20,8 +21,9 @@ export const ALTO_BOTTOM_NAV = ALTO_ITEM + 1;
  * Barra inferior de navegación con N slots equiwidth (ícono + label).
  * El item activo se pinta con color de acento. Inactivos con texto muted.
  * Cada item es un <button> accesible por teclado (Enter/Space disparan onClick).
- * @param {Array<{id: string, label: string, icon: React.ComponentType}>} props.items
+ * @param {Array<{id: string, label: string, icon: React.ComponentType, badge?: number}>} props.items
  *        - Lista de items. `icon` es el componente de lucide-react (ej: `Home`, `Calendar`).
+ *          `badge` (opcional): cantidad de avisos sin atender, en un número sobre el ícono.
  * @param {string} props.activo - ID del item actualmente activo.
  * @param {(id: string) => void} props.onChange - Callback al tocar un item.
  */
@@ -58,8 +60,9 @@ function BottomNav({ items, activo, onChange }) {
 /**
  * NavItem
  * Slot individual del BottomNav. Hover solo con mouse (useHover, MD §4.2).
- * Touch target ≥ 44px (MD §5.4).
- * @param {{id, label, icon}} props.item
+ * Touch target ≥ 44px (MD §5.4). Con `badge`, el número va sobre el ícono y en
+ * el nombre accesible ("Hoy, 2 avisos").
+ * @param {{id, label, icon, badge?}} props.item
  * @param {boolean} props.activo
  * @param {Function} props.onClick
  */
@@ -76,6 +79,7 @@ function NavItem({ item, activo, onClick }) {
       onClick={onClick}
       {...eventosHover}
       aria-current={activo ? 'page' : undefined}
+      aria-label={item.badge ? `${item.label}, ${item.badge} ${item.badge === 1 ? 'aviso' : 'avisos'}` : undefined}
       style={{
         flex: 1,
         minHeight: ALTO_ITEM,
@@ -93,11 +97,14 @@ function NavItem({ item, activo, onClick }) {
         transition: `color ${theme.transitionFast}`,
       }}
     >
-      <Icon
-        size={22}
-        strokeWidth={activo ? 2 : 1.75}
-        aria-hidden="true"
-      />
+      <span style={{ position: 'relative', display: 'flex' }}>
+        <Icon
+          size={22}
+          strokeWidth={activo ? 2 : 1.75}
+          aria-hidden="true"
+        />
+        <ContadorAvisos cantidad={item.badge} />
+      </span>
       <span style={{
         fontSize: theme.sizeMicro,
         fontWeight: activo ? theme.weightMedium : theme.weightRegular,

@@ -1,7 +1,8 @@
 // /frontend-barbero/src/components/Dashboard.jsx
 // Pantalla principal post-login ("Hoy").
 // Muestra:
-//   - Header con fecha del día.
+//   - Header con fecha del día y la campanita de avisos (abre el modal de
+//     avisos que monta App: traspasos que te ofrecen y cómo terminaron los tuyos).
 //   - Card destacada con el próximo turno (si existe).
 //   - 3 KPIs: pendientes, completados, no asistieron (+ nota chica de cancelados).
 //   - Botón primario "Nuevo turno".
@@ -13,14 +14,17 @@
 //   barbero       — { id, nombre }
 //   onCrearTurno  — callback al wizard de crear turno
 //   onVerAgenda   — callback a la agenda (se usa desde la card "próximo")
+//   avisos        — { cantidad, onAbrir }: el número de la campanita y qué hace al tocarla
+//   firmaTraspasos — cambia cuando un traspaso aceptado movió un turno: la lista se recarga
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, RefreshCw, CalendarX } from 'lucide-react';
 
 import { getTurnos, patchEstadoTurno, cancelarTurno } from '../services/api.js';
 import { fmtHora, fmtFechaLarga, fechaHoyISO } from '../utils/fecha.js';
 import { textoCliente } from '../utils/formato.js';
 import { theme } from '../theme/tokens.js';
+import BotonAvisos from './avisos/BotonAvisos.jsx';
 
 import {
   ScreenHeader,
@@ -56,8 +60,14 @@ const ACCIONES = {
 /**
  * Dashboard
  * Pantalla "Hoy" — orquesta la carga de turnos, KPIs, próximo turno y acciones.
+ * @param {{ id: string, nombre: string }} props.barbero
+ * @param {() => void} props.onCrearTurno
+ * @param {() => void} props.onVerAgenda
+ * @param {{ cantidad: number, onAbrir: () => void }} props.avisos - la campanita
+ * @param {string} props.firmaTraspasos - useTraspasos → firmaAceptados
+ * @returns {JSX.Element}
  */
-export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
+export default function Dashboard({ barbero, onCrearTurno, onVerAgenda, avisos, firmaTraspasos }) {
   const [turnos, setTurnos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [refrescando, setRefrescando] = useState(false);
@@ -90,6 +100,15 @@ export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
   }, [hoy]);
 
   useEffect(() => { cargarTurnos(); }, [cargarTurnos]);
+
+  // Un traspaso aceptado sumó o sacó un turno: recargar la lista (la primera
+  // vez no, ya la carga el efecto de arriba).
+  const refFirma = useRef(firmaTraspasos);
+  useEffect(() => {
+    if (refFirma.current === firmaTraspasos) return;
+    refFirma.current = firmaTraspasos;
+    cargarTurnos();
+  }, [firmaTraspasos, cargarTurnos]);
 
   /**
    * refrescar
@@ -172,15 +191,23 @@ export default function Dashboard({ barbero, onCrearTurno, onVerAgenda }) {
       gap: 16,
       padding: '16px 16px 24px',
     }}>
-      <ScreenHeader
-        eyebrow="Hoy"
-        title={fmtFechaLarga(hoy)}
-        subtitle={
-          cargando
-            ? 'Cargando turnos del día…'
-            : `${turnos.length} turnos · Hola, ${barbero?.nombre?.split(' ')[0] ?? ''}`
-        }
-      />
+      {/* Encabezado con la campanita arriba a la derecha */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <ScreenHeader
+            eyebrow="Hoy"
+            title={fmtFechaLarga(hoy)}
+            subtitle={
+              cargando
+                ? 'Cargando turnos del día…'
+                : `${turnos.length} turnos · Hola, ${barbero?.nombre?.split(' ')[0] ?? ''}`
+            }
+          />
+        </div>
+        <div style={{ marginRight: -8 }}>
+          <BotonAvisos cantidad={avisos.cantidad} onAbrir={avisos.onAbrir} />
+        </div>
+      </div>
 
       {/* Banner inline de errores de acción (reemplaza alert) */}
       {errorAccion && (

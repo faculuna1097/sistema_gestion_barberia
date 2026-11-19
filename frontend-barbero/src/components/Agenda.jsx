@@ -12,6 +12,10 @@
 //   elegido) y "Marcar descanso" (confirma con ConfirmDialog).
 // - Un turno sin cliente ofrece "Asignar cliente" en su detalle (abre
 //   HojaAsignarCliente).
+// - Un turno reservado que no empezó se puede ofrecer a otro barbero:
+//   "Traspasar" en su detalle (abre HojaTraspasar). Con la oferta pendiente, el
+//   bloque lleva "⇄ {B}" y el detalle ofrece "Retirar". Las solicitudes las
+//   carga useTraspasos en App y llegan por props (F2 de plan_mejoras_operativas.md).
 // - Al tocar un descanso propio se abre su detalle, con "Liberar" (si no empezó)
 //   o "Terminar descanso" (si está en curso). Las ausencias se ven, sin acciones:
 //   se gestionan en Más → Gestión → Suspensiones.
@@ -29,11 +33,12 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CalendarOff, X } from 'lucide-react';
 
 import {
-  getAgenda, patchEstadoTurno, cancelarTurno, crearDescanso, liberarSuspension,
+  getAgenda, patchEstadoTurno, cancelarTurno, crearDescanso, liberarSuspension, responderTraspaso,
 } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { fmtHora, fechaHoyISO, sumarDias } from '../utils/fecha.js';
 import { esSlotTocable, tocarSlot, depurarSeleccion } from '../utils/seleccionSlots.js';
+import { textoErrorAlRetirar, textoConflictoAlOfrecer } from '../utils/traspasos.js';
 
 import {
   Skeleton,
@@ -56,6 +61,7 @@ import DetalleTurnoModal from './agenda/DetalleTurnoModal.jsx';
 import DetalleDescansoModal from './agenda/DetalleDescansoModal.jsx';
 import HojaReservar from './agenda/HojaReservar.jsx';
 import HojaAsignarCliente from './agenda/HojaAsignarCliente.jsx';
+import HojaTraspasar from './traspasos/HojaTraspasar.jsx';
 
 // ─── Constantes ─────────────────────────────────────────────────────────────
 
@@ -100,13 +106,17 @@ const ACCIONES = {
 /**
  * Agenda
  * Orquesta la carga de la agenda del día, los modales de detalle/confirmación y
- * las hojas de reservar y de asignar cliente. La agenda la pide el backend con el
- * barbero del JWT; `barbero` se usa solo para el alta del turno.
+ * las hojas de reservar, de asignar cliente y de traspasar. La agenda la pide el
+ * backend con el barbero del JWT; `barbero` se usa solo para el alta del turno.
  * @param {{ id: string, nombre: string }} props.barbero - el barbero de la sesión
+ * @param {Object} props.traspasos - lo que devuelve useTraspasos (App): usa
+ *   `porTurno`, `firmaAceptados`, `aplicar`, `recargar` y `marcarVistos`
+ * @param {string|null} [props.fechaInicial] - 'YYYY-MM-DD' con el que abre (ej.
+ *   "Ver en la Agenda" de un turno aceptado); sin él, hoy
  * @returns {JSX.Element}
  */
-export default function Agenda({ barbero }) {
-  const [fecha, setFecha] = useState(fechaHoyISO());
+export default function Agenda({ barbero, traspasos, fechaInicial = null }) {
+  const [fecha, setFecha] = useState(() => fechaInicial ?? fechaHoyISO());
   // Agenda del día visible, ya preparada para dibujar (prepararAgenda), o null
   // antes de la primera carga.
   const [agenda, setAgenda] = useState(null);
@@ -135,6 +145,8 @@ export default function Agenda({ barbero }) {
   const [reservaEn, setReservaEn] = useState(null);
   // Hoja de "Asignar cliente": el turno, o null.
   const [asignarA, setAsignarA] = useState(null);
+  // Hoja de "Traspasar": el turno, o null.
+  const [traspasarTurno, setTraspasarTurno] = useState(null);
 
   const refAhora = useRef(null);  // para auto-scroll al indicador de "ahora"
   // Número del último pedido de agenda: si el barbero cambia de día rápido, la
@@ -221,7 +233,19 @@ export default function Agenda({ barbero }) {
     setSeleccion([]);
     setReservaEn(null);
     setAsignarA(null);
+    setTraspasarTurno(null);
   }, [cargarAgenda]);
+
+  // Un traspaso aceptado (de este barbero o hacia él) mueve un turno de una
+  // Agenda a otra: recargar sin esperar el refresco. La primera vez no, porque
+  // la carga del día ya está en curso.
+  const { firmaAceptados } = traspasos;
+  const refFirma = useRef(firmaAceptados);
+  useEffect(() => {
+    if (refFirma.current === firmaAceptados) return;
+    refFirma.current = firmaAceptados;
+    refCargarAgenda.current({ silenciosa: true });
+  }, [firmaAceptados]);
 
   // Reloj de "ahora".
   useEffect(() => {
@@ -361,6 +385,11 @@ export default function Agenda({ barbero }) {
           ? await cancelarTurno(turno.id)
           : await patchEstadoTurno(turno.id, 'no_asistio');
         setAgenda((actual) => (actual ? aplicarEstadoDeTurno(actual, cambio) : actual));
+        // Si el barbero cancela un turno con una oferta pendiente, la oferta
+        // vence y su aviso lo causó él: queda como visto (en gris, sin sumar en
+        // la campanita). Si lo cancela otro (el cliente, el dueño), sí avisa.
+        const oferta = traspasos.porTurno.get(turno.id);
+        if (accion === 'cancelar' && oferta?.estado === 'pendiente') traspasos.marcarVistos([oferta.id]);
       }
       exito = true;
     } catch (err) {
@@ -386,6 +415,9 @@ export default function Agenda({ barbero }) {
 
     if (exito) {
       cerrarConfirma();
+      // Cancelar un turno vence su oferta de traspaso pendiente: también se
+      // recargan las solicitudes, así la marca y el aviso no esperan al refresco.
+      if (!esDescanso) traspasos.recargar();
       await cargarAgenda({ silenciosa: true });
     }
   };
@@ -439,6 +471,64 @@ export default function Agenda({ barbero }) {
   };
 
   /**
+   * abrirTraspasar
+   * Cierra el detalle del turno y abre la hoja de "Traspasar".
+   * @param {Object} turno
+   */
+  const abrirTraspasar = (turno) => {
+    setDetalle(null);
+    setTraspasarTurno(turno);
+  };
+
+  /**
+   * traspasoEnviado
+   * Dibuja la oferta con lo que devolvió el servidor (el bloque pasa a "⇄ {B}"),
+   * cierra la hoja y recarga las solicitudes por detrás.
+   * @param {Object} solicitud
+   */
+  const traspasoEnviado = (solicitud) => {
+    traspasos.aplicar(solicitud);
+    setTraspasarTurno(null);
+    traspasos.recargar();
+  };
+
+  /**
+   * conflictoAlTraspasar
+   * El turno ya no se puede ofrecer (cambió o ya tiene una oferta): cierra la
+   * hoja, avisa y recarga la agenda y las solicitudes.
+   * @param {Error & { codigo?: string }} err
+   */
+  const conflictoAlTraspasar = (err) => {
+    setTraspasarTurno(null);
+    mostrarAviso(textoConflictoAlOfrecer(err));
+    cargarAgenda({ silenciosa: true });
+    traspasos.recargar();
+  };
+
+  /**
+   * retirarTraspaso
+   * Retira la oferta pendiente del turno abierto en el detalle. El detalle queda
+   * en "Retirando…" y, con la respuesta, muestra el turno sin oferta (con
+   * "Traspasar" de nuevo). Si el otro ya respondió, cierra el detalle, avisa y
+   * recarga.
+   * @param {Object} solicitud
+   */
+  const retirarTraspaso = async (solicitud) => {
+    setProcesando(true);
+    try {
+      traspasos.aplicar(await responderTraspaso(solicitud.id, 'retirar'));
+    } catch (err) {
+      console.error('[Agenda] Error al retirar el traspaso:', err.message);
+      setDetalle(null);
+      mostrarAviso(textoErrorAlRetirar(err, solicitud));
+      cargarAgenda({ silenciosa: true });
+    } finally {
+      setProcesando(false);
+    }
+    traspasos.recargar();
+  };
+
+  /**
    * liberarDescanso
    * Libera el descanso abierto en el detalle (POST /admin/suspensiones/:id/liberar): si
    * no empezó lo anula entero; si está en curso, lo termina ahora. Un
@@ -481,11 +571,16 @@ export default function Agenda({ barbero }) {
     ? 2 * PADDING_VERTICAL + ((rango.minFin - rango.minInicio) / 60) * pxPorHora
     : ALTO_SKELETON;
 
-  // Texto del ConfirmDialog: fijo, o armado con el rango elegido.
+  // Texto del ConfirmDialog: fijo, o armado con el rango elegido. Cancelar un
+  // turno con una oferta de traspaso pendiente avisa que la oferta se cae.
   const configConfirma = ACCIONES[confirma.accion];
   let mensajeConfirma = configConfirma?.message || '';
   if (typeof mensajeConfirma === 'function') {
     mensajeConfirma = rangoSeleccion ? mensajeConfirma(rangoSeleccion) : '';
+  }
+  const ofertaDelTurno = confirma.turno ? traspasos.porTurno.get(confirma.turno.id) : null;
+  if (confirma.accion === 'cancelar' && ofertaDelTurno?.estado === 'pendiente') {
+    mensajeConfirma = `${mensajeConfirma} La oferta de traspaso a ${ofertaDelTurno.a_barbero.nombre} queda sin efecto.`;
   }
 
   return (
@@ -547,6 +642,7 @@ export default function Agenda({ barbero }) {
             refAhora={refAhora}
             iniciosTocables={iniciosTocables}
             seleccion={seleccionVigente}
+            traspasos={traspasos.porTurno}
             onTocarSlot={tocarSlotLibre}
             onTocarTurno={setDetalle}
             onTocarDescanso={setDescansoDetalle}
@@ -614,9 +710,13 @@ export default function Agenda({ barbero }) {
       {/* Modal de detalle del turno */}
       <DetalleTurnoModal
         turno={detalle}
+        traspaso={detalle ? traspasos.porTurno.get(detalle.id) : null}
+        procesando={procesando}
         onCerrar={() => setDetalle(null)}
         onAccion={pedirConfirmacion}
         onAsignarCliente={abrirAsignarCliente}
+        onTraspasar={abrirTraspasar}
+        onRetirarTraspaso={retirarTraspaso}
       />
 
       {/* Hoja del atajo "Reservar turno" */}
@@ -637,6 +737,16 @@ export default function Agenda({ barbero }) {
           onCerrar={() => setAsignarA(null)}
           onAsignado={clienteAsignado}
           onConflicto={conflictoAlAsignar}
+        />
+      )}
+
+      {/* Hoja de "Traspasar" */}
+      {traspasarTurno && (
+        <HojaTraspasar
+          turno={traspasarTurno}
+          onCerrar={() => setTraspasarTurno(null)}
+          onEnviado={traspasoEnviado}
+          onConflicto={conflictoAlTraspasar}
         />
       )}
 
