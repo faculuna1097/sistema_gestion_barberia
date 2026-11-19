@@ -23,7 +23,7 @@ histórico caía cuando retiraban más.
 | Modelo | Tabla `movimiento_extra` con tres tipos fijos (`aporte_capital`, `retiro_socio`, `otro_ingreso`) y `monto > 0`. La tabla `gasto` no se tocó. | La semántica contable queda en el código, no en cómo se nombra una categoría. Ninguna consulta de gastos cambió. |
 | Semántica | Un único mapa en `backend/src/utils/movimientos.js` (`sentido`, `afectaResultado`, `requiereSocio`). La API manda `sentido` resuelto en cada fila; el front no decide por nombre de tipo. | Cambiar el criterio de un tipo es tocar un solo lugar. |
 | Dónde se carga | Solo desde el panel (admin), con el "+" de Caja → Movimientos del día. Sin flujo en el iPad. | Es una decisión del dueño y pasa poco. Caja ya es la vista de la plata que entra y sale, con el borrado por fila. |
-| Dueños | Tabla `socio` por tenant, elegida con un selector (no texto libre). Vínculo opcional `socio.barbero_id`. Se cargan por SQL. | Totales por dueño exactos. El vínculo va en `socio` porque es opcional (un dueño puede no cortar) y así `barbero` no se toca. Comisión 100% no implica ser dueño: un barbero que alquila el sillón también la tiene. |
+| Dueños | Tabla `socio` por tenant, elegida con un selector (no texto libre). Vínculo opcional `socio.barbero_id`. Se cargaban por SQL; desde F4 de mejoras operativas (2026-11-19), también en Gestión → Socios. | Totales por dueño exactos. El vínculo va en `socio` porque es opcional (un dueño puede no cortar) y así `barbero` no se toca. Comisión 100% no implica ser dueño: un barbero que alquila el sillón también la tiene. |
 | Texto | "Otro ingreso" lleva descripción obligatoria; aporte y retiro no piden texto. | "Otro" no se puede enumerar de antemano; en aporte y retiro alcanza con tipo y dueño. |
 | Fecha | Obligatoria en el alta y no futura. Hoy → la hora real; un día pasado → el mediodía de ese día en hora argentina. | Permite cargar un movimiento después; el mediodía evita que un borde de zona horaria lo pase de día. |
 | Formas de pago | `efectivo` / `mercado_pago`. | Las del resto del sistema; así los netos de Caja cierran. |
@@ -50,7 +50,8 @@ histórico caía cuando retiraban más.
   quedó en el respaldo CSV. La columna sigue admitiendo texto en aporte y retiro por si una
   migración futura lo necesita.
 - **Tenant sin socios:** el formulario no deja guardar aportes ni retiros, porque no hay dueño
-  para elegir. Los socios se cargan en el alta del tenant (`onboarding.md`, Paso 2b).
+  para elegir. Los socios se cargan en el alta del tenant (`onboarding.md`, Paso 2b) y, desde
+  F4 de mejoras operativas (2026-11-19), en Gestión → Socios.
 - **Migración de retiros (2026-10-01):** en Kingsai había tres retiros de Migue cargados como
   gasto en "Otros": 13/06 por $300.000, 15/07 por $20.000 y 05/08 por $70.000. Se pasaron a
   `movimiento_extra` con su fecha original, en un solo bloque `DO` que controlaba la cantidad
@@ -64,7 +65,8 @@ histórico caía cuando retiraban más.
 ## Cosas que NO entran (postergado)
 
 - Edición de movimientos extra.
-- Pantalla de alta de socios.
+- ~~Pantalla de alta de socios.~~ Hecha en F4 de mejoras operativas (2026-11-19): Gestión → Socios
+  (`plan_mejoras_operativas.md` §5, fase 8).
 - Columnas de aportes y retiros en el histórico en pantalla (están en el Excel y en el modal
   de detalle de cada mes).
 - Flujo en el iPad para registrar retiros.

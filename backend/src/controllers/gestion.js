@@ -15,6 +15,7 @@ import { validarContactoNegocio } from '../utils/contactoNegocio.js';
 import { esUrlHttps } from '../utils/validarTexto.js';
 import { enmascararEmail } from '../services/recuperacionService.js';
 import { enviarAvisoCambioEmail } from '../services/mail/mailer.js';
+import { esSocioSql } from '../services/sociosService.js';
 
 const SALT_ROUNDS = 10;
 const MENSAJE_PRECIO_INVALIDO = mensajeMontoInvalido('precio');
@@ -62,16 +63,23 @@ const barberoConNumeros = (fila) => ({
 
 // ─── BARBEROS ────────────────────────────────────────────────────────────────
 
+// Columnas de un barbero en la lista y en las respuestas del alta y la edición.
+// es_socio: vinculado a un socio activo (la marca "Socio" de Gestión → Barberos).
+// Va también en el alta y la edición para que la fila editada no la pierda.
+const COLUMNAS_BARBERO =
+  `id, nombre, comision_tipo, comision_valor, activo, ${esSocioSql('barbero')} AS es_socio`;
+
 /**
  * getBarberos
  * Devuelve todos los barberos del tenant ordenados por nombre.
  * @param {string} req.tenant_id - Inyectado por verificarToken
- * @returns {JSON} Array de barberos con id, nombre, comision_tipo, comision_valor, activo
+ * @returns {JSON} Array de barberos con id, nombre, comision_tipo, comision_valor,
+ *   activo y es_socio (true si está vinculado a un socio activo)
  */
 export const getBarberos = async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, nombre, comision_tipo, comision_valor, activo
+      `SELECT ${COLUMNAS_BARBERO}
        FROM barbero
        WHERE tenant_id = $1
        ORDER BY nombre ASC`,
@@ -118,7 +126,7 @@ export const crearBarbero = async (req, res) => {
     const result = await query(
       `INSERT INTO barbero (tenant_id, nombre, pin, comision_tipo, comision_valor, activo)
        VALUES ($1, $2, $3, 'porcentaje', $4, true)
-       RETURNING id, nombre, comision_tipo, comision_valor, activo`,
+       RETURNING ${COLUMNAS_BARBERO}`,
       [req.tenant_id, nombre.trim(), pinHash, comision]
     );
     console.log('[gestion] crearBarbero completado | barbero_id:', result.rows[0].id);
@@ -180,7 +188,7 @@ export const editarBarbero = async (req, res) => {
          SET nombre = $1, comision_valor = $2, activo = $3, pin = $4,
              token_version = token_version + 1
          WHERE id = $5 AND tenant_id = $6
-         RETURNING id, nombre, comision_tipo, comision_valor, activo`,
+         RETURNING ${COLUMNAS_BARBERO}`,
         [nombre.trim(), comision, activo, pinHash, id, req.tenant_id]
       );
     } else {
@@ -191,7 +199,7 @@ export const editarBarbero = async (req, res) => {
         `UPDATE barbero
          SET nombre = $1, comision_valor = $2, activo = $3${bumpTv}
          WHERE id = $4 AND tenant_id = $5
-         RETURNING id, nombre, comision_tipo, comision_valor, activo`,
+         RETURNING ${COLUMNAS_BARBERO}`,
         [nombre.trim(), comision, activo, id, req.tenant_id]
       );
     }

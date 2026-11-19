@@ -498,7 +498,11 @@ bloquearla).
   `muted`, en vez de esconder columnas. Ej.: Ventas pone "2 × $ 500" bajo el
   producto. Las acciones de una fila quedan siempre a la vista.
 - **Pestañas:** `Tabs` acepta `mostrarIconos={false}`; Gestión lo usa en lo
-  angosto (sus 6 pestañas con ícono miden 650 px).
+  angosto (con ícono no entran). Sus 7 pestañas sin ícono miden ~592 px: entran
+  justo en el iPad vertical (744 px). Si una fila de pestañas no entra, `Tabs`
+  scrollea de costado sin barra visible y lleva la elegida a la vista (desde el
+  2026-11-19, F4 de `plan_mejoras_operativas.md`). Su línea base es una sombra
+  interior, no un border.
 - Desde 1024 px (el iPad horizontal) el panel se ve como en escritorio.
 
 **Turnero: pantalla ancha (desde el 2026-11-12, §3.8).** Antes, en compu y en
@@ -704,7 +708,7 @@ pantalla.
 | `StickyFooter` | Footer anclado abajo con border-top, safe-area iOS. No está en el panel: si un front nuevo lo necesita, se copia del barbero. En el turnero (desde el 2026-11-03), mientras está montado su alto es el `scroll-padding-bottom` del documento: lo que se enfoca con Tab o el "siguiente" del teclado queda por encima del footer. `Field` y `CampoTelefono` suman `MARGEN_SCROLL_CAMPO` al input para que también se vea la ayuda o el error. |
 | `EmptyState` | Glyph + title + body + acción opcional. |
 | `Skeleton` | Bloque con shimmer. |
-| `StatusPill` | Pill chiquito con dot + label de estado. |
+| `StatusPill` | Pill chiquito con dot + label de estado. En el panel, también la marca "socio" de Gestión → Barberos (desde el 2026-11-19). |
 | `PageContainer` | Wrapper raíz, max-width responsive, fondo lateral. En el turnero, en pantalla ancha la columna va a la derecha del panel del local, sobre blanco (§4.6). |
 | `ConfirmDialog` | Modal de confirmación (ESC + click fuera + loading state). |
 | `AvatarIniciales` | Círculo con iniciales y tono determinístico por nombre (en el turnero, un tono neutro único). |
@@ -745,6 +749,11 @@ admin. Entre ellos:
   ícono, descripción y un pie que dice cómo se recupera la credencial) y
   Gestión → Negocio → Contacto. `PillSinConfigurar` marca un dato vacío, en
   tono warning, con su texto ("Sin configurar", "Sin cargar").
+- `BotonExportarExcel` es solo el ícono de descarga, en 44 × 44, con el nombre en
+  `ariaLabel` y `title` (desde el 2026-11-19; antes llevaba el texto "Exportar Excel").
+  `SelectorDia` acepta `botonHoy`: un botón "Hoy" a su derecha, siempre a la vista y
+  deshabilitado si ya es hoy (lo usa Caja). `TogglePill` mide 44 de alto. Los tres van a 44
+  porque comparten fila en Caja (deuda #24 de §9).
 - `Button` acepta `ariaLabel` cuando el texto visible no alcanza (ej. "Cambiar"
   en una fila → "Cambiar el PIN de administrador"); empieza con el texto visible.
 - `Modal` con `botonCerrar` (desde el 2026-11-18, F3 de `plan_mejoras_operativas.md`):
@@ -1068,6 +1077,13 @@ actualizá este doc.**
 21. ~~**Touch target de los días de `SelectorDiaHorario`**: ~46 px de ancho en 375 px, pero ~41 px dentro de la tarjeta de la reprogramación y ~37 px en pantallas de 320 px, debajo de los 44 de §5.4 (el alto es 48). Al `MiniCalendario` le pasaba lo mismo.~~ — **Resuelto desde 375 px (2026-11-03)**: el botón de cada día ocupa la columna entera, con el espacio entre días adentro, y la caja visible no cambió (medida al píxel). En 375 px: 49,6 en "¿Cuándo?" y 44,8 en la reprogramación. En 320 px queda en 41,7: llegar a 44 ahí exige cambiar el diseño.
 22. ~~**Textos de 12 px en `frontend-barbero`**~~ — **Resuelto (2026-10-19)**: pasaron a 14 (`sizeBody`), con el valor de `SummaryRow` (13) y la ayuda y el error de `Field` (12). `StatusPill` pasó de 10 a 11 (`sizeMicro`). Quedan en 11, a propósito, las pills de categoría y las etiquetas de la `BottomNav` (excepciones de §3.6). Texto original: (`theme.sizeMicro + 1`), debajo del mínimo de 14 de §3.6: Clientes, CrearTurno, Dashboard, Gestión (tab Horarios, `FilaDia`), Más, MiPlanilla, `KPI` y `TurnoListItem`; `StatusPill` usa 10. Los 12 de `Field` y los 13 de `SummaryRow` ya están en `estado_actual.md` ("Tamaños escritos a mano"). La Agenda y las filas de Gestión → Suspensiones pasaron a 14 el 2026-10-19. Ojo al subirlos: en un bloque de alto fijo, 14 px con el interlineado global (1,5 → 21 px por renglón) puede no entrar; el bloque de turno de la Agenda usa un interlineado de 18 px (`INTERLINEADO_TURNO`). Visto en el paso 5a de la app del barbero.
 23. ~~**La escala del kiosko está escrita como números sueltos**~~ — **Resuelto (2026-11-02)**: `TAM_KIOSKO` en `wizardStyles.js` (§3.6), con los mismos valores. Texto original: en `frontend/src/screens/flows/wizard.jsx` (19, 18, 13, 15, 22, 32, 40, 56, 48; ver §3.6). Los tamaños son intencionales; lo que falta es nombrarlos: una escala local al archivo (ej. `TAM_KIOSKO = { opcion: 19, valorResumen: 18, … }`), no en `tokens.js`, porque hoy la usa un solo archivo (§7.1). Si otro front o superficie la necesita, se promueve. Visto el 2026-10-29 al documentar §6.4.
+24. **Los botones del panel no tienen una escala de alto.** Cada primitivo tiene el suyo:
+    `Button` ~47 px (padding 12 + interlineado), `TogglePill` 44, las flechas de
+    `SelectorPeriodo` 36, el "+ Movimiento" de Caja 36 y `BotonIconoFila` 28. Al juntarlos en
+    una fila se nota: en Caja hubo que fijar a mano 44 en "Solo Barberos", "Hoy" y Exportar
+    (2026-11-19). Revisar todos los botones de los fronts y definir pocos altos con nombre
+    en `tokens.js` (ej. compacto y normal, sin bajar de 44 donde se toca con el dedo, §5.4).
+    Anotada a pedido del usuario en F4 de `plan_mejoras_operativas.md`.
 
 ---
 

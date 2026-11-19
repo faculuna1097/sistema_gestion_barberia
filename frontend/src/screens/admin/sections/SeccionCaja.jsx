@@ -42,6 +42,7 @@ import {
   Field,
   InputTiempo,
   GrupoOpciones,
+  Toast,
   OPCIONES_FORMA_PAGO_TONO,
 } from '../../../components/ui';
 import { theme } from '../../../theme/tokens.js';
@@ -299,8 +300,9 @@ function LogoMercadoPagoConFallback() {
 
 /**
  * BotonNuevoMovimiento
- * "+" discreto que abre el alta de movimientos extra. Va a la derecha de las
- * pestañas, sin texto: no es una acción de uso cotidiano.
+ * "+ Movimiento" discreto que abre el alta de movimientos extra. Va a la derecha
+ * de las pestañas. Hasta el 2026-11-19 era solo el "+"; el texto dice qué agrega
+ * (pedido del usuario en F4 de plan_mejoras_operativas.md).
  * @param {object} props
  * @param {() => void} props.onClick
  */
@@ -312,24 +314,29 @@ function BotonNuevoMovimiento({ onClick }) {
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      aria-label="Registrar movimiento"
-      title="Registrar movimiento"
+      title="Registrar un aporte, un retiro u otro ingreso"
       style={{
         alignSelf: 'center',
         flexShrink: 0,
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 8,
+        gap: 6,
+        padding: '6px 12px',
         background: 'transparent',
         border: `2px solid ${theme.accent}`,
         borderRadius: theme.radiusSm,
         color: hover ? theme.ink : theme.muted,
+        fontFamily: theme.body,
+        fontSize: theme.sizeBody,
+        fontWeight: theme.weightMedium,
+        whiteSpace: 'nowrap',
         cursor: 'pointer',
         transition: `color ${theme.transitionFast}`,
       }}
     >
-      <Plus size={16} strokeWidth={1.75} />
+      <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
+      Movimiento
     </button>
   );
 }
@@ -552,11 +559,13 @@ function TabMovimientos({ modalAbierto, onCerrarModal }) {
     return () => { cancelado = true; };
   }, [fecha, intento]);
 
-  // Filtro "Solo Barberos": excluye los cortes de barberos con 100% de comisión.
-  // En la práctica esos cortes van directo al bolsillo del barbero y no pasan
-  // por la caja del local — sacarlos da la visión "cuenta del local puro".
+  // Filtro "Solo Barberos": excluye los cortes de los socios (barberos vinculados
+  // a un socio activo: `es_socio` del backend; el vínculo se carga en Gestión →
+  // Socios). Sacarlos deja solo lo que cortan los barberos. Mira el vínculo de
+  // ahora, no el de la fecha del corte: si alguien deja de ser socio, sus cortes
+  // viejos vuelven a aparecer con el filtro (aceptado, F4 de plan_mejoras_operativas.md).
   const movimientosFiltrados = soloNegocio
-    ? movimientos.filter(m => m.tipo !== 'corte' || Number(m.comision_valor) < 100)
+    ? movimientos.filter(m => m.tipo !== 'corte' || !m.es_socio)
     : movimientos;
 
   // Totales netos por canal: las salidas restan, las entradas suman.
@@ -701,10 +710,19 @@ function TabMovimientos({ modalAbierto, onCerrarModal }) {
             labelOn="Solo Barberos"
           />
           <div style={{ justifySelf: 'center' }}>
-            <SelectorDia value={fecha} onChange={setFecha} />
+            <SelectorDia value={fecha} onChange={setFecha} botonHoy />
           </div>
           <BotonExportarExcel onClick={exportarExcel} disabled={!hayDatosDelDia || movimientos.length === 0} />
         </div>
+
+        {/* Con el filtro prendido, los totales ya no son toda la plata del día:
+            la nota dice qué se saca y por qué (Toast inline, §4.8). */}
+        {soloNegocio && (
+          <Toast tone="info">
+            Sin los cortes de los socios: se asume que lo que cobran por sus cortes va
+            directo a su bolsillo y no a la caja. Los socios se marcan en Gestión → Socios.
+          </Toast>
+        )}
 
 
         {cargando ? (
@@ -784,14 +802,16 @@ export default function SeccionCaja() {
     <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* La línea inferior la dibuja este contenedor (y no el tablist) para que
-          corra también debajo del "+", que queda fuera del role="tablist". */}
+          corra también debajo del "+", que queda fuera del role="tablist". Es
+          una sombra interior, como la de Tabs: el subrayado de la pestaña
+          activa se pinta encima. */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         gap: 12,
-        borderBottom: `1px solid ${theme.hairline}`,
+        boxShadow: `inset 0 -1px 0 ${theme.hairline}`,
       }}>
-        <Tabs items={TABS} value={tabActivo} onChange={setTabActivo} style={{ borderBottom: 'none' }} />
+        <Tabs items={TABS} value={tabActivo} onChange={setTabActivo} style={{ boxShadow: 'none' }} />
         {tabActivo === 'movimientos' && (
           <BotonNuevoMovimiento onClick={() => setModalAbierto(true)} />
         )}

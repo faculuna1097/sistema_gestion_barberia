@@ -337,7 +337,7 @@ app.use('/api/admin/operativo',      verificarToken, requiereRol('admin'), admin
 app.use('/api/admin/horario-atencion', verificarToken, adminHorarioAtencionRoutes);
 app.use('/api/admin/feriados',         verificarToken, requiereRol('admin'), adminFeriadosRoutes);
 app.use('/api/admin/imagenes',         verificarToken, requiereRol('admin'), adminImagenesRoutes);
-// socios: los dueños del negocio, para el selector de aportes y retiros de Caja.
+// socios: los dueños del negocio (el selector de aportes y retiros de Caja y Gestión → Socios).
 app.use('/api/admin/socios',           verificarToken, requiereRol('admin'), adminSociosRoutes);
 
 // --- Handler de errores de Sentry ---

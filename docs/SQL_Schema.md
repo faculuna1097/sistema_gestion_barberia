@@ -338,7 +338,10 @@ CREATE TABLE public.socio (
   tenant_id uuid NOT NULL,
   nombre text NOT NULL,
   -- Vínculo opcional con barbero (NULL: el dueño no corta). Va acá y no en
-  -- barbero para no tocar la tabla central. Nadie lo lee todavía.
+  -- barbero para no tocar la tabla central. Lo carga Gestión → Socios (desde F4
+  -- de mejoras operativas). Un barbero vinculado a un socio activo "es socio"
+  -- (esSocioSql en sociosService.js): la marca de Gestión → Barberos y el filtro
+  -- "Solo Barberos" de Caja. Al desactivar un socio, el backend lo pone en NULL.
   barbero_id uuid,
   activo boolean NOT NULL DEFAULT true,
   created_at timestamp with time zone NOT NULL DEFAULT now(),

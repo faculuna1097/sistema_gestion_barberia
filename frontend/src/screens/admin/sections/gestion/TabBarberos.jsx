@@ -5,6 +5,8 @@
 //
 // Arquitectura (Opción C del plan):
 //   - Lista: DataTable. Click en fila → modal chico de datos básicos.
+//   - Junto al nombre, la marca "Socio" (StatusPill) si está vinculado a un
+//     socio activo (es_socio del backend; el vínculo se carga en Gestión → Socios).
 //   - Columna "Horarios": días con horario sobre días que abre el local (ej. 3/5),
 //     con alerta en 0/x si el barbero está activo. Arriba de la tabla, un cartel
 //     si hay barberos activos sin horario (no se les pueden reservar turnos).
@@ -49,6 +51,7 @@ import {
   Toast,
   InputTiempo,
   SelectorConBarra,
+  StatusPill,
 } from '../../../../components/ui';
 import { toast } from '../../../../utils/toast';
 import {
@@ -1205,6 +1208,7 @@ export default function TabBarberos() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <AvatarIniciales nombre={row.nombre} size={30} />
           <span>{row.nombre}</span>
+          {row.es_socio && <StatusPill estado="socio" />}
         </div>
       ),
     },

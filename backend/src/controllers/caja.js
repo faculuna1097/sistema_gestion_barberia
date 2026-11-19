@@ -12,7 +12,7 @@ import {
   esTipoMovimientoExtra,
   sentidoDeMovimiento,
 } from '../utils/movimientos.js';
-import { socioActivoEnTenant } from '../services/sociosService.js';
+import { socioActivoEnTenant, esSocioSql } from '../services/sociosService.js';
 import { eliminarCorte, eliminarGasto, eliminarVenta } from '../services/movimientosService.js';
 
 // Mensaje del 404 de los tipos base; los de movimiento_extra comparten uno solo.
@@ -32,7 +32,8 @@ const AVISO_TURNO_CANCELADO = 'El horario de ese turno ya lo tiene otro cliente:
  * Devuelve todos los movimientos del día (cortes, ventas, gastos y movimientos
  * extra) ordenados por timestamp descendente. Cada fila trae `sentido`
  * ('entrada' | 'salida') ya resuelto, para que el front no decida por tipo, y
- * `monto` como número.
+ * `monto` como número. Los cortes suman `es_socio` (el barbero está vinculado a
+ * un socio activo), que usa el filtro "Solo barberos" del panel.
  * @param {string} req.query.fecha - Fecha en formato YYYY-MM-DD (default: hoy en timezone AR)
  * @param {string} req.tenant_id  - Inyectado por tenantMiddleware
  * @returns {JSON} { movimientos: [...] } — 400 si `fecha` viene y no es una fecha válida
@@ -62,10 +63,13 @@ export const getMovimientosDia = async (req, res) => {
          t.inicio  AS turno_inicio,
          t.estado  AS turno_estado,
          cl.nombre AS turno_cliente_nombre,
-         -- % de comisión de este corte (el guardado al registrarlo): el filtro
-         -- "Solo barberos" del panel saca los del 100%. Se llama comision_valor
-         -- por compatibilidad con el panel.
+         -- % de comisión de este corte (el guardado al registrarlo). Hasta F4 lo
+         -- usaba el filtro "Solo barberos" del panel (sacaba los del 100%); queda
+         -- para el panel publicado antes del deploy de F4, que lo sigue leyendo.
          ${porcentajeComisionSql('c', 'b')} AS comision_valor,
+         -- El barbero está vinculado a un socio activo (vínculo de ahora, no el de
+         -- la fecha del corte): el filtro "Solo barberos" saca estos cortes.
+         ${esSocioSql('b')} AS es_socio,
          'corte' AS tipo
        FROM corte c
        JOIN barbero b  ON c.barbero_id  = b.id

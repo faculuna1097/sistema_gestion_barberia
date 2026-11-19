@@ -249,7 +249,7 @@ backend/src/routes/
 |-- adminHorarioAtencion.js   horario semanal del tenant
 |-- adminFeriados.js          feriados del tenant
 |-- adminImagenes.js          imagenes del negocio
-|-- adminSocios.js            socios (duenos) del negocio
+|-- adminSocios.js            socios (duenos) del negocio: lista, alta y edicion
 `-- adminOperativo.js         credenciales operativas
 ```
 
@@ -364,6 +364,7 @@ frontend/
     |   |           |-- TabProductos.jsx
     |   |           |-- TabSeguridad.jsx
     |   |           |-- TabServicios.jsx
+    |   |           |-- TabSocios.jsx         socios (dueños): alta, edición, vínculo con un barbero
     |   |           `-- TabTurnero.jsx
     |   `-- flows/
     |       |-- FlujoCorte.jsx
