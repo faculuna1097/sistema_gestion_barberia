@@ -7,7 +7,8 @@ import {
   listarTurnos, calcularDuracionServicio, upsertCliente, insertarTurno,
   enriquecerTurno, armarLinkGestion, sincronizarCalendarCreacion,
   notificarConfirmacion, cambiarEstado, completarTurnoConCorte,
-  cancelarTurnoPorId, inicioPosteriorAhora,
+  cancelarTurnoPorId, inicioPosteriorAhora, asignarClienteATurno, sincronizarCalendarCliente,
+  clienteUsable, borrarClienteSinTurnos,
 } from '../services/turnosService.js';
 import { barberoActivoEnTenant } from '../services/barberosService.js';
 import { validarTurnoEnHorario } from '../services/horarioAtencionService.js';
@@ -23,6 +24,8 @@ import { cuerpoError422, CUERPO_422_FERIADO } from '../utils/errores422.js';
 
 // Mensaje del 404 de un turno, el mismo que usa turnosService.
 const MENSAJE_TURNO_NO_ENCONTRADO = 'Turno no encontrado';
+// Mensaje del 404 de un cliente, el mismo que usa asignarClienteATurno.
+const MENSAJE_CLIENTE_NO_ENCONTRADO = 'Cliente no encontrado';
 
 /**
  * GET /api/admin/turnos
@@ -67,15 +70,39 @@ export const getTurnos = async (req, res) => {
 };
 
 /**
+ * hayDatoDeContacto
+ * Dice si el body trae algún dato de contacto del cliente (nombre, teléfono o email)
+ * no vacío. Sirve para rechazar un turno "Sin datos" que igual manda datos.
+ * @param {Object} body - req.body
+ * @returns {boolean} true si viene al menos uno
+ */
+const hayDatoDeContacto = (body) =>
+  ['nombre', 'telefono', 'email'].some((campo) => {
+    const valor = body[campo];
+    return valor !== undefined && valor !== null && !(typeof valor === 'string' && valor.trim() === '');
+  });
+
+/**
  * POST /api/admin/turnos
- * Reserva manual desde backoffice. Email y teléfono opcionales.
+ * Reserva manual desde backoffice. El cliente es uno de tres:
+ * - nuevo: `nombre` y, opcionales, `telefono` y `email` (upsertCliente);
+ * - existente: `cliente_id` (sin nombre ni contacto), del local con cualquier rol
+ *   (clienteUsable); uno de otro local responde 404, igual que uno inexistente.
+ *   Así elegir un cliente del buscador no crea otro igual;
+ * - ninguno: `sin_cliente: true` (cliente "Sin datos", turno.cliente_id NULL). No
+ *   sale mail. El cliente se le puede asignar después (PATCH /:id/cliente).
  * Si rol=barbero, barbero_id del body se ignora y se usa req.barbero_id.
  * origen_creacion se setea según el rol.
- * @param {Object} req.body - { servicio_id, barbero_id, inicio, nombre, telefono?, email? }
- * @returns {JSON} 201 { turno_id, token_gestion }
+ * @param {Object} req.body - { servicio_id, barbero_id, inicio } más
+ *   { nombre, telefono?, email? }, { cliente_id } o { sin_cliente: true }
+ * @returns {JSON} 201 { turno_id, token_gestion }; 400 si se combinan dos formas de
+ *   cliente (sin_cliente o cliente_id con nombre o contacto, o sin_cliente con
+ *   cliente_id); 404 si el cliente_id no existe o no es del local
  */
 export const crearTurnoAdmin = async (req, res) => {
-  const { servicio_id, inicio } = req.body;
+  const { servicio_id, inicio, cliente_id: clienteIdBody } = req.body;
+  const sinCliente = req.body.sin_cliente === true;
+  const traeClienteId = clienteIdBody !== undefined && clienteIdBody !== null && clienteIdBody !== '';
 
   // barbero_id: si es barbero, forzar el propio (anti escalada horizontal)
   const barbero_id = barberoSegunRol(req, req.body.barbero_id);
@@ -89,10 +116,29 @@ export const crearTurnoAdmin = async (req, res) => {
   }
   // ── Validar y normalizar contacto. En el backoffice telefono y email son
   //    opcionales (contactoRequerido=false); igual se les aplica tope de
-  //    longitud y, si viene email, formato válido (auditoría 3.2). ────────────
-  const contacto = validarContacto(req.body, false);
-  if (contacto.error) {
-    return res.status(400).json({ error: contacto.error });
+  //    longitud y, si viene email, formato válido (auditoría 3.2). Un turno
+  //    "Sin datos" no lleva contacto: si igual viene alguno, es un error del
+  //    front y se rechaza en vez de descartarlo callado. ──────────────────────
+  let contacto = null;
+  if (sinCliente && traeClienteId) {
+    return res.status(400).json({ error: 'sin_cliente no admite cliente_id' });
+  }
+  if (sinCliente || traeClienteId) {
+    if (hayDatoDeContacto(req.body)) {
+      return res.status(400).json({
+        error: sinCliente
+          ? 'sin_cliente no admite nombre, telefono ni email'
+          : 'Mandá cliente_id o los datos de un cliente nuevo, no los dos',
+      });
+    }
+    if (traeClienteId && !esUUID(clienteIdBody)) {
+      return res.status(404).json({ error: MENSAJE_CLIENTE_NO_ENCONTRADO });
+    }
+  } else {
+    contacto = validarContacto(req.body, false);
+    if (contacto.error) {
+      return res.status(400).json({ error: contacto.error });
+    }
   }
 
   // Fecha y hora obligatorias: sin zona se toma en hora argentina; un '10:00' o
@@ -135,8 +181,23 @@ export const crearTurnoAdmin = async (req, res) => {
       return res.status(422).json(CUERPO_422_FERIADO);
     }
 
-    // ── Upsert cliente (datos ya normalizados por validarContacto) ──────────
-    const cliente_id = await upsertCliente(req.tenant_id, contacto);
+    // ── Cliente: uno existente (del local), uno nuevo (upsert, datos ya
+    //    normalizados por validarContacto) o ninguno ("Sin datos", cliente_id
+    //    NULL). ─────────────────────────────────────────────────────────────
+    let cliente_id = null;
+    // Un cliente sin email siempre es una fila nueva (upsertCliente): si el turno
+    // no se inserta, se borra para no dejar clientes sin turnos (uno por reintento).
+    let clienteCreadoAca = false;
+    if (traeClienteId) {
+      const usable = await clienteUsable({ clienteId: clienteIdBody, tenantId: req.tenant_id });
+      if (!usable) {
+        return res.status(404).json({ error: MENSAJE_CLIENTE_NO_ENCONTRADO });
+      }
+      cliente_id = clienteIdBody;
+    } else if (!sinCliente) {
+      cliente_id = await upsertCliente(req.tenant_id, contacto);
+      clienteCreadoAca = !contacto.email;
+    }
 
     // ── INSERT turno ────────────────────────────────────────────────────────
     let resultado;
@@ -146,6 +207,7 @@ export const crearTurnoAdmin = async (req, res) => {
         servicioId: servicio_id, inicioDT, finDT, origenCreacion: origen_creacion,
       });
     } catch (err) {
+      if (clienteCreadoAca) await borrarClienteSinTurnos(cliente_id, req.tenant_id, 'crearTurnoAdmin');
       if (err.code === 'SLOT_OCUPADO') {
         console.warn('[turnos] crearTurnoAdmin — slot ocupado (turno o suspensión)');
         return res.status(409).json({ error: err.message });
@@ -159,7 +221,8 @@ export const crearTurnoAdmin = async (req, res) => {
     const { turno_id, token_gestion } = resultado;
     console.log('[turnos] crearTurnoAdmin — turno insertado | turno_id:', turno_id);
 
-    // ── Best-effort: Calendar + mail ────────────────────────────────────────
+    // ── Best-effort: Calendar + mail. Un turno "Sin datos" no tiene email, así
+    //    que no sale mail; Calendar lo nombra "Sin datos". ───────────────────
     try {
       const enriquecido = await enriquecerTurno(turno_id);
       if (enriquecido) {
@@ -283,6 +346,119 @@ export const completarTurno = async (req, res) => {
     console.error('[turnos] Error en completarTurno:', err);
     res.status(500).json({ error: 'Error al completar el turno' });
   }
+};
+
+/**
+ * PATCH /api/admin/turnos/:id/cliente
+ * Asigna un cliente a un turno "Sin datos" (cliente_id NULL), reservado o completado.
+ * El cliente es uno existente ({ cliente_id }, del local) o uno nuevo ({ nombre,
+ * telefono?, email? }, con las mismas reglas que el alta). No manda mail. Con rol
+ * barbero, solo turnos propios: uno ajeno responde 404, igual que uno inexistente.
+ *
+ * Reemplazo (auditoría 2026-11, Z5-09): con `reemplazar: true` y
+ * `cliente_actual_id` (el cliente que muestra la pantalla), cambia el cliente de
+ * un turno que ya tiene uno. Solo el admin: con otro rol responde 403. Si el turno
+ * ya no tiene ese cliente (otro lo cambió), 409 'cliente_cambio'. Sin
+ * `reemplazar`, no pisa un cliente ya asignado.
+ *
+ * Después, best-effort, actualiza el evento de Calendar.
+ * @param {Object} req.body - { cliente_id } o { nombre, telefono?, email? }; para
+ *   reemplazar, además { reemplazar: true, cliente_actual_id }
+ * @returns {JSON} 200 { id, cliente_id, cliente_nombre, cliente_email, cliente_telefono };
+ *   400 si no viene ninguno de los dos, vienen los dos, el contacto es inválido o,
+ *   al reemplazar, falta cliente_actual_id (o no es un UUID);
+ *   403 si un rol que no es admin pide reemplazar;
+ *   404 si el turno o el cliente no existen (o no son del local, o el turno no es
+ *   del barbero);
+ *   409 con codigo 'turno_con_cliente' si el turno ya tiene cliente, con codigo
+ *   'cliente_cambio' si al reemplazar el cliente ya no es el que se vio, o 409 si
+ *   su estado no lo permite
+ */
+export const asignarCliente = async (req, res) => {
+  if (!esUUID(req.params.id)) {
+    return res.status(404).json({ error: MENSAJE_TURNO_NO_ENCONTRADO });
+  }
+
+  // ── Reemplazo: solo el admin, y con el cliente que está viendo ─────────────
+  const reemplazar = req.body.reemplazar === true;
+  if (reemplazar && req.rol !== 'admin') {
+    console.warn('[turnos] asignarCliente — reemplazo sin rol admin | rol:', req.rol, '| turno_id:', req.params.id);
+    return res.status(403).json({ error: 'Solo el dueño puede cambiar el cliente de un turno' });
+  }
+  const clienteActualId = reemplazar ? req.body.cliente_actual_id : null;
+  if (reemplazar && !esUUID(clienteActualId)) {
+    return res.status(400).json({ error: 'cliente_actual_id es requerido para cambiar el cliente' });
+  }
+
+  const { cliente_id } = req.body;
+  const traeClienteId = cliente_id !== undefined && cliente_id !== null && cliente_id !== '';
+  const traeContacto = hayDatoDeContacto(req.body);
+
+  if (traeClienteId && traeContacto) {
+    return res.status(400).json({ error: 'Mandá cliente_id o los datos de un cliente nuevo, no los dos' });
+  }
+  if (!traeClienteId && !traeContacto) {
+    return res.status(400).json({ error: 'cliente_id o nombre son requeridos' });
+  }
+  if (traeClienteId && !esUUID(cliente_id)) {
+    return res.status(404).json({ error: MENSAJE_CLIENTE_NO_ENCONTRADO });
+  }
+
+  let contacto = null;
+  if (traeContacto) {
+    contacto = validarContacto(req.body, false);
+    if (contacto.error) {
+      return res.status(400).json({ error: contacto.error });
+    }
+  }
+
+  // Scoping: barbero solo asigna en los suyos
+  const barberoId = barberoSegunRol(req, null);
+
+  let resultado;
+  try {
+    resultado = await asignarClienteATurno({
+      turnoId: req.params.id,
+      tenantId: req.tenant_id,
+      barberoId,
+      clienteId: traeClienteId ? cliente_id : undefined,
+      contacto,
+      clienteActualId,
+    });
+  } catch (err) {
+    if (err.code === 'NO_ENCONTRADO' || err.code === 'CLIENTE_NO_ENCONTRADO') {
+      return res.status(404).json({ error: err.message });
+    }
+    if (err.code === 'TURNO_CON_CLIENTE') {
+      console.warn('[turnos] asignarCliente — el turno ya tiene cliente | turno_id:', req.params.id);
+      return res.status(409).json({ error: err.message, codigo: 'turno_con_cliente' });
+    }
+    if (err.code === 'CLIENTE_CAMBIO') {
+      console.warn('[turnos] asignarCliente — el cliente cambió antes del reemplazo | turno_id:', req.params.id);
+      return res.status(409).json({ error: err.message, codigo: 'cliente_cambio' });
+    }
+    if (err.code === 'ESTADO_INVALIDO') {
+      console.warn('[turnos] asignarCliente — estado no permite asignar | turno_id:', req.params.id);
+      return res.status(409).json({ error: err.message });
+    }
+    console.error('[turnos] Error en asignarCliente:', err);
+    return res.status(500).json({ error: 'Error al asignar el cliente al turno' });
+  }
+  if (clienteActualId) {
+    console.log('[turnos] asignarCliente — cliente reemplazado | turno_id:', resultado.id,
+      '| cliente_anterior_id:', clienteActualId, '| cliente_id:', resultado.cliente_id);
+  } else {
+    console.log('[turnos] asignarCliente completado | turno_id:', resultado.id, '| cliente_id:', resultado.cliente_id);
+  }
+
+  // ── Best-effort: el evento de Calendar pasa de "Sin datos" al cliente ──────
+  try {
+    await sincronizarCalendarCliente(resultado.id);
+  } catch (err) {
+    console.error('[turnos] asignarCliente — fallo best-effort (Calendar):', err);
+  }
+
+  return res.json(resultado);
 };
 
 /**

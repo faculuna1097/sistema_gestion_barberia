@@ -1,7 +1,7 @@
 // /frontend/src/screens/admin/sections/SeccionGestion.jsx
 // Sección Gestión del panel admin.
-// Shell con 6 tabs: Barberos, Servicios, Productos, Turnero (config booking
-// online), Negocio, Seguridad. Cada tab carga sus propios datos al
+// Shell con 7 tabs: Barberos, Servicios, Productos, Turnero (config booking
+// online), Socios (los dueños: aportes y retiros de Caja), Negocio, Seguridad. Cada tab carga sus propios datos al
 // activarse — no hay precarga global.
 //
 // Estructura visual: Tabs underline (D8) arriba + contenido del tab activo.
@@ -14,6 +14,7 @@ import {
   ClipboardList,
   Package,
   Calendar,
+  Handshake,
   Building2,
   Shield,
 } from 'lucide-react';
@@ -25,6 +26,7 @@ import TabBarberos  from './gestion/TabBarberos.jsx';
 import TabServicios from './gestion/TabServicios.jsx';
 import TabProductos from './gestion/TabProductos.jsx';
 import TabTurnero   from './gestion/TabTurnero.jsx';
+import TabSocios    from './gestion/TabSocios.jsx';
 import TabNegocio   from './gestion/TabNegocio.jsx';
 import TabSeguridad from './gestion/TabSeguridad.jsx';
 
@@ -34,21 +36,23 @@ const TABS_ITEMS = [
   { key: 'servicios', label: 'Servicios',         icon: ClipboardList },
   { key: 'productos', label: 'Productos',         icon: Package       },
   { key: 'turnero',   label: 'Turnero',           icon: Calendar      },
+  { key: 'socios',    label: 'Socios',            icon: Handshake     },
   { key: 'negocio',   label: 'Negocio',           icon: Building2     },
   { key: 'seguridad', label: 'Seguridad',         icon: Shield        },
 ];
 
 /**
  * SeccionGestion
- * Shell padre de las 6 tabs de administración del negocio. Mantiene cuál tab
+ * Shell padre de las 7 tabs de administración del negocio. Mantiene cuál tab
  * está activa y renderiza solo el contenido correspondiente.
  *
  * @returns {JSX.Element}
  */
 export default function SeccionGestion() {
   const [tabActiva, setTabActiva] = useState('barberos');
-  // En pantalla angosta las 6 pestañas con ícono no entran (miden 650 px):
-  // Negocio y Seguridad quedaban fuera de la vista. Sin íconos miden ~506.
+  // En pantalla angosta las pestañas con ícono no entran: van sin íconos. Las
+  // 7 sin íconos miden ~592 px: entran en el iPad vertical con el riel (744 px
+  // de ventana), y en una ventana más angosta Tabs scrollea de costado.
   const angosta = usePantallaAngosta();
 
   return (
@@ -65,6 +69,7 @@ export default function SeccionGestion() {
         {tabActiva === 'servicios' && <TabServicios />}
         {tabActiva === 'productos' && <TabProductos />}
         {tabActiva === 'turnero'   && <TabTurnero />}
+        {tabActiva === 'socios'    && <TabSocios />}
         {tabActiva === 'negocio'   && <TabNegocio />}
         {tabActiva === 'seguridad' && <TabSeguridad />}
       </div>

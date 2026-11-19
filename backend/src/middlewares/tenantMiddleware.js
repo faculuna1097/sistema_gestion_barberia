@@ -18,9 +18,30 @@
 
 import { query } from '../config/db.js';
 import { etiquetarRequest } from '../config/sentry.js';
+import { motivoFormatoSubdominio } from '../utils/subdominio.js';
 
 // Caché en memoria: { [subdominio]: { tenant_id, operativo_token_version, admin_token_version } }
 const tenantCache = {};
+
+/**
+ * subdominioParaLog (interna)
+ * Devuelve el subdominio del header listo para escribirlo en un log: tal cual si
+ * tiene forma de subdominio, y '(formato inválido)' si no. El header lo escribe
+ * el cliente y el log lo lee la sesión de diagnóstico de Claude (auditoría
+ * 2026-11, Z7-02): sin esto, un anónimo dejaba ahí texto libre (hasta un salto de
+ * línea, que arma una línea de log falsa).
+ *
+ * Usa la regla de formato del alta (motivoFormatoSubdominio: 3 a 30 minúsculas,
+ * dígitos y guiones entre medio), que cumplen todos los subdominios reales. Un
+ * reservado (ej. 'demo') tiene forma válida y se escribe igual: solo se descarta
+ * el motivo 'formato'.
+ *
+ * @param {*} subdominio - valor del header X-Tenant-Subdomain.
+ * @returns {string} el subdominio, o '(formato inválido)'.
+ */
+function subdominioParaLog(subdominio) {
+  return motivoFormatoSubdominio(subdominio) === 'formato' ? '(formato inválido)' : subdominio;
+}
 
 /**
  * resolverPorSubdominio
@@ -165,9 +186,9 @@ export const tenantMiddleware = async (req, res, next) => {
       // no se loguea el flujo normal, solo el rechazo. Un subdominio que no
       // resuelve es un tenant dado de baja, un subdominio mal escrito o un link
       // viejo en circulación (ej. tras renombrar un subdominio), y el
-      // subdominio es justo el dato que lo identifica. Se recorta a 63
-      // caracteres (máximo de una etiqueta DNS): el header lo manda el cliente.
-      console.warn('[tenantMiddleware] tenantMiddleware — subdominio no resuelve a un tenant activo | subdominio:', String(subdominio).slice(0, 63));
+      // subdominio es justo el dato que lo identifica. El header lo manda el
+      // cliente: se escribe solo si tiene forma de subdominio (subdominioParaLog).
+      console.warn('[tenantMiddleware] tenantMiddleware — subdominio no resuelve a un tenant activo | subdominio:', subdominioParaLog(subdominio));
       return res.status(404).json({ error: 'Tenant no encontrado', codigo: 'tenant_no_encontrado' });
     }
 

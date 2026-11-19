@@ -8,6 +8,9 @@
  * construirContextoMail (mailer.js) y los JOINs a barbero, servicio, cliente y
  * tenant. Lo comparten los servicios de turnos, recordatorios, suspensiones, feriados
  * y horario de atención, y el turnero público; cada uno suma sus columnas y su condición.
+ * El cliente va con LEFT JOIN: un turno "Sin datos" (cliente_id NULL, F1) trae
+ * cliente_nombre, cliente_email y cliente_telefono en null. El mailer lo saltea
+ * (no hay email) y Calendar lo nombra "Sin datos".
  * @param {string} columnasExtra - Columnas propias de la consulta, separadas por coma.
  *   Son fragmentos fijos del código, nunca input del usuario.
  * @param {string} condiciones - WHERE (y ORDER BY, si hace falta). Los parámetros los
@@ -23,6 +26,6 @@ export const sqlTurnoEnriquecido = (columnasExtra, condiciones) =>
    FROM turno t
    JOIN barbero  b ON b.id = t.barbero_id
    JOIN servicio s ON s.id = t.servicio_id
-   JOIN cliente  c ON c.id = t.cliente_id
+   LEFT JOIN cliente c ON c.id = t.cliente_id
    JOIN tenant   tn ON tn.id = t.tenant_id
    ${condiciones}`;

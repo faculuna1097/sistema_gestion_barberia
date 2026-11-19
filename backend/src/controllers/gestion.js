@@ -6,10 +6,16 @@
 
 import { query } from '../config/db.js';
 import bcrypt from 'bcrypt';
-import { pinColisiona } from '../utils/pin.js';
+import { pinColisiona, verificarPinAdmin, CODIGO_PIN_ADMIN_INCORRECTO } from '../utils/pin.js';
 import { esUUID } from '../utils/validarUuid.js';
 import { esMontoValido, esEnteroNoNegativo, ENTERO_MAXIMO, mensajeMontoInvalido } from '../utils/validarNumero.js';
 import { invalidar } from '../middlewares/tenantMiddleware.js';
+import { esComisionValida, MENSAJE_COMISION_INVALIDA } from '../utils/comision.js';
+import { validarContactoNegocio } from '../utils/contactoNegocio.js';
+import { esUrlHttps } from '../utils/validarTexto.js';
+import { enmascararEmail } from '../services/recuperacionService.js';
+import { enviarAvisoCambioEmail } from '../services/mail/mailer.js';
+import { esSocioSql } from '../services/sociosService.js';
 
 const SALT_ROUNDS = 10;
 const MENSAJE_PRECIO_INVALIDO = mensajeMontoInvalido('precio');
@@ -57,16 +63,23 @@ const barberoConNumeros = (fila) => ({
 
 // ─── BARBEROS ────────────────────────────────────────────────────────────────
 
+// Columnas de un barbero en la lista y en las respuestas del alta y la edición.
+// es_socio: vinculado a un socio activo (la marca "Socio" de Gestión → Barberos).
+// Va también en el alta y la edición para que la fila editada no la pierda.
+const COLUMNAS_BARBERO =
+  `id, nombre, comision_tipo, comision_valor, activo, ${esSocioSql('barbero')} AS es_socio`;
+
 /**
  * getBarberos
  * Devuelve todos los barberos del tenant ordenados por nombre.
  * @param {string} req.tenant_id - Inyectado por verificarToken
- * @returns {JSON} Array de barberos con id, nombre, comision_tipo, comision_valor, activo
+ * @returns {JSON} Array de barberos con id, nombre, comision_tipo, comision_valor,
+ *   activo y es_socio (true si está vinculado a un socio activo)
  */
 export const getBarberos = async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, nombre, comision_tipo, comision_valor, activo
+      `SELECT ${COLUMNAS_BARBERO}
        FROM barbero
        WHERE tenant_id = $1
        ORDER BY nombre ASC`,
@@ -85,7 +98,7 @@ export const getBarberos = async (req, res) => {
  * @param {string} req.tenant_id          - Inyectado por verificarToken
  * @param {string} req.body.nombre        - Nombre del barbero
  * @param {string} req.body.pin           - PIN de 4 dígitos (se hashea antes de guardar)
- * @param {number} req.body.comision_valor - Porcentaje de comisión (0-100)
+ * @param {number} req.body.comision_valor - Porcentaje de comisión (0 a 100, de a 5)
  * @returns {JSON} Barbero creado sin PIN
  */
 export const crearBarbero = async (req, res) => {
@@ -97,10 +110,10 @@ export const crearBarbero = async (req, res) => {
   if (!/^\d{4}$/.test(pin)) {
     return res.status(400).json({ error: 'El PIN debe ser exactamente 4 dígitos numéricos' });
   }
-  const comision = Number(comision_valor);
-  if (!Number.isFinite(comision) || comision < 0 || comision > 100) {
-    return res.status(400).json({ error: 'comision_valor debe ser un número entre 0 y 100' });
+  if (!esComisionValida(comision_valor)) {
+    return res.status(400).json({ error: MENSAJE_COMISION_INVALIDA });
   }
+  const comision = Number(comision_valor);
 
   try {
     // Unicidad de PIN dentro del tenant (vs admin y otros barberos). Pre-requisito
@@ -113,7 +126,7 @@ export const crearBarbero = async (req, res) => {
     const result = await query(
       `INSERT INTO barbero (tenant_id, nombre, pin, comision_tipo, comision_valor, activo)
        VALUES ($1, $2, $3, 'porcentaje', $4, true)
-       RETURNING id, nombre, comision_tipo, comision_valor, activo`,
+       RETURNING ${COLUMNAS_BARBERO}`,
       [req.tenant_id, nombre.trim(), pinHash, comision]
     );
     console.log('[gestion] crearBarbero completado | barbero_id:', result.rows[0].id);
@@ -136,7 +149,7 @@ export const crearBarbero = async (req, res) => {
  * @param {string}  req.params.id          - UUID del barbero
  * @param {string}  req.tenant_id          - Inyectado por verificarToken
  * @param {string}  req.body.nombre        - Nombre del barbero
- * @param {number}  req.body.comision_valor - Porcentaje de comisión
+ * @param {number}  req.body.comision_valor - Porcentaje de comisión (0 a 100, de a 5)
  * @param {boolean} req.body.activo        - Estado activo/inactivo
  * @param {string}  req.body.pin           - Nuevo PIN opcional (4 dígitos)
  * @returns {JSON} Barbero actualizado sin PIN
@@ -151,10 +164,10 @@ export const editarBarbero = async (req, res) => {
   if (!nombre || comision_valor === undefined || activo === undefined) {
     return res.status(400).json({ error: 'nombre, comision_valor y activo son requeridos' });
   }
-  const comision = Number(comision_valor);
-  if (!Number.isFinite(comision) || comision < 0 || comision > 100) {
-    return res.status(400).json({ error: 'comision_valor debe ser un número entre 0 y 100' });
+  if (!esComisionValida(comision_valor)) {
+    return res.status(400).json({ error: MENSAJE_COMISION_INVALIDA });
   }
+  const comision = Number(comision_valor);
 
   try {
     let result;
@@ -175,7 +188,7 @@ export const editarBarbero = async (req, res) => {
          SET nombre = $1, comision_valor = $2, activo = $3, pin = $4,
              token_version = token_version + 1
          WHERE id = $5 AND tenant_id = $6
-         RETURNING id, nombre, comision_tipo, comision_valor, activo`,
+         RETURNING ${COLUMNAS_BARBERO}`,
         [nombre.trim(), comision, activo, pinHash, id, req.tenant_id]
       );
     } else {
@@ -186,7 +199,7 @@ export const editarBarbero = async (req, res) => {
         `UPDATE barbero
          SET nombre = $1, comision_valor = $2, activo = $3${bumpTv}
          WHERE id = $4 AND tenant_id = $5
-         RETURNING id, nombre, comision_tipo, comision_valor, activo`,
+         RETURNING ${COLUMNAS_BARBERO}`,
         [nombre.trim(), comision, activo, id, req.tenant_id]
       );
     }
@@ -469,18 +482,167 @@ export const getNegocio = async (req, res) => {
 };
 
 /**
+ * getNegocioAdmin
+ * Datos del negocio para Gestión → Negocio (solo admin): lo mismo que getNegocio
+ * más el contacto (mail y celular del dueño, teléfono del local). Es un handler
+ * aparte a propósito: getNegocio también atiende GET /api/negocio, que es público,
+ * y el contacto del dueño no tiene que salir de ahí.
+ * @param {string} req.tenant_id - Inyectado por verificarToken
+ * @returns {JSON} { nombre_negocio, booking_url, email_duenio, telefono_duenio, telefono_local }
+ *   (los tres del contacto pueden venir null) | 404 si el tenant no existe
+ */
+export const getNegocioAdmin = async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT nombre_negocio, booking_url, email_duenio, telefono_duenio, telefono_local
+       FROM tenant WHERE id = $1`,
+      [req.tenant_id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Tenant no encontrado' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('[gestion] Error en getNegocioAdmin:', err);
+    res.status(500).json({ error: 'Error al obtener datos del negocio' });
+  }
+};
+
+/**
+ * editarContactoNegocio
+ * Guarda el contacto del negocio: mail y celular del dueño (a dónde llega la
+ * recuperación de la contraseña del iPad y del PIN admin) y teléfono del local
+ * (el `tel:` del turnero). Endpoint aparte del PUT de nombre y booking_url para no
+ * cambiar su contrato. Las reglas viven en utils/contactoNegocio.js.
+ * Pide el PIN de administrador siempre (re-autenticación, como las credenciales
+ * operativas): quien cambia este mail decide a dónde llega la recuperación de las
+ * credenciales. El log no lleva los datos (son personales): solo el tenant.
+ *
+ * Si el mail del dueño cambia (auditoría 2026-11, Z1-02):
+ *   - En la misma sentencia que guarda, se anulan los links de recuperación
+ *     pendientes del tenant, de los dos tipos (vence_en = now(), como emitirToken):
+ *     un link mandado al mail viejo deja de servir.
+ *   - Si había un mail anterior, se le manda un aviso (enviarAvisoCambioEmail) con
+ *     el mail nuevo enmascarado y el contacto del soporte. Es best-effort: si no
+ *     sale, la respuesta es la misma (el error llega a Sentry desde enviarMail).
+ * Cambiar solo los teléfonos no anula ni avisa nada.
+ * @param {string}  req.tenant_id              - Inyectado por verificarToken
+ * @param {string}  req.body.pin_admin         - PIN de administrador, para confirmar
+ * @param {string}  req.body.email_duenio      - Obligatorio; se guarda recortado y en minúsculas
+ * @param {string}  req.body.telefono_duenio   - Obligatorio, E.164
+ * @param {string} [req.body.telefono_local]   - Opcional, hasta 30 caracteres (vacío → null)
+ * @returns {JSON} { email_duenio, telefono_duenio, telefono_local }
+ *   | 400 { error, campo } | 403 { error, codigo, campo } (PIN admin incorrecto)
+ *   | 404 si el tenant no existe
+ */
+export const editarContactoNegocio = async (req, res) => {
+  const resultado = validarContactoNegocio(req.body ?? {});
+  if (resultado.error) {
+    return res.status(400).json({ error: resultado.error, campo: resultado.campo });
+  }
+  const { pin_admin } = req.body;
+  if (!pin_admin || typeof pin_admin !== 'string') {
+    return res.status(400).json({ error: 'El PIN de administrador es requerido', campo: 'pin_admin' });
+  }
+  const { email_duenio, telefono_duenio, telefono_local } = resultado.valores;
+
+  try {
+    const pinCorrecto = await verificarPinAdmin(req.tenant_id, pin_admin);
+    if (pinCorrecto === null) {
+      return res.status(404).json({ error: 'Tenant no encontrado' });
+    }
+    if (!pinCorrecto) {
+      console.warn('[gestion] editarContactoNegocio — PIN admin incorrecto | cambio rechazado | tenant:', req.tenant_id);
+      return res.status(403).json({ error: 'El PIN de administrador es incorrecto', codigo: CODIGO_PIN_ADMIN_INCORRECTO, campo: 'pin_admin' });
+    }
+
+    // Una sola sentencia (sin transacciones por el pooler). Todas las partes ven la
+    // foto de la tabla previa al UPDATE: `anterior` lee el mail de antes, y
+    // `anulados` compara ese con el que quedó guardado.
+    const result = await query(
+      `WITH anterior AS (
+         SELECT email_duenio FROM tenant WHERE id = $4
+       ),
+       guardado AS (
+         UPDATE tenant
+         SET email_duenio = $1, telefono_duenio = $2, telefono_local = $3
+         WHERE id = $4
+         RETURNING email_duenio, telefono_duenio, telefono_local, nombre_negocio
+       ),
+       anulados AS (
+         UPDATE token_recuperacion SET vence_en = now()
+         WHERE tenant_id = $4 AND usado_en IS NULL AND vence_en > now()
+           AND (SELECT email_duenio FROM anterior)
+               IS DISTINCT FROM (SELECT email_duenio FROM guardado)
+         RETURNING id
+       )
+       SELECT g.email_duenio, g.telefono_duenio, g.telefono_local, g.nombre_negocio,
+              (SELECT email_duenio FROM anterior) AS email_anterior,
+              (SELECT count(*) FROM anulados) AS links_anulados
+       FROM guardado g`,
+      [email_duenio, telefono_duenio, telefono_local, req.tenant_id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Tenant no encontrado' });
+    }
+    const fila = result.rows[0];
+    const mailCambiado = fila.email_anterior !== fila.email_duenio;
+
+    console.log('[gestion] editarContactoNegocio completado | tenant:', req.tenant_id,
+      '| mail cambiado:', mailCambiado ? 'sí' : 'no', '| links anulados:', Number(fila.links_anulados));
+
+    if (mailCambiado && fila.email_anterior) {
+      await enviarAvisoCambioEmail({
+        destino: fila.email_anterior,
+        destinoEnmascarado: enmascararEmail(fila.email_anterior),
+        emailNuevoEnmascarado: enmascararEmail(fila.email_duenio),
+        nombreNegocio: fila.nombre_negocio,
+      });
+    }
+
+    res.json({
+      email_duenio: fila.email_duenio,
+      telefono_duenio: fila.telefono_duenio,
+      telefono_local: fila.telefono_local,
+    });
+  } catch (err) {
+    console.error('[gestion] Error en editarContactoNegocio:', err);
+    res.status(500).json({ error: 'Error al guardar el contacto del negocio' });
+  }
+};
+
+/**
  * editarNegocio
  * Actualiza nombre_negocio y booking_url del tenant.
+ * booking_url tiene que ser una URL https (auditoría 2026-11, Z3-06): el botón
+ * "Reservar" del iPad lo abre con window.open, y un `javascript:` guardado acá
+ * corría en el origen del panel, donde viven las sesiones del iPad y del barbero.
  * @param {string}  req.tenant_id           - Inyectado por verificarToken
- * @param {string}  req.body.nombre_negocio - Nombre del negocio (requerido, se recorta)
- * @param {string} [req.body.booking_url]   - URL de reservas (opcional, se recorta; null si vacío)
- * @returns {JSON} { nombre_negocio, booking_url } | 404 si el tenant no existe
+ * @param {string}  req.body.nombre_negocio - Nombre del negocio (requerido, texto no vacío; se recorta)
+ * @param {string} [req.body.booking_url]   - URL de reservas https (opcional, se recorta;
+ *   null si viene vacío, solo espacios o no viene)
+ * @returns {JSON} { nombre_negocio, booking_url }
+ *   | 400 { error, campo: 'nombre_negocio' } (falta, no es texto o es solo espacios)
+ *   | 400 { error, campo: 'booking_url' } (no es texto o no es una URL https)
+ *   | 404 si el tenant no existe
  */
 export const editarNegocio = async (req, res) => {
   const { nombre_negocio, booking_url } = req.body;
 
-  if (!nombre_negocio) {
-    return res.status(400).json({ error: 'nombre_negocio es requerido' });
+  // Tiene que ser texto con algo escrito: un número daba 500 en el .trim(), y un
+  // nombre de solo espacios se guardaba vacío.
+  if (typeof nombre_negocio !== 'string' || nombre_negocio.trim() === '') {
+    return res.status(400).json({ error: 'nombre_negocio es requerido', campo: 'nombre_negocio' });
+  }
+
+  // Vacío o ausente → null. Si vino algo, tiene que ser texto (un número daba 500
+  // en el .trim()) y una URL https.
+  let bookingUrl = null;
+  if (booking_url !== undefined && booking_url !== null && booking_url !== '') {
+    if (typeof booking_url !== 'string' || (booking_url.trim() !== '' && !esUrlHttps(booking_url))) {
+      return res.status(400).json({ error: 'El link de reservas tiene que ser una dirección que empiece con https://', campo: 'booking_url' });
+    }
+    bookingUrl = booking_url.trim() || null;
   }
 
   try {
@@ -490,7 +652,7 @@ export const editarNegocio = async (req, res) => {
            booking_url    = $2
        WHERE id = $3
        RETURNING nombre_negocio, booking_url`,
-      [nombre_negocio.trim(), booking_url ? booking_url.trim() : null, req.tenant_id]
+      [nombre_negocio.trim(), bookingUrl, req.tenant_id]
     );
     // Sin esta guarda, un tenant_id inexistente devolvía rows vacío y el log de
     // abajo (result.rows[0].nombre_negocio) tiraba un 500 en vez de un 404 limpio.
@@ -519,7 +681,7 @@ export const editarNegocio = async (req, res) => {
  * @param {string} req.tenant_id        - Inyectado por verificarToken
  * @param {string} req.body.pin_actual  - PIN actual para verificación
  * @param {string} req.body.pin_nuevo   - Nuevo PIN de 4 dígitos
- * @returns {JSON} { ok: true }
+ * @returns {JSON} { ok: true } | 400 | 403 (PIN actual incorrecto) | 404 | 409 (PIN en uso)
  */
 export const cambiarPinAdmin = async (req, res) => {
   const { pin_actual, pin_nuevo } = req.body;
@@ -532,18 +694,14 @@ export const cambiarPinAdmin = async (req, res) => {
   }
 
   try {
-    const tenantResult = await query(
-      `SELECT pin_admin FROM tenant WHERE id = $1`,
-      [req.tenant_id]
-    );
-    if (tenantResult.rows.length === 0) {
+    // 403 y no 401 si no coincide: la sesión sigue válida (ver utils/pin.js).
+    const pinCorrecto = await verificarPinAdmin(req.tenant_id, pin_actual);
+    if (pinCorrecto === null) {
       return res.status(404).json({ error: 'Tenant no encontrado' });
     }
-
-    const pinCorrecto = await bcrypt.compare(pin_actual, tenantResult.rows[0].pin_admin);
     if (!pinCorrecto) {
       console.warn('[gestion] cambiarPinAdmin — PIN actual incorrecto | cambio rechazado');
-      return res.status(401).json({ error: 'El PIN actual es incorrecto' });
+      return res.status(403).json({ error: 'El PIN actual es incorrecto', codigo: CODIGO_PIN_ADMIN_INCORRECTO, campo: 'pin_actual' });
     }
 
     // Unicidad: el nuevo PIN del admin no puede chocar con el de ningún barbero

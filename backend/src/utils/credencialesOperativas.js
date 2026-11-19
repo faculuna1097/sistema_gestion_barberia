@@ -21,10 +21,22 @@ export function errorCredencialesOperativas(usuario, password) {
   if (usuario.length < USUARIO_MIN_CARACTERES) {
     return `el usuario debe tener al menos ${USUARIO_MIN_CARACTERES} caracteres.`;
   }
-  if (password.length < PASSWORD_MIN_CARACTERES) {
+  if (!esPasswordOperativaValida(password)) {
     return `la password debe tener al menos ${PASSWORD_MIN_CARACTERES} caracteres.`;
   }
   return null;
+}
+
+/**
+ * esPasswordOperativaValida
+ * La regla de la password operativa: texto de PASSWORD_MIN_CARACTERES o más. La usan
+ * los scripts de alta (vía errorCredencialesOperativas) y la recuperación por mail
+ * (controllers/authRecuperar.js).
+ * @param {*} password - Password operativa en texto plano.
+ * @returns {boolean} true si cumple.
+ */
+export function esPasswordOperativaValida(password) {
+  return typeof password === 'string' && password.length >= PASSWORD_MIN_CARACTERES;
 }
 
 /**

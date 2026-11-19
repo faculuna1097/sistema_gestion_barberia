@@ -1,13 +1,15 @@
 // /frontend-turnero/src/components/ui/ResumenTurno.jsx
 // Resumen del turno del flujo de reserva: cuándo, servicio, barbero y dirección.
-// Lo comparten la pantalla de confirmación (antes de reservar) y la de éxito.
+// Lo usa la pantalla de confirmación (antes de reservar). El éxito tiene su
+// propio detalle, más corto (TurnoConfirmado), con el mismo textoBarbero.
 // Exclusivo del flujo de reserva (como Progress y SelectorDiaHorario).
 
 import { theme } from '../../theme/tokens.js';
-import { fmtPesos, capitalizar } from '../../utils/formato.js';
+import { fmtPesos, capitalizar, textoBarbero } from '../../utils/formato.js';
 import { fmtFechaLarga, fmtHora, fechaDeISO } from '../../utils/fecha.js';
 import AvatarIniciales from './AvatarIniciales.jsx';
 import IconoPin from './IconoPin.jsx';
+import IconoPersona from './IconoPersona.jsx';
 
 /**
  * ALTO_CIRCULO
@@ -20,20 +22,6 @@ const ALTO_CIRCULO = 28;
  * Alto de un renglón de texto del resumen (14 px × 1,5).
  */
 const ALTO_RENGLON = 21;
-
-/**
- * textoBarbero
- * Quién atiende, dicho para el cliente.
- * @param {Object} barbero - { id, nombre }; `nombre` es null si "Cualquiera"
- *   asignó un barbero que no está en la lista de App
- * @param {boolean} asignado - true si lo asignó "Cualquiera"
- * @returns {string} "Te atiende Juan" (asignado), "Con Juan" (elegido a mano)
- *   o "Te asignamos un barbero" (sin nombre)
- */
-function textoBarbero(barbero, asignado) {
-  if (!barbero.nombre) return 'Te asignamos un barbero';
-  return asignado ? `Te atiende ${barbero.nombre}` : `Con ${barbero.nombre}`;
-}
 
 /**
  * ResumenTurno
@@ -178,20 +166,6 @@ function CirculoIcono({ children }) {
     }}>
       {children}
     </span>
-  );
-}
-
-/**
- * IconoPersona
- * SVG inline de una silueta, en lugar del avatar cuando no se sabe el nombre
- * del barbero.
- */
-function IconoPersona() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.5"/>
-      <path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>
   );
 }
 

@@ -1,22 +1,24 @@
 // /frontend/src/screens/admin/sections/gestion/TabNegocio.jsx
 // Tab "Negocio" de SeccionGestion. Contenedor de layout puro: un único bloque
-// con divisores que agrupa las 3 secciones del negocio. El nombre y la URL de
-// reservas se administran directo en la base de datos (cambian muy poco), por
-// eso no hay formulario para esos campos acá.
+// con divisores que agrupa las 4 secciones del negocio. Desde el 2026-11-13 (F6
+// de plan_mejoras_operativas.md) acá se edita el contacto (mail y celular del
+// dueño, teléfono del local). El nombre y la URL de reservas siguen
+// administrándose directo en la base de datos (cambian muy poco).
 //
-// Layout (opción 1): Horario de atención como franja full-width arriba, y
+// Layout: Contacto y Horario de atención como franjas full-width arriba, y
 // debajo dos columnas — Feriados | Imágenes — separadas por un divisor. Cada
 // bloque se autocarga; TabNegocio solo aporta el contenedor y los divisores.
 
 import { theme } from '../../../../theme/tokens.js';
 
+import BloqueContacto from './BloqueContacto';
 import BloqueHorarioAtencion from './BloqueHorarioAtencion';
 import BloqueFeriados from './BloqueFeriados';
 import BloqueImagenes from './BloqueImagenes';
 
 /**
  * TabNegocio
- * Monta las 3 secciones del negocio (horario, feriados, imágenes) dentro de un
+ * Monta las 4 secciones del negocio (contacto, horario, feriados, imágenes) dentro de un
  * único panel dividido. No hace fetch propio.
  *
  * @returns {JSX.Element}
@@ -33,7 +35,12 @@ export default function TabNegocio() {
       display: 'flex',
       flexDirection: 'column',
     }}>
-      {/* Franja superior: horario de atención (full-width) */}
+      {/* Franja superior: contacto del dueño y del local (full-width) */}
+      <div style={{ padding: 20, borderBottom: hairline }}>
+        <BloqueContacto />
+      </div>
+
+      {/* Horario de atención (full-width) */}
       <div style={{ padding: 20, borderBottom: hairline }}>
         <BloqueHorarioAtencion />
       </div>

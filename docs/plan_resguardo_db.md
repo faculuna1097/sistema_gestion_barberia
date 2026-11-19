@@ -251,7 +251,8 @@ con el `.env`".
    `age12zu3jvs0ymxcvvgxlg9qw0jyfuze6g2lu5q2yev76mfmc7qnxeesvnhuj0`.
 3. **Aviso:** ✅ no se crea a mano. El monitor `backup-db` de Sentry Crons (proyecto
    del backend) **se crea solo con el primer check-in**, que manda su configuración:
-   `17 7 * * *` UTC, margen de 90 min, duración máxima de 30 min. Así la
+   `17 7 * * *` UTC, margen de 90 min (12 h desde el 2026-11-19: GitHub lanza el backup horas tarde y Sentry
+   avisaba todos los días un check-in perdido), duración máxima de 30 min. Así la
    configuración queda versionada en el workflow. Después de la primera corrida: el
    usuario le configura el aviso a Discord en Sentry. Si el plan gratis no deja crear
    el monitor, healthchecks.io (D7).

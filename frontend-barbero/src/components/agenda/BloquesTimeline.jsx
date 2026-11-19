@@ -3,10 +3,11 @@
 // descanso o de una ausencia, el botón de un slot libre y el bloque de un turno.
 // Usan la misma geometría que las celdas de la grilla (cajaVertical).
 
-import { Check, Coffee, CalendarOff } from 'lucide-react';
+import { Check, Coffee, CalendarOff, ArrowRightLeft } from 'lucide-react';
 
 import { theme } from '../../theme/tokens.js';
 import { fmtHora } from '../../utils/fecha.js';
+import { textoCliente } from '../../utils/formato.js';
 import { useHover } from '../../hooks/useHover.js';
 import { OFFSET_IZQ, cajaVertical } from './geometria.js';
 
@@ -171,12 +172,16 @@ export function SlotTocable({ slot, seleccionado, origen, pxPorHora, onTocar }) 
  * Bloque clickable posicionado por hora. Fondo soft + barra lateral de color.
  * Usa la misma geometría que las celdas de la grilla (cajaVertical). Hover solo
  * con mouse (useHover).
+ * Con un traspaso pendiente, el renglón de la hora suma ⇄ y el nombre del
+ * barbero al que se le ofreció ("10:00 ⇄ Juan"), y el nombre accesible lo dice.
  * @param {Object} props.turno - con minInicio/minFin (prepararAgenda)
  * @param {number} props.origen - minuto del día que queda arriba del timeline
  * @param {number} props.pxPorHora - escala vertical
+ * @param {string|null} [props.traspasoA] - nombre del barbero al que se le
+ *   ofreció el turno, si la oferta está pendiente
  * @param {() => void} props.onClick
  */
-export function BloqueTurno({ turno, origen, pxPorHora, onClick }) {
+export function BloqueTurno({ turno, origen, pxPorHora, traspasoA = null, onClick }) {
   const [hover, eventosHover] = useHover();
 
   const caja = cajaVertical(turno.minInicio, turno.minFin, origen, pxPorHora);
@@ -184,11 +189,17 @@ export function BloqueTurno({ turno, origen, pxPorHora, onClick }) {
   const alto = Math.max(caja.height, 28);
 
   const estilo = ESTILO_ESTADO[turno.estado] || ESTILO_ESTADO.reservado;
+  const cliente = `${textoCliente(turno.cliente_nombre)}${turno.servicio_nombre ? ` · ${turno.servicio_nombre}` : ''}`;
+  // Con traspaso pendiente el nombre accesible lo dice entero (el ⇄ es un ícono).
+  const etiqueta = traspasoA
+    ? `${fmtHora(turno.inicio)}, ${cliente}, traspaso pendiente a ${traspasoA}`
+    : undefined;
 
   return (
     <div
       role="button"
       tabIndex={0}
+      aria-label={etiqueta}
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }
@@ -218,8 +229,18 @@ export function BloqueTurno({ turno, origen, pxPorHora, onClick }) {
         fontWeight: theme.weightMedium,
         color: estilo.fuerte,
         whiteSpace: 'nowrap',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        minWidth: 0,
       }}>
         {fmtHora(turno.inicio)}
+        {traspasoA && (
+          <>
+            <ArrowRightLeft size={16} strokeWidth={1.75} aria-hidden="true" style={{ flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{traspasoA}</span>
+          </>
+        )}
       </div>
       <div style={{
         fontFamily: theme.body,
@@ -230,8 +251,7 @@ export function BloqueTurno({ turno, origen, pxPorHora, onClick }) {
         textOverflow: 'ellipsis',
         whiteSpace: 'nowrap',
       }}>
-        {turno.cliente_nombre || 'Sin nombre'}
-        {turno.servicio_nombre && ` · ${turno.servicio_nombre}`}
+        {cliente}
       </div>
     </div>
   );

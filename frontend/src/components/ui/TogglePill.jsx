@@ -8,6 +8,8 @@
 // - Radius normal (theme.radius = 10), no stadium 20 — más sobrio para
 //   el admin compacto.
 // - Hover sólo en el inactivo (el activo no necesita feedback adicional).
+// - Alto fijo de 44 px (touch target de §5.4), desde el 2026-11-19: en Caja
+//   comparte fila con "Hoy" y Exportar, que miden lo mismo. Antes medía ~35.
 
 import { useState } from 'react';
 import { theme } from '../../theme/tokens.js';
@@ -28,7 +30,8 @@ export default function TogglePill({ activo, onToggle, labelOn, labelOff }) {
   const estilo = {
     display: 'inline-flex',
     alignItems: 'center',
-    padding: '6px 12px',
+    height: 44,
+    padding: '0 12px',
     borderRadius: theme.radius,
     fontFamily: theme.body,
     fontSize: theme.sizeBody,

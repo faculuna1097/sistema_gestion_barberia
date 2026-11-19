@@ -1,12 +1,12 @@
 # Ruta del proyecto - Sistema de Gestion de Barberia
 
-Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y comparado de nuevo contra `git ls-files` el 2026-11-11 (resguardo de la base, fases 1 y 2: `backend/.env.lectura.example`, en `backend/src/scripts/` `conexionLectura.js` y `consultar.js`, y `.github/workflows/backup-db.yml` con `.github/scripts/backup-db.sh`; antes, ese mismo día, formulario de alta de clientes: `frontend-alta/` completo, en `backend/src/` `controllers/alta.js`, `routes/alta.js`, `utils/subdominio.js` y `utils/validarSolicitudAlta.js`, la skill `.claude/skills/alta-cliente/` y `docs/decisiones_alta_clientes.md` y `plan_alta_clientes.md`). Antes, el 2026-11-06 (monitoreo de producción: `backend/src/instrument.js`, `backend/src/config/sentry.js`, `.claude/settings.json`, las skills `.claude/skills/salud-prod/` y `arreglo-prod/`, y `docs/decisiones_monitoreo_prod.md`). Antes, el 2026-11-04 (se sumaron `frontend/src/utils/pantalla.js` y `frontend-landing/src/components/ui/IconoWhatsApp.jsx`, que faltaban). Antes, el 2026-11-03 (en `frontend-turnero/src/`: `components/ui/estilos.js`, `hooks/useHover.js` y `utils/errores.js`; y `frontend/src/hooks/usePantallaAngosta.js`). Antes, el 2026-11-02 (en `frontend/src/`: `components/ui/GrupoOpciones.jsx`, `ToastProvider.jsx`, `tonosFormaPago.js`, `estilos.js`, `utils/errores.js` y `utils/toast.js`). Antes, el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
+Mapa de rutas del repositorio, regenerado desde `git ls-files` el 2026-09-29 y completado el 2026-11-19 (mejoras operativas, fase 10: en `frontend-barbero/src/` `components/avisos/`, `components/traspasos/HojaTraspasar.jsx`, `components/ui/ContadorAvisos.jsx`, `hooks/useTraspasos.js` y `utils/traspasos.js`; antes, ese mismo día, fase 9: en `backend/src/` `controllers/traspasos.js`, `routes/adminTraspasos.js` y `services/traspasosService.js`). Antes, el 2026-11-18 (mejoras operativas, fase 7b: en `frontend/src/` `components/ui/DetalleTurnosSinCobrar.jsx`, `hooks/useAhoraPorMinuto.js`, `hooks/useTurnosSinCobrar.js` y `utils/turnosSinCobrar.js`; antes, ese mismo día, fase 7a: `backend/src/jobs/cierreDiario.js` y `backend/src/services/turnosSinCobrarService.js`; antes, ese mismo día, fase 6d: `frontend/src/utils/url.js`). Antes, el 2026-11-17 (`docs/auditoria_2026-11.md` y `docs/plan_auditoria_2026-11.md`). Antes, el 2026-11-16 (mejoras operativas, F1b: en `frontend-barbero/src/` `components/agenda/HojaAsignarCliente.jsx` y `HojaReservar.jsx`, `components/cliente/`, `components/ui/AvisoError.jsx` y `HojaInferior.jsx`, `hooks/useBusquedaClientes.js` y `utils/clienteTurno.js`; en `frontend/src/` `hooks/useBusquedaClientes.js` y `screens/admin/sections/turnero/AsignarCliente.jsx`). Antes, el 2026-11-13 (mejoras operativas, F5: en `frontend-barbero/src/` `components/ui/FondoLocal.jsx` y `MarcoAcceso.jsx`, `utils/pantalla.js` y `utils/sesion.js`; F6b: en `frontend/src/` `components/ui/` `BotonEnlace.jsx`, `FilaAjuste.jsx`, `MarcoAcceso.jsx` y `PillSinConfigurar.jsx`, `screens/` `PantallaRecuperacion.jsx`, `SolicitudRecuperacion.jsx` y `admin/sections/gestion/BloqueContacto.jsx`, y `utils/` `contactoNegocio.js` y `credenciales.js`). Antes, el 2026-11-12 (mejoras operativas: F7, `frontend/src/components/ui/SelectorConBarra.jsx`; F9 y F11, en `frontend-turnero/src/`: `components/ui/` `HeroLocal.jsx`, `IconoMensaje.jsx`, `IconoTelefono.jsx`, `LineaContacto.jsx` y `MarcoLocal.jsx`, `hooks/usePantallaAncha.js` y `utils/estadoNegocio.js`). Antes, comparado de nuevo contra `git ls-files` el 2026-11-11 (resguardo de la base, fases 1 y 2: `backend/.env.lectura.example`, en `backend/src/scripts/` `conexionLectura.js` y `consultar.js`, y `.github/workflows/backup-db.yml` con `.github/scripts/backup-db.sh`; antes, ese mismo día, formulario de alta de clientes: `frontend-alta/` completo, en `backend/src/` `controllers/alta.js`, `routes/alta.js`, `utils/subdominio.js` y `utils/validarSolicitudAlta.js`, la skill `.claude/skills/alta-cliente/` y `docs/decisiones_alta_clientes.md` y `plan_alta_clientes.md`). Antes, el 2026-11-06 (monitoreo de producción: `backend/src/instrument.js`, `backend/src/config/sentry.js`, `.claude/settings.json`, las skills `.claude/skills/salud-prod/` y `arreglo-prod/`, y `docs/decisiones_monitoreo_prod.md`). Antes, el 2026-11-04 (se sumaron `frontend/src/utils/pantalla.js` y `frontend-landing/src/components/ui/IconoWhatsApp.jsx`, que faltaban). Antes, el 2026-11-03 (en `frontend-turnero/src/`: `components/ui/estilos.js`, `hooks/useHover.js` y `utils/errores.js`; y `frontend/src/hooks/usePantallaAngosta.js`). Antes, el 2026-11-02 (en `frontend/src/`: `components/ui/GrupoOpciones.jsx`, `ToastProvider.jsx`, `tonosFormaPago.js`, `estilos.js`, `utils/errores.js` y `utils/toast.js`). Antes, el 2026-10-30 (`controllers/agenda.js`, `controllers/descansos.js`, `routes/agenda.js`, `routes/descansos.js`, `services/descansosService.js`, `services/sqlTurnoEnriquecido.js` y `utils/errores422.js`, todos en `backend/src/`). Antes, el 2026-10-29 (`frontend/src/utils/descansos.js`) y el 2026-10-19 (`frontend-barbero/`: `components/agenda/`, `utils/seleccionSlots.js`, `hooks/useHover.js` y `utils/colorMonto.js`) y el 2026-10-08 (árbol de `frontend-turnero/` regenerado: rediseño del turnero).
 
 Este documento lista las carpetas y archivos del proyecto para ubicar rapido backend, frontends, documentacion, pantallas, servicios y rutas HTTP. Para mantenerlo, regenerar los arboles desde `git ls-files` en vez de parchearlos a mano.
 
 ## Exclusiones
 
-Solo se listan archivos versionados. No aparecen rutas generadas o locales: `node_modules/`, `dist/`, `build/`, archivos `.env`, lo local de `.claude/` (`launch.json`, `settings.local.json`) y `backend/scripts/` (scripts one-off, gitignored; no confundir con `backend/src/scripts/`).
+Solo se listan archivos versionados. No aparecen rutas generadas o locales: `node_modules/`, `dist/`, `build/`, archivos `.env`, lo local de `.claude/` (`launch.json` y `settings.local.json`) y `backend/scripts/` (scripts one-off, gitignored; no confundir con `backend/src/scripts/`).
 
 ## Vista general
 
@@ -19,7 +19,7 @@ sistema-gestion-barberia/
 |-- frontend-landing/   Landing de marketing (React + Vite, barbermanager.app)
 |-- frontend-alta/      Formulario de alta de clientes (React + Vite, alta.barbermanager.app)
 |-- docs/               Documentacion tecnica
-|-- .claude/            Config compartida de Claude Code: settings.json (permisos allow/deny) y skills/ (salud-prod, arreglo-prod, alta-cliente)
+|-- .claude/            Config compartida de Claude Code: settings.json (permisos allow/deny) y skills/ (salud-prod y arreglo-prod; alta-cliente vive solo en la PC, ignorada)
 |-- .github/            Backup diario de la base: workflows/backup-db.yml y scripts/backup-db.sh (GitHub Actions)
 |-- .gitignore
 |-- CLAUDE.md
@@ -31,6 +31,7 @@ sistema-gestion-barberia/
 ```txt
 docs/
 |-- auditoria_2026-07.md
+|-- auditoria_2026-11.md
 |-- convenciones_tecnicas.md
 |-- decisiones_acceso_barberos.md
 |-- decisiones_alta_clientes.md
@@ -40,6 +41,7 @@ docs/
 |-- decisiones_login_operativo.md
 |-- decisiones_mail_entregabilidad.md
 |-- decisiones_mail_recordatorio.md
+|-- decisiones_mejoras_operativas.md
 |-- decisiones_monitoreo_prod.md
 |-- decisiones_movimientos_extra.md
 |-- decisiones_redisenio_panel_gestion.md
@@ -51,7 +53,11 @@ docs/
 |-- performance_frontends.md
 |-- plan_alta_clientes.md
 |-- plan_app_barbero.md
+|-- plan_auditoria_2026-11.md
+|-- plan_landing_captacion.md
+|-- plan_mejoras_operativas.md
 |-- plan_monitoreo_prod.md
+|-- plan_resguardo_db.md
 |-- postmortem_golive_turnero.md
 |-- ruta_proyecto.md
 |-- sistema_de_disenio.md
@@ -84,6 +90,7 @@ backend/
     |   |-- authBarbero.js
     |   |-- authOperativo.js
     |   |-- authPanel.js
+    |   |-- authRecuperar.js     recuperación por mail de la contraseña del iPad y del PIN admin
     |   |-- balances.js
     |   |-- barberos.js
     |   |-- caja.js
@@ -103,12 +110,14 @@ backend/
     |   |-- servicios.js
     |   |-- socios.js
     |   |-- suspensiones.js
+    |   |-- traspasos.js
     |   |-- turnero.js
     |   |-- turneroConfig.js
     |   |-- turnos.js
     |   |-- turnosOperativo.js
     |   `-- ventas.js
     |-- jobs/
+    |   |-- cierreDiario.js  cron 03:00 AR: pasa a no_asistio los reservados de días anteriores (F3)
     |   `-- recordatorios.js
     |-- middlewares/
     |   |-- authMiddleware.js
@@ -126,12 +135,14 @@ backend/
     |   |-- adminProductos.js
     |   |-- adminServicios.js
     |   |-- adminSocios.js
+    |   |-- adminTraspasos.js
     |   |-- adminTurneroConfig.js
     |   |-- agenda.js
     |   |-- alta.js
     |   |-- authBarbero.js
     |   |-- authOperativo.js
     |   |-- authPanel.js
+    |   |-- authRecuperar.js
     |   |-- balances.js
     |   |-- barberos.js
     |   |-- caja.js
@@ -174,11 +185,14 @@ backend/
     |   |-- movimientosService.js
     |   |-- planillaService.js
     |   |-- recordatoriosService.js
+    |   |-- recuperacionService.js  token, link y queries de la recuperación por mail
     |   |-- sociosService.js
     |   |-- sqlTurnoEnriquecido.js
     |   |-- storageService.js
     |   |-- suspensionesService.js
+    |   |-- traspasosService.js  traspaso de turnos entre barberos (F2)
     |   |-- turnosService.js
+    |   |-- turnosSinCobrarService.js  aviso de turnos sin cobrar y cierre diario (F3)
     |   `-- mail/
     |       |-- mailer.js
     |       |-- mailProvider.js
@@ -186,6 +200,7 @@ backend/
     `-- utils/
         |-- comision.js          fórmula de la comisión de un corte (única fuente)
         |-- constantes.js
+        |-- contactoNegocio.js   reglas del mail y celular del dueño y del teléfono del local
         |-- credencialesOperativas.js
         |-- errores422.js
         |-- movimientos.js
@@ -212,6 +227,7 @@ backend/src/routes/
 |-- authPanel.js              login unificado admin/barbero
 |-- authBarbero.js            login barbero
 |-- authOperativo.js          login operativo
+|-- authRecuperar.js          recuperación por mail (contraseña del iPad y PIN admin)
 |-- barberos.js               barberos para operacion
 |-- servicios.js              servicios para operacion
 |-- productos.js              productos para operacion
@@ -223,7 +239,7 @@ backend/src/routes/
 |-- inicio.js                 dashboard/inicio
 |-- balances.js               balances/reportes
 |-- turnero.js                turnero publico
-|-- turnosOperativo.js        turnos para flujo operativo
+|-- turnosOperativo.js        turnos para flujo operativo y aviso de turnos sin cobrar
 |-- turnos.js                 turnos admin/barbero
 |-- horarios.js               horarios admin/barbero
 |-- suspensiones.js           suspensiones admin/barbero
@@ -240,7 +256,8 @@ backend/src/routes/
 |-- adminHorarioAtencion.js   horario semanal del tenant
 |-- adminFeriados.js          feriados del tenant
 |-- adminImagenes.js          imagenes del negocio
-|-- adminSocios.js            socios (duenos) del negocio
+|-- adminSocios.js            socios (duenos) del negocio: lista, alta y edicion
+|-- adminTraspasos.js         traspaso de turnos entre barberos (solo rol barbero)
 `-- adminOperativo.js         credenciales operativas
 ```
 
@@ -277,6 +294,7 @@ frontend/
     |       |-- BadgeFormaPago.jsx
     |       |-- BadgeVariacion.jsx
     |       |-- BarraProporcional.jsx
+    |       |-- BotonEnlace.jsx      acción con forma de link ("¿Olvidaste…?" de los logins)
     |       |-- BotonExportarExcel.jsx
     |       |-- BotonIconoFila.jsx
     |       |-- Button.jsx
@@ -286,10 +304,12 @@ frontend/
     |       |-- DataTable.jsx
     |       |-- DesgloseMontos.jsx
     |       |-- DetalleRecurso.jsx
+    |       |-- DetalleTurnosSinCobrar.jsx detalle del aviso de turnos sin cobrar (iPad e Inicio)
     |       |-- EmptyState.jsx
     |       |-- ErrorBoundary.jsx
     |       |-- estilos.js           estiloEtiquetaCampo (rótulo de Field y GrupoOpciones)
-    |       |-- Field.jsx
+    |       |-- Field.jsx            con `revelable`: el ojo de mostrar la contraseña
+    |       |-- FilaAjuste.jsx       fila de ajustes: qué es, valor y acción (Seguridad, Contacto)
     |       |-- FondoLocal.jsx
     |       |-- GrupoOpciones.jsx
     |       |-- IconoAlerta.jsx
@@ -297,10 +317,13 @@ frontend/
     |       |-- InputTiempo.jsx
     |       |-- LoadingState.jsx
     |       |-- LogoCirculo.jsx
-    |       |-- Modal.jsx
+    |       |-- MarcoAcceso.jsx      marco de los logins y la recuperación (+ EncabezadoAcceso)
+    |       |-- Modal.jsx            con `botonCerrar`: la X en la esquina de la card
     |       |-- PageContainer.jsx
+    |       |-- PillSinConfigurar.jsx marca de dato vacío ("Sin configurar", "Sin cargar")
     |       |-- ScreenHeader.jsx
     |       |-- Select.jsx
+    |       |-- SelectorConBarra.jsx barra de a pasos con - y + (la comisión del barbero)
     |       |-- SelectorDia.jsx
     |       |-- SelectorMes.jsx
     |       |-- SelectorPeriodo.jsx
@@ -316,11 +339,16 @@ frontend/
     |       |-- TogglePill.jsx
     |       `-- TopBar.jsx
     |-- hooks/
-    |   `-- usePantallaAngosta.js    ventana de menos de 1024 px (iPad vertical, Split View)
+    |   |-- useAhoraPorMinuto.js     instante actual con un tick por minuto (Reloj y aviso F3)
+    |   |-- useBusquedaClientes.js   búsqueda de clientes con debounce (asignar cliente)
+    |   |-- usePantallaAngosta.js    ventana de menos de 1024 px (iPad vertical, Split View)
+    |   `-- useTurnosSinCobrar.js    aviso de turnos sin cobrar: carga, refresco, ocultado y alerta
     |-- screens/
     |   |-- MainScreen.jsx
     |   |-- PantallaLoginPanel.jsx      login por PIN del panel (admin o barbero)
     |   |-- PantallaLoginOperativo.jsx
+    |   |-- PantallaRecuperacion.jsx    link #recuperar=: contraseña del iPad o PIN nuevos
+    |   |-- SolicitudRecuperacion.jsx   el "¿Olvidaste…?" de los dos logins (pide el mail)
     |   |-- admin/
     |   |   |-- PanelAdmin.jsx
     |   |   `-- sections/
@@ -332,7 +360,10 @@ frontend/
     |   |       |-- SeccionPlanillas.jsx
     |   |       |-- SeccionTurnero.jsx
     |   |       |-- SeccionVentas.jsx
+    |   |       |-- turnero/
+    |   |       |   `-- AsignarCliente.jsx    asignar un cliente a un turno "Sin datos"
     |   |       `-- gestion/
+    |   |           |-- BloqueContacto.jsx    mail y celular del dueño, teléfono del local
     |   |           |-- BloqueFeriados.jsx
     |   |           |-- BloqueHorarioAtencion.jsx
     |   |           |-- BloqueImagenes.jsx
@@ -341,6 +372,7 @@ frontend/
     |   |           |-- TabProductos.jsx
     |   |           |-- TabSeguridad.jsx
     |   |           |-- TabServicios.jsx
+    |   |           |-- TabSocios.jsx         socios (dueños): alta, edición, vínculo con un barbero
     |   |           `-- TabTurnero.jsx
     |   `-- flows/
     |       |-- FlujoCorte.jsx
@@ -351,18 +383,22 @@ frontend/
     |-- services/
     |   `-- api.js
     |-- theme/
-    |   `-- tokens.js
+    |   `-- tokens.js            tema Luz y TAM_KIOSKO (escala del iPad)
     `-- utils/
         |-- cargarChunk.js
         |-- colorMonto.js
         |-- comision.js          suma la comisión de los cortes y arma el texto del %
+        |-- contactoNegocio.js   validación del contacto (espejo del backend) y celular a E.164
+        |-- credenciales.js      reglas y mensajes de la contraseña del iPad y del PIN
         |-- descansos.js
         |-- errores.js           mensaje de error para el usuario (servidor o genérico)
         |-- fecha.js
         |-- formato.js
         |-- movimientos.js
         |-- pantalla.js          alto visible de la pantalla (100dvh con respaldo)
-        `-- toast.js             API imperativa del toast (toast.show)
+        |-- toast.js             API imperativa del toast (toast.show)
+        |-- turnosSinCobrar.js   cálculos del aviso F3: modo alerta, texto y agrupado por barbero
+        `-- url.js               esUrlHttps: abrir solo links https (booking_url del iPad)
 ```
 
 ## Frontend barbero
@@ -398,19 +434,35 @@ frontend-barbero/
     |   |   |-- DetalleDescansoModal.jsx
     |   |   |-- DetalleTurnoModal.jsx
     |   |   |-- geometria.js
+    |   |   |-- HojaAsignarCliente.jsx   asignar un cliente a un turno "Sin datos"
+    |   |   |-- HojaReservar.jsx         atajo "Reservar turno" desde los slots elegidos
     |   |   |-- ModalDetalle.jsx
     |   |   |-- NavegadorDia.jsx
     |   |   `-- Timeline.jsx
+    |   |-- avisos/
+    |   |   |-- BotonAvisos.jsx          la campanita de "Hoy", con el número de avisos
+    |   |   `-- HojaAvisos.jsx           modal de avisos: traspasos ofrecidos y respuestas
+    |   |-- cliente/
+    |   |   |-- BotonSinDatos.jsx        el "Sin datos" destacado
+    |   |   |-- SelectorCliente.jsx      buscar o cargar un cliente (wizard, atajo, asignar)
+    |   |   `-- Separador.jsx
+    |   |-- traspasos/
+    |   |   `-- HojaTraspasar.jsx        candidatos y "Ofrecer a {B}" desde el detalle del turno
     |   `-- ui/
     |       |-- AvatarIniciales.jsx
+    |       |-- AvisoError.jsx
     |       |-- BottomNav.jsx
     |       |-- Button.jsx
     |       |-- Card.jsx
     |       |-- ConfirmDialog.jsx
+    |       |-- ContadorAvisos.jsx   número de avisos sobre un ícono (campanita, BottomNav)
     |       |-- EmptyState.jsx
     |       |-- Field.jsx
+    |       |-- FondoLocal.jsx       foto del local de fondo del login (copia del panel)
+    |       |-- HojaInferior.jsx     hoja que sube desde abajo (atajo, asignar cliente)
     |       |-- index.js
     |       |-- KPI.jsx
+    |       |-- MarcoAcceso.jsx      marco del login (+ EncabezadoAcceso), copia del panel
     |       |-- PageContainer.jsx
     |       |-- ScreenHeader.jsx
     |       |-- SearchInput.jsx
@@ -421,17 +473,23 @@ frontend-barbero/
     |       |-- TopBar.jsx
     |       `-- TurnoListItem.jsx
     |-- hooks/
-    |   `-- useHover.js
+    |   |-- useBusquedaClientes.js   búsqueda de clientes con debounce
+    |   |-- useHover.js          useHover y useHoverPresion (hover + apretado)
+    |   `-- useTraspasos.js      solicitudes de traspaso del barbero (una carga, en App)
     |-- services/
     |   `-- api.js
     |-- theme/
     |   `-- tokens.js
     `-- utils/
+        |-- clienteTurno.js      armar el cliente del alta (nuevo, existente o "Sin datos")
         |-- colorMonto.js
         |-- comision.js          suma la comisión de los cortes y arma el texto del %
         |-- fecha.js
         |-- formato.js
-        `-- seleccionSlots.js
+        |-- pantalla.js          ALTO_VISIBLE (100dvh o 100vh), copia del panel
+        |-- seleccionSlots.js
+        |-- sesion.js            sesión, último barbero y avisos vistos en localStorage
+        `-- traspasos.js         textos de los motivos y cuentas sobre los traspasos
 ```
 
 ## Frontend turnero
@@ -459,11 +517,16 @@ frontend-turnero/
     |       |-- Card.jsx
     |       |-- ConfirmDialog.jsx
     |       |-- EmptyState.jsx
-    |       |-- estilos.js           estiloEyebrow y MARGEN_SCROLL_CAMPO
+    |       |-- estilos.js           estiloEyebrow, MARGEN_SCROLL_CAMPO y las filas de info del local
     |       |-- Field.jsx
+    |       |-- HeroLocal.jsx        foto, logo, nombre y abierto/cerrado del local
     |       |-- IconoAlerta.jsx
+    |       |-- IconoMensaje.jsx
     |       |-- IconoPin.jsx
+    |       |-- IconoTelefono.jsx
     |       |-- index.js
+    |       |-- LineaContacto.jsx    fila de contacto del local (landing y gestión del turno)
+    |       |-- MarcoLocal.jsx       panel del local a la izquierda en pantalla ancha
     |       |-- PageContainer.jsx
     |       |-- Progress.jsx
     |       |-- ResumenTurno.jsx
@@ -480,7 +543,8 @@ frontend-turnero/
     |   |-- useEleccionConPausa.js
     |   |-- useHover.js          hover solo con mouse (copia del de frontend-barbero)
     |   |-- useListaRemota.js
-    |   `-- useNavegacion.js
+    |   |-- useNavegacion.js
+    |   `-- usePantallaAncha.js  ventana de 768 px o más (iPad, compu, celular acostado)
     |-- screens/
     |   |-- ConfirmarTurno.jsx
     |   |-- GestionTurno.jsx
@@ -495,6 +559,7 @@ frontend-turnero/
     `-- utils/
         |-- calendario.js
         |-- errores.js           textos de error de la API (sin conexión, 429)
+        |-- estadoNegocio.js     si el local está abierto y cuándo abre
         |-- fecha.js
         |-- formato.js
         |-- mapa.js
@@ -719,6 +784,7 @@ frontend-alta/
 - Controllers: `backend/src/controllers/`
 - Servicios reutilizables: `backend/src/services/`
 - Cron de recordatorios: `backend/src/jobs/recordatorios.js`
+- Cron de cierre diario (turnos sin cobrar → no asistió): `backend/src/jobs/cierreDiario.js`
 - Sentry: `backend/src/instrument.js` + `backend/src/config/sentry.js`
 - Aviso si un cron no corre: `backend/src/config/monitorCron.js` (healthchecks.io)
 - Skills de producción (diagnóstico y arreglo desde el celular): `.claude/skills/salud-prod/`, `.claude/skills/arreglo-prod/`
@@ -728,7 +794,7 @@ frontend-alta/
 - App barbero: `frontend-barbero/src/App.jsx`
 - Landing: `frontend-landing/src/App.jsx`
 - Formulario de alta: `frontend-alta/src/App.jsx`
-- Skill de alta de clientes (revisa la solicitud, arma la query y el mensaje): `.claude/skills/alta-cliente/`
+- Skill de alta de clientes (revisa la solicitud, arma la query y el mensaje): `.claude/skills/alta-cliente/` (fuera del repo desde el 2026-11-19: vive solo en la PC de Facundo, ignorada en `.gitignore`)
 - Consultar la base con el rol de solo lectura: `backend/src/scripts/consultar.js` (conexión en `conexionLectura.js`, credenciales en `backend/.env.lectura`)
 
 ---

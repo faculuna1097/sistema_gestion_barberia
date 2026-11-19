@@ -14,7 +14,8 @@
 //      son el elemento principal y deben tocarse rápido desde lejos.
 //
 // Layout (evolución del original): Corte + Venta arriba (2 columnas) y Gasto
-// abajo full-width. Indigo = ingreso (Corte/Venta), rojo = egreso (Gasto),
+// abajo full-width. Abajo al centro, entre las esquinas, el aviso de turnos sin
+// cobrar (F3), solo cuando hay. Indigo = ingreso (Corte/Venta), rojo = egreso (Gasto),
 // mismo lenguaje cromático que las secciones Balances/Ventas/Gastos del admin.
 //
 // Props:
@@ -25,13 +26,20 @@
 //   imagenLogo        — URL del logo (tenant_imagen tipo='logo'). Se muestra en
 //                       un círculo en la esquina superior derecha si existe.
 //   imagenLocal       — URL de la foto del local (fondo). Fallback: surfaceAlt.
-//   bookingUrl        — URL de reservas (si existe, muestra el botón Reservar).
+//   bookingUrl        — URL de reservas (si existe, muestra el botón Reservar). Llega
+//                       ya filtrada por App.jsx: solo https (Z3-06). Se abre sin
+//                       opener ni referrer, como YouTube.
 
-import { useState, useEffect } from "react";
-import { Scissors, Package, Receipt, CalendarDays, Lock, LogOut } from "lucide-react";
-import { theme } from "../theme/tokens.js";
+import { useEffect } from "react";
+import { Scissors, Package, Receipt, CalendarDays, Lock, LogOut, ChevronRight, X } from "lucide-react";
+import { theme, TAM_KIOSKO } from "../theme/tokens.js";
 import { formatHora, getFechaHoy, DIAS, MESES } from "../utils/fecha.js";
 import FondoLocal from "../components/ui/FondoLocal.jsx";
+import IconoAlerta from "../components/ui/IconoAlerta.jsx";
+import DetalleTurnosSinCobrar from "../components/ui/DetalleTurnosSinCobrar.jsx";
+import { useAhoraPorMinuto } from "../hooks/useAhoraPorMinuto.js";
+import { useTurnosSinCobrar } from "../hooks/useTurnosSinCobrar.js";
+import { textoCantidadSinCobrar } from "../utils/turnosSinCobrar.js";
 
 // URL de la app nativa de YouTube. Si la app no está instalada, hacemos
 // fallback a la versión web tras un pequeño timeout.
@@ -66,7 +74,7 @@ const abrirYouTube = () => {
   const inicio = Date.now();
   const timer = setTimeout(() => {
     if (Date.now() - inicio < 600) {
-      window.open(YOUTUBE_WEB_URL, "_blank");
+      window.open(YOUTUBE_WEB_URL, "_blank", "noopener,noreferrer");
     }
   }, 500);
   const cancelarFallback = () => {
@@ -115,22 +123,9 @@ function fechaLockScreen(fechaHoy) {
  * @returns {JSX.Element}
  */
 function Reloj({ sobreFoto }) {
-  // Instante actual. Se recalcula en cada tick de minuto.
-  const [ahora, setAhora] = useState(() => new Date());
-
-  useEffect(() => {
-    let intervalId;
-    // Alinear el primer tick al borde del próximo minuto; luego cada 60s.
-    const msAlProximoMinuto = 60000 - (Date.now() % 60000);
-    const timeoutId = setTimeout(() => {
-      setAhora(new Date());
-      intervalId = setInterval(() => setAhora(new Date()), 60000);
-    }, msAlProximoMinuto);
-    return () => {
-      clearTimeout(timeoutId);
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, []);
+  // Instante actual, con un tick por minuto alineado (hook compartido con el
+  // aviso de turnos sin cobrar).
+  const ahora = useAhoraPorMinuto();
 
   const hora = formatHora(ahora.toISOString());
   const fecha = fechaLockScreen(getFechaHoy());
@@ -280,6 +275,108 @@ function BotonEsquina({ onClick, children, ariaLabel, color = theme.inkSoft, ext
 }
 
 /**
+ * AvisoSinCobrar
+ * Aviso de turnos sin cobrar del iPad (F3 de plan_mejoras_operativas.md): una
+ * pill sólida abajo al centro, entre las dos esquinas inferiores y alineada con
+ * ellas, así no tapa las acciones ni las esquinas. Tocar el texto abre el detalle;
+ * la X lo oculta un rato (useTurnosSinCobrar).
+ *
+ * En modo alerta pasa a `warning` sólido con texto blanco (5:1), suma la línea de
+ * que a la noche se cierran solos y pierde la X. No usa `danger`: en esta
+ * pantalla el rojo es el egreso (Gasto).
+ *
+ * @param {Object}   props
+ * @param {number}   props.cantidad - Turnos sin cobrar (> 0).
+ * @param {boolean}  props.enAlerta - Modo alerta.
+ * @param {Function} props.onAbrir  - Abre el detalle.
+ * @param {Function} props.onOcultar - Oculta el aviso (no se usa en alerta).
+ * @returns {JSX.Element}
+ */
+function AvisoSinCobrar({ cantidad, enAlerta, onAbrir, onOcultar }) {
+  const fondo = enAlerta ? theme.warning : theme.surface;
+  const tinta = enAlerta ? theme.accentInk : theme.ink;
+  const texto = textoCantidadSinCobrar(cantidad);
+  return (
+    <div style={{
+      position: "absolute",
+      bottom: 28,
+      left: "50%",
+      transform: "translateX(-50%)",
+      zIndex: 2,
+      // Deja libres las esquinas: 32 de margen + 56 de botón + 16 de aire, por lado.
+      maxWidth: "calc(100% - 208px)",
+      display: "flex",
+      alignItems: "stretch",
+      minHeight: 56,
+      background: fondo,
+      color: tinta,
+      border: `1px solid ${enAlerta ? theme.warning : theme.hairline}`,
+      borderRadius: 28,
+      boxShadow: theme.shadowMd,
+      overflow: "hidden",
+    }}>
+      <button
+        className="om-aviso"
+        onClick={onAbrir}
+        aria-label={`${texto}. Ver el detalle`}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          minWidth: 0,
+          padding: enAlerta ? "8px 24px" : "0 20px 0 24px",
+          background: "transparent",
+          color: "inherit",
+          border: "none",
+          cursor: "pointer",
+          fontFamily: theme.body,
+          textAlign: "left",
+          WebkitTapHighlightColor: "transparent",
+        }}
+      >
+        <span style={{ color: enAlerta ? theme.accentInk : theme.warning, display: "inline-flex", flexShrink: 0 }}>
+          <IconoAlerta size={24} />
+        </span>
+        <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+          <span style={{ fontSize: TAM_KIOSKO.opcion, fontWeight: theme.weightHeading, lineHeight: 1.2 }}>
+            {texto}
+          </span>
+          {enAlerta && (
+            <span style={{ fontSize: TAM_KIOSKO.subtitulo, lineHeight: 1.3 }}>
+              Esta noche se cierran solos como «no asistió»
+            </span>
+          )}
+        </span>
+        <ChevronRight size={24} strokeWidth={1.75} aria-hidden="true" style={{ flexShrink: 0 }} />
+      </button>
+      {!enAlerta && (
+        <button
+          className="om-aviso"
+          onClick={onOcultar}
+          aria-label="Ocultar el aviso de turnos sin cobrar"
+          title="Ocultar"
+          style={{
+            width: 56,
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "transparent",
+            color: theme.inkSoft,
+            border: "none",
+            borderLeft: `1px solid ${theme.hairline}`,
+            cursor: "pointer",
+            WebkitTapHighlightColor: "transparent",
+          }}
+        >
+          <X size={22} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
  * MainScreen
  * Pantalla principal del modo operativo. Ver cabecera del archivo.
  * @returns {JSX.Element}
@@ -304,6 +401,11 @@ export default function MainScreen({
     const img = new Image();
     img.src = "/mercadopago.png";
   }, []);
+
+  // Aviso de turnos sin cobrar (F3), con el token del iPad. El ocultado y el
+  // detalle abierto viven en el hook: al volver de un flujo, MainScreen se remonta
+  // y el aviso vuelve.
+  const sinCobrar = useTurnosSinCobrar({ modo: "operativo" });
 
   return (
     // esperarImagen: MainScreen es la superficie ambiental de ENTRADA. Retiene
@@ -331,6 +433,9 @@ export default function MainScreen({
         }
         .om-logout:hover { color: rgba(255, 255, 255, 0.95); }
         .om-logout:active { transform: scale(.92); }
+        .om-aviso { transition: background-color .15s ease, transform .1s ease; }
+        .om-aviso:hover { background-color: rgba(9, 9, 11, 0.06); }
+        .om-aviso:active { transform: scale(.97); }
       `}</style>
 
       {/* ── Capa 3: acciones (protagonistas) ─────────────────────────────── */}
@@ -452,7 +557,7 @@ export default function MainScreen({
       }}>
         {bookingUrl && (
           <BotonEsquina
-            onClick={() => window.open(bookingUrl, "_blank")}
+            onClick={() => window.open(bookingUrl, "_blank", "noopener,noreferrer")}
             ariaLabel="Reservar turno"
             color={theme.accent}
           >
@@ -463,6 +568,26 @@ export default function MainScreen({
           <Lock size={24} strokeWidth={1.75} />
         </BotonEsquina>
       </div>
+
+      {/* ── Abajo al centro: aviso de turnos sin cobrar (F3) ──────────────── */}
+      {sinCobrar.visible && (
+        <AvisoSinCobrar
+          cantidad={sinCobrar.turnos.length}
+          enAlerta={sinCobrar.enAlerta}
+          onAbrir={sinCobrar.abrirDetalle}
+          onOcultar={sinCobrar.ocultar}
+        />
+      )}
+      {/* El detalle se puede abrir también en alerta. Con el cliente: decidido
+          con el usuario (2026-11-18), aunque la pantalla está a la vista del local. */}
+      <DetalleTurnosSinCobrar
+        open={sinCobrar.detalleAbierto}
+        onClose={sinCobrar.cerrarDetalle}
+        turnos={sinCobrar.turnos}
+        enAlerta={sinCobrar.enAlerta}
+        kiosko
+        mostrarCliente
+      />
     </FondoLocal>
   );
 }

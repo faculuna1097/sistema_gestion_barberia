@@ -11,11 +11,18 @@
 --   - corte: UNIQUE corte_turno_unico (turno_id) WHERE turno_id IS NOT NULL
 --     (un turno se vincula a un solo corte; violación → 23505).
 --   - barbero_suspension: índice (barbero_id, desde, hasta).
+--   - token_recuperacion: índice token_recuperacion_tenant_tipo (tenant_id, tipo,
+--     created_at), para el freno anti-spam de 2 minutos.
+--   - turno_traspaso: índice único parcial turno_traspaso_una_pendiente (turno_id)
+--     WHERE estado = 'pendiente' (una pendiente por turno; violación → 23505), e
+--     índices turno_traspaso_recibidos (tenant_id, a_barbero_id, turno_inicio) y
+--     turno_traspaso_enviados (tenant_id, de_barbero_id, turno_inicio).
 --   - Comisión: siempre un porcentaje sobre el precio del servicio (decisión de
 --     negocio del 2026-09-29). El tipo 'fijo' se sacó del CHECK el 2026-11-03. La
 --     fórmula vive solo en backend/src/utils/comision.js.
---   - Row Level Security ACTIVADO y sin policies en las 19 tablas (desde 2026-09-30;
---     solicitud_alta se creó con RLS el 2026-11-10).
+--   - Row Level Security ACTIVADO y sin policies en las 21 tablas (desde 2026-09-30;
+--     solicitud_alta se creó con RLS el 2026-11-10, token_recuperacion el 2026-11-13
+--     y turno_traspaso el 2026-11-19).
 --     Cierra la API automática de Supabase (roles anon / authenticated); el backend
 --     entra como owner (postgres) y RLS no le aplica. Toda tabla nueva se crea con
 --     ALTER TABLE ... ENABLE ROW LEVEL SECURITY (el SQL editor no lo activa solo).
@@ -47,8 +54,22 @@ CREATE TABLE public.tenant (
   operativo_password_hash text,
   operativo_token_version integer NOT NULL DEFAULT 0,
   admin_token_version integer NOT NULL DEFAULT 0,
+  -- telefono: columna vieja, reemplazada por telefono_local (2026-11-13). La lee el
+  -- backend de main hasta el deploy de mejoras-operativas; después se borra (pasos
+  -- post-deploy en plan_mejoras_operativas.md). Hasta entonces el alta escribe las dos.
   telefono text,
   direccion text,
+  -- Teléfono público del local, texto libre (hasta 30, lo valida el backend): el
+  -- `tel:` del turnero, que lo expone con la clave `telefono`.
+  telefono_local text,
+  -- Contacto del dueño (2026-11-13): a email_duenio llega la recuperación de la
+  -- contraseña del iPad y del PIN admin. Se guarda en minúsculas. Nullable hasta
+  -- completar los tenants viejos; NOT NULL post-deploy (plan_mejoras_operativas.md).
+  -- Las reglas completas viven en backend/src/utils/contactoNegocio.js.
+  email_duenio text CONSTRAINT tenant_email_duenio_formato
+    CHECK (email_duenio ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'::text),
+  telefono_duenio text CONSTRAINT tenant_telefono_duenio_e164
+    CHECK (telefono_duenio ~ '^\+[1-9][0-9]{7,14}$'::text),
   CONSTRAINT tenant_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.barbero (
@@ -60,7 +81,8 @@ CREATE TABLE public.barbero (
   -- filas). Ningún front publicado la usa desde el deploy del 2026-11-05; se puede
   -- borrar sacándola antes del backend (gestion.js la lee y la escribe).
   comision_tipo text DEFAULT 'porcentaje'::text CONSTRAINT barbero_comision_tipo_check CHECK (comision_tipo = 'porcentaje'::text),
-  -- comision_valor: % actual del barbero (0 a 100, lo valida el backend). Vale para
+  -- comision_valor: % actual del barbero (múltiplo de 5 entre 0 y 100, lo valida el
+  -- backend con utils/comision.js desde el 2026-11-12). Vale para
   -- los cortes nuevos: cada corte guarda el suyo en corte.comision_porcentaje.
   comision_valor numeric(10,2) DEFAULT 0,
   -- activo y created_at: NOT NULL desde el 2026-11-03 (no había NULLs).
@@ -248,7 +270,9 @@ CREATE TABLE public.barbero_suspension (
 CREATE TABLE public.turno (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   tenant_id uuid NOT NULL,
-  cliente_id uuid NOT NULL,
+  -- NULL = cliente "Sin datos" (turno rápido, F1): se le puede asignar uno después
+  -- (PATCH /api/admin/turnos/:id/cliente). Nullable desde el 2026-11-13.
+  cliente_id uuid,
   barbero_id uuid NOT NULL,
   servicio_id uuid NOT NULL,
   inicio timestamp with time zone NOT NULL,
@@ -265,6 +289,14 @@ CREATE TABLE public.turno (
   -- 'qr'). Solo lo graba el turnero público; null si no vino o no cumple el formato
   -- (la reserva no se rechaza). Agregada el 2026-10-08. No confundir con origen_creacion.
   origen_link text CONSTRAINT turno_origen_link_formato CHECK (origen_link ~ '^[a-z0-9_-]{1,30}$'),
+  -- Quién marcó el turno como "no asistió" (F3, agregada el 2026-11-18). Solo con
+  -- estado = 'no_asistio'; vuelve a NULL si el admin lo completa (el cliente vino):
+  --   'barbero' → lo marcó el barbero desde su app (cambiarEstado con rol barbero)
+  --   'admin'   → lo marcó el admin desde el panel (cambiarEstado con rol admin)
+  --   'sistema' → lo cerró el cron nocturno (jobs/cierreDiario.js): quedó reservado
+  --               sin cobrar después del día del turno
+  -- NULL en un no_asistio = marcado antes de que existiera la columna.
+  no_asistio_por text CONSTRAINT turno_no_asistio_por_valido CHECK (no_asistio_por = ANY (ARRAY['barbero'::text, 'admin'::text, 'sistema'::text])),
   CONSTRAINT turno_pkey PRIMARY KEY (id),
   CONSTRAINT turno_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
   CONSTRAINT turno_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.cliente(id),
@@ -311,7 +343,10 @@ CREATE TABLE public.socio (
   tenant_id uuid NOT NULL,
   nombre text NOT NULL,
   -- Vínculo opcional con barbero (NULL: el dueño no corta). Va acá y no en
-  -- barbero para no tocar la tabla central. Nadie lo lee todavía.
+  -- barbero para no tocar la tabla central. Lo carga Gestión → Socios (desde F4
+  -- de mejoras operativas). Un barbero vinculado a un socio activo "es socio"
+  -- (esSocioSql en sociosService.js): la marca de Gestión → Barberos y el filtro
+  -- "Solo Barberos" de Caja. Al desactivar un socio, el backend lo pone en NULL.
   barbero_id uuid,
   activo boolean NOT NULL DEFAULT true,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
@@ -376,6 +411,77 @@ CREATE TABLE public.solicitud_alta (
   -- Sin trigger: lo setea cada UPDATE (guardar, enviar y la query de alta).
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT solicitud_alta_pkey PRIMARY KEY (id)
+);
+-- Links de recuperación de la contraseña del iPad ('operativo') y del PIN admin
+-- ('pin_admin'), que llegan al tenant.email_duenio (2026-11-13). Solo se guarda el
+-- SHA-256 del token; el token viaja en el fragmento del link (#recuperar=…). Un
+-- link nuevo anula los anteriores sin usar del mismo tipo (vence_en = now(): se
+-- conservan). Lo escriben solo controllers/authRecuperar.js y
+-- services/recuperacionService.js.
+CREATE TABLE public.token_recuperacion (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tenant_id uuid NOT NULL,
+  tipo text NOT NULL CONSTRAINT token_recuperacion_tipo_check
+    CHECK (tipo = ANY (ARRAY['operativo'::text, 'pin_admin'::text])),
+  token_hash text NOT NULL,
+  vence_en timestamp with time zone NOT NULL DEFAULT (now() + '01:00:00'::interval),
+  usado_en timestamp with time zone,              -- NULL = sin usar
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT token_recuperacion_pkey PRIMARY KEY (id),
+  CONSTRAINT token_recuperacion_hash_unico UNIQUE (token_hash),
+  CONSTRAINT token_recuperacion_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id)
+);
+-- Traspaso de turnos entre barberos (F2 de mejoras operativas, 2026-11-19): el
+-- barbero A (de_barbero_id) le ofrece uno de sus turnos reservados y futuros a otro
+-- barbero B (a_barbero_id), que lo acepta o lo rechaza. Aceptar cambia
+-- turno.barbero_id a B y marca la fila 'aceptado' en una sola sentencia. Nunca se
+-- cancela un turno por un traspaso. La leen y escriben solo
+-- controllers/traspasos.js y services/traspasosService.js (rol barbero).
+-- Estado efectivo, calculado al leer (como el rango efectivo de barbero_suspension):
+-- una 'pendiente' guardada se muestra como pendiente solo si el turno sigue
+-- reservado, futuro, de A y con inicio = turno_inicio, y B sigue activo y libre en
+-- ese horario; si no, la API la muestra 'vencido' con su motivo sin escribirlo. Se
+-- guarda 'vencido' recién cuando alguien actúa sobre ella (aceptar, o pedir otro
+-- traspaso del mismo turno).
+CREATE TABLE public.turno_traspaso (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tenant_id uuid NOT NULL,
+  turno_id uuid NOT NULL,
+  de_barbero_id uuid NOT NULL,
+  a_barbero_id uuid NOT NULL,
+  -- Inicio del turno cuando se pidió el traspaso. Si el turno se mueve (el cliente
+  -- lo reprograma desde el link), la solicitud vence: B nunca acepta un horario
+  -- distinto del que le ofrecieron.
+  turno_inicio timestamp with time zone NOT NULL,
+  estado text NOT NULL DEFAULT 'pendiente'
+    CONSTRAINT turno_traspaso_estado_valido
+    CHECK (estado = ANY (ARRAY['pendiente','aceptado','rechazado','retirado','vencido']::text[])),
+  -- Por qué venció (solo en un 'vencido'). Los textos los arma la app del barbero:
+  --   turno_no_reservado → el turno se canceló, se cobró o quedó como "no asistió"
+  --   turno_reasignado   → el turno ya no es de A
+  --   turno_reprogramado → el inicio del turno ya no es turno_inicio
+  --   turno_empezado     → llegó la hora del turno sin respuesta
+  --   barbero_inactivo   → B se desactivó
+  --   horario_ocupado    → B ya no tiene libre el horario (turno, descanso, ausencia,
+  --                        cambio de horario o el local no atiende ese día)
+  motivo_vencimiento text
+    CONSTRAINT turno_traspaso_motivo_valido
+    CHECK (motivo_vencimiento = ANY (ARRAY['turno_no_reservado','turno_empezado','turno_reasignado',
+                                           'turno_reprogramado','barbero_inactivo','horario_ocupado']::text[])),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  -- Cuándo dejó de estar pendiente (aceptado, rechazado, retirado o vencido).
+  respondido_en timestamp with time zone,
+  CONSTRAINT turno_traspaso_pkey PRIMARY KEY (id),
+  CONSTRAINT turno_traspaso_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenant(id),
+  -- FK compuestos con tenant_id (mismo estándar que auditoría 2.1).
+  CONSTRAINT turno_traspaso_turno_tenant_fkey FOREIGN KEY (tenant_id, turno_id) REFERENCES public.turno(tenant_id, id),
+  CONSTRAINT turno_traspaso_de_barbero_tenant_fkey FOREIGN KEY (tenant_id, de_barbero_id) REFERENCES public.barbero(tenant_id, id),
+  CONSTRAINT turno_traspaso_a_barbero_tenant_fkey FOREIGN KEY (tenant_id, a_barbero_id) REFERENCES public.barbero(tenant_id, id),
+  CONSTRAINT turno_traspaso_barberos_distintos CHECK (de_barbero_id <> a_barbero_id),
+  -- El motivo va solo (y siempre) en un vencido.
+  CONSTRAINT turno_traspaso_motivo_si_vencido CHECK ((estado = 'vencido') = (motivo_vencimiento IS NOT NULL)),
+  -- respondido_en va solo (y siempre) fuera de pendiente.
+  CONSTRAINT turno_traspaso_respondido_coherente CHECK ((estado = 'pendiente') = (respondido_en IS NULL))
 );
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Web de Kingsai (sitio aparte, no es parte de este repo). Vive solo en la DB;

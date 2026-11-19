@@ -19,12 +19,19 @@ export class ErrorServidor extends Error {
    * @param {number} status - Status HTTP de la respuesta
    * @param {string|null} [codigo] - `codigo` del backend, para distinguir un
    *   caso sin comparar textos (ej. 'tenant_no_encontrado'); null si no vino
+   * @param {string|null} [campo] - `campo` del backend en un 400 de formulario
+   *   (ej. 'email_duenio'): a qué campo va el error; null si no vino
+   * @param {object|null} [datos] - El cuerpo entero de la respuesta, para los
+   *   datos extra que van al lado de `error` (ej. `socio_id` en un
+   *   'socio_nombre_repetido'); null si no era JSON
    */
-  constructor(mensaje, status, codigo = null) {
+  constructor(mensaje, status, codigo = null, campo = null, datos = null) {
     super(mensaje);
     this.name = 'ErrorServidor';
     this.status = status;
     this.codigo = codigo;
+    this.campo = campo;
+    this.datos = datos;
   }
 }
 
@@ -47,6 +54,8 @@ export async function errorDeRespuesta(res) {
     typeof data?.error === 'string' ? data.error : '',
     res.status,
     typeof data?.codigo === 'string' ? data.codigo : null,
+    typeof data?.campo === 'string' ? data.campo : null,
+    data !== null && typeof data === 'object' ? data : null,
   );
 }
 

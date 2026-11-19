@@ -3,6 +3,7 @@
 // barberosService: es la red de seguridad a nivel app por encima del FK
 // compuesto (tenant_id, socio_id) de movimiento_extra, y convierte un socio_id
 // ajeno o inactivo en un 404 limpio en vez de una violación de FK cruda (500).
+// También la regla de "es socio" de un barbero (esSocioSql).
 
 import { query } from '../config/db.js';
 import { esUUID } from '../utils/validarUuid.js';
@@ -26,3 +27,20 @@ export const socioActivoEnTenant = async (socioId, tenantId) => {
   );
   return result.rows.length > 0;
 };
+
+/**
+ * esSocioSql — expresión SQL que dice si un barbero es socio: está vinculado a un
+ * socio activo de su mismo tenant. Es la regla de `es_socio` en la lista de
+ * barberos de Gestión y en los cortes de Caja (el filtro "Solo Barberos"), así
+ * que vive en un solo lugar. Mira el vínculo de ahora, no el de la fecha de cada
+ * corte: si alguien deja de ser socio, sus cortes viejos dejan de contar como de
+ * socio (aceptado, F4 de plan_mejoras_operativas.md).
+ *
+ * @param {string} barbero - Alias de la tabla barbero en la query (ej. 'b').
+ * @returns {string} Fragmento SQL de tipo boolean (nunca NULL).
+ */
+export const esSocioSql = (barbero) =>
+  `EXISTS (SELECT 1 FROM socio so
+           WHERE so.tenant_id = ${barbero}.tenant_id
+             AND so.barbero_id = ${barbero}.id
+             AND so.activo = true)`;

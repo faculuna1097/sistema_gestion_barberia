@@ -5,9 +5,14 @@
 // a los logs de Railway en texto plano.
 
 // Lista de keys cuyo valor se reemplaza por '***' al sanitizar un objeto.
-// Comparación case-insensitive. Agregar acá nuevas keys cuando aparezcan
-// (ej: 'token', 'secret', si alguna vez viajan en body).
-const KEYS_SENSIBLES = ['pin', 'pin_admin', 'pin_actual', 'pin_nuevo', 'password'];
+// Comparación case-insensitive. Agregar acá nuevas keys cuando aparezcan.
+//   - token y nueva: la recuperación por mail (POST /api/auth/recuperar/*) manda el
+//     token del link y la credencial nueva en el body.
+//   - email_duenio y telefono_duenio: datos personales del dueño (Gestión → Negocio).
+const KEYS_SENSIBLES = [
+  'pin', 'pin_admin', 'pin_actual', 'pin_nuevo', 'password',
+  'token', 'nueva', 'email_duenio', 'telefono_duenio',
+];
 
 /**
  * sanitizarObjeto
@@ -76,4 +81,25 @@ export function enmascararTokensEnRuta(url) {
 export function rutaSinDatosSensibles(url) {
   if (typeof url !== 'string') return '';
   return enmascararTokensEnRuta(url.split(/[?#]/)[0]);
+}
+
+// Largo máximo de una ruta en una línea de log. La ruta real más larga anda por
+// los 40 caracteres (/api/turnero/turnos/:token/reprogramar): 100 deja margen.
+export const LARGO_MAXIMO_RUTA_LOG = 100;
+
+/**
+ * rutaParaLog
+ * Devuelve la ruta de un request lista para escribirla en un log que lee la
+ * sesión de diagnóstico de Claude (auditoría 2026-11, Z7-02): sin query string,
+ * con los secretos enmascarados (rutaSinDatosSensibles) y recortada a
+ * LARGO_MAXIMO_RUTA_LOG. La URL la escribe el cliente: sin esto, un anónimo
+ * dejaba varios kB de texto libre en una línea de log. Se recorta después de
+ * enmascarar, así un recorte nunca deja medio token a la vista.
+ * Ej.: '/api/x?<texto largo>' → '/api/x'.
+ *
+ * @param {string} url - URL o path del request (ej. req.originalUrl).
+ * @returns {string} la ruta limpia y recortada (string vacío si url no es un string).
+ */
+export function rutaParaLog(url) {
+  return rutaSinDatosSensibles(url).slice(0, LARGO_MAXIMO_RUTA_LOG);
 }

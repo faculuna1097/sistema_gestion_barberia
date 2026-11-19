@@ -13,7 +13,7 @@ import { Banknote, Check, X, CalendarOff, CalendarX } from "lucide-react";
 import { registrarCorte, getTurnosDelDia } from "../../services/api";
 import { getFechaHoy, formatHora } from "../../utils/fecha.js";
 import { theme } from "../../theme/tokens.js";
-import { fmtPesos } from "../../utils/formato.js";
+import { fmtPesos, textoCliente } from "../../utils/formato.js";
 import { motivoYQueHacer } from "../../utils/errores.js";
 import { Button, BadgeFormaPago, LoadingState, EmptyState } from "../../components/ui";
 import {
@@ -269,7 +269,7 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
                     avanzar();
                   }}
                 >
-                  <span>{t.cliente_nombre}</span>
+                  <span>{textoCliente(t.cliente_nombre)}</span>
                   <span style={styles.subLinea}>{formatHora(t.inicio)}</span>
                 </BotonOpcion>
               ))}
@@ -390,7 +390,7 @@ export default function FlujoCorte({ onVolver, barberos, servicios, imagenLocal 
       >
         <TarjetaResumen total={<FilaTotal label="Total" value={fmtPesos(montoTotal)} />}>
           <FilaResumen label="Barbero" value={barberoSeleccionado?.nombre} />
-          {turnoSeleccionado && <FilaResumen label="Cliente" value={turnoSeleccionado.cliente_nombre} />}
+          {turnoSeleccionado && <FilaResumen label="Cliente" value={textoCliente(turnoSeleccionado.cliente_nombre)} />}
           <FilaResumen label="Servicio" value={servicioSeleccionado?.nombre} />
           <FilaResumen label="Precio" value={fmtPesos(servicioSeleccionado?.precio)} />
           <FilaResumen label="Pago" value={<BadgeFormaPago forma={formaPago} />} ultima={!hayPropina} />

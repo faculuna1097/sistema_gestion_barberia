@@ -34,3 +34,25 @@ export function useHover() {
     : SIN_EVENTOS;
   return [hover, eventosHover];
 }
+
+/**
+ * useHoverPresion
+ * Hover (solo con mouse, como useHover) más el estado "apretado" de un botón,
+ * que sí se prende también en pantallas táctiles: es el feedback del toque y
+ * se apaga al soltar o al salir del botón. Lo usan las teclas del PIN y los
+ * barberos del login.
+ * @returns {[{ hover: boolean, presion: boolean }, Object]}
+ *   [estado, eventos] — los eventos van esparcidos en el elemento:
+ *   `<button {...eventos}>`
+ */
+export function useHoverPresion() {
+  const [hover, eventosHover] = useHover();
+  const [presion, setPresion] = useState(false);
+  const eventos = {
+    ...eventosHover,
+    onMouseLeave: () => { eventosHover.onMouseLeave?.(); setPresion(false); },
+    onMouseDown: () => setPresion(true),
+    onMouseUp: () => setPresion(false),
+  };
+  return [{ hover, presion }, eventos];
+}

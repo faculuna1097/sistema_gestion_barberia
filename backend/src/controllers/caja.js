@@ -12,8 +12,8 @@ import {
   esTipoMovimientoExtra,
   sentidoDeMovimiento,
 } from '../utils/movimientos.js';
-import { socioActivoEnTenant } from '../services/sociosService.js';
-import { eliminarGasto, eliminarVenta } from '../services/movimientosService.js';
+import { socioActivoEnTenant, esSocioSql } from '../services/sociosService.js';
+import { eliminarCorte, eliminarGasto, eliminarVenta } from '../services/movimientosService.js';
 
 // Mensaje del 404 de los tipos base; los de movimiento_extra comparten uno solo.
 const NO_ENCONTRADO_POR_TIPO = {
@@ -23,12 +23,17 @@ const NO_ENCONTRADO_POR_TIPO = {
 };
 const MOVIMIENTO_NO_ENCONTRADO = 'Movimiento no encontrado';
 
+// Aviso del borrado de un corte cuyo turno no pudo volver a 'reservado' porque su
+// horario ya es de otro turno (Z4-09): Caja lo muestra después de borrar.
+const AVISO_TURNO_CANCELADO = 'El horario de ese turno ya lo tiene otro cliente: quedó cancelado.';
+
 /**
  * getMovimientosDia
  * Devuelve todos los movimientos del día (cortes, ventas, gastos y movimientos
  * extra) ordenados por timestamp descendente. Cada fila trae `sentido`
  * ('entrada' | 'salida') ya resuelto, para que el front no decida por tipo, y
- * `monto` como número.
+ * `monto` como número. Los cortes suman `es_socio` (el barbero está vinculado a
+ * un socio activo), que usa el filtro "Solo barberos" del panel.
  * @param {string} req.query.fecha - Fecha en formato YYYY-MM-DD (default: hoy en timezone AR)
  * @param {string} req.tenant_id  - Inyectado por tenantMiddleware
  * @returns {JSON} { movimientos: [...] } — 400 si `fecha` viene y no es una fecha válida
@@ -53,14 +58,24 @@ export const getMovimientosDia = async (req, res) => {
          c.monto_total AS monto,
          c.forma_pago,
          c.turno_id,
-         -- % de comisión de este corte (el guardado al registrarlo): el filtro
-         -- "Solo barberos" del panel saca los del 100%. Se llama comision_valor
-         -- por compatibilidad con el panel.
+         -- Datos del turno para el diálogo de borrado (null sin turno; el nombre,
+         -- también en un turno "Sin datos"). El join repite tenant_id como defensa.
+         t.inicio  AS turno_inicio,
+         t.estado  AS turno_estado,
+         cl.nombre AS turno_cliente_nombre,
+         -- % de comisión de este corte (el guardado al registrarlo). Hasta F4 lo
+         -- usaba el filtro "Solo barberos" del panel (sacaba los del 100%); queda
+         -- para el panel publicado antes del deploy de F4, que lo sigue leyendo.
          ${porcentajeComisionSql('c', 'b')} AS comision_valor,
+         -- El barbero está vinculado a un socio activo (vínculo de ahora, no el de
+         -- la fecha del corte): el filtro "Solo barberos" saca estos cortes.
+         ${esSocioSql('b')} AS es_socio,
          'corte' AS tipo
        FROM corte c
        JOIN barbero b  ON c.barbero_id  = b.id
        JOIN servicio s ON c.servicio_id = s.id
+       LEFT JOIN turno t    ON t.id = c.turno_id AND t.tenant_id = c.tenant_id
+       LEFT JOIN cliente cl ON cl.id = t.cliente_id AND cl.tenant_id = t.tenant_id
        WHERE c.tenant_id = $1
          AND DATE(c.timestamp AT TIME ZONE $2) = $3::date
        ORDER BY c.timestamp ASC`,
@@ -261,15 +276,18 @@ export const crearMovimientoExtra = async (req, res) => {
 /**
  * eliminarMovimiento
  * Elimina un registro del día por tipo e id.
- * - corte: borra el corte y, si completaba un turno, lo devuelve a 'reservado'
+ * - corte: borra el corte y, si completaba un turno, lo devuelve a 'reservado'; si
+ *   el horario de ese turno ya lo tiene otro, lo deja 'cancelado' y avisa
  * - venta: restaura stock_actual del producto, luego borra venta
  * - gasto: borra directo
  * - aporte_capital / retiro_socio / otro_ingreso: borra directo de movimiento_extra
  * @param {string} req.params.tipo - 'corte' | 'venta' | 'gasto' | 'aporte_capital' | 'retiro_socio' | 'otro_ingreso'
  * @param {string} req.params.id   - UUID del registro
  * @param {string} req.tenant_id   - Inyectado por tenantMiddleware
- * @returns {JSON} { ok: true } — 404 si el registro no existe en el tenant o el id
- *   está mal formado; 400 si el tipo es inválido
+ * @returns {JSON} { ok: true }; un corte responde además
+ *   { turno: { id, estado: 'reservado'|'cancelado' } | null, aviso?: string }
+ *   (`aviso` solo si el turno quedó cancelado). 404 si el registro no existe en el
+ *   tenant o el id está mal formado; 400 si el tipo es inválido
  */
 export const eliminarMovimiento = async (req, res) => {
   const { tipo, id } = req.params;
@@ -285,59 +303,20 @@ export const eliminarMovimiento = async (req, res) => {
 
   try {
     if (tipo === 'corte') {
-      // Recuperamos el turno vinculado (si lo hay) antes de borrar el corte, y
-      // de paso validamos existencia (404 si no existe en este tenant).
-      const corteResult = await query(
-        'SELECT turno_id FROM corte WHERE id = $1 AND tenant_id = $2',
-        [id, req.tenant_id]
-      );
-      if (corteResult.rows.length === 0) {
+      // El servicio deja el turno sin completar y borra el corte, con su
+      // compensación (movimientosService.eliminarCorte).
+      const resultado = await eliminarCorte(id, req.tenant_id);
+      if (!resultado) {
         return res.status(404).json({ error: NO_ENCONTRADO_POR_TIPO.corte });
       }
-      const { turno_id } = corteResult.rows[0];
-
-      // Orden con compensación (auditoría 6.2): revertimos el turno PRIMERO y
-      // borramos el corte DESPUÉS. Si el DELETE del corte falla, devolvemos el
-      // turno a 'completado' (compensación con delta de estado conocido). Al revés
-      // (borrar corte y luego revertir turno) un fallo dejaría un turno 'completado'
-      // huérfano sin corte, y compensarlo exigiría reconstruir la fila del corte.
-      //
-      // El guard estado = 'completado' hace el revert defensivo (espejo del
-      // registro, que solo completa turnos 'reservado'): nunca toca turnos
-      // cancelados/no_asistio. Estas escrituras son de VALOR FIJO (idempotentes),
-      // así que el retry-once de query() es seguro (no aplica la excepción de 4.2).
-      let turnoRevertido = false;
-      if (turno_id) {
-        const turnoResult = await query(
-          `UPDATE turno SET estado = 'reservado'
-           WHERE id = $1 AND tenant_id = $2 AND estado = 'completado'`,
-          [turno_id, req.tenant_id]
-        );
-        turnoRevertido = turnoResult.rowCount > 0;
-        if (!turnoRevertido) {
-          console.warn('[caja] eliminarMovimiento — turno no revertido (no existe, otro tenant, o no estaba completado) | turno_id:', turno_id);
-        } else {
-          console.log('[caja] eliminarMovimiento — turno revertido a reservado | turno_id:', turno_id);
-        }
-      }
-
-      try {
-        await query('DELETE FROM corte WHERE id = $1 AND tenant_id = $2', [id, req.tenant_id]);
-      } catch (err) {
-        // Compensa el revert del turno si el borrado del corte falló. El guard
-        // estado = 'reservado' evita pisar un cambio concurrente.
-        if (turnoRevertido) {
-          await query(
-            `UPDATE turno SET estado = 'completado'
-             WHERE id = $1 AND tenant_id = $2 AND estado = 'reservado'`,
-            [turno_id, req.tenant_id]
-          ).catch((compErr) => {
-            console.error('[caja] eliminarMovimiento — error compensando revert de turno (best-effort) | turno_id:', turno_id, '| error:', compErr);
-          });
-        }
-        throw err;
-      }
       console.log('[caja] eliminarMovimiento — corte eliminado | id:', id);
+
+      const { turno } = resultado;
+      return res.json({
+        ok: true,
+        turno,
+        ...(turno?.estado === 'cancelado' && { aviso: AVISO_TURNO_CANCELADO }),
+      });
 
     } else if (tipo === 'venta') {
       if (!(await eliminarVenta(id, req.tenant_id))) {

@@ -6,6 +6,7 @@ import FlujoVenta from "./screens/flows/FlujoVenta";
 import FlujoGasto from "./screens/flows/FlujoGasto";
 import PantallaLoginPanel from "./screens/PantallaLoginPanel";
 import PantallaLoginOperativo from "./screens/PantallaLoginOperativo";
+import PantallaRecuperacion from "./screens/PantallaRecuperacion";
 // PanelAdmin (panel admin/barbero) se carga con React.lazy: es el subárbol más
 // pesado y "frío" del front (solo el dueño/barbero, post-login). Así el login y
 // el camino operativo no bajan NADA del código del panel hasta entrar (#7). El
@@ -15,6 +16,7 @@ import { Loader2 } from "lucide-react";
 import { theme } from "./theme/tokens.js";
 import { EmptyState, Button, IconoAlerta, ErrorBoundary, ContactoSoporte } from "./components/ui";
 import { problemaDeAcceso } from "./utils/errores";
+import { esUrlHttps } from "./utils/url.js";
 import FondoLocal from "./components/ui/FondoLocal.jsx";
 import {
   getBarberosOperativo,
@@ -42,6 +44,30 @@ const leerTokenOperativoInicial = () => {
     return null;
   }
 };
+
+/**
+ * leerTokenRecuperacion
+ * Lee el token del link de recuperación (`#recuperar=<token>`, F6 de
+ * plan_mejoras_operativas.md) y lo saca de la URL en el acto con
+ * `history.replaceState`, así no queda en el historial ni en una captura de la
+ * barra de direcciones. Corre una sola vez, al cargar el módulo: si corriera en un
+ * `useState`, StrictMode lo llamaría dos veces en desarrollo y la segunda ya no
+ * encontraría el fragmento.
+ * @returns {string|null} El token, o null si la URL no lo trae.
+ */
+const leerTokenRecuperacion = () => {
+  const coincidencia = window.location.hash.match(/^#recuperar=(.*)$/);
+  if (!coincidencia) return null;
+  try {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  } catch (err) {
+    console.warn('[app] No se pudo sacar el token de recuperación de la URL:', err.message);
+  }
+  return coincidencia[1] || null;
+};
+
+// Token del link de recuperación con el que se abrió la página (o null).
+const TOKEN_RECUPERACION_INICIAL = leerTokenRecuperacion();
 
 /**
  * Wrapper full-screen centrado con fondo del theme. Usado por las pantallas
@@ -143,6 +169,9 @@ export default function App() {
   // tokenOperativo: hidratado desde localStorage al primer render (lazy init).
   // Cuando es null, la pantalla inicial es PantallaLoginOperativo en lugar de MainScreen.
   const [tokenOperativo, setTokenOperativo] = useState(leerTokenOperativoInicial);
+  // tokenRecuperacion: si la página se abrió desde el link de recuperación, se
+  // muestra PantallaRecuperacion antes que cualquier otra pantalla.
+  const [tokenRecuperacion, setTokenRecuperacion] = useState(TOKEN_RECUPERACION_INICIAL);
   const [currentScreen, setCurrentScreen] = useState(tokenOperativo ? "main" : "loginOperativo");
   // imagenLogo: URL del logo del tenant — viene de tenant_imagen tipo='logo'.
   // Nombre evita confusión con el campo legacy tenant.logo (que se elimina al
@@ -167,6 +196,10 @@ export default function App() {
   // barberoSesion: { id, nombre } del barbero logueado, o null si entró el admin.
   // PanelAdmin lo usa (Fase 5) para la vista reducida y para mostrar su identidad.
   const [barberoSesion, setBarberoSesion] = useState(null);
+  // sesionPanelCerrada: el backend cerró la sesión del panel (401: cambio de PIN
+  // del admin —propio o por el link de recuperación—, barbero desactivado o
+  // token vencido). El login del panel lo dice, así no parece un error.
+  const [sesionPanelCerrada, setSesionPanelCerrada] = useState(false);
   const [datos, setDatos] = useState({
     barberos: [],
     servicios: [],
@@ -201,6 +234,7 @@ export default function App() {
       console.warn('[app] 401 del panel detectado — redirigiendo al login del panel');
       setRolPanel('admin');
       setBarberoSesion(null);
+      setSesionPanelCerrada(true);
       setCurrentScreen("loginPanel");
     });
     return () => setOnUnauthorizedAdmin(null);
@@ -219,7 +253,9 @@ export default function App() {
         getNegocio(),
         getImagenesNegocio(),
       ]);
-      setBookingUrl(negocio.booking_url || null);
+      // Solo un link https: cualquier otra cosa (un `javascript:`, un texto suelto)
+      // cuenta como que no hay, y el iPad no muestra el botón Reservar (Z3-06).
+      setBookingUrl(esUrlHttps(negocio.booking_url) ? negocio.booking_url.trim() : null);
       setNombreNegocio(negocio.nombre_negocio || '');
       if (negocio.nombre_negocio) document.title = negocio.nombre_negocio;
 
@@ -317,6 +353,34 @@ export default function App() {
     setCurrentScreen("loginOperativo");
   };
 
+  /**
+   * salirDeRecuperacion
+   * "Ir al inicio" de la pantalla de recuperación: sigue el flujo normal. Si se
+   * cambió la contraseña del iPad, el token operativo de este dispositivo (si
+   * había) quedó revocado: se limpia y se va al login del iPad.
+   * @param {'operativo'|'pin_admin'|null} tipoRecuperado - Qué se cambió, o null.
+   */
+  const salirDeRecuperacion = (tipoRecuperado) => {
+    if (tipoRecuperado === 'operativo') {
+      clearAuthTokenOperativo();
+      setTokenOperativo(null);
+      setCurrentScreen("loginOperativo");
+    }
+    setTokenRecuperacion(null);
+  };
+
+  // Link de recuperación: antes que todo (login, precarga, token operativo).
+  if (tokenRecuperacion) {
+    return (
+      <PantallaRecuperacion
+        token={tokenRecuperacion}
+        imagenLogo={imagenLogo}
+        imagenLocal={imagenLocal}
+        onIrAlInicio={salirDeRecuperacion}
+      />
+    );
+  }
+
   // Login operativo: pantalla inicial cuando no hay tokenOperativo. Tiene que
   // ir ANTES de los chequeos de cargando/error porque precargarDatos no corre
   // sin token, así que datos.barberos quedaría en [] permanentemente acá.
@@ -366,7 +430,9 @@ export default function App() {
         imagenLogo={imagenLogo}
         imagenLocal={imagenLocal}
         avisoAcceso={avisoAcceso}
+        sesionCerrada={sesionPanelCerrada}
         onAcceso={(tokenRecibido, info) => {
+          setSesionPanelCerrada(false);
           setAuthToken(tokenRecibido);
           setRolPanel(info.rol);
           setBarberoSesion(info.barbero ?? null);
@@ -374,7 +440,10 @@ export default function App() {
           setAvisosPago(info.rol === 'admin' && !!info.aviso_pago);
           setCurrentScreen("admin");
         }}
-        onCancelar={volverAlInicio}
+        onCancelar={() => {
+          setSesionPanelCerrada(false);
+          volverAlInicio();
+        }}
       />
     );
   }

@@ -33,18 +33,36 @@ const publicHeaders = {
 };
 
 /**
- * errorDeEscritura
- * Arma el error de una escritura que falló (reservar, cancelar, reprogramar):
- * el mensaje del backend (`error`) o `generico`, salvo un 429, que lleva
- * siempre el texto propio del turnero (TEXTO_DEMASIADOS_INTENTOS).
+ * errorDeLectura
+ * Arma el error de un pedido que llegó al backend y falló: el mensaje del
+ * backend (`error`) o `generico`, con el HTTP y el código para que la pantalla
+ * elija qué decir (ej. `mensajeDeCargaDelLocal`).
  * @param {Response} res - Respuesta con `ok` en false
  * @param {string} generico - Texto si el backend no mandó `error`
- * @returns {Promise<Error>} Con `status` (el HTTP)
+ * @returns {Promise<Error>} Con `status` (el HTTP) y `codigo` (el del backend,
+ *   ej. 'tenant_no_encontrado', o null si no vino)
+ */
+async function errorDeLectura(res, generico) {
+  const body = await res.json().catch(() => ({}));
+  const err = new Error(body.error || generico);
+  err.status = res.status;
+  err.codigo = typeof body.codigo === 'string' ? body.codigo : null;
+  return err;
+}
+
+/**
+ * errorDeEscritura
+ * Arma el error de una escritura que falló (reservar, cancelar, reprogramar):
+ * como errorDeLectura, salvo un 429, que lleva siempre el texto propio del
+ * turnero (TEXTO_DEMASIADOS_INTENTOS).
+ * @param {Response} res - Respuesta con `ok` en false
+ * @param {string} generico - Texto si el backend no mandó `error`
+ * @returns {Promise<Error>} Con `status` (el HTTP) y `codigo` (el del backend,
+ *   ej. 'turno_ya_empezo', o null si no vino)
  */
 async function errorDeEscritura(res, generico) {
-  const body = await res.json().catch(() => ({}));
-  const err = new Error(res.status === 429 ? TEXTO_DEMASIADOS_INTENTOS : (body.error || generico));
-  err.status = res.status;
+  const err = await errorDeLectura(res, generico);
+  if (res.status === 429) err.message = TEXTO_DEMASIADOS_INTENTOS;
   return err;
 }
 
@@ -59,13 +77,7 @@ async function errorDeEscritura(res, generico) {
  */
 export const getTenant = async () => {
   const res = await fetchConDiagnostico(`${BASE_URL}/tenant`, { headers: publicHeaders }, URL_HEALTH);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const err = new Error(body.error || 'Error al obtener tenant');
-    err.status = res.status;
-    err.codigo = typeof body.codigo === 'string' ? body.codigo : null;
-    throw err;
-  }
+  if (!res.ok) throw await errorDeLectura(res, 'Error al obtener tenant');
   return res.json();
 };
 
@@ -163,13 +175,16 @@ export const crearTurno = async (datos) => {
 
 /**
  * getTurnoPorToken
- * Obtiene datos de un turno por su token_gestion.
+ * Obtiene datos de un turno por su token_gestion. Si falla, el error dice por
+ * qué, para que la gestión distinga un link que no existe (404) de una falla de
+ * red o del servidor (con "Reintentar"): lleva `status` y `codigo` si el pedido
+ * llegó, o es un ErrorSinRespuesta con su `causa` si no llegó.
  * @param {string} token
  * @returns {Promise<Object>} { turno, barbero, servicio, cliente }
  */
 export const getTurnoPorToken = async (token) => {
-  const res = await fetch(`${BASE_URL}/turnos/${token}`, { headers: publicHeaders });
-  if (!res.ok) throw new Error('Error al obtener turno');
+  const res = await fetchConDiagnostico(`${BASE_URL}/turnos/${token}`, { headers: publicHeaders }, URL_HEALTH);
+  if (!res.ok) throw await errorDeLectura(res, 'Error al obtener turno');
   return res.json();
 };
 

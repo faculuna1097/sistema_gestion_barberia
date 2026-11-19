@@ -144,6 +144,7 @@ fuera verde, el verde dejaría de avisar algo.
   - `sizeHeading` (18) — h2/h3, títulos de card.
   - `sizeBody` (14) — texto base.
   - `sizeMicro` (11) — eyebrows, helper text en mono uppercase.
+- `sizeDisplay` (44), solo en el turnero: la hora del turno en el éxito de la reserva (`TurnoConfirmado`). Es el dato que el cliente tiene que llevarse de esa pantalla; no se usa para títulos.
 - `sizeInput` (16) es funcional, no de jerarquía: el texto de los inputs. Con menos de 16 px, Safari hace zoom al enfocar un campo en el iPad o el iPhone. Está en los cuatro fronts (en el panel, desde el 2026-11-02).
 - 3 pesos: regular (400), medium (500), heading (600). Nada de 700+.
 
@@ -193,8 +194,10 @@ rápido entre cliente y cliente. Por eso usan una escala más grande que la de
 textarea, 18 en los valores del resumen y el botón grande, 13 en las etiquetas
 mono del resumen, 15 en el subtítulo, 22 / 32 en la etiqueta y el monto del
 total, 40 / 56 en el campo de monto y 48 en el monto del éxito. Desde el
-2026-11-02 está escrita con nombre en `TAM_KIOSKO` (`screens/flows/wizardStyles.js`),
-local a los flujos (§7.1): si otra superficie la necesita, se promueve a `tokens.js`.
+2026-11-02 está escrita con nombre en `TAM_KIOSKO`. Primero fue local a los flujos
+(`screens/flows/wizardStyles.js`, §7.1); desde el 2026-11-18 vive en `theme/tokens.js`,
+porque la usa también el aviso de turnos sin cobrar de `MainScreen` (§6.1).
+`wizardStyles.js` la re-exporta, así los flujos la siguen importando de ahí.
 
 Reglas que cambian según densidad:
 - **Tipografía**: el turnero puede usar `sizeHeading` (18) generosamente; gestión prioriza `sizeBody` (14) incluso en títulos de card. **No bajar nunca de 14 en texto leíble**.
@@ -257,9 +260,21 @@ aunque la foto sea blanca (peor caso medido: título 7:1, estado 6,8:1).
   `transform`, el contenedor pasaría a ser bloque contenedor de los
   `position: fixed` y el overlay de `ConfirmDialog` quedaría atado a la columna.
 
+**En pantallas grandes** (iPad, compu y celular acostado; decidido el
+2026-11-12, F11 de `plan_mejoras_operativas.md`): desde 768 px de ancho, el
+turnero deja de ser una columna de celular sobre gris. A la izquierda va un
+panel fijo con el local (`MarcoLocal` con `HeroLocal`: la foto a todo el alto,
+el logo, el nombre y si está abierto o cerrado; solo identidad, sin dirección
+ni horario, que ya están en la landing). A la derecha, cada pantalla en su
+columna de 480 de siempre, sobre blanco. Por qué así y no rediseñar cada
+pantalla a lo ancho: la reserva es un flujo angosto por naturaleza (como
+Calendly o Booksy), la "vidriera" del local queda a la vista en todo el flujo, y
+cada pantalla se diseña una sola vez para el celular y la compu. Detalle en
+§4.6.
+
 **Íconos**: el turnero no usa Lucide (§3.7). Sus pocos íconos son SVG inline
 con el mismo trazo (1.5–1.75, `currentColor`); los que se repiten viven en
-`components/ui/` (`IconoAlerta`, `IconoPin`).
+`components/ui/` (`IconoAlerta`, `IconoPin`, `IconoPersona`).
 
 **Lo que no se copia**: `tokens.js` e `index.css` del turnero divergen a
 propósito del resto. Un front nuevo copia los del panel (§8), nunca los del
@@ -395,6 +410,9 @@ const [hover, eventosHover] = useHover();
   `eventosHover.onMouseLeave?.()`.
 - Un componente nuevo del barbero o del turnero con hover usa el hook. El
   panel sigue con el `useState` (es de escritorio).
+- **`useHoverPresion`** (mismo archivo del barbero, desde el 2026-11-13): el
+  hover más el "apretado" de un botón, que sí se prende en táctil (es el
+  feedback del toque). Lo usan las teclas del PIN y los barberos del login.
 - **En el turnero (desde el 2026-11-03)** está la misma copia
   (`frontend-turnero/src/hooks/useHover.js`), en `Card`, `SlotChip`, `Button` y
   las filas de servicio y de barbero de la landing. La fila del equipo de la
@@ -480,8 +498,48 @@ bloquearla).
   `muted`, en vez de esconder columnas. Ej.: Ventas pone "2 × $ 500" bajo el
   producto. Las acciones de una fila quedan siempre a la vista.
 - **Pestañas:** `Tabs` acepta `mostrarIconos={false}`; Gestión lo usa en lo
-  angosto (sus 6 pestañas con ícono miden 650 px).
+  angosto (con ícono no entran). Sus 7 pestañas sin ícono miden ~592 px: entran
+  justo en el iPad vertical (744 px). Si una fila de pestañas no entra, `Tabs`
+  scrollea de costado sin barra visible y lleva la elegida a la vista (desde el
+  2026-11-19, F4 de `plan_mejoras_operativas.md`). Su línea base es una sombra
+  interior, no un border.
 - Desde 1024 px (el iPad horizontal) el panel se ve como en escritorio.
+
+**Turnero: pantalla ancha (desde el 2026-11-12, §3.8).** Antes, en compu y en
+el iPad todo vivía en la columna de 480 con gris a los costados, y con el
+celular acostado (812×375) la foto se comía 260 px de 375. El corte es la
+ventana de **768 px o más** (`theme.anchoPantallaAncha`, hook
+`usePantallaAncha` en `frontend-turnero/src/hooks/`): mira el ancho, no la
+orientación, así que el iPad en las dos posiciones y el celular acostado
+entran. Debajo de 768, todo igual que antes (comparado píxel a píxel contra la
+versión anterior en 375 px, en todas las pantallas).
+- **`MarcoLocal`** (`components/ui/`): lo monta `App` en todas sus salidas, por
+  fuera de las pantallas. En lo ancho dibuja el panel del local, pegado arriba
+  (`position: sticky`, alto `100dvh`, ancho `theme.anchoPanelLocal` =
+  `clamp(300px, 42vw, 600px)`), y al lado el contenido. Como está afuera de la
+  pila de pantallas, el panel no se vuelve a montar al navegar ni entra con
+  `tt-pantalla`: solo la columna se desliza. Mientras carga el local, el panel
+  es el bloque oscuro de `accent`. El árbol es el mismo en lo angosto y en lo
+  ancho (el contenido siempre es el segundo hijo), así al rotar el celular la
+  pantalla no se vuelve a montar ni pierde lo elegido.
+- **`HeroLocal`** (`components/ui/`): el hero de la landing (foto, logo, nombre,
+  abierto/cerrado), que se mudó de `Landing.jsx` porque ahora lo usan dos
+  lugares. Normal, es el hero del celular; con `lleno`, ocupa todo el alto del
+  panel. El estado sale de `calcularEstadoNegocio` (`utils/estadoNegocio.js`).
+  El nombre sigue siendo el `h1`.
+- **`PageContainer`**: en lo ancho, la columna de 480 se centra en lo que deja el
+  panel, sobre blanco y con 24 px a los costados (en 768 mide ~400).
+- **Landing:** en lo ancho no dibuja el hero (es el panel) y suma 24 px arriba;
+  su skeleton, igual.
+- El resto de las pantallas (flujo, éxito, gestión) no cambió: `StickyFooter`
+  sigue pegado abajo de la columna, y el overlay de `ConfirmDialog` cubre toda
+  la ventana, panel incluido. El panel no tiene nada enfocable: Tab va directo a
+  la columna.
+- **Hook y no CSS** (a diferencia de la landing de marketing, §4.1): el turnero
+  no se pre-renderiza, los estilos son inline y lo que cambia es qué se dibuja
+  (el hero en la columna o en el panel), no solo cómo se ve. Se lee al montar,
+  sin salto. El costo: un re-render al cruzar el corte. No se sumaron clases
+  `tt-`.
 
 ### 4.7 Comentarios obligatorios
 
@@ -563,8 +621,17 @@ El primitivo `Field` debe garantizar:
 Si construís un input que no usa `Field`, replicá estas tres reglas.
 
 El `Field` del turnero las cumple desde el 2026-10-08 (con `useId`), y
-`CampoTelefono` (local de `ConfirmarTurno`) también. En el panel y el barbero,
-sin verificar.
+`CampoTelefono` (local de `ConfirmarTurno`) también. El del panel, desde el
+2026-11-13 (F6 de `plan_mejoras_operativas.md`): la label pasó de envolver al
+input a `htmlFor`/`id`, porque el botón ojo vive dentro de la caja del campo. En
+el barbero, sin verificar.
+
+**Ver contraseña (panel, desde el 2026-11-13):** `Field` con `revelable` y
+`type="password"` suma un botón ojo dentro de la caja, a la derecha: 44 × 44,
+`aria-label` "Mostrar contraseña" / "Ocultar contraseña", `aria-pressed` y
+`aria-controls`. Con un texto (`revelable="PIN"`) nombra eso en vez de
+"contraseña". No toca el `autoComplete`. Lo usan los logins, la recuperación y
+los modales de Gestión → Seguridad.
 
 ### 5.3 Contraste
 
@@ -641,8 +708,8 @@ pantalla.
 | `StickyFooter` | Footer anclado abajo con border-top, safe-area iOS. No está en el panel: si un front nuevo lo necesita, se copia del barbero. En el turnero (desde el 2026-11-03), mientras está montado su alto es el `scroll-padding-bottom` del documento: lo que se enfoca con Tab o el "siguiente" del teclado queda por encima del footer. `Field` y `CampoTelefono` suman `MARGEN_SCROLL_CAMPO` al input para que también se vea la ayuda o el error. |
 | `EmptyState` | Glyph + title + body + acción opcional. |
 | `Skeleton` | Bloque con shimmer. |
-| `StatusPill` | Pill chiquito con dot + label de estado. |
-| `PageContainer` | Wrapper raíz, max-width responsive, fondo lateral. |
+| `StatusPill` | Pill chiquito con dot + label de estado. En el panel, también la marca "socio" de Gestión → Barberos (desde el 2026-11-19). |
+| `PageContainer` | Wrapper raíz, max-width responsive, fondo lateral. En el turnero, en pantalla ancha la columna va a la derecha del panel del local, sobre blanco (§4.6). |
 | `ConfirmDialog` | Modal de confirmación (ESC + click fuera + loading state). |
 | `AvatarIniciales` | Círculo con iniciales y tono determinístico por nombre (en el turnero, un tono neutro único). |
 | `SummaryRow` | Fila label/value con border-bottom sutil. |
@@ -660,6 +727,57 @@ admin. Entre ellos:
   (`OPCIONES_FORMA_PAGO`, `formatPago`) y los colores en `tonosFormaPago.js`.
 - `Field` acepta `maxLength`; su input va en `sizeInput` y la ayuda y el error
   en `sizeBody`.
+- `SelectorConBarra` (desde el 2026-11-12, F7 de `plan_mejoras_operativas.md`):
+  un valor que se elige con una barra de a pasos (`<input type="range">`
+  nativo) y botones de − y + de 44 px, con el rótulo de `Field` y el valor a la
+  vista. Rango, paso y formato van por props; acepta `error` como `Field`. Lo
+  usa la comisión del barbero (Gestión → Barberos, de 0 a 100 de a 5). Es la
+  copia del de `frontend-alta` (§6.5) con la densidad del panel, y el riel se
+  dibuja con la clase `om-rango` de `index.css`.
+- Pantallas de acceso (desde el 2026-11-13, F6 de `plan_mejoras_operativas.md`):
+  `MarcoAcceso` es el marco del login del iPad, el login del panel y la
+  recuperación por mail (`FondoLocal`, un overlay con scroll para cuando sube el
+  teclado y la card centrada; con `onSubmit` la card es un `<form>`, con
+  `esquina` lleva el botón de arriba a la izquierda). `EncabezadoAcceso` (mismo
+  archivo) es el título y la bajada, que pasa a `danger` en un error; el título
+  es enfocable por código para anunciar un paso nuevo dentro de la misma card.
+- `BotonEnlace`: acción secundaria con forma de link, sin caja, de 44 px de
+  alto. Hoy, el "¿Olvidaste…?" de los dos logins.
+- Pantallas de ajustes: `FilaAjuste` es la fila "qué es (con una línea que lo
+  explica) · valor actual · acción", que baja el valor debajo del rótulo en lo
+  angosto (flex-wrap). La usan Gestión → Seguridad (una tarjeta por tema, con
+  ícono, descripción y un pie que dice cómo se recupera la credencial) y
+  Gestión → Negocio → Contacto. `PillSinConfigurar` marca un dato vacío, en
+  tono warning, con su texto ("Sin configurar", "Sin cargar").
+- `BotonExportarExcel` es solo el ícono de descarga, en 44 × 44, con el nombre en
+  `ariaLabel` y `title` (desde el 2026-11-19; antes llevaba el texto "Exportar Excel").
+  `SelectorDia` acepta `botonHoy`: un botón "Hoy" a su derecha, siempre a la vista y
+  deshabilitado si ya es hoy (lo usa Caja). `TogglePill` mide 44 de alto. Los tres van a 44
+  porque comparten fila en Caja (deuda #24 de §9).
+- `Button` acepta `ariaLabel` cuando el texto visible no alcanza (ej. "Cambiar"
+  en una fila → "Cambiar el PIN de administrador"); empieza con el texto visible.
+- `Modal` con `botonCerrar` (desde el 2026-11-18, F3 de `plan_mejoras_operativas.md`):
+  una X de 48 × 48 en la esquina de la card (`etiquetaCerrar` es su nombre
+  accesible), para un modal que solo se lee y no tiene botón de cerrar propio. El
+  título deja 64 a la derecha para no pasar por debajo. Lo demás no cambia (ESC,
+  tocar afuera, foco).
+- Aviso de turnos sin cobrar (desde el 2026-11-18, F3 de `plan_mejoras_operativas.md`):
+  - `DetalleTurnosSinCobrar` es el detalle que comparten el iPad y el Inicio: un
+    `Modal` con `botonCerrar`, del tamaño de su contenido, con una columna por
+    barbero (ancho fijo, centradas como grupo, pasan a otra fila desde el cuarto) y
+    sus horarios pendientes apilados (hora de inicio en grande, el cliente debajo y,
+    si no es de hoy, la fecha arriba). Título, subtítulo, el aviso del modo alerta y
+    los nombres de los barberos quedan fijos; scrollean solo los horarios. El nombre
+    es `sticky` con `top: -16` para cubrir el padding de arriba del cuerpo del
+    `Modal`. Props: `kiosko` (tamaños de `TAM_KIOSKO`), `mostrarCliente` y
+    `onIrAlTurnero` (el botón del pie, solo el panel).
+  - El aviso de cada pantalla es propio, por la densidad: en el iPad, una pill
+    sólida abajo al centro, entre las esquinas inferiores (blanca; en modo alerta,
+    `warning` sólido con texto blanco y sin X, porque en esa pantalla el rojo es el
+    egreso); en el Inicio, una franja arriba de las cards (`surface`; en alerta,
+    `warningSoft` con borde `warning`).
+  - Los datos y el ocultado salen del hook `useTurnosSinCobrar` (`hooks/`); el tick
+    por minuto, de `useAhoraPorMinuto`, que comparte con el Reloj de `MainScreen`.
 
 **Gráficos, sin librería.** El proyecto no tiene librería de gráficos: las
 barras se hacen con divs de ancho proporcional y los tokens del tema.
@@ -678,14 +796,17 @@ series temporales), se evalúa una librería cargada solo al usarla, como `xlsx`
 | `Progress` | Barra fina de 3 tramos (`role="progressbar"`, "Paso N de 3: X"). Tiene sentido en un flujo lineal corto, no en dashboards. |
 | `SelectorDiaHorario` | Grilla semanal de los próximos días (lunes a domingo, sin scroll) + los horarios del día elegido en una sola grilla. Solo dibuja: los datos los trae el hook `useDisponibilidad`. Lo usan "¿Cuándo?" y la reprogramación. Para gestión hace falta otro picker (navegación de mes, multi-selección). Reemplazó a `MiniCalendario` el 2026-10-08. |
 | `SlotChip` | Chip de horario, de alto fijo (`ALTO_SLOT`, 48) para que el skeleton no salte. |
-| `ResumenTurno` | Tarjeta del turno (día y hora, servicio, quién atiende, dirección). La comparten la confirmación y el éxito. |
-| `AgregarAlCalendario` | Botón "Agregar al calendario": `.ics` en iPhone/iPad/Mac y Google Calendar en el resto, con la otra opción como link. Lo usan el éxito y la gestión del turno. |
+| `ResumenTurno` | Tarjeta del turno (día y hora, servicio, quién atiende, dirección). La usa la confirmación. El éxito tiene su propio detalle (quién atiende, con el servicio debajo, y la dirección subrayada con una ↗, que abre el mapa desde toda la fila), con el mismo `textoBarbero` de `utils/formato.js`. |
+| `AgregarAlCalendario` | Botón "Agregar al calendario": `.ics` en iPhone/iPad/Mac y Google Calendar en el resto, con la otra opción como link. Lo usan el éxito y la gestión del turno. El éxito pasa `conOtraOpcion={false}` (solo el calendario del celular o Google, decidido el 2026-11-12); la gestión deja el link como camino de respaldo. |
+| `HeroLocal` | Foto del local, logo, nombre y abierto/cerrado. Hero de la landing en el celular y, con `lleno`, el panel de la pantalla ancha (§4.6). |
+| `MarcoLocal` | Marco del turnero en pantalla ancha: panel fijo del local a la izquierda y la pantalla a la derecha. Lo monta `App` una sola vez (§4.6). |
 
 Hooks del flujo (`frontend-turnero/src/hooks/`): `useNavegacion` (pila de
 pantallas integrada al historial, así el "atrás" del celular vuelve un paso),
 `useListaRemota` (servicios y barberos, cargados una vez en `App`),
-`useDisponibilidad` (días y horarios, descarta respuestas viejas) y
-`useEleccionConPausa` (la pausa de ~150 ms al elegir).
+`useDisponibilidad` (días y horarios, descarta respuestas viejas),
+`useEleccionConPausa` (la pausa de ~150 ms al elegir) y `usePantallaAncha`
+(la pantalla ancha de §4.6).
 
 ### 6.3 Propias de `frontend-barbero` (todavía no compartidas)
 
@@ -695,10 +816,72 @@ componente se comparte recién cuando un segundo front lo necesita).
 
 | Componente | Para qué |
 |---|---|
-| `BottomNav` | Barra de navegación inferior fija, mobile. |
+| `BottomNav` | Barra de navegación inferior fija, mobile. Un ítem acepta `badge` (desde el 2026-11-19, F2 de `plan_mejoras_operativas.md`): el número de `ContadorAvisos` sobre el ícono y en el nombre accesible ("Hoy, 2 avisos"). |
 | `KPI` | Tarjeta de métrica (label + valor grande + tono semántico). |
 | `TurnoListItem` | Card de turno: hora/cliente/servicio + acciones según estado. |
 | `SearchInput` | Input de búsqueda con lupa + botón limpiar. |
+| `FondoLocal` | Fondo a pantalla completa con la foto del local desenfocada y con velo (sin foto, `surfaceAlt`). Copia del panel (§6.1) sin el "telón" de `esperarImagen`. |
+| `MarcoAcceso` / `EncabezadoAcceso` | Marco del login: `FondoLocal`, un overlay con scroll propio y la card centrada (380), con `esquina` para el "Volver". Copia del panel sin `onSubmit`; la bajada de `EncabezadoAcceso` es `aria-live`, así se anuncia "PIN incorrecto". |
+| `HojaInferior` | Hoja que sube desde abajo (ancho de la columna, hasta 90 % del alto) para una tarea corta sin salir de la pantalla: encabezado con título, subtítulo y X; cuerpo con scroll propio; `pie` fijo con el error y el botón, que queda a la vista aunque suba el teclado. Cierra con Escape, la X o tocando afuera, salvo `bloqueada`; lleva el foco a la hoja y lo devuelve al cerrar. Entra con `om-hoja-in`. La usan el atajo "Reservar turno" y "Asignar cliente" de la Agenda (desde el 2026-11-16, F1 de `plan_mejoras_operativas.md`). |
+| `AvisoError` | Caja de error en línea (`dangerSoft`, borde y texto `danger`, `role="alert"`). La usan el wizard de turno, las hojas y los avisos de la Agenda. |
+| `ContadorAvisos` | Círculo de 18 en `accent` con borde blanco y el número ("9+" desde 10), arriba a la derecha de un ícono (el padre va `position: relative`). Solo dibuja (`aria-hidden`): el número para el lector lo pone el botón que lo lleva. Lo usan la campanita de "Hoy" y el `badge` de `BottomNav` (desde el 2026-11-19). |
+
+`AvatarIniciales` sin nombre (un turno "Sin datos") dibuja el ícono de persona
+sobre `accentSoft`, el mismo del botón "Sin datos".
+
+**Cliente de un turno (desde el 2026-11-16, F1 de `plan_mejoras_operativas.md`).**
+Piezas de dominio en `components/cliente/`, no en `ui/`: `SelectorCliente`
+(buscar entre los clientes del barbero o cargar uno nuevo; controlado, con el
+valor y su conversión para la API en `utils/clienteTurno.js`), `BotonSinDatos`
+(reservar sin cliente, en el acento suave, confirma en el acto) y `Separador`
+("o cargá el cliente"). La búsqueda con espera entre teclas es el hook
+`useBusquedaClientes`. Las comparten el wizard de turno, la hoja del atajo y
+"Asignar cliente". El texto de un turno sin cliente es siempre "Sin datos"
+(`textoCliente` en `utils/formato.js`).
+
+**Avisos y traspasos (desde el 2026-11-19, F2 de `plan_mejoras_operativas.md`).**
+Piezas de dominio, como las del cliente:
+- **Avisos** (`components/avisos/`): `BotonAvisos` es la campanita de 44 × 44, arriba a
+  la derecha de "Hoy", con `ContadorAvisos`; el mismo número va sobre "Hoy" en la barra.
+  Abre `HojaAvisos`, el modal de avisos (una `HojaInferior` con X, que monta `App`), con
+  un bloque por tipo: "Te ofrecen" (tarjeta con quién ofrece, día y horario, servicio y
+  cliente, y Rechazar / Aceptar; lo respondido queda a la vista hasta cerrar: "Aceptado"
+  con "Ver en la Agenda", "Rechazaste este turno" o el motivo en un `AvisoError`) y "Tus
+  traspasos" (cómo terminaron los que ofreció, con ícono por resultado; los ya vistos van
+  en `muted` y sin negrita). Un aviso nuevo de otro tipo se suma como otro bloque y otra
+  cuenta en el número. Sin aviso: `EmptyState`.
+- **Traspasar** (`components/traspasos/HojaTraspasar.jsx`): `HojaInferior` con los
+  barberos que tienen libre el horario (filas de 56 con `aria-pressed` y tilde; la elegida
+  en `accentSoft` con borde `accent`) y "Ofrecer a {B}" en el pie. Sin candidatos,
+  `EmptyState` que dice qué tiene que estar libre.
+- **En la Agenda:** el bloque de un turno con una oferta pendiente suma `⇄ {B}`
+  (`ArrowRightLeft` de 16) en el renglón de la hora, y su nombre accesible lo dice. El
+  detalle muestra una línea con el estado de la última oferta (pendiente en `accentSoft`,
+  aceptada en `successSoft`, rechazada en `surfaceAlt`, vencida en `warningSoft`; siempre
+  con el texto), "Retirar" si está pendiente y "Traspasar" o "Traspasar a otro".
+- Los textos de los motivos salen de `utils/traspasos.js`, y los datos de `useTraspasos`.
+
+**Login (desde el 2026-11-13, F5 de `plan_mejoras_operativas.md`).** Las dos
+fases del login comparten `MarcoAcceso`: la misma "puerta" que el login del
+iPad y el del panel, con la foto del local de fondo.
+- **Selector:** la marca del local (logo de 72 y el nombre; skeletons del mismo
+  tamaño mientras `App` la carga, así no salta) y los barberos en una grilla de
+  avatares con el nombre completo debajo, en hasta dos renglones. Las columnas
+  dependen de la cantidad (`medidasGrilla` en `Login.jsx`): con 2, dos
+  columnas; con 3, una fila de 3; con 4, 2×2; desde 5, tres columnas con la
+  última fila centrada. Avatar de 64 hasta 4 barberos y de 56 desde 5. Con 9
+  entra sin scroll en un celular de 667 px; con más, la card scrollea sobre la
+  foto. El último barbero que entró desde ese celular va primero
+  (`utils/sesion.js`).
+- **PIN:** "Volver" en la esquina, el avatar, el nombre, los puntos y un teclado
+  de teclas de 56 en `surfaceAlt` (la de borrar, sin fondo), con la línea
+  "¿Olvidaste tu PIN? Pedile uno nuevo al dueño." debajo: el barbero no tiene
+  recuperación por mail.
+- Al cambiar de fase, el foco va al título de la fase nueva.
+- **La sesión queda guardada en el celular** (`utils/sesion.js`, `localStorage`,
+  como el token del iPad en el panel): al abrir la app con una sesión vigente
+  se entra sin PIN, hasta los 30 días del token. Un 401 o "Cerrar sesión" la
+  borran.
 
 ### 6.5 Propias de `frontend-alta`
 
@@ -828,8 +1011,8 @@ la estrategia es duplicar**:
 
 | | `tokens.js` | `index.css` |
 |---|---|---|
-| **Panel** | La base de Luz más `neutralSoft`, `overlay` y `shadowLg` (`0 20px 40px rgba(0,0,0,0.15)`), solo de este front. | Geist y Geist Mono desde `public/fonts` (desde 2026-11-02). `om-fade` sube 4 px. Suma `om-shake` y `.om-fila-hover` (el hover de las tablas de reporte) y `spin`. |
-| **Barbero** | La base de Luz: lo mismo que el panel, sin `neutralSoft`, `overlay` ni `shadowLg`. | Google Fonts. `om-fade` es solo opacidad (con `transform`, los modales se descentraban dentro de `PageContainer`). Su giro se llama `om-spin`. Sin `om-shake` ni `.om-fila-hover`. |
+| **Panel** | La base de Luz más `neutralSoft`, `overlay` y `shadowLg` (`0 20px 40px rgba(0,0,0,0.15)`), solo de este front. Desde el 2026-11-18, también `TAM_KIOSKO` (§3.6), la escala del iPad. | Geist y Geist Mono desde `public/fonts` (desde 2026-11-02). `om-fade` sube 4 px. Suma `om-shake`, `.om-fila-hover` (el hover de las tablas de reporte), `.om-rango` (el riel de `SelectorConBarra`, desde el 2026-11-12) y `spin`. |
+| **Barbero** | La base de Luz: lo mismo que el panel, sin `neutralSoft`, `overlay` ni `shadowLg`. | Google Fonts. `om-fade` es solo opacidad (con `transform`, los modales se descentraban dentro de `PageContainer`). Su giro se llama `om-spin`. `om-shake` (los puntos del PIN, desde el 2026-11-13; antes era un `<style>` del login). `om-hoja-in` (la entrada de `HojaInferior`, con su versión para "reducir movimiento", desde el 2026-11-16). Sin `.om-fila-hover`. |
 | **Landing** | La base sin `neutralSoft`, `overlay` ni `maxWidth`. Suma `sizeDisplay`, `sizeSection`, `sizeSubheading`, `maxWidthWide`, `maxWidthText`, `sectionGapMin` y `sectionGapMax`. Tiene su propio `shadowLg` (`0 12px 32px rgba(0,0,0,0.10)`, para las capturas que flotan): mismo nombre que el del panel, otro valor. | Google Fonts, `scroll-behavior: smooth`, `om-reveal` y las clases `om-` de §4.1. Sin `om-stroke`, `om-overlay-in` ni `om-dialog-in`. |
 | **Turnero** | Diverge a propósito (§3.8): `bg`, `accent`, `accentHover`, `accentSoft` y los del hero. No tiene `shadowScroll`. | Diverge a propósito (§3.8): `overscroll-behavior`, los colores de su tema y el movimiento `tt-`. |
 | **Alta** | La base de Luz, sin `neutralSoft`, `overlay` ni `shadowLg` (copia del panel, 2026-11-10). | Geist desde `public/fonts`. `om-shimmer`, `om-pop` y `om-stroke`, con su versión para "reducir movimiento", y el movimiento `al-` (§3.9). |
@@ -917,10 +1100,31 @@ actualizá este doc.**
 21. ~~**Touch target de los días de `SelectorDiaHorario`**: ~46 px de ancho en 375 px, pero ~41 px dentro de la tarjeta de la reprogramación y ~37 px en pantallas de 320 px, debajo de los 44 de §5.4 (el alto es 48). Al `MiniCalendario` le pasaba lo mismo.~~ — **Resuelto desde 375 px (2026-11-03)**: el botón de cada día ocupa la columna entera, con el espacio entre días adentro, y la caja visible no cambió (medida al píxel). En 375 px: 49,6 en "¿Cuándo?" y 44,8 en la reprogramación. En 320 px queda en 41,7: llegar a 44 ahí exige cambiar el diseño.
 22. ~~**Textos de 12 px en `frontend-barbero`**~~ — **Resuelto (2026-10-19)**: pasaron a 14 (`sizeBody`), con el valor de `SummaryRow` (13) y la ayuda y el error de `Field` (12). `StatusPill` pasó de 10 a 11 (`sizeMicro`). Quedan en 11, a propósito, las pills de categoría y las etiquetas de la `BottomNav` (excepciones de §3.6). Texto original: (`theme.sizeMicro + 1`), debajo del mínimo de 14 de §3.6: Clientes, CrearTurno, Dashboard, Gestión (tab Horarios, `FilaDia`), Más, MiPlanilla, `KPI` y `TurnoListItem`; `StatusPill` usa 10. Los 12 de `Field` y los 13 de `SummaryRow` ya están en `estado_actual.md` ("Tamaños escritos a mano"). La Agenda y las filas de Gestión → Suspensiones pasaron a 14 el 2026-10-19. Ojo al subirlos: en un bloque de alto fijo, 14 px con el interlineado global (1,5 → 21 px por renglón) puede no entrar; el bloque de turno de la Agenda usa un interlineado de 18 px (`INTERLINEADO_TURNO`). Visto en el paso 5a de la app del barbero.
 23. ~~**La escala del kiosko está escrita como números sueltos**~~ — **Resuelto (2026-11-02)**: `TAM_KIOSKO` en `wizardStyles.js` (§3.6), con los mismos valores. Texto original: en `frontend/src/screens/flows/wizard.jsx` (19, 18, 13, 15, 22, 32, 40, 56, 48; ver §3.6). Los tamaños son intencionales; lo que falta es nombrarlos: una escala local al archivo (ej. `TAM_KIOSKO = { opcion: 19, valorResumen: 18, … }`), no en `tokens.js`, porque hoy la usa un solo archivo (§7.1). Si otro front o superficie la necesita, se promueve. Visto el 2026-10-29 al documentar §6.4.
+24. **Los botones del panel no tienen una escala de alto.** Cada primitivo tiene el suyo:
+    `Button` ~47 px (padding 12 + interlineado), `TogglePill` 44, las flechas de
+    `SelectorPeriodo` 36, el "+ Movimiento" de Caja 36 y `BotonIconoFila` 28. Al juntarlos en
+    una fila se nota: en Caja hubo que fijar a mano 44 en "Solo Barberos", "Hoy" y Exportar
+    (2026-11-19). Revisar todos los botones de los fronts y definir pocos altos con nombre
+    en `tokens.js` (ej. compacto y normal, sin bajar de 44 donde se toca con el dedo, §5.4).
+    Anotada a pedido del usuario en F4 de `plan_mejoras_operativas.md`.
 
 ---
 
-*Última actualización: 2026-11-03 — §3.7 suma la excepción de los logos de marcas (`IconoWhatsApp` en la landing).*
+*Última actualización: 2026-11-18 — F3 de mejoras operativas (fase 7b): §3.6 y §8, `TAM_KIOSKO` pasa a `tokens.js`; §6.1 suma `botonCerrar` en `Modal`, `DetalleTurnosSinCobrar` y los avisos de turnos sin cobrar del iPad y del Inicio.*
+
+*2026-11-16 — F1 de mejoras operativas (fase 6): §6.3 suma `HojaInferior`, `AvisoError`, `AvatarIniciales` sin nombre y las piezas del cliente de un turno (`components/cliente/`); §8, `om-hoja-in` en el `index.css` del barbero.*
+
+*2026-11-13 — F5 de mejoras operativas (fase 4): el login de la app del barbero con `FondoLocal` y `MarcoAcceso` (§6.3), la grilla de barberos, la sesión guardada en el celular, `useHoverPresion` (§4.2) y `om-shake` en el `index.css` del barbero (§8).*
+
+*2026-11-13 — F6 de mejoras operativas (fase 3): §5.2 suma el ojo de `Field` (`revelable`) y la label con `htmlFor` en el panel; §6.1 suma `MarcoAcceso`, `EncabezadoAcceso`, `BotonEnlace`, `FilaAjuste`, `PillSinConfigurar` y `ariaLabel` en `Button`.*
+
+*2026-11-12 — F7 de mejoras operativas: §6.1 suma `SelectorConBarra` (panel) y §8 la clase `om-rango` en el `index.css` del panel.*
+
+*2026-11-12 — F10 de mejoras operativas: el éxito de la reserva más liviano. §3.2 suma `sizeDisplay` (turnero), §3.8 `IconoPersona` y §6.2 actualiza `ResumenTurno` y `AgregarAlCalendario` (`conOtraOpcion`).*
+
+*2026-11-12 — F11 de mejoras operativas: el turnero en pantallas grandes (§3.8, §4.6), con `MarcoLocal`, `HeroLocal` y `usePantallaAncha` (§6.2).*
+
+*2026-11-03 — §3.7 suma la excepción de los logos de marcas (`IconoWhatsApp` en la landing).*
 
 *2026-11-03 — tanda 7b de deudas: `muted` pasa a `#6B6B74` en los cuatro fronts (§3.1, §5.3 con la tabla de contraste y qué queda en `mutedSoft`, §8); `fmtPesos` igual en los cuatro (§8); deuda #9 resuelta para los grises.*
 

@@ -49,6 +49,20 @@ function estadoDelSlot(slot) {
 }
 
 /**
+ * nombreTraspasoPendiente
+ * A quién se le ofreció un turno reservado, si la oferta sigue pendiente.
+ * @param {Map<string, Object>|undefined} traspasos - turno_id → solicitud
+ * @param {Object} turno
+ * @returns {string|null}
+ */
+function nombreTraspasoPendiente(traspasos, turno) {
+  const solicitud = traspasos?.get(turno.id);
+  return turno.estado === 'reservado' && solicitud?.estado === 'pendiente'
+    ? solicitud.a_barbero.nombre
+    : null;
+}
+
+/**
  * Timeline
  * Dibuja la grilla del barbero (una celda con borde por slot y, a la izquierda,
  * el horario de inicio de cada slot), en gris las horas del local en que no
@@ -69,12 +83,14 @@ function estadoDelSlot(slot) {
  * @param {Set<number>} props.iniciosTocables - inicioMs de los slots que se pueden tocar
  * @param {Array} props.seleccion - slots elegidos para un descanso (continuos, ordenados)
  * @param {(slot) => void} props.onTocarSlot
+ * @param {Map<string, Object>} [props.traspasos] - turno_id → solicitud de
+ *   traspaso más nueva (useTraspasos): marca los que tienen una pendiente
  * @param {(turno) => void} props.onTocarTurno
  * @param {(descanso) => void} props.onTocarDescanso
  */
 export default function Timeline({
   agenda, fecha, ahora, esHoy, rango, pxPorHora, altoTotal, refAhora,
-  iniciosTocables, seleccion, onTocarSlot, onTocarTurno, onTocarDescanso,
+  iniciosTocables, seleccion, traspasos, onTocarSlot, onTocarTurno, onTocarDescanso,
 }) {
   const { turnos, slots, bloques, fueraDeHorario } = agenda;
   const origen = rango.minInicio;
@@ -237,6 +253,7 @@ export default function Timeline({
           turno={turno}
           origen={origen}
           pxPorHora={pxPorHora}
+          traspasoA={nombreTraspasoPendiente(traspasos, turno)}
           onClick={() => onTocarTurno(turno)}
         />
       ))}

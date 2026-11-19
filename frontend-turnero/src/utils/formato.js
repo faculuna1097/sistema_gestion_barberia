@@ -30,3 +30,18 @@ export function fmtPesos(n) {
 export function capitalizar(texto) {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
+
+/**
+ * textoBarbero
+ * Quién atiende el turno, dicho para el cliente. Lo usan el resumen del turno
+ * (ResumenTurno) y el éxito de la reserva (TurnoConfirmado).
+ * @param {Object} barbero - { id, nombre }; `nombre` es null si "Cualquiera"
+ *   asignó un barbero que no está en la lista de App
+ * @param {boolean} asignado - true si lo asignó "Cualquiera"
+ * @returns {string} "Te atiende Juan" (asignado), "Con Juan" (elegido a mano)
+ *   o "Te asignamos un barbero" (sin nombre)
+ */
+export function textoBarbero(barbero, asignado) {
+  if (!barbero.nombre) return 'Te asignamos un barbero';
+  return asignado ? `Te atiende ${barbero.nombre}` : `Con ${barbero.nombre}`;
+}

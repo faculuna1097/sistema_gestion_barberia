@@ -1,7 +1,7 @@
 // /frontend-barbero/src/utils/errores.js
 // Mensajes de error para el usuario a partir de una respuesta fallida. Copia
 // de /frontend/src/utils/errores.js (los fronts no comparten código), con lo que
-// usa esta app: hoy, el login (lista de barberos y PIN).
+// usa esta app: el login (lista de barberos y PIN) y los traspasos.
 //
 // Por qué existe: si un handler muestra `err.message` tal cual, el usuario ve
 // textos técnicos en inglés cuando el error no viene del servidor: "Failed to
@@ -21,12 +21,16 @@ export class ErrorServidor extends Error {
    * @param {number} status - Status HTTP de la respuesta
    * @param {string|null} [codigo] - `codigo` del backend, para distinguir un
    *   caso sin comparar textos (ej. 'tenant_no_encontrado'); null si no vino
+   * @param {object|null} [datos] - El cuerpo entero de la respuesta, para los
+   *   datos extra que van al lado de `error` (ej. `motivo` en un
+   *   'traspaso_vencido'); null si no era JSON
    */
-  constructor(mensaje, status, codigo = null) {
+  constructor(mensaje, status, codigo = null, datos = null) {
     super(mensaje);
     this.name = 'ErrorServidor';
     this.status = status;
     this.codigo = codigo;
+    this.datos = datos;
   }
 }
 
@@ -49,6 +53,7 @@ export async function errorDeRespuesta(res) {
     typeof data?.error === 'string' ? data.error : '',
     res.status,
     typeof data?.codigo === 'string' ? data.codigo : null,
+    data && typeof data === 'object' ? data : null,
   );
 }
 

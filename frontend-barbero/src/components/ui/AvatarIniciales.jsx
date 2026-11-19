@@ -2,18 +2,24 @@
 // Círculo con las iniciales de un nombre. Color de fondo determinístico (hash del nombre).
 // Usado en SeleccionBarbero y Confirmacion/GestionTurno.
 
+import { UserRound } from 'lucide-react';
+
 import { theme } from '../../theme/tokens.js';
 
 /**
  * AvatarIniciales
  * Avatar circular con iniciales y tono derivado del nombre.
  * Mismo nombre → mismo color en cualquier parte de la app.
- * @param {string} props.nombre - Nombre completo (toma iniciales de primera y última palabra)
+ * Sin nombre (un turno "Sin datos") muestra el ícono de persona en el acento
+ * suave, el mismo del botón "Sin datos" (components/cliente/BotonSinDatos).
+ * @param {string|null} props.nombre - Nombre completo (toma iniciales de primera y última palabra)
  * @param {number} [props.size=40] - Diámetro en px
+ * @returns {JSX.Element}
  */
 function AvatarIniciales({ nombre, size = 40 }) {
+  const sinNombre = !nombre || !nombre.trim();
   const iniciales = obtenerIniciales(nombre);
-  const tono = tonoDesdeNombre(nombre);
+  const tono = sinNombre ? { bg: theme.accentSoft, fg: theme.accent } : tonoDesdeNombre(nombre);
 
   return (
     <div style={{
@@ -32,7 +38,9 @@ function AvatarIniciales({ nombre, size = 40 }) {
       letterSpacing: '-0.01em',
       userSelect: 'none',
     }}>
-      {iniciales}
+      {sinNombre
+        ? <UserRound size={Math.round(size * 0.45)} strokeWidth={1.75} aria-hidden="true" />
+        : iniciales}
     </div>
   );
 }

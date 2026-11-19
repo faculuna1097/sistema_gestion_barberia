@@ -1,5 +1,6 @@
 // Envío de mails transaccionales del turnero (y el aviso interno de una solicitud
-// de alta, ver enviarAvisoSolicitudAlta). Arma el HTML (sistema de diseño
+// de alta, ver enviarAvisoSolicitudAlta; y los del dueño: la recuperación y el
+// aviso de cambio del mail de recuperación). Arma el HTML (sistema de diseño
 // "Luz") y delega el transporte en la capa de proveedor (mailProvider →
 // resendProvider), que envía vía la API HTTP de Resend. No conoce el proveedor
 // concreto ni su API key.
@@ -10,7 +11,7 @@
 // tipografía neutra. Geist no carga de forma confiable en clientes de mail,
 // así que se usa el stack de fallback de los tokens.
 
-import { TZ } from '../../utils/constantes.js';
+import { TZ, SOPORTE } from '../../utils/constantes.js';
 import * as mailProvider from './mailProvider.js';
 
 // Espejo (parcial) de los tokens del tema "Luz". El backend no puede importar
@@ -234,15 +235,18 @@ const componerRemitente = (nombre) => {
  * con su message_id para trazabilidad. Best-effort: ante error loguea y devuelve
  * false sin propagar.
  *
- * @param {Object} opciones - { destino, asunto, texto, html, nombreFuncion, remitente }
+ * @param {Object} opciones - { destino, asunto, texto, html, nombreFuncion, remitente, destinoLog }
  *   remitente: nombre del negocio; se usa como display name del From (si falta, el provider usa MAIL_FROM)
+ *   destinoLog: cómo aparece el destinatario en el log (opcional, por defecto el
+ *   destino tal cual). La recuperación pasa el mail enmascarado: el del dueño no
+ *   se escribe en los logs.
  * @returns {Promise<boolean>} true si OK, false si falla
  */
-const enviarMail = async ({ destino, asunto, texto, html, nombreFuncion, remitente }) => {
+const enviarMail = async ({ destino, asunto, texto, html, nombreFuncion, remitente, destinoLog = destino }) => {
   try {
     const from = componerRemitente(remitente);
     const { id } = await mailProvider.send({ from, to: destino, subject: asunto, text: texto, html });
-    console.log(`[mailer] enviarMail — enviado | tipo: ${nombreFuncion} | to: ${destino} | tenant: ${remitente ?? '(sin tenant)'} | message_id: ${id}`);
+    console.log(`[mailer] enviarMail — enviado | tipo: ${nombreFuncion} | to: ${destinoLog} | tenant: ${remitente ?? '(sin tenant)'} | message_id: ${id}`);
     return true;
   } catch (err) {
     console.error(`[mailer] Error en ${nombreFuncion}:`, err);
@@ -558,4 +562,110 @@ export const enviarAvisoSolicitudAlta = async ({ id, referencia, nombreNegocio }
   });
 
   return enviarMail({ destino, asunto, texto, html, nombreFuncion: 'enviarAvisoSolicitudAlta' });
+};
+
+/**
+ * Mail de recuperación de la contraseña del iPad (modo operativo) o del PIN de
+ * administrador, al mail del dueño (tenant.email_duenio). Lleva el link de un solo
+ * uso que vence en 1 hora; en el de 'operativo', también el usuario operativo (para
+ * que el dueño tenga los dos datos del login del iPad juntos). Si no lo pidió, que
+ * lo ignore: sin el link no cambia nada.
+ * Best-effort como el resto: sin credenciales loguea un warn y devuelve false; si
+ * el envío falla, enviarMail loguea el error (llega a Sentry) y devuelve false. El
+ * mail del dueño no se escribe en el log: va enmascarado (destinoLog).
+ *
+ * @param {Object} datos
+ * @param {'operativo'|'pin_admin'} datos.tipo - Qué credencial se recupera
+ * @param {string} datos.destino - Mail del dueño
+ * @param {string} datos.destinoEnmascarado - El mismo mail enmascarado, para el log
+ * @param {string} datos.link - Link de recuperación (con el token en el fragmento)
+ * @param {string} datos.nombreNegocio - Nombre del negocio (título y remitente)
+ * @param {string|null} [datos.usuarioOperativo] - Usuario del iPad (solo 'operativo')
+ * @returns {Promise<boolean>} true si se envió, false si se salteó o falló
+ */
+export const enviarRecuperacion = async ({ tipo, destino, destinoEnmascarado, link, nombreNegocio, usuarioOperativo }) => {
+  const nombreFuncion = 'enviarRecuperacion';
+  if (!mailProvider.estaConfigurado) {
+    console.warn(`[mailer] ${nombreFuncion} — saltado: faltan credenciales`);
+    return false;
+  }
+
+  const esOperativo = tipo === 'operativo';
+  const que = esOperativo ? 'la contraseña del iPad' : 'tu PIN de administrador';
+  const asunto = esOperativo ? 'Cambiá la contraseña del iPad' : 'Cambiá tu PIN de administrador';
+  const intro = `Pediste cambiar ${que} de ${nombreNegocio}. Tocá el botón para elegir uno nuevo. El link sirve una sola vez y vence en 1 hora.`;
+  const ignorar = 'Si no lo pediste, ignorá este mail: sin el link no cambia nada.';
+
+  const filas = [];
+  if (esOperativo && usuarioOperativo) filas.push({ label: 'Usuario del iPad', valor: usuarioOperativo });
+  filas.push({ label: 'Vence', valor: 'En 1 hora' });
+
+  const lineaUsuario = esOperativo && usuarioOperativo ? `\nUsuario del iPad: ${usuarioOperativo}` : '';
+  const texto = `${intro}${lineaUsuario}\n\n${link}\n\n${ignorar}`;
+
+  const html = construirHtml({
+    eyebrow: esOperativo ? 'Contraseña del iPad' : 'PIN de administrador',
+    eyebrowColor: paleta.accent,
+    titulo: nombreNegocio,
+    intro: `${intro} ${ignorar}`,
+    filas,
+    cta: { label: esOperativo ? 'Elegir contraseña nueva' : 'Elegir PIN nuevo', url: link },
+  });
+
+  return enviarMail({
+    destino, asunto, texto, html, nombreFuncion,
+    remitente: nombreNegocio,
+    destinoLog: destinoEnmascarado,
+  });
+};
+
+/**
+ * Aviso al mail ANTERIOR del dueño de que el mail de recuperación del local cambió
+ * (Gestión → Negocio → Contacto; auditoría 2026-11, Z1-02). Sin el aviso, alguien que
+ * supo el PIN de admin podía poner su mail y quedarse con la recuperación sin que el
+ * dueño se enterara. Dice a qué mail nuevo (enmascarado) y que, si no fue el dueño,
+ * le escriba al soporte (SOPORTE, utils/constantes.js).
+ * Best-effort como el resto: sin credenciales loguea un warn (con los datos ya
+ * enmascarados, para poder revisar la llamada) y devuelve false; si el envío falla,
+ * enviarMail loguea el error (llega a Sentry) y devuelve false. Ninguno de los dos
+ * mails se escribe entero en el log.
+ *
+ * @param {Object} datos
+ * @param {string} datos.destino - Mail anterior del dueño (a dónde va el aviso)
+ * @param {string} datos.destinoEnmascarado - El mismo mail enmascarado, para el log
+ * @param {string} datos.emailNuevoEnmascarado - El mail nuevo, enmascarado (enmascararEmail)
+ * @param {string} datos.nombreNegocio - Nombre del negocio (título y remitente)
+ * @returns {Promise<boolean>} true si se envió, false si se salteó o falló
+ */
+export const enviarAvisoCambioEmail = async ({ destino, destinoEnmascarado, emailNuevoEnmascarado, nombreNegocio }) => {
+  const nombreFuncion = 'enviarAvisoCambioEmail';
+  if (!mailProvider.estaConfigurado) {
+    console.warn(`[mailer] ${nombreFuncion} — saltado: faltan credenciales | to: ${destinoEnmascarado} | mail nuevo: ${emailNuevoEnmascarado} | tenant: ${nombreNegocio}`);
+    return false;
+  }
+
+  const asunto = `Cambió el mail de recuperación de ${nombreNegocio}`;
+  const intro = `El mail al que llegan los links para recuperar la contraseña del iPad y el PIN de administrador de ${nombreNegocio} cambió a ${emailNuevoEnmascarado}. Desde ahora, esos links ya no llegan a este mail.`;
+  const siNoFuiste = 'Si no lo cambiaste vos, escribile cuanto antes al soporte de BarberManager.';
+
+  const texto = `${intro}\n\n${siNoFuiste}\nWhatsApp: ${SOPORTE.whatsapp}\nMail: ${SOPORTE.email}`;
+
+  const html = construirHtml({
+    eyebrow: 'Mail de recuperación',
+    eyebrowColor: paleta.danger,
+    titulo: nombreNegocio,
+    intro: `${intro} ${siNoFuiste}`,
+    filas: [
+      { label: 'Mail nuevo', valor: emailNuevoEnmascarado },
+      { label: 'WhatsApp del soporte', valor: SOPORTE.whatsapp, href: SOPORTE.whatsappLink },
+      { label: 'Mail del soporte', valor: SOPORTE.email, href: `mailto:${SOPORTE.email}` },
+    ],
+    cta: null,
+  });
+
+  return enviarMail({
+    destino, asunto, texto, html, nombreFuncion,
+    remitente: nombreNegocio,
+    destinoLog: destinoEnmascarado,
+  });
 };

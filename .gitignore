@@ -26,12 +26,20 @@ backend/scripts/
 
 # Configuración de Claude Code
 # Se ignora todo .claude/ salvo lo compartido: settings.json (permisos de solo
-# lectura para la skill de diagnóstico) y skills/ (salud-prod). Van al repo para
-# que la sesión en la nube, que clona GitHub, los tenga. Es .claude/* y no
-# .claude/ porque git no deja re-incluir nada dentro de una carpeta ignorada.
-# launch.json y settings.local.json siguen ignorados (son locales).
+# lectura para la skill de diagnóstico) y skills/ (salud-prod y arreglo-prod).
+# Van al repo para que la sesión en la nube, que clona GitHub, los tenga. Es
+# .claude/* y no .claude/ porque git no deja re-incluir nada dentro de una
+# carpeta ignorada. launch.json y settings.local.json siguen ignorados (son locales).
 .claude/*
 !.claude/settings.json
 !.claude/skills/
+# La skill de alta de clientes va a vivir solo en la PC de Facundo (auditoría
+# 2026-11, Z7-01): corre en local y el repo es público. Va DESPUÉS de
+# !.claude/skills/: antes, esa excepción la volvería a incluir. Sus archivos se
+# sacaron del repo con `git rm -r --cached` el 2026-11-19, antes del PR de merge
+# de mejoras operativas (ver plan_mejoras_operativas.md §8). Hasta ese merge,
+# `main` todavía los versiona: un checkout de main los pisa y la vuelta a este
+# branch los borra del disco (hay un respaldo fuera del repo).
+.claude/skills/alta-cliente/
 
 

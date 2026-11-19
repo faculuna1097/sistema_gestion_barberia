@@ -24,7 +24,6 @@
 // tokens cuyo tv no coincida con el actual. Cambiar solo el usuario NO invalida
 // tokens (un rename no compromete credenciales). Mantener consistente.
 
-import bcrypt from 'bcrypt';
 import { query } from '../config/db.js';
 import { invalidar } from '../middlewares/tenantMiddleware.js';
 import {
@@ -32,6 +31,7 @@ import {
   PASSWORD_MIN_CARACTERES,
   hashearPasswordOperativa,
 } from '../utils/credencialesOperativas.js';
+import { verificarPinAdmin, CODIGO_PIN_ADMIN_INCORRECTO } from '../utils/pin.js';
 
 /**
  * obtenerCredencialesOperativas
@@ -71,7 +71,7 @@ export async function obtenerCredencialesOperativas(req, res) {
  * con bcrypt antes de tocar la DB (mismo patrón que cambiarPinAdmin).
  *
  * @param {Request}  req - body: { usuario?, password?, pin_admin }; tenant_id y rol inyectados por middlewares.
- * @param {Response} res - 204 No Content | 400 | 401 | 404 | 500.
+ * @param {Response} res - 204 No Content | 400 | 403 (PIN admin incorrecto) | 404 | 500.
  */
 export async function actualizarCredencialesOperativas(req, res) {
   const { usuario, password, pin_admin } = req.body;
@@ -100,18 +100,15 @@ export async function actualizarCredencialesOperativas(req, res) {
 
   try {
     // Re-autenticación: verificar el PIN admin contra el hash del tenant antes
-    // de cualquier modificación. Si no coincide, se rechaza sin tocar la DB.
-    const tenantResult = await query(
-      'SELECT pin_admin FROM tenant WHERE id = $1',
-      [tenant_id]
-    );
-    if (tenantResult.rows.length === 0) {
+    // de cualquier modificación. Si no coincide, 403 (no 401: la sesión sigue
+    // válida; ver CODIGO_PIN_ADMIN_INCORRECTO en utils/pin.js).
+    const pinCorrecto = await verificarPinAdmin(tenant_id, pin_admin);
+    if (pinCorrecto === null) {
       return res.status(404).json({ error: 'Tenant no encontrado' });
     }
-    const pinCorrecto = await bcrypt.compare(pin_admin, tenantResult.rows[0].pin_admin);
     if (!pinCorrecto) {
-      console.log('[adminOperativo] actualizarCredencialesOperativas — PIN admin incorrecto | cambio rechazado | tenant:', tenant_id);
-      return res.status(401).json({ error: 'El PIN de administrador es incorrecto' });
+      console.warn('[adminOperativo] actualizarCredencialesOperativas — PIN admin incorrecto | cambio rechazado | tenant:', tenant_id);
+      return res.status(403).json({ error: 'El PIN de administrador es incorrecto', codigo: CODIGO_PIN_ADMIN_INCORRECTO, campo: 'pin_admin' });
     }
 
     // UPDATE dinámico: solo las columnas que efectivamente vienen.

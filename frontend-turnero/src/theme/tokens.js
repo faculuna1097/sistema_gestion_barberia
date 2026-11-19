@@ -61,6 +61,8 @@ export const theme = {
   sizeHeading: 18,  // h3, títulos de card
   sizeBody:    14,  // texto base
   sizeMicro:   11,  // eyebrows, micro-labels en mayúsculas
+  // Número destacado: la hora del turno en el éxito de la reserva. Solo ahí.
+  sizeDisplay: 44,
 
   // Tamaño funcional (no de jerarquía): los inputs deben ser ≥16px para
   // evitar el auto-zoom de iOS Safari al enfocar un campo de texto.
@@ -75,8 +77,18 @@ export const theme = {
   radiusLg:  14,  // cards "destacadas" (resumen)
   radiusSm:   6,  // skeletons, pills chicos
 
-  // Ancho máximo de la columna principal — wizard mobile-first.
+  // Ancho máximo de la columna principal — wizard mobile-first. En pantalla
+  // ancha también: cada pantalla mide lo mismo que en el celular.
   maxWidth:  480,
+
+  // Pantalla ancha (iPad en las dos posiciones, compu, celular acostado): desde
+  // este ancho de ventana, el local va en un panel fijo a la izquierda y la
+  // columna de cada pantalla a la derecha (MarcoLocal, usePantallaAncha).
+  // Debajo de este ancho, todo como en el celular.
+  anchoPantallaAncha: 768,
+  // Ancho del panel del local: 42 % de la ventana, entre 300 y 600 px (en
+  // 768 mide 322; en 1280, 538).
+  anchoPanelLocal: 'clamp(300px, 42vw, 600px)',
 
   // ── Sombras ───────────────────────────────────────────────────
   shadowSm: '0 1px 2px rgba(0,0,0,0.06)',

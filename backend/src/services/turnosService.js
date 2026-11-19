@@ -7,7 +7,7 @@
 import crypto from 'crypto';
 import { DateTime } from 'luxon';
 import { query } from '../config/db.js';
-import { crearEvento, cancelarEvento } from './googleCalendar.js';
+import { crearEvento, cancelarEvento, actualizarEvento } from './googleCalendar.js';
 import { enviarConfirmacion, enviarCancelacion, construirContextoMail } from './mail/mailer.js';
 import { TZ, ANTELACION_MINIMA_MINUTOS, DIAS_RESERVABLES } from '../utils/constantes.js';
 import { esUUID } from '../utils/validarUuid.js';
@@ -74,6 +74,19 @@ export const upsertCliente = async (tenantId, { nombre, telefono, email }) => {
 // suspensión). Lo comparten insertarTurno y reprogramarTurno (controllers/turnero.js
 // y turnos.js). Lo lee el cliente en el turnero: sin la palabra "slot".
 export const MENSAJE_SLOT_OCUPADO = 'Ese horario ya no está disponible. Elegí otro.';
+
+// 409 cuando el cliente quiere cancelar o reprogramar desde el turnero un turno
+// que ya empezó (cancelarTurno y reprogramarTurno de controllers/turnero.js). Un
+// turno se completa recién al registrar su corte: uno que ya empezó y todavía no
+// se cobró sigue 'reservado', y el cliente no lo puede tocar. El turnero usa el
+// código para dejar de ofrecer las acciones y mostrar el contacto del local.
+export const MENSAJE_TURNO_YA_EMPEZO =
+  'Este turno ya pasó, así que no se puede cancelar ni reprogramar. Si necesitás algo, comunicate con el local.';
+export const CODIGO_TURNO_YA_EMPEZO = 'turno_ya_empezo';
+export const CUERPO_409_TURNO_YA_EMPEZO = Object.freeze({
+  error: MENSAJE_TURNO_YA_EMPEZO,
+  codigo: CODIGO_TURNO_YA_EMPEZO,
+});
 
 /**
  * Arma el error tipado que los controllers mapean a 409.
@@ -292,17 +305,21 @@ export const listarTurnos = async ({ tenantId, fecha, desde, hasta, barberoId })
   // del que salen la forma de pago y el monto cobrado (deuda #32). El UNIQUE parcial
   // en corte.turno_id garantiza ≤1 corte por turno → no multiplica filas. Turnos no
   // completados (o completados sin corte) devuelven forma_pago/monto_total = null.
+  // LEFT JOIN cliente: un turno "Sin datos" (cliente_id NULL, F1) trae cliente_id,
+  // cliente_nombre, cliente_email y cliente_telefono en null; el front muestra "Sin datos".
+  // no_asistio_por (F3): quién marcó un 'no_asistio' ('barbero', 'admin', 'sistema' o
+  // NULL); el panel lo usa para ofrecer "Completar" en uno que cerró el sistema.
   const result = await query(
     `SELECT t.id, t.inicio, t.fin, t.estado, t.origen_creacion,
             b.id AS barbero_id, b.nombre AS barbero_nombre,
             s.id AS servicio_id, s.nombre AS servicio_nombre,
             c.id AS cliente_id, c.nombre AS cliente_nombre,
             c.email AS cliente_email, c.telefono AS cliente_telefono,
-            co.forma_pago, co.monto_total
+            co.forma_pago, co.monto_total, t.no_asistio_por
      FROM turno t
      JOIN barbero  b ON b.id = t.barbero_id
      JOIN servicio s ON s.id = t.servicio_id
-     JOIN cliente  c ON c.id = t.cliente_id
+     LEFT JOIN cliente c ON c.id = t.cliente_id
      LEFT JOIN corte co ON co.turno_id = t.id
      WHERE ${where}
      ORDER BY t.inicio ASC`,
@@ -316,14 +333,15 @@ export const listarTurnos = async ({ tenantId, fecha, desde, hasta, barberoId })
  * mínimos para el flujo operativo público (registrar corte desde el iPad).
  * No expone email ni teléfono del cliente — solo lo que la pantalla necesita.
  * @param {Object} filtros - { tenantId, barberoId, fecha (YYYY-MM-DD) }
- * @returns {Promise<Array>} [{ id, inicio, cliente_nombre, servicio_id }]
+ * @returns {Promise<Array>} [{ id, inicio, cliente_nombre, servicio_id }];
+ *   cliente_nombre es null en un turno "Sin datos" (cliente_id NULL, F1)
  */
 export const listarTurnosOperativos = async ({ tenantId, barberoId, fecha }) => {
   const result = await query(
     `SELECT t.id, t.inicio, t.servicio_id,
             c.nombre AS cliente_nombre
      FROM turno t
-     JOIN cliente c ON c.id = t.cliente_id
+     LEFT JOIN cliente c ON c.id = t.cliente_id
      WHERE t.tenant_id = $1
        AND t.barbero_id = $2
        AND t.estado = 'reservado'
@@ -341,10 +359,14 @@ export const listarTurnosOperativos = async ({ tenantId, barberoId, fecha }) => 
  * (completarTurnoConCorte o el iPad). Completarlo acá lo dejaba completado sin
  * corte y, como el iPad lista solo los reservados, el cobro terminaba cargado
  * como un cliente sin turno.
+ * En el mismo UPDATE guarda quién lo marcó (turno.no_asistio_por, F3): 'barbero'
+ * si viene barberoId, 'admin' si no. El cron de cierre diario usa 'sistema'.
+ * No toca Google Calendar: el evento queda como está.
  * @param {string} turnoId
  * @param {string} nuevoEstado - 'no_asistio'
  * @param {string} tenantId
  * @param {string|null} barberoId - si es barbero, solo puede cambiar los suyos
+ *   (y queda no_asistio_por = 'barbero'); null = admin
  * @returns {Promise<Object>} { id, estado }
  * @throws {{ code: 'ESTADO_NO_PERMITIDO' | 'NO_ENCONTRADO' | 'ESTADO_INVALIDO' | 'TURNO_NO_EMPEZO' }}
  */
@@ -394,9 +416,11 @@ export const cambiarEstado = async (turnoId, nuevoEstado, tenantId, barberoId) =
   // (se canceló, se registró su corte), no se pisa. tenant_id redundante
   // (defensa en profundidad, auditoría 2.2): el turnoId ya vino del lookup
   // scopeado por tenant de arriba.
+  const marcadoPor = barberoId ? 'barbero' : 'admin';
   const updateRes = await query(
-    `UPDATE turno SET estado = $1 WHERE id = $2 AND tenant_id = $3 AND estado = 'reservado'`,
-    [nuevoEstado, turnoId, tenantId]
+    `UPDATE turno SET estado = $1, no_asistio_por = $4
+     WHERE id = $2 AND tenant_id = $3 AND estado = 'reservado'`,
+    [nuevoEstado, turnoId, tenantId, marcadoPor]
   );
   if (updateRes.rowCount === 0) {
     console.warn('[turnosService] cambiarEstado — el turno dejó de estar reservado antes del UPDATE | turno_id:', turnoId);
@@ -414,7 +438,10 @@ export const cambiarEstado = async (turnoId, nuevoEstado, tenantId, barberoId) =
  * financiero del turno — es el equivalente backoffice del flujo operativo del
  * iPad: completar = registrar el corte. Valida (scoped) que el turno exista y siga
  * 'reservado'; el admin también puede completar uno marcado 'no_asistio' (el
- * cliente vino y la falta estaba mal marcada). El servicio
+ * cliente vino y la falta estaba mal marcada; registrarCorte deja
+ * no_asistio_por en NULL en la misma sentencia): el mismo día del turno, o
+ * cualquier día si lo cerró el cierre nocturno (no_asistio_por = 'sistema',
+ * S-A-01 de auditoria_2026-11.md). El servicio
  * del corte es por defecto el del turno; opcionalmente se acepta un override
  * (servicioId) que se valida contra el catálogo (tenant + activo). Delega en
  * registrarCorte (cortesService), que inserta el corte, marca el turno
@@ -451,9 +478,11 @@ export const completarTurnoConCorte = async ({ turnoId, tenantId, barberoId, for
     throw err;
   }
 
-  // Estados que se pueden completar: reservado y, solo el admin, no_asistio (este
-  // solo el mismo día del turno: lo controla registrarCorte en la misma sentencia).
-  const estadosCompletables = barberoId ? ['reservado'] : ['reservado', 'no_asistio'];
+  // Estados que se pueden completar: reservado y, solo el admin, no_asistio (este,
+  // el mismo día del turno o, si lo cerró el sistema a la noche, cualquier día: lo
+  // controla registrarCorte en la misma sentencia).
+  const esAdmin = !barberoId;
+  const estadosCompletables = esAdmin ? ['reservado', 'no_asistio'] : ['reservado'];
 
   const turno = lookupRes.rows[0];
   if (!estadosCompletables.includes(turno.estado)) {
@@ -491,6 +520,7 @@ export const completarTurnoConCorte = async ({ turnoId, tenantId, barberoId, for
     propina,
     turnoId,
     estadosCompletables,
+    noAsistioDelSistemaCualquierDia: esAdmin,
   });
 
   return { id: turnoId, estado: 'completado', servicio_id: servicioFinal, corte_id, monto_total };
@@ -568,4 +598,210 @@ export const cancelarTurnoPorId = async (turnoId, canceladoPor, tenantId, barber
   await enviarCancelacion(turno, barbero, servicio, cliente, canceladoPor, tenant);
 
   return { id: turnoId, estado: 'cancelado' };
+};
+
+// ─── Asignar un cliente a un turno "Sin datos" (F1) ──────────────────────────
+
+// Estados en los que a un turno se le puede asignar o cambiar el cliente: reservado
+// (todavía no vino) y completado (se anota al cliente después de cobrar). Un turno
+// cancelado o con "no asistió" ya no se toca.
+const ESTADOS_ASIGNABLES = ['reservado', 'completado'];
+
+/**
+ * Dice si un cliente existente se puede usar en un turno: alcanza con que sea del
+ * local, con cualquier rol. El buscador de clientes devuelve los de todo el local
+ * (decisión del usuario, auditoría 2026-11 Z2-01: hay clientes que no se cortan
+ * siempre con el mismo barbero). Lo usan el alta del turno con `cliente_id` y la
+ * asignación de un cliente a un turno.
+ * @param {Object} datos
+ * @param {string} datos.clienteId - id ya validado como UUID
+ * @param {string} datos.tenantId
+ * @returns {Promise<boolean>} true si el cliente se puede usar
+ */
+export const clienteUsable = async ({ clienteId, tenantId }) => {
+  const res = await query(
+    'SELECT 1 FROM cliente c WHERE c.id = $1 AND c.tenant_id = $2',
+    [clienteId, tenantId]
+  );
+  return res.rows.length > 0;
+};
+
+/**
+ * Cleanup manual (sin transacción, convenciones §6): borra un cliente recién
+ * creado que se quedó sin turno porque lo que venía después falló (el insert del
+ * turno dio 409, o la asignación perdió una carrera). Solo si no tiene ningún
+ * turno: nunca toca un cliente en uso. No propaga errores: si falla, queda un
+ * cliente sin turnos y se avisa a Sentry.
+ * @param {string} clienteId
+ * @param {string} tenantId
+ * @param {string} origen - quién llama, para el log (ej. 'crearTurnoAdmin')
+ * @returns {Promise<void>}
+ */
+export const borrarClienteSinTurnos = async (clienteId, tenantId, origen) => {
+  try {
+    await query(
+      `DELETE FROM cliente c
+        WHERE c.id = $1 AND c.tenant_id = $2
+          AND NOT EXISTS (SELECT 1 FROM turno t WHERE t.cliente_id = c.id)`,
+      [clienteId, tenantId]
+    );
+  } catch (err) {
+    console.error(`[turnosService] ${origen} — falló el cleanup del cliente creado:`, err);
+  }
+};
+
+/**
+ * Arma un error tipado de la asignación de cliente, que el controller mapea a su status.
+ * @param {string} code    - 'NO_ENCONTRADO' | 'CLIENTE_NO_ENCONTRADO' | 'TURNO_CON_CLIENTE'
+ *   | 'CLIENTE_CAMBIO' | 'ESTADO_INVALIDO'
+ * @param {string} mensaje - texto para el usuario
+ * @returns {Error}
+ */
+const errorAsignacion = (code, mensaje) => {
+  const err = new Error(mensaje);
+  err.code = code;
+  return err;
+};
+
+/**
+ * Lee un turno con el scoping del rol y, si no admite el cambio de cliente que se
+ * pide, tira el error que corresponde. Sin clienteActualId es una asignación: el
+ * turno tiene que estar "Sin datos". Con clienteActualId es un reemplazo: el turno
+ * tiene que seguir con ese cliente (el que vio quien lo pide).
+ * @param {string} turnoId
+ * @param {string} tenantId
+ * @param {string|null} barberoId - con rol barbero, solo sus turnos (uno ajeno = no encontrado)
+ * @param {string|null} clienteActualId - el cliente que se reemplaza; null = asignación
+ * @returns {Promise<void>}
+ * @throws {{ code: 'NO_ENCONTRADO' | 'TURNO_CON_CLIENTE' | 'CLIENTE_CAMBIO' | 'ESTADO_INVALIDO' }}
+ */
+const verificarTurnoAsignable = async (turnoId, tenantId, barberoId, clienteActualId) => {
+  const params = [turnoId, tenantId];
+  let where = 't.id = $1 AND t.tenant_id = $2';
+  if (barberoId) {
+    where += ' AND t.barbero_id = $3';
+    params.push(barberoId);
+  }
+  const res = await query(`SELECT t.estado, t.cliente_id FROM turno t WHERE ${where}`, params);
+  if (res.rows.length === 0) {
+    throw errorAsignacion('NO_ENCONTRADO', 'Turno no encontrado');
+  }
+  const { estado, cliente_id } = res.rows[0];
+  if (!clienteActualId && cliente_id !== null) {
+    throw errorAsignacion('TURNO_CON_CLIENTE', 'El turno ya tiene un cliente asignado');
+  }
+  if (clienteActualId && cliente_id !== clienteActualId) {
+    throw errorAsignacion('CLIENTE_CAMBIO', 'El cliente del turno cambió mientras lo editabas');
+  }
+  if (!ESTADOS_ASIGNABLES.includes(estado)) {
+    throw errorAsignacion('ESTADO_INVALIDO', `El turno está en estado "${estado}" y no se le puede cambiar el cliente`);
+  }
+};
+
+/**
+ * Asigna un cliente a un turno "Sin datos" (cliente_id NULL) o, con
+ * clienteActualId, reemplaza el cliente que tiene (solo el admin: el controller
+ * lo controla). El cliente es uno existente (clienteId) o uno nuevo (contacto, que
+ * pasa por upsertCliente como en el alta: con un email que ya existe en el local,
+ * devuelve ese cliente).
+ *
+ * Scoping: todo por tenant; con rol barbero, solo turnos propios. El cliente
+ * existente alcanza con que sea del local (clienteUsable).
+ *
+ * El cambio es una sola sentencia (UPDATE ... FROM cliente) con todas las reglas
+ * en el WHERE, incluido el cliente que tiene el turno: NULL en una asignación, el
+ * que vio quien pide en un reemplazo. Si dos llegan a la vez, la segunda espera a
+ * la primera, vuelve a evaluar la fila y no la pisa. La lectura previa solo sirve
+ * para devolver el error justo; si el UPDATE no toca nada (perdió una carrera), se
+ * relee para elegir el error. Si en ese caso se había creado un cliente sin email
+ * (siempre es una fila nueva), se borra: cleanup manual en vez de transacción
+ * (Session Pooler, convenciones §6).
+ *
+ * Al reemplazar, si el cliente cambia de verdad, se genera un token_gestion nuevo
+ * en la misma sentencia: el link del mail del cliente anterior deja de servir para
+ * cancelar o reprogramar un turno que ya no es suyo. El cliente anterior no se
+ * toca, aunque se quede sin turnos (es un dato real del local).
+ *
+ * @param {Object} datos
+ * @param {string} datos.turnoId
+ * @param {string} datos.tenantId
+ * @param {string|null} datos.barberoId - id del barbero si el rol es barbero; null = admin
+ * @param {string} [datos.clienteId] - cliente existente (UUID ya validado)
+ * @param {Object} [datos.contacto] - cliente nuevo, ya normalizado por validarContacto
+ * @param {string|null} [datos.clienteActualId] - el cliente a reemplazar (UUID ya
+ *   validado); null o ausente = asignación a un turno "Sin datos"
+ * @returns {Promise<{ id, cliente_id, cliente_nombre, cliente_email, cliente_telefono }>}
+ * @throws {{ code: 'NO_ENCONTRADO' | 'CLIENTE_NO_ENCONTRADO' | 'TURNO_CON_CLIENTE'
+ *   | 'CLIENTE_CAMBIO' | 'ESTADO_INVALIDO' }}
+ */
+export const asignarClienteATurno = async ({
+  turnoId, tenantId, barberoId, clienteId, contacto, clienteActualId = null,
+}) => {
+  await verificarTurnoAsignable(turnoId, tenantId, barberoId, clienteActualId);
+
+  if (clienteId && !(await clienteUsable({ clienteId, tenantId }))) {
+    throw errorAsignacion('CLIENTE_NO_ENCONTRADO', 'Cliente no encontrado');
+  }
+
+  let idCliente = clienteId;
+  let clienteCreadoAca = false;
+  if (contacto) {
+    idCliente = await upsertCliente(tenantId, contacto);
+    clienteCreadoAca = !contacto.email;
+  }
+
+  const params = [turnoId, tenantId, idCliente, ESTADOS_ASIGNABLES];
+  let set = 'cliente_id = c.id';
+  let condicionCliente = 't.cliente_id IS NULL';
+  if (clienteActualId) {
+    params.push(clienteActualId);
+    condicionCliente = `t.cliente_id = $${params.length}`;
+    // Reemplazar por el mismo cliente no rota el token: su link sigue valiendo.
+    params.push(crypto.randomUUID());
+    set += `, token_gestion = CASE WHEN t.cliente_id = c.id THEN t.token_gestion ELSE $${params.length} END`;
+  }
+  let filtros = '';
+  if (barberoId) {
+    params.push(barberoId);
+    filtros += ` AND t.barbero_id = $${params.length}`;
+  }
+
+  const updateRes = await query(
+    `UPDATE turno t
+        SET ${set}
+       FROM cliente c
+      WHERE t.id = $1 AND t.tenant_id = $2
+        AND c.id = $3 AND c.tenant_id = $2
+        AND ${condicionCliente}
+        AND t.estado = ANY($4::text[])${filtros}
+     RETURNING t.id, c.id AS cliente_id, c.nombre AS cliente_nombre,
+               c.email AS cliente_email, c.telefono AS cliente_telefono`,
+    params
+  );
+  if (updateRes.rows.length > 0) {
+    return updateRes.rows[0];
+  }
+
+  // Perdió una carrera: el turno cambió entre la lectura y el UPDATE.
+  console.warn('[turnosService] asignarClienteATurno — el turno cambió antes del UPDATE | turno_id:', turnoId);
+  if (clienteCreadoAca) {
+    await borrarClienteSinTurnos(idCliente, tenantId, 'asignarClienteATurno');
+  }
+  await verificarTurnoAsignable(turnoId, tenantId, barberoId, clienteActualId);
+  // El turno sigue asignable: lo que dejó de valer es el cliente.
+  throw errorAsignacion('CLIENTE_NO_ENCONTRADO', 'Cliente no encontrado');
+};
+
+/**
+ * Best-effort: después de asignarle un cliente a un turno, actualiza su evento de
+ * Google Calendar (el título pasa de "Sin datos" al nombre del cliente). Si el turno
+ * no tiene evento, no hace nada. actualizarEvento no propaga errores.
+ * @param {string} turnoId
+ * @returns {Promise<void>}
+ */
+export const sincronizarCalendarCliente = async (turnoId) => {
+  const enriquecido = await enriquecerTurno(turnoId);
+  if (!enriquecido?.google_event_id) return;
+  const { turno, barbero, servicio, cliente } = construirContextoMail(enriquecido);
+  await actualizarEvento(enriquecido.google_event_id, turno, barbero, servicio, cliente);
 };

@@ -14,8 +14,8 @@ import { useState, useEffect } from 'react';
 import { Banknote, Trash2, Inbox, Construction, RefreshCw, Info, Plus } from 'lucide-react';
 
 import { apiFetch } from '../../../services/api';
-import { getFechaHoy } from '../../../utils/fecha';
-import { fmtPesos, formatPago } from '../../../utils/formato';
+import { getFechaHoy, fechaDeInstante, formatInstanteCorto } from '../../../utils/fecha';
+import { fmtPesos, formatPago, textoCliente } from '../../../utils/formato';
 import {
   labelTipoMovimiento,
   OPCIONES_TIPO_MOVIMIENTO_EXTRA,
@@ -42,6 +42,7 @@ import {
   Field,
   InputTiempo,
   GrupoOpciones,
+  Toast,
   OPCIONES_FORMA_PAGO_TONO,
 } from '../../../components/ui';
 import { theme } from '../../../theme/tokens.js';
@@ -85,9 +86,22 @@ function TipoMovimientoPill({ tipo }) {
 }
 
 /**
+ * turnoQueVuelveAPendiente
+ * Dice si borrar este movimiento deja su turno pendiente de cobro: es un corte
+ * con un turno que hoy está completado (el backend solo cambia esos, ver
+ * movimientosService.eliminarCorte).
+ * @param {object|null} m - Movimiento (con turno_id, turno_estado y turno_inicio si es un corte)
+ * @returns {boolean}
+ */
+function turnoQueVuelveAPendiente(m) {
+  return m?.tipo === 'corte' && !!m.turno_id && m.turno_estado === 'completado' && !!m.turno_inicio;
+}
+
+/**
  * filasDetalleMovimiento
  * Arma el array de filas que se pasa al primitivo DetalleRecurso para mostrar
- * el detalle del movimiento dentro del ConfirmDialog de eliminación.
+ * el detalle del movimiento dentro del ConfirmDialog de eliminación. Un corte con
+ * turno suma la fila "Turno" (día si no es de hoy, hora y cliente o "Sin datos").
  * @param {object} m - Movimiento
  * @returns {Array}
  */
@@ -98,6 +112,16 @@ function filasDetalleMovimiento(m) {
     // overflowWrap: un detalle largo sin espacios corta dentro del diálogo.
     { label: 'Detalle', valor: <span style={{ overflowWrap: 'anywhere' }}>{m.detalle}</span> },
     ...(m.barbero_nombre ? [{ label: 'Barbero', valor: m.barbero_nombre }] : []),
+    ...(turnoQueVuelveAPendiente(m)
+      ? [{
+          label: 'Turno',
+          valor: (
+            <span style={{ overflowWrap: 'anywhere' }}>
+              {formatInstanteCorto(m.turno_inicio)} · {textoCliente(m.turno_cliente_nombre)}
+            </span>
+          ),
+        }]
+      : []),
     {
       label: 'Monto',
       valor: fmtPesos(m.monto),
@@ -276,8 +300,9 @@ function LogoMercadoPagoConFallback() {
 
 /**
  * BotonNuevoMovimiento
- * "+" discreto que abre el alta de movimientos extra. Va a la derecha de las
- * pestañas, sin texto: no es una acción de uso cotidiano.
+ * "+ Movimiento" discreto que abre el alta de movimientos extra. Va a la derecha
+ * de las pestañas. Hasta el 2026-11-19 era solo el "+"; el texto dice qué agrega
+ * (pedido del usuario en F4 de plan_mejoras_operativas.md).
  * @param {object} props
  * @param {() => void} props.onClick
  */
@@ -289,24 +314,29 @@ function BotonNuevoMovimiento({ onClick }) {
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      aria-label="Registrar movimiento"
-      title="Registrar movimiento"
+      title="Registrar un aporte, un retiro u otro ingreso"
       style={{
         alignSelf: 'center',
         flexShrink: 0,
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 8,
+        gap: 6,
+        padding: '6px 12px',
         background: 'transparent',
         border: `2px solid ${theme.accent}`,
         borderRadius: theme.radiusSm,
         color: hover ? theme.ink : theme.muted,
+        fontFamily: theme.body,
+        fontSize: theme.sizeBody,
+        fontWeight: theme.weightMedium,
+        whiteSpace: 'nowrap',
         cursor: 'pointer',
         transition: `color ${theme.transitionFast}`,
       }}
     >
-      <Plus size={16} strokeWidth={1.75} />
+      <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
+      Movimiento
     </button>
   );
 }
@@ -529,11 +559,13 @@ function TabMovimientos({ modalAbierto, onCerrarModal }) {
     return () => { cancelado = true; };
   }, [fecha, intento]);
 
-  // Filtro "Solo Barberos": excluye los cortes de barberos con 100% de comisión.
-  // En la práctica esos cortes van directo al bolsillo del barbero y no pasan
-  // por la caja del local — sacarlos da la visión "cuenta del local puro".
+  // Filtro "Solo Barberos": excluye los cortes de los socios (barberos vinculados
+  // a un socio activo: `es_socio` del backend; el vínculo se carga en Gestión →
+  // Socios). Sacarlos deja solo lo que cortan los barberos. Mira el vínculo de
+  // ahora, no el de la fecha del corte: si alguien deja de ser socio, sus cortes
+  // viejos vuelven a aparecer con el filtro (aceptado, F4 de plan_mejoras_operativas.md).
   const movimientosFiltrados = soloNegocio
-    ? movimientos.filter(m => m.tipo !== 'corte' || Number(m.comision_valor) < 100)
+    ? movimientos.filter(m => m.tipo !== 'corte' || !m.es_socio)
     : movimientos;
 
   // Totales netos por canal: las salidas restan, las entradas suman.
@@ -550,7 +582,11 @@ function TabMovimientos({ modalAbierto, onCerrarModal }) {
     try {
       const res = await apiFetch(`/caja/movimientos/${tipo}/${id}`, { method: 'DELETE' });
       if (!res.ok) throw await errorDeRespuesta(res);
+      const data = await res.json();
       setMovimientos(prev => prev.filter(m => m.id !== id));
+      // El borrado salió, pero el turno del corte no volvió a pendiente (su
+      // horario ya es de otro turno): el backend avisa que quedó cancelado.
+      if (data?.aviso) toast.show({ tone: 'warning', texto: data.aviso });
     } catch (err) {
       console.error('[seccionCaja] Error en confirmarEliminar:', err.message);
       // El diálogo se cierra igual; el aviso dice que el movimiento sigue ahí.
@@ -593,11 +629,14 @@ function TabMovimientos({ modalAbierto, onCerrarModal }) {
     XLSX.writeFile(wb, `movimientos-${fecha}.xlsx`);
   };
 
-  // Al eliminar un corte vinculado a un turno, el backend revierte ese turno a
-  // 'reservado' (ver controllers/caja.js → eliminarMovimiento). Avisamos en el
-  // cartel con una nota, solo cuando corresponde (corte con turno_id no nulo).
-  const turnoVuelveAReservado =
-    movimientoAEliminar?.tipo === 'corte' && !!movimientoAEliminar?.turno_id;
+  // Al eliminar un corte con turno, el backend devuelve ese turno a 'reservado':
+  // queda pendiente de cobro. Si es de un día anterior, además, el iPad no lo
+  // muestra (lista solo los de hoy) y el cierre de esa noche lo pasa a "no
+  // asistió". El día se calcula al abrir el diálogo, no al cargar la lista.
+  const turnoVuelveAPendiente = turnoQueVuelveAPendiente(movimientoAEliminar);
+  // 'YYYY-MM-DD' ordena igual como texto que como fecha.
+  const turnoDeDiaAnterior = turnoVuelveAPendiente
+    && fechaDeInstante(movimientoAEliminar.turno_inicio) < getFechaHoy();
 
   // Mientras el día carga o si falló, `movimientos` todavía es el del día
   // anterior: los totales muestran "—" y el Excel queda deshabilitado. El
@@ -626,7 +665,7 @@ function TabMovimientos({ modalAbierto, onCerrarModal }) {
           onCancel={() => setMovimientoAEliminar(null)}
         >
           {movimientoAEliminar && <DetalleRecurso filas={filasDetalleMovimiento(movimientoAEliminar)} />}
-          {turnoVuelveAReservado && (
+          {turnoVuelveAPendiente && (
             <div style={{
               display: 'flex',
               alignItems: 'flex-start',
@@ -638,8 +677,14 @@ function TabMovimientos({ modalAbierto, onCerrarModal }) {
             }}>
               <Info size={14} strokeWidth={1.75} style={{ flexShrink: 0, marginTop: 2 }} />
               <span>
-                El turno asociado volverá a estado{' '}
-                <strong style={{ color: theme.ink }}>Reservado</strong>.
+                El turno vuelve a quedar{' '}
+                <strong style={{ color: theme.ink }}>pendiente de cobro</strong>.
+                {turnoDeDiaAnterior && (
+                  <>
+                    {' '}No aparece en el iPad: se cobra desde Turnero. Si no se cobra, esta noche
+                    pasa a <strong style={{ color: theme.ink }}>No asistió</strong> automáticamente.
+                  </>
+                )}
               </span>
             </div>
           )}
@@ -665,10 +710,19 @@ function TabMovimientos({ modalAbierto, onCerrarModal }) {
             labelOn="Solo Barberos"
           />
           <div style={{ justifySelf: 'center' }}>
-            <SelectorDia value={fecha} onChange={setFecha} />
+            <SelectorDia value={fecha} onChange={setFecha} botonHoy />
           </div>
           <BotonExportarExcel onClick={exportarExcel} disabled={!hayDatosDelDia || movimientos.length === 0} />
         </div>
+
+        {/* Con el filtro prendido, los totales ya no son toda la plata del día:
+            la nota dice qué se saca y por qué (Toast inline, §4.8). */}
+        {soloNegocio && (
+          <Toast tone="info">
+            Sin los cortes de los socios: se asume que lo que cobran por sus cortes va
+            directo a su bolsillo y no a la caja. Los socios se marcan en Gestión → Socios.
+          </Toast>
+        )}
 
 
         {cargando ? (
@@ -748,14 +802,16 @@ export default function SeccionCaja() {
     <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* La línea inferior la dibuja este contenedor (y no el tablist) para que
-          corra también debajo del "+", que queda fuera del role="tablist". */}
+          corra también debajo del "+", que queda fuera del role="tablist". Es
+          una sombra interior, como la de Tabs: el subrayado de la pestaña
+          activa se pinta encima. */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         gap: 12,
-        borderBottom: `1px solid ${theme.hairline}`,
+        boxShadow: `inset 0 -1px 0 ${theme.hairline}`,
       }}>
-        <Tabs items={TABS} value={tabActivo} onChange={setTabActivo} style={{ borderBottom: 'none' }} />
+        <Tabs items={TABS} value={tabActivo} onChange={setTabActivo} style={{ boxShadow: 'none' }} />
         {tabActivo === 'movimientos' && (
           <BotonNuevoMovimiento onClick={() => setModalAbierto(true)} />
         )}

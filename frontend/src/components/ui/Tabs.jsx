@@ -14,7 +14,13 @@
 //
 // Primer uso: SeccionCaja (3 tabs). Próximo uso esperado: SeccionGestion.
 
-import { useRef } from 'react';
+// Si las pestañas no entran a lo ancho (Gestión con 7 en pantalla angosta), el
+// tablist scrollea de costado, sin barra visible: se desliza con el dedo, y la
+// pestaña elegida (con clic o con las flechas) se lleva a la vista. La línea
+// base es una sombra interior y no un border: con overflow, un border-bottom
+// recortaba el subrayado de la pestaña activa.
+
+import { useEffect, useRef } from 'react';
 import { theme } from '../../theme/tokens.js';
 
 /**
@@ -34,6 +40,13 @@ import { theme } from '../../theme/tokens.js';
 function Tabs({ items, value, onChange, style, mostrarIconos = true }) {
   // Refs a cada botón para manejar foco con flechas.
   const botonesRef = useRef([]);
+
+  // Lleva a la vista la pestaña activa cuando cambia (solo mueve el scroll
+  // horizontal del tablist si hace falta; con todas a la vista no hace nada).
+  const indiceActivo = items.findIndex((item) => item.key === value);
+  useEffect(() => {
+    botonesRef.current[indiceActivo]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [indiceActivo]);
 
   /**
    * Mueve foco y activa un tab por índice. Wrap-around en los extremos.
@@ -71,7 +84,10 @@ function Tabs({ items, value, onChange, style, mostrarIconos = true }) {
   const tablistStyle = {
     display: 'flex',
     gap: 4,
-    borderBottom: `1px solid ${theme.hairline}`,
+    // Línea base: sombra interior (no border), ver el comentario de arriba.
+    boxShadow: `inset 0 -1px 0 ${theme.hairline}`,
+    overflowX: 'auto',
+    scrollbarWidth: 'none',
     ...style,
   };
 
@@ -86,7 +102,8 @@ function Tabs({ items, value, onChange, style, mostrarIconos = true }) {
           alignItems: 'center',
           gap: 8,
           padding: '10px 12px',
-          marginBottom: -1, // tapa el hairline del tablist con el border-bottom propio
+          // El border-bottom propio se pinta encima de la línea base del tablist.
+          flexShrink: 0,
           background: 'transparent',
           border: 'none',
           borderBottom: `2px solid ${activo ? theme.accent : 'transparent'}`,

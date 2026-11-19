@@ -25,6 +25,13 @@ Antes de arrancar, tener:
 cliente carga todo por su cuenta desde un link privado, y la skill arma la query de alta. Decisiones en
 [`decisiones_alta_clientes.md`](./decisiones_alta_clientes.md).
 
+> **La skill pasa a vivir solo en la PC de Facundo, fuera del repo** (auditoría 2026-11, Z7-01). La
+> carpeta `.claude/skills/alta-cliente/` (el `SKILL.md`, los tres scripts y `plantilla_alta.sql`) ya está
+> en `.gitignore`, y sus archivos se sacaron del repo el 2026-11-19 (en `main`, con el merge de mejoras
+> operativas): desde ahí, un clon nuevo no la trae y el repo público no la muestra. Hay una copia de la carpeta
+> fuera del repo; actualizala cuando cambies la skill. Las
+> rutas de esta guía son las de esa carpeta en la PC.
+
 1. **Crear la solicitud** (Supabase → SQL Editor). La referencia es para vos: de quién es.
    ```sql
    INSERT INTO solicitud_alta (referencia) VALUES ('Kings — Juan') RETURNING id;
@@ -35,12 +42,14 @@ cliente carga todo por su cuenta desde un link privado, y la skill arma la query
    llega un mail a `ALTA_AVISO_EMAIL` (env var de Railway) con la referencia, el negocio y el id.
 4. **Pasale el mail a Claude** en una sesión en la PC (`/alta-cliente`, o "dale de alta esta
    solicitud"). La skill lee y verifica la solicitud, te muestra un resumen con lo que conviene
-   confirmar, propone las credenciales (simples: todavía no hay recuperación de PIN) y te da la
+   confirmar, propone las credenciales (simples: el dueño las recupera por mail si se las olvida) y te da la
    query. Nunca escribe en la DB.
 5. **Correr la query** en el SQL Editor. Es una sola sentencia (entra todo o nada) y devuelve una
    fila con lo que cargó. Crea el tenant con su horario, barberos y sus horarios, socios,
-   servicios, productos, las 9 categorías de gasto, el WhatsApp y el link de reseñas, y el
-   `booking_url`; y pasa la solicitud a `cargada`. La plantilla vive en
+   servicios, productos, las 9 categorías de gasto, el WhatsApp, el teléfono del local
+   (`telefono_local`) y el link de reseñas, el contacto del dueño (`email_duenio`, en minúsculas,
+   y `telefono_duenio`: a ese mail llega la recuperación de la contraseña del iPad y del PIN) y
+   el `booking_url`; y pasa la solicitud a `cargada`. La plantilla vive en
    `.claude/skills/alta-cliente/plantilla_alta.sql`.
 6. **Avisale a la skill** que la corriste: verifica el alta (PINs y contraseña con el mismo
    `bcrypt.compare` de los logins), te da el checklist del navegador (Paso 3) y arma el mensaje de
@@ -51,7 +60,7 @@ cliente carga todo por su cuenta desde un link privado, y la skill arma la query
 
 ### Pasos del camino alternativo
 
-1. El cliente acuerda contratar el sistema y te pasa: nombre del negocio, subdominio deseado, PIN inicial y las credenciales operativas que quiere.
+1. El cliente acuerda contratar el sistema y te pasa: nombre del negocio, subdominio deseado, PIN inicial, las credenciales operativas que quiere, su mail y su celular (a ese mail le llega la recuperación de la contraseña del iPad y del PIN) y, si quiere, el teléfono del local para el turnero.
 2. Corrés `crearTenant.js` para dar de alta el tenant en la DB, con sus credenciales del modo operativo.
 3. Cargás los dueños del negocio (tabla `socio`) por SQL. Las categorías de gasto ya las creó el script.
 4. Verificás que el subdominio responde, el login operativo entra y el PIN funciona.
@@ -65,27 +74,33 @@ cliente carga todo por su cuenta desde un link privado, y la skill arma la query
 Desde la raíz de `/backend`:
 
 ```bash
-node src/scripts/crearTenant.js "Nombre Barbería" subdominio 1234 usuario password
+node src/scripts/crearTenant.js "Nombre Barbería" subdominio 1234 usuario password mail@dueño.com +5491133111686 "011 4444-5555"
 ```
 
-**Argumentos (todos obligatorios):**
+**Argumentos (en este orden):**
 - Nombre del negocio (entre comillas si tiene espacios).
 - Subdominio (sin puntos ni espacios, en minúscula).
 - PIN inicial de 4 dígitos.
 - Usuario del modo operativo (3+ caracteres).
 - Password del modo operativo (8+ caracteres).
+- Mail del dueño: ahí le llega la recuperación de la contraseña del iPad y del PIN. Se guarda en minúsculas.
+- Celular del dueño, en formato internacional E.164 (`+`, código de país y número, sin espacios: `+5491133111686`).
+- (Opcional) Teléfono del local, el que muestra el turnero para llamar (texto libre, hasta 30 caracteres, entre comillas si tiene espacios).
+
+Con `--dry-run` (en cualquier posición) valida todo y muestra lo que insertaría, sin escribir nada en la DB.
+Conviene correrlo así primero.
 
 > La password queda en el historial de la terminal. Usá una inicial y que el cliente la cambie desde el panel (Gestión → Seguridad).
 
 **El script hace:**
-- Valida que el PIN sea de 4 dígitos numéricos y las credenciales operativas, con las mismas reglas que el panel.
+- Valida que el PIN sea de 4 dígitos numéricos, las credenciales operativas y el contacto (mail, celular y teléfono del local), con las mismas reglas que el panel.
 - Verifica que el subdominio no exista ya en la DB.
 - Hashea el PIN y la password operativa con bcrypt.
 - Setea `suscripcion_vigente_hasta` al último día del mes actual.
-- Inserta el tenant con `activo = true`.
+- Inserta el tenant con `activo = true`, el mail y el celular del dueño (`email_duenio`, `telefono_duenio`) y el teléfono del local (`telefono_local`).
 - Seedea el horario de atención default en `tenant_horario_atencion`: **Lunes a Sábado 10:00-19:00** (domingo cerrado). El dueño lo ajusta desde el panel admin (Gestión → Negocio) al activar la cuenta.
 - Crea las 9 categorías de gasto predeterminadas (ver Paso 2c).
-- Imprime el UUID, nombre, subdominio, usuario operativo, fecha de suscripción, horario, categorías y URL.
+- Imprime el UUID, nombre, subdominio, usuario operativo, fecha de suscripción, contacto, horario, categorías y URL.
 
 > Si el seed del horario o el de las categorías falla (caso raro), el script igual termina con éxito: el tenant queda creado y se avisa por consola. El horario se carga desde el admin; las categorías, con el SQL del Paso 2c.
 
@@ -98,6 +113,9 @@ node src/scripts/crearTenant.js "Nombre Barbería" subdominio 1234 usuario passw
   Subdominio:   subdominio
   Operativo:    usuario
   Suscripción:  vigente hasta YYYY-MM-DD
+  Mail dueño:   mail@dueño.com
+  Celular:      +5491133111686
+  Tel. local:   011 4444-5555
   Horario:      L-S 10:00-19:00 (default, ajustable desde el admin)
   Categorías:   9 de gasto predeterminadas
   URL:          subdominio.barbermanager.app
@@ -135,8 +153,9 @@ limpia el caché.
 ## Paso 2b — Dueños del negocio (socios)
 
 Los aportes y retiros que se cargan en Caja van contra un dueño elegido de una lista (tabla
-`socio`). Sin dueños cargados, el formulario no deja guardarlos. No hay pantalla de alta: se
-cargan por SQL (Supabase → SQL Editor).
+`socio`). Sin dueños cargados, el formulario no deja guardarlos. Desde el deploy de mejoras operativas
+se cargan en Gestión → Socios (alta, vínculo con su barbero, activar y desactivar); hasta entonces, y como
+referencia, por SQL (Supabase → SQL Editor).
 
 ```sql
 -- Dueño que no corta (o cuyos barberos todavía no están cargados):
@@ -152,7 +171,8 @@ UPDATE socio SET barbero_id = '<barbero_id>'
 WHERE id = '<socio_id>' AND tenant_id = '<tenant_uuid>';
 ```
 
-- El vínculo con `barbero` es opcional y hoy no lo lee ningún código.
+- El vínculo con `barbero` es opcional. Desde mejoras operativas lo usan la marca "Socio" de Gestión → Barberos y
+  el filtro "Solo Barberos" de Caja, que saca los cortes de los barberos vinculados a un socio activo.
 - Un dueño no se borra: se desactiva con `UPDATE socio SET activo = false WHERE id = '<socio_id>'`.
   Sus movimientos lo siguen referenciando.
 - Comisión 100% no implica ser dueño: un barbero que alquila el sillón también la tiene.

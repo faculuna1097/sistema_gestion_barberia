@@ -5,7 +5,7 @@
 //
 // Uso:
 //   cd backend
-//   node src/scripts/crearTenant.js "Nombre Barbería" subdominio 1234 usuario password
+//   node src/scripts/crearTenant.js "Nombre Barbería" subdominio 1234 usuario password mail@dueño.com +5491133111686 ["011 4444-5555"] [--dry-run]
 //
 // Argumentos:
 //   1. nombre del negocio (string, entre comillas si tiene espacios)
@@ -13,10 +13,17 @@
 //   3. PIN admin de 4 dígitos (string)
 //   4. usuario operativo, al menos 3 caracteres (string)
 //   5. password operativa, al menos 8 caracteres (string)
+//   6. mail del dueño (a dónde llega la recuperación de la contraseña del iPad y del PIN)
+//   7. celular del dueño, en formato internacional E.164 (ej. +5491133111686)
+//   8. (opcional) teléfono del local, el que muestra el turnero (texto libre, hasta 30)
+//
+// --dry-run (en cualquier posición): valida todo y muestra lo que insertaría, sin
+// escribir nada en la DB (solo lee si el subdominio ya existe).
 
 import bcrypt from 'bcrypt';
 import { query } from '../config/db.js';
 import { errorCredencialesOperativas, hashearPasswordOperativa } from '../utils/credencialesOperativas.js';
+import { validarContactoNegocio } from '../utils/contactoNegocio.js';
 
 // Categorías de gasto predeterminadas: todos los tenants tienen las mismas y no se
 // agregan propias (decidido el 2026-11-03). Cada tenant tiene su copia, para que el
@@ -56,12 +63,17 @@ function ultimoDiaDelMes() {
 async function crearTenant() {
   console.log('[crearTenant] Iniciando...');
 
-  // 1. Leer y validar argumentos
-  const [, , nombre, subdominio, pinPlano, usuarioOperativo, passwordOperativa] = process.argv;
+  // 1. Leer y validar argumentos (--dry-run puede ir en cualquier posición)
+  const argumentos = process.argv.slice(2);
+  const dryRun = argumentos.includes('--dry-run');
+  const [
+    nombre, subdominio, pinPlano, usuarioOperativo, passwordOperativa,
+    emailDuenio, telefonoDuenio, telefonoLocal,
+  ] = argumentos.filter((a) => a !== '--dry-run');
 
-  if (!nombre || !subdominio || !pinPlano || !usuarioOperativo || !passwordOperativa) {
+  if (!nombre || !subdominio || !pinPlano || !usuarioOperativo || !passwordOperativa || !emailDuenio || !telefonoDuenio) {
     console.error('[crearTenant] Error: faltan argumentos.');
-    console.error('Uso: node src/scripts/crearTenant.js "Nombre" subdominio pin usuario password');
+    console.error('Uso: node src/scripts/crearTenant.js "Nombre" subdominio pin usuario password mail_dueño celular_dueño ["teléfono local"] [--dry-run]');
     process.exit(1);
   }
 
@@ -76,6 +88,18 @@ async function crearTenant() {
     process.exit(1);
   }
 
+  // Mismas reglas que Gestión → Negocio (utils/contactoNegocio.js). El mail queda en minúsculas.
+  const contacto = validarContactoNegocio({
+    email_duenio: emailDuenio,
+    telefono_duenio: telefonoDuenio,
+    telefono_local: telefonoLocal,
+  });
+  if (contacto.error) {
+    console.error(`[crearTenant] Error: ${contacto.error}.`);
+    process.exit(1);
+  }
+  const { email_duenio, telefono_duenio, telefono_local } = contacto.valores;
+
   try {
     // 2. Verificar que el subdominio no exista
     const existe = await query(
@@ -86,6 +110,21 @@ async function crearTenant() {
     if (existe.rows.length > 0) {
       console.error(`[crearTenant] Error: el subdominio "${subdominio}" ya existe.`);
       process.exit(1);
+    }
+
+    // Dry-run: todo validado; se muestra lo que se insertaría y no se escribe nada.
+    if (dryRun) {
+      console.log('[crearTenant] --dry-run: no se escribió nada. Esto es lo que se insertaría:');
+      console.log(`  Nombre:       ${nombre}`);
+      console.log(`  Subdominio:   ${subdominio} (libre)`);
+      console.log(`  Operativo:    ${usuarioOperativo}`);
+      console.log(`  Suscripción:  vigente hasta ${ultimoDiaDelMes()}`);
+      console.log(`  Mail dueño:   ${email_duenio}`);
+      console.log(`  Celular:      ${telefono_duenio}`);
+      console.log(`  Tel. local:   ${telefono_local ?? '(sin cargar)'}`);
+      console.log('  Horario:      L-S 10:00-19:00 (default)');
+      console.log(`  Categorías:   ${CATEGORIAS_GASTO_BASE.length} de gasto predeterminadas`);
+      process.exit(0);
     }
 
     // 3. Hashear el PIN y la password operativa
@@ -99,10 +138,12 @@ async function crearTenant() {
     const resultado = await query(
       `INSERT INTO tenant
         (nombre_negocio, subdominio, pin_admin, suscripcion_vigente_hasta,
-         operativo_usuario, operativo_password_hash, activo)
-       VALUES ($1, $2, $3, $4, $5, $6, true)
+         operativo_usuario, operativo_password_hash,
+         email_duenio, telefono_duenio, telefono_local, telefono, activo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, true)
        RETURNING id`,
-      [nombre, subdominio, pinHasheado, fechaSuscripcion, usuarioOperativo, passwordOperativaHash]
+      [nombre, subdominio, pinHasheado, fechaSuscripcion, usuarioOperativo, passwordOperativaHash,
+        email_duenio, telefono_duenio, telefono_local]
     );
 
     const tenantId = resultado.rows[0].id;
@@ -153,6 +194,9 @@ async function crearTenant() {
     console.log(`  Subdominio:   ${subdominio}`);
     console.log(`  Operativo:    ${usuarioOperativo}`);
     console.log(`  Suscripción:  vigente hasta ${fechaSuscripcion}`);
+    console.log(`  Mail dueño:   ${email_duenio}`);
+    console.log(`  Celular:      ${telefono_duenio}`);
+    console.log(`  Tel. local:   ${telefono_local ?? '(sin cargar)'}`);
     console.log(`  Horario:      ${horarioSeedOk ? 'L-S 10:00-19:00 (default, ajustable desde el admin)' : 'NO seedeado — cargar manualmente'}`);
     console.log(`  Categorías:   ${categoriasSeedOk ? `${CATEGORIAS_GASTO_BASE.length} de gasto predeterminadas` : 'NO seedeadas — cargar con el SQL de onboarding.md'}`);
     console.log(`  URL:          ${subdominio}.barbermanager.app`);

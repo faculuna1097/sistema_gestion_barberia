@@ -8,6 +8,7 @@
 import { UserX } from 'lucide-react';
 import { theme } from '../../theme/tokens.js';
 import { fmtHora } from '../../utils/fecha.js';
+import { textoCliente } from '../../utils/formato.js';
 import Button from './Button.jsx';
 import StatusPill from './StatusPill.jsx';
 
@@ -65,7 +66,7 @@ function TurnoListItem({ turno, onNoAsistio, onCancelar, bloqueado = false }) {
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           }}>
-            {turno.cliente_nombre || 'Sin nombre'}
+            {textoCliente(turno.cliente_nombre)}
           </div>
           {turno.servicio_nombre && (
             <div style={{

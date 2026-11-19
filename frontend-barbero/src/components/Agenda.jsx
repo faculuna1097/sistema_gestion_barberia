@@ -6,27 +6,39 @@
 // Todo sale de una sola llamada por día, GET /api/admin/agenda
 // (decisiones_descansos.md).
 // - Al tocar un turno se abre su detalle; las acciones pasan por ConfirmDialog.
-// - Los slots libres y futuros se pueden tocar para elegir un descanso (reglas
-//   en utils/seleccionSlots.js); con algo elegido aparece un footer para
-//   marcarlo, que confirma con ConfirmDialog.
+// - Los slots libres y futuros se pueden tocar (reglas en
+//   utils/seleccionSlots.js); con algo elegido aparece un footer con dos
+//   acciones: "Reservar turno" (abre HojaReservar, que arranca en el primer slot
+//   elegido) y "Marcar descanso" (confirma con ConfirmDialog).
+// - Un turno sin cliente ofrece "Asignar cliente" en su detalle (abre
+//   HojaAsignarCliente).
+// - Un turno reservado que no empezó se puede ofrecer a otro barbero:
+//   "Traspasar" en su detalle (abre HojaTraspasar). Con la oferta pendiente, el
+//   bloque lleva "⇄ {B}" y el detalle ofrece "Retirar". Las solicitudes las
+//   carga useTraspasos en App y llegan por props (F2 de plan_mejoras_operativas.md).
 // - Al tocar un descanso propio se abre su detalle, con "Liberar" (si no empezó)
 //   o "Terminar descanso" (si está en curso). Las ausencias se ven, sin acciones:
 //   se gestionan en Más → Gestión → Suspensiones.
 //
-// Este archivo orquesta: estado, carga, reloj, selección, acciones, layout y
-// footer. Las piezas viven en components/agenda/: datosAgenda.js y geometria.js
+// - Con la app visible, se recarga sola por detrás cada INTERVALO_REFRESCO_MS y
+//   al volver al primer plano: un turno que entró por otro lado (turnero, panel)
+//   aparece sin tocar nada, sin perder lo elegido ni cerrar lo abierto.
+//
+// Este archivo orquesta: estado, carga, reloj, refresco, selección, acciones,
+// layout y footer. Las piezas viven en components/agenda/: datosAgenda.js y geometria.js
 // (funciones puras), NavegadorDia, Timeline y sus bloques (BloquesTimeline) y
 // los modales de detalle.
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { CalendarOff } from 'lucide-react';
+import { CalendarOff, X } from 'lucide-react';
 
 import {
-  getAgenda, patchEstadoTurno, cancelarTurno, crearDescanso, liberarSuspension,
+  getAgenda, patchEstadoTurno, cancelarTurno, crearDescanso, liberarSuspension, responderTraspaso,
 } from '../services/api.js';
 import { theme } from '../theme/tokens.js';
 import { fmtHora, fechaHoyISO, sumarDias } from '../utils/fecha.js';
 import { esSlotTocable, tocarSlot, depurarSeleccion } from '../utils/seleccionSlots.js';
+import { textoErrorAlRetirar, textoConflictoAlOfrecer } from '../utils/traspasos.js';
 
 import {
   Skeleton,
@@ -34,9 +46,12 @@ import {
   ConfirmDialog,
   StickyFooter,
   EmptyState,
+  AvisoError,
 } from './ui';
 
-import { prepararAgenda, agregarDescanso, aplicarEstadoDeTurno } from './agenda/datosAgenda.js';
+import {
+  prepararAgenda, agregarDescanso, aplicarEstadoDeTurno, aplicarClienteDeTurno,
+} from './agenda/datosAgenda.js';
 import {
   PADDING_VERTICAL, ALTO_SKELETON, calcularPxPorHora, calcularRango,
 } from './agenda/geometria.js';
@@ -44,6 +59,9 @@ import NavegadorDia from './agenda/NavegadorDia.jsx';
 import Timeline from './agenda/Timeline.jsx';
 import DetalleTurnoModal from './agenda/DetalleTurnoModal.jsx';
 import DetalleDescansoModal from './agenda/DetalleDescansoModal.jsx';
+import HojaReservar from './agenda/HojaReservar.jsx';
+import HojaAsignarCliente from './agenda/HojaAsignarCliente.jsx';
+import HojaTraspasar from './traspasos/HojaTraspasar.jsx';
 
 // ─── Constantes ─────────────────────────────────────────────────────────────
 
@@ -51,18 +69,11 @@ import DetalleDescansoModal from './agenda/DetalleDescansoModal.jsx';
 // y deja de ofrecer los slots que ya empezaron.
 const INTERVALO_AHORA_MS = 30 * 1000;
 
+// Cada cuánto se recarga la agenda por detrás con la app visible.
+const INTERVALO_REFRESCO_MS = 60 * 1000;
+
 // Cuánto queda a la vista un aviso de error en el footer.
 const DURACION_AVISO_MS = 5000;
-
-// Caja de error (carga de la agenda y avisos de acciones).
-const ESTILO_ALERTA = {
-  background: theme.dangerSoft,
-  border: `1px solid ${theme.danger}`,
-  borderRadius: theme.radius,
-  padding: '10px 12px',
-  color: theme.danger,
-  fontSize: theme.sizeBody,
-};
 
 // Config del ConfirmDialog por acción (mismo patrón que Dashboard). `message`
 // puede ser una función del rango elegido ({ desde, hasta } en 'HH:MM').
@@ -94,11 +105,18 @@ const ACCIONES = {
 
 /**
  * Agenda
- * Orquesta la carga de la agenda del día y los modales de detalle/confirmación.
- * No recibe props: el backend toma al barbero del JWT.
+ * Orquesta la carga de la agenda del día, los modales de detalle/confirmación y
+ * las hojas de reservar, de asignar cliente y de traspasar. La agenda la pide el
+ * backend con el barbero del JWT; `barbero` se usa solo para el alta del turno.
+ * @param {{ id: string, nombre: string }} props.barbero - el barbero de la sesión
+ * @param {Object} props.traspasos - lo que devuelve useTraspasos (App): usa
+ *   `porTurno`, `firmaAceptados`, `aplicar`, `recargar` y `marcarVistos`
+ * @param {string|null} [props.fechaInicial] - 'YYYY-MM-DD' con el que abre (ej.
+ *   "Ver en la Agenda" de un turno aceptado); sin él, hoy
+ * @returns {JSX.Element}
  */
-export default function Agenda() {
-  const [fecha, setFecha] = useState(fechaHoyISO());
+export default function Agenda({ barbero, traspasos, fechaInicial = null }) {
+  const [fecha, setFecha] = useState(() => fechaInicial ?? fechaHoyISO());
   // Agenda del día visible, ya preparada para dibujar (prepararAgenda), o null
   // antes de la primera carga.
   const [agenda, setAgenda] = useState(null);
@@ -123,23 +141,40 @@ export default function Agenda() {
   const [descansoDetalle, setDescansoDetalle] = useState(null); // descanso expandido
   const [confirma, setConfirma] = useState({ open: false, accion: null, turno: null });
   const [procesando, setProcesando] = useState(false);
+  // Hoja del atajo: el inicio del primer slot elegido al abrirla, o null.
+  const [reservaEn, setReservaEn] = useState(null);
+  // Hoja de "Asignar cliente": el turno, o null.
+  const [asignarA, setAsignarA] = useState(null);
+  // Hoja de "Traspasar": el turno, o null.
+  const [traspasarTurno, setTraspasarTurno] = useState(null);
 
   const refAhora = useRef(null);  // para auto-scroll al indicador de "ahora"
   // Número del último pedido de agenda: si el barbero cambia de día rápido, la
   // respuesta de un pedido viejo se descarta en vez de pisar la del día visible.
   const refPedido = useRef(0);
+  // Hay un pedido de agenda en curso: el refresco automático no arranca otro.
+  const refCargando = useRef(false);
+  // Espejo de `procesando` para el refresco automático (lee el valor del momento,
+  // no el del render en que se armó el intervalo).
+  const refProcesando = useRef(false);
+  useEffect(() => { refProcesando.current = procesando; }, [procesando]);
 
   const esHoy = fecha === fechaHoyISO();
 
   /**
    * cargarAgenda
    * Trae la agenda del día seleccionado (turnos, descansos/ausencias y grilla).
+   * Si el detalle de un turno está abierto, lo actualiza con lo que llegó (ej. el
+   * cliente lo canceló desde el turnero), sin cerrarlo.
    * @param {Object} [opciones]
    * @param {boolean} [opciones.silenciosa=false] - si es true, no muestra el
-   *   skeleton (recarga después de una acción, sin que el timeline parpadee)
+   *   skeleton (recarga después de una acción o refresco automático, sin que el
+   *   timeline parpadee). Si falla, deja lo que se ve y no muestra error: un
+   *   corte de señal no tapa la agenda (la acción ya avisa su propio error).
    */
   const cargarAgenda = useCallback(async ({ silenciosa = false } = {}) => {
     const pedido = ++refPedido.current;
+    refCargando.current = true;
     if (!silenciosa) {
       setCargando(true);
       setErrorCarga(null);
@@ -149,14 +184,31 @@ export default function Agenda() {
       if (pedido !== refPedido.current) return;
       setAgenda(prepararAgenda(data, fecha));
       setErrorCarga(null);
+      setDetalle((abierto) => {
+        if (!abierto) return abierto;
+        const actual = data.turnos.find((t) => t.id === abierto.id);
+        return actual ? { ...abierto, ...actual } : abierto;
+      });
     } catch (err) {
       if (pedido !== refPedido.current) return;
-      console.error('[Agenda] Error cargando la agenda:', err.message);
-      setErrorCarga('No se pudo cargar la agenda.');
+      if (silenciosa) {
+        console.warn('[Agenda] No se pudo recargar la agenda; queda la anterior:', err.message);
+      } else {
+        console.error('[Agenda] Error cargando la agenda:', err.message);
+        setErrorCarga('No se pudo cargar la agenda.');
+      }
     } finally {
-      if (pedido === refPedido.current) setCargando(false);
+      if (pedido === refPedido.current) {
+        setCargando(false);
+        refCargando.current = false;
+      }
     }
   }, [fecha]);
+
+  // Última versión de cargarAgenda, para el refresco automático (que se arma una
+  // sola vez y tiene que cargar el día visible de ahora).
+  const refCargarAgenda = useRef(cargarAgenda);
+  useEffect(() => { refCargarAgenda.current = cargarAgenda; }, [cargarAgenda]);
 
   /**
    * irADia
@@ -179,12 +231,57 @@ export default function Agenda() {
     setDetalle(null);
     setDescansoDetalle(null);
     setSeleccion([]);
+    setReservaEn(null);
+    setAsignarA(null);
+    setTraspasarTurno(null);
   }, [cargarAgenda]);
+
+  // Un traspaso aceptado (de este barbero o hacia él) mueve un turno de una
+  // Agenda a otra: recargar sin esperar el refresco. La primera vez no, porque
+  // la carga del día ya está en curso.
+  const { firmaAceptados } = traspasos;
+  const refFirma = useRef(firmaAceptados);
+  useEffect(() => {
+    if (refFirma.current === firmaAceptados) return;
+    refFirma.current = firmaAceptados;
+    refCargarAgenda.current({ silenciosa: true });
+  }, [firmaAceptados]);
 
   // Reloj de "ahora".
   useEffect(() => {
     const id = setInterval(() => setAhora(Date.now()), INTERVALO_AHORA_MS);
     return () => clearInterval(id);
+  }, []);
+
+  // Refresco automático: cada INTERVALO_REFRESCO_MS con la app visible y al
+  // volver al primer plano. No arranca si ya hay una carga en curso o una acción
+  // en "Procesando…" (esa acción recarga al terminar).
+  useEffect(() => {
+    /**
+     * refrescar
+     * Recarga silenciosa del día visible, si la app está a la vista y no hay
+     * otra carga ni una acción en curso.
+     */
+    const refrescar = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (refCargando.current || refProcesando.current) return;
+      refCargarAgenda.current({ silenciosa: true });
+    };
+    /**
+     * alVolver
+     * Al volver la app al primer plano: actualiza "ahora" y recarga.
+     */
+    const alVolver = () => {
+      if (document.visibilityState !== 'visible') return;
+      setAhora(Date.now());
+      refrescar();
+    };
+    const id = setInterval(refrescar, INTERVALO_REFRESCO_MS);
+    document.addEventListener('visibilitychange', alVolver);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', alVolver);
+    };
   }, []);
 
   // Al desmontar, cortar el timer del aviso.
@@ -288,6 +385,11 @@ export default function Agenda() {
           ? await cancelarTurno(turno.id)
           : await patchEstadoTurno(turno.id, 'no_asistio');
         setAgenda((actual) => (actual ? aplicarEstadoDeTurno(actual, cambio) : actual));
+        // Si el barbero cancela un turno con una oferta pendiente, la oferta
+        // vence y su aviso lo causó él: queda como visto (en gris, sin sumar en
+        // la campanita). Si lo cancela otro (el cliente, el dueño), sí avisa.
+        const oferta = traspasos.porTurno.get(turno.id);
+        if (accion === 'cancelar' && oferta?.estado === 'pendiente') traspasos.marcarVistos([oferta.id]);
       }
       exito = true;
     } catch (err) {
@@ -313,8 +415,117 @@ export default function Agenda() {
 
     if (exito) {
       cerrarConfirma();
+      // Cancelar un turno vence su oferta de traspaso pendiente: también se
+      // recargan las solicitudes, así la marca y el aviso no esperan al refresco.
+      if (!esDescanso) traspasos.recargar();
       await cargarAgenda({ silenciosa: true });
     }
+  };
+
+  /**
+   * turnoReservado
+   * El alta del atajo salió bien: recarga la agenda (la respuesta del alta no
+   * alcanza para dibujar el turno) y recién con el turno a la vista cierra la
+   * hoja y suelta la selección. La hoja queda en "Reservando…" mientras tanto.
+   */
+  const turnoReservado = async () => {
+    await cargarAgenda({ silenciosa: true });
+    setSeleccion([]);
+    setReservaEn(null);
+  };
+
+  /**
+   * abrirAsignarCliente
+   * Cierra el detalle del turno y abre la hoja de "Asignar cliente".
+   * @param {Object} turno
+   */
+  const abrirAsignarCliente = (turno) => {
+    setDetalle(null);
+    setAsignarA(turno);
+  };
+
+  /**
+   * clienteAsignado
+   * Dibuja el cliente con lo que devolvió el servidor, cierra la hoja y recarga
+   * por detrás para confirmar (convenciones §8).
+   * @param {Object} respuesta - { id, cliente_id, cliente_nombre, cliente_email, cliente_telefono }
+   */
+  const clienteAsignado = (respuesta) => {
+    setAgenda((actual) => (actual ? aplicarClienteDeTurno(actual, respuesta) : actual));
+    setAsignarA(null);
+    cargarAgenda({ silenciosa: true });
+  };
+
+  /**
+   * conflictoAlAsignar
+   * El turno cambió mientras se elegía el cliente (409): cierra la hoja, avisa y
+   * recarga para mostrar cómo quedó.
+   * @param {Error & { codigo?: string }} err
+   */
+  const conflictoAlAsignar = (err) => {
+    setAsignarA(null);
+    mostrarAviso(err.codigo === 'turno_con_cliente'
+      ? 'Otro ya le cargó el cliente a este turno.'
+      : err.message);
+    cargarAgenda({ silenciosa: true });
+  };
+
+  /**
+   * abrirTraspasar
+   * Cierra el detalle del turno y abre la hoja de "Traspasar".
+   * @param {Object} turno
+   */
+  const abrirTraspasar = (turno) => {
+    setDetalle(null);
+    setTraspasarTurno(turno);
+  };
+
+  /**
+   * traspasoEnviado
+   * Dibuja la oferta con lo que devolvió el servidor (el bloque pasa a "⇄ {B}"),
+   * cierra la hoja y recarga las solicitudes por detrás.
+   * @param {Object} solicitud
+   */
+  const traspasoEnviado = (solicitud) => {
+    traspasos.aplicar(solicitud);
+    setTraspasarTurno(null);
+    traspasos.recargar();
+  };
+
+  /**
+   * conflictoAlTraspasar
+   * El turno ya no se puede ofrecer (cambió o ya tiene una oferta): cierra la
+   * hoja, avisa y recarga la agenda y las solicitudes.
+   * @param {Error & { codigo?: string }} err
+   */
+  const conflictoAlTraspasar = (err) => {
+    setTraspasarTurno(null);
+    mostrarAviso(textoConflictoAlOfrecer(err));
+    cargarAgenda({ silenciosa: true });
+    traspasos.recargar();
+  };
+
+  /**
+   * retirarTraspaso
+   * Retira la oferta pendiente del turno abierto en el detalle. El detalle queda
+   * en "Retirando…" y, con la respuesta, muestra el turno sin oferta (con
+   * "Traspasar" de nuevo). Si el otro ya respondió, cierra el detalle, avisa y
+   * recarga.
+   * @param {Object} solicitud
+   */
+  const retirarTraspaso = async (solicitud) => {
+    setProcesando(true);
+    try {
+      traspasos.aplicar(await responderTraspaso(solicitud.id, 'retirar'));
+    } catch (err) {
+      console.error('[Agenda] Error al retirar el traspaso:', err.message);
+      setDetalle(null);
+      mostrarAviso(textoErrorAlRetirar(err, solicitud));
+      cargarAgenda({ silenciosa: true });
+    } finally {
+      setProcesando(false);
+    }
+    traspasos.recargar();
   };
 
   /**
@@ -360,11 +571,16 @@ export default function Agenda() {
     ? 2 * PADDING_VERTICAL + ((rango.minFin - rango.minInicio) / 60) * pxPorHora
     : ALTO_SKELETON;
 
-  // Texto del ConfirmDialog: fijo, o armado con el rango elegido.
+  // Texto del ConfirmDialog: fijo, o armado con el rango elegido. Cancelar un
+  // turno con una oferta de traspaso pendiente avisa que la oferta se cae.
   const configConfirma = ACCIONES[confirma.accion];
   let mensajeConfirma = configConfirma?.message || '';
   if (typeof mensajeConfirma === 'function') {
     mensajeConfirma = rangoSeleccion ? mensajeConfirma(rangoSeleccion) : '';
+  }
+  const ofertaDelTurno = confirma.turno ? traspasos.porTurno.get(confirma.turno.id) : null;
+  if (confirma.accion === 'cancelar' && ofertaDelTurno?.estado === 'pendiente') {
+    mensajeConfirma = `${mensajeConfirma} La oferta de traspaso a ${ofertaDelTurno.a_barbero.nombre} queda sin efecto.`;
   }
 
   return (
@@ -387,14 +603,14 @@ export default function Agenda() {
         {cargando && <Skeleton height={altoTotal} radius={theme.radius} />}
 
         {!cargando && errorCarga && (
-          <div role="alert" style={ESTILO_ALERTA}>
+          <AvisoError>
             {errorCarga}
             <div style={{ marginTop: 8 }}>
               <Button variant="secondary" full={false} onClick={() => cargarAgenda()}>
                 Reintentar
               </Button>
             </div>
-          </div>
+          </AvisoError>
         )}
 
         {/* El local no abre y no hay turnos: no hay timeline que dibujar. El
@@ -426,6 +642,7 @@ export default function Agenda() {
             refAhora={refAhora}
             iniciosTocables={iniciosTocables}
             seleccion={seleccionVigente}
+            traspasos={traspasos.porTurno}
             onTocarSlot={tocarSlotLibre}
             onTocarTurno={setDetalle}
             onTocarDescanso={setDescansoDetalle}
@@ -433,22 +650,58 @@ export default function Agenda() {
         )}
       </div>
 
-      {/* Footer: el descanso elegido y/o el aviso de error de una acción */}
+      {/* Footer: los slots elegidos con sus dos acciones y/o el aviso de error
+          de una acción. El rango va en su propio renglón, con la X para soltarlo:
+          en 375 px no entran las dos acciones y el "Cancelar" en una fila. */}
       {(rangoSeleccion || aviso) && (
         <StickyFooter sobreBottomNav>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {aviso && <div role="alert" style={ESTILO_ALERTA}>{aviso}</div>}
+            {aviso && <AvisoError>{aviso}</AvisoError>}
             {rangoSeleccion && (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <Button variant="secondary" full={false} onClick={() => setSeleccion([])}>
-                  Cancelar
-                </Button>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <Button variant="primary" onClick={() => pedirConfirmacion(null, 'marcar_descanso')}>
-                    {`Marcar descanso · ${rangoSeleccion.desde}–${rangoSeleccion.hasta}`}
-                  </Button>
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{
+                    fontFamily: theme.body,
+                    fontSize: theme.sizeBody,
+                    fontWeight: theme.weightMedium,
+                    color: theme.ink,
+                  }}>
+                    {`${rangoSeleccion.desde}–${rangoSeleccion.hasta}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSeleccion([])}
+                    aria-label="Soltar los horarios elegidos"
+                    style={{
+                      width: 44,
+                      height: 44,
+                      margin: '-8px -12px -8px 0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: 999,
+                      cursor: 'pointer',
+                      color: theme.muted,
+                    }}
+                  >
+                    <X size={20} strokeWidth={1.75} aria-hidden="true" />
+                  </button>
                 </div>
-              </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Button variant="primary" onClick={() => setReservaEn(seleccionVigente[0].inicioIso)}>
+                      Reservar turno
+                    </Button>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Button variant="secondary" onClick={() => pedirConfirmacion(null, 'marcar_descanso')}>
+                      Marcar descanso
+                    </Button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </StickyFooter>
@@ -457,9 +710,45 @@ export default function Agenda() {
       {/* Modal de detalle del turno */}
       <DetalleTurnoModal
         turno={detalle}
+        traspaso={detalle ? traspasos.porTurno.get(detalle.id) : null}
+        procesando={procesando}
         onCerrar={() => setDetalle(null)}
         onAccion={pedirConfirmacion}
+        onAsignarCliente={abrirAsignarCliente}
+        onTraspasar={abrirTraspasar}
+        onRetirarTraspaso={retirarTraspaso}
       />
+
+      {/* Hoja del atajo "Reservar turno" */}
+      {reservaEn && (
+        <HojaReservar
+          barberoId={barbero.id}
+          inicioIso={reservaEn}
+          onCerrar={() => setReservaEn(null)}
+          onReservado={turnoReservado}
+          onConflicto={() => cargarAgenda({ silenciosa: true })}
+        />
+      )}
+
+      {/* Hoja de "Asignar cliente" */}
+      {asignarA && (
+        <HojaAsignarCliente
+          turno={asignarA}
+          onCerrar={() => setAsignarA(null)}
+          onAsignado={clienteAsignado}
+          onConflicto={conflictoAlAsignar}
+        />
+      )}
+
+      {/* Hoja de "Traspasar" */}
+      {traspasarTurno && (
+        <HojaTraspasar
+          turno={traspasarTurno}
+          onCerrar={() => setTraspasarTurno(null)}
+          onEnviado={traspasoEnviado}
+          onConflicto={conflictoAlTraspasar}
+        />
+      )}
 
       {/* Modal de detalle del descanso */}
       <DetalleDescansoModal

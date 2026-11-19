@@ -14,7 +14,7 @@ import { RUTA_TURNERO, extraerTokenGestion, esRutaResena, leerOrigen } from './u
 import { mensajeDeCargaDelLocal } from './utils/errores.js';
 import { useNavegacion } from './hooks/useNavegacion.js';
 import { useListaRemota } from './hooks/useListaRemota.js';
-import { PageContainer, EmptyState, Button, IconoAlerta } from './components/ui';
+import { PageContainer, MarcoLocal, EmptyState, Button, IconoAlerta } from './components/ui';
 import Landing, { LandingSkeleton } from './screens/Landing.jsx';
 import SeleccionServicio from './screens/SeleccionServicio.jsx';
 import SeleccionCuando from './screens/SeleccionCuando.jsx';
@@ -188,17 +188,30 @@ function App() {
     window.location.replace(esUrlHttps(tenant.resena_url) ? tenant.resena_url : RUTA_TURNERO);
   }, [esResena, tenant]);
 
+  /**
+   * conMarco
+   * Envuelve lo que se muestra en MarcoLocal: en pantalla ancha, el panel del
+   * local a la izquierda. Va en todas las salidas de App (en la misma
+   * posición), así el panel se monta una sola vez y queda quieto al navegar:
+   * mientras carga el local es un bloque oscuro, y después muestra la foto.
+   * @param {ReactNode} contenido - La pantalla
+   * @returns {JSX.Element}
+   */
+  const conMarco = (contenido) => (
+    <MarcoLocal tenant={tenant} imagenes={imagenes}>{contenido}</MarcoLocal>
+  );
+
   // ── Render: loading ───────────────────────────────────────
   // En la landing, su silueta (mismos bloques que la real: no salta al llegar
   // los datos). En la gestión y en la reseña, la columna vacía: mostrar la
   // landing ahí sería anunciar una pantalla que no viene.
   if (cargando) {
-    return enFlujoReserva ? <LandingSkeleton /> : <PageContainer />;
+    return conMarco(enFlujoReserva ? <LandingSkeleton /> : <PageContainer />);
   }
 
   // ── Render: error de carga ────────────────────────────────
   if (error) {
-    return (
+    return conMarco(
       <PageContainer>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <EmptyState
@@ -218,12 +231,12 @@ function App() {
 
   // Ruta especial: gestión del turno desde link del mail
   if (tokenGestion) {
-    return <GestionTurno token={tokenGestion} tenant={tenant} />;
+    return conMarco(<GestionTurno token={tokenGestion} tenant={tenant} />);
   }
 
   // Ruta de reseñas: el efecto de arriba ya está redirigiendo.
   if (esResena) {
-    return <PageContainer />;
+    return conMarco(<PageContainer />);
   }
 
   /**
@@ -346,7 +359,6 @@ function App() {
             cliente={cliente}
             tenant={tenant}
             resultado={resultado}
-            onNuevaReserva={() => { reiniciarReserva(); nav.volverAlInicio(); }}
           />
         );
       default:
@@ -354,9 +366,10 @@ function App() {
     }
   };
 
-  return (
+  return conMarco(
     // data-tt-direccion: index.css elige con él la animación de entrada de la
     // pantalla (desde la derecha al avanzar, desde la izquierda al volver).
+    // El panel de MarcoLocal queda afuera: no se anima.
     <div data-tt-direccion={nav.direccion}>
       {/* key: cada pantalla nueva se monta de cero y corre su transición */}
       <Fragment key={`${nav.profundidad}-${nav.pantalla}`}>

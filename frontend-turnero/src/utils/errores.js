@@ -11,8 +11,10 @@ export const TEXTO_SIN_CONEXION = 'No pudimos conectarnos. Revisá tu conexión 
 
 /**
  * TEXTO_DEMASIADOS_INTENTOS
- * Texto de un 429 (el backend limita las reservas por IP: 3 por minuto y 10
- * por hora). Es del turnero y no depende del cuerpo de la respuesta: si el 429
+ * Texto de un 429. El backend limita por IP, con 3 por minuto y 10 por hora,
+ * la reserva y, por separado, la gestión del turno (cancelar y reprogramar,
+ * con un cupo compartido entre las dos). Es del turnero y no depende del
+ * cuerpo de la respuesta: si el 429
  * llega sin JSON (ej. de un proxy), igual se dice qué hacer.
  */
 export const TEXTO_DEMASIADOS_INTENTOS = 'Hiciste muchos intentos seguidos. Esperá unos minutos y probá de nuevo.';

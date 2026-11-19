@@ -50,3 +50,20 @@ export const OPCIONES_FORMA_PAGO = [
 export function formatPago(forma) {
   return OPCIONES_FORMA_PAGO.find((o) => o.value === forma)?.label ?? (forma || '—');
 }
+
+// Texto que muestra el panel (y el iPad) para un turno sin cliente
+// (turno.cliente_id NULL). La API devuelve el cliente en null y cada front elige
+// su texto.
+export const TEXTO_SIN_CLIENTE = 'Sin datos';
+
+/**
+ * textoCliente
+ * El nombre del cliente de un turno, o "Sin datos" si el turno no tiene cliente.
+ * Es el único texto de respaldo del front: todo lugar que muestra el cliente de
+ * un turno pasa por acá.
+ * @param {string|null|undefined} nombre - `cliente_nombre` del turno
+ * @returns {string} Ej: "Juan Pérez", "Sin datos"
+ */
+export function textoCliente(nombre) {
+  return nombre?.trim() ? nombre : TEXTO_SIN_CLIENTE;
+}

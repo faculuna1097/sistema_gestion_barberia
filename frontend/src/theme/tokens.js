@@ -90,6 +90,27 @@ export const theme = {
 };
 
 /**
+ * TAM_KIOSKO
+ * Escala tipográfica de la superficie kiosko (sistema_de_disenio.md §3.6): más
+ * grande que la de `theme` porque el iPad del mostrador se lee de pie, a un brazo
+ * de distancia. Es una excepción escrita, no un descuido. La usan los flujos de
+ * Corte, Venta y Gasto (vía wizardStyles.js) y, desde el 2026-11-18, el aviso de
+ * turnos sin cobrar de MainScreen y su detalle.
+ */
+export const TAM_KIOSKO = {
+  opcion:          19, // BotonOpcion y CampoTexto; texto del aviso y filas del detalle
+  botonGrande:     18, // wizardStyles.btnGrande
+  valorResumen:    18, // valor de FilaResumen
+  etiquetaResumen: 13, // etiqueta mono de FilaResumen y de los días del detalle
+  subtitulo:       15, // subtítulo de PanelWizard y del detalle
+  etiquetaTotal:   22, // etiqueta de FilaTotal; título del detalle
+  montoTotal:      32, // monto de FilaTotal
+  signoMonto:      40, // "$" de CampoMonto
+  campoMonto:      56, // input de CampoMonto
+  montoExito:      48, // monto de PantallaExito
+};
+
+/**
  * spacing
  * Escala fija de spacing. Usar siempre múltiplos definidos.
  * Ej: spacing[4] = 16px.

@@ -18,6 +18,7 @@ import {
   calcularDuracionServicio, upsertCliente, insertarTurno, enriquecerTurno,
   armarLinkGestion, sincronizarCalendarCreacion, notificarConfirmacion,
   inicioPosteriorAhora, inicioDentroDeVentana, MENSAJE_SLOT_OCUPADO, MENSAJE_FUERA_DE_VENTANA,
+  CUERPO_409_TURNO_YA_EMPEZO,
 } from '../services/turnosService.js';
 import { sqlTurnoEnriquecido } from '../services/sqlTurnoEnriquecido.js';
 import { suspensionSolapaSql } from '../services/suspensionesService.js';
@@ -45,13 +46,17 @@ import { cuerpoError422, CUERPO_422_FERIADO } from '../utils/errores422.js';
  * reseñas" del Perfil de Empresa de Google, también por SQL): solo viaja si es
  * una URL https; si no, `null` y el turnero no muestra el link de reseñas.
  *
+ * `telefono` sale de `tenant.telefono_local` (el teléfono público del local, para
+ * el `tel:`). La clave de la respuesta sigue siendo `telefono`: el contrato no cambió
+ * cuando la columna pasó de `telefono` a `telefono_local`.
+ *
  * @param {string} req.tenant_id - Inyectado por tenantMiddleware
  * @returns {JSON} { id, nombre, telefono, whatsapp, resena_url, direccion, horario_atencion, feriados }
  */
 export const getTenant = async (req, res) => {
   try {
     const result = await query(
-      `SELECT id, nombre_negocio, telefono, direccion, configuracion
+      `SELECT id, nombre_negocio, telefono_local, direccion, configuracion
        FROM tenant
        WHERE id = $1 AND activo = true`,
       [req.tenant_id]
@@ -75,7 +80,7 @@ export const getTenant = async (req, res) => {
     res.json({
       id: row.id,
       nombre: row.nombre_negocio,
-      telefono: row.telefono,
+      telefono: row.telefono_local,
       whatsapp: esTelefonoE164(whatsapp) ? whatsapp.trim() : null,
       resena_url: esUrlHttps(resenaUrl) ? resenaUrl.trim() : null,
       direccion: row.direccion,
@@ -407,7 +412,8 @@ export const crearTurno = async (req, res) => {
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @param {string} req.params.token
  * @returns {JSON} { turno: { id, inicio, fin, estado }, barbero: { id, nombre },
- *   servicio: { id, nombre, precio: number, duracion_minutos }, cliente: { nombre } }
+ *   servicio: { id, nombre, precio: number, duracion_minutos }, cliente: { nombre } };
+ *   cliente.nombre es null en un turno "Sin datos" (cliente_id NULL, F1)
  */
 export const getTurnoPorToken = async (req, res) => {
   try {
@@ -421,7 +427,7 @@ export const getTurnoPorToken = async (req, res) => {
        JOIN barbero  b  ON b.id  = t.barbero_id
        JOIN servicio s  ON s.id  = t.servicio_id
        JOIN tenant   tn ON tn.id = t.tenant_id
-       JOIN cliente  c  ON c.id  = t.cliente_id
+       LEFT JOIN cliente c ON c.id = t.cliente_id
        WHERE t.token_gestion = $1 AND t.tenant_id = $2`,
       [req.params.token, req.tenant_id]
     );
@@ -452,19 +458,26 @@ export const getTurnoPorToken = async (req, res) => {
 
 /**
  * cancelarTurno
- * Cancela un turno reservado desde la página pública de gestión.
- * Setea cancelado_por='cliente' y dispara best-effort la cancelación del
- * evento de Google Calendar y el mail de cancelación.
+ * Cancela un turno reservado desde la página pública de gestión, solo si todavía
+ * no empezó (`inicio > now()`, con el reloj de la base). Setea
+ * cancelado_por='cliente' y dispara best-effort la cancelación del evento de
+ * Google Calendar y el mail de cancelación.
  *
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @param {string} req.params.token
- * @returns {JSON} { ok: true }; 409 si el turno ya no está reservado
+ * @returns {JSON} { ok: true }; 404 si no existe; 409 `{ error }` si el turno ya
+ *   no está reservado; 409 `{ error, codigo: 'turno_ya_empezo' }` si está
+ *   reservado pero ya empezó
  */
 export const cancelarTurno = async (req, res) => {
   try {
     // ── Buscar turno + datos enriquecidos en una sola query ────────────────
+    // Si ya empezó se calcula en la base, con su reloj (como cancelarTurnoPorId).
     const lookupRes = await query(
-      sqlTurnoEnriquecido('t.id, t.estado, t.google_event_id', 'WHERE t.token_gestion = $1 AND t.tenant_id = $2'),
+      sqlTurnoEnriquecido(
+        't.id, t.estado, t.google_event_id, t.inicio <= now() AS empezo',
+        'WHERE t.token_gestion = $1 AND t.tenant_id = $2'
+      ),
       [req.params.token, req.tenant_id]
     );
     if (lookupRes.rows.length === 0) {
@@ -475,28 +488,37 @@ export const cancelarTurno = async (req, res) => {
       console.warn('[turnero] cancelarTurno — estado no cancelable:', r.estado);
       return res.status(409).json({ error: `El turno está en estado "${r.estado}" y no se puede cancelar` });
     }
+    if (r.empezo) {
+      console.warn('[turnero] cancelarTurno — el turno ya empezó | turno_id:', r.id);
+      return res.status(409).json(CUERPO_409_TURNO_YA_EMPEZO);
+    }
 
     // ── UPDATE estado ──────────────────────────────────────────────────────
-    // El estado también va en el WHERE: si cambió entre la lectura de arriba y
-    // acá (ej. el turno se cobró), no se cancela.
+    // Las dos reglas también van en el WHERE: si entre la lectura de arriba y
+    // acá el turno cambió de estado (ej. se cobró) o llegó su hora, no se cancela.
     const updateRes = await query(
       `UPDATE turno
          SET estado = 'cancelado',
              cancelado_en = now(),
              cancelado_por = 'cliente'
-       WHERE id = $1 AND tenant_id = $2 AND estado = 'reservado'`,
+       WHERE id = $1 AND tenant_id = $2 AND estado = 'reservado' AND inicio > now()`,
       [r.id, req.tenant_id]
     );
-    // Sin filas actualizadas: el turno cambió de estado. Una lectura solo decide
-    // qué estado nombrar en el 409; no se toca Calendar ni se manda el mail.
+    // Sin filas actualizadas: cambió el estado o el turno ya empezó. Una lectura
+    // solo decide qué 409 devolver; no se toca Calendar ni se manda el mail. Si
+    // sigue reservado, lo que falló es la hora (es la otra condición del WHERE).
     if (updateRes.rowCount === 0) {
       const estadoRes = await query(
         `SELECT estado FROM turno WHERE id = $1 AND tenant_id = $2`,
         [r.id, req.tenant_id]
       );
       const estadoActual = estadoRes.rows[0]?.estado;
-      console.warn('[turnero] cancelarTurno — el turno cambió de estado antes del UPDATE | turno_id:', r.id, '| estado:', estadoActual);
-      return res.status(409).json({ error: `El turno está en estado "${estadoActual}" y no se puede cancelar` });
+      if (estadoActual !== 'reservado') {
+        console.warn('[turnero] cancelarTurno — el turno cambió de estado antes del UPDATE | turno_id:', r.id, '| estado:', estadoActual);
+        return res.status(409).json({ error: `El turno está en estado "${estadoActual}" y no se puede cancelar` });
+      }
+      console.warn('[turnero] cancelarTurno — el turno empezó antes del UPDATE | turno_id:', r.id);
+      return res.status(409).json(CUERPO_409_TURNO_YA_EMPEZO);
     }
     console.log('[turnero] cancelarTurno — turno cancelado | turno_id:', r.id);
 
@@ -520,13 +542,21 @@ export const cancelarTurno = async (req, res) => {
  * Cambia inicio/fin del turno. El constraint EXCLUDE GIST también aplica
  * al UPDATE: si el nuevo rango choca con otro turno reservado del mismo
  * barbero, devuelve 409. Lo mismo si choca con una suspensión vigente del
- * barbero: el UPDATE lleva un NOT EXISTS y no escribe nada.
+ * barbero: el UPDATE lleva un NOT EXISTS y no escribe nada. Solo se reprograma
+ * un turno que todavía no empezó (`inicio > now()` del turno actual, con el
+ * reloj de la base). Si el `inicio` pedido es el mismo instante que ya tiene el
+ * turno, no cambia nada: responde 200 sin UPDATE, sin Calendar y sin mail.
  *
  * @param {string} req.tenant_id     - Inyectado por tenantMiddleware
  * @param {string} req.params.token
  * @param {string} req.body.inicio   - ISO con offset
- * @returns {JSON} { ok: true, turno: { id, inicio, fin } }; 400 si `inicio` no es
- *   futuro o queda fuera de los próximos DIAS_RESERVABLES días
+ * @returns {JSON} { ok: true, turno: { id, inicio, fin } } (con el mismo horario,
+ *   los datos actuales del turno); 400 si `inicio` no es
+ *   futuro o queda fuera de los próximos DIAS_RESERVABLES días; 404 si no existe;
+ *   409 `{ error }` si el turno ya no está reservado; 409
+ *   `{ error, codigo: 'turno_ya_empezo' }` si está reservado pero ya empezó; 422
+ *   si el horario nuevo cae fuera del horario de atención o en un feriado; 409
+ *   MENSAJE_SLOT_OCUPADO si el horario nuevo choca con otro turno o una suspensión
  */
 export const reprogramarTurno = async (req, res) => {
   const { inicio } = req.body;
@@ -548,9 +578,10 @@ export const reprogramarTurno = async (req, res) => {
 
   try {
     // ── Lookup turno + duración del servicio + datos para services ─────────
+    // Si ya empezó se calcula en la base, con su reloj (como cancelarTurnoPorId).
     const lookupRes = await query(
       sqlTurnoEnriquecido(
-        `t.id, t.estado, t.google_event_id,
+        `t.id, t.estado, t.google_event_id, t.inicio <= now() AS empezo,
          (tn.duracion_slot_minutos * s.cantidad_slots) AS duracion_minutos`,
         'WHERE t.token_gestion = $1 AND t.tenant_id = $2'
       ),
@@ -563,6 +594,30 @@ export const reprogramarTurno = async (req, res) => {
     if (r.estado !== 'reservado') {
       console.warn('[turnero] reprogramarTurno — estado no reprogramable:', r.estado);
       return res.status(409).json({ error: `El turno está en estado "${r.estado}" y no se puede reprogramar` });
+    }
+    if (r.empezo) {
+      console.warn('[turnero] reprogramarTurno — el turno ya empezó | turno_id:', r.id);
+      return res.status(409).json(CUERPO_409_TURNO_YA_EMPEZO);
+    }
+
+    // ── Mismo horario: no hay nada que cambiar [auditoría 2026-11, Z3-01] ───
+    // Sin esto, "reprogramar" al horario que ya tiene el turno hacía el UPDATE y
+    // mandaba el mail y el aviso de Calendar igual: con un solo turno se podían
+    // mandar mails en bucle. Se responde 200 con la forma de siempre y los datos
+    // actuales, sin UPDATE, sin Calendar y sin mail. Va después del 404 y de los
+    // 409 (esas respuestas no cambian) y antes del horario y del feriado: si el
+    // local cambió su horario después de la reserva, dejar el turno donde está no
+    // es un error. Se comparan instantes, no strings: el pedido llega con offset
+    // y pg devuelve un Date.
+    if (inicioDT.toMillis() === r.inicio.getTime()) {
+      return res.json({
+        ok: true,
+        turno: {
+          id: r.id,
+          inicio: DateTime.fromJSDate(r.inicio).setZone(TZ).toISO(),
+          fin: DateTime.fromJSDate(r.fin).setZone(TZ).toISO(),
+        },
+      });
     }
 
     const finDT = inicioDT.plus({ minutes: r.duracion_minutos });
@@ -582,13 +637,17 @@ export const reprogramarTurno = async (req, res) => {
 
     // ── UPDATE con captura de 23P01 y sin pisar suspensiones ───────────────
     // El chequeo de suspensión va en la misma sentencia (NOT EXISTS) y compara
-    // contra el barbero del propio turno. El estado también va en el WHERE: si
-    // lo cancelaron entre la lectura de arriba y acá, no se reprograma.
+    // contra el barbero del propio turno. El estado y la hora también van en el
+    // WHERE: si entre la lectura de arriba y acá lo cancelaron o llegó su hora,
+    // no se reprograma. El `inicio > now()` del WHERE evalúa el inicio actual de
+    // la fila (el de antes del SET), no el nuevo: lo que importa es que el turno
+    // que se mueve todavía no haya empezado. Que el nuevo sea futuro ya se validó
+    // arriba (inicioPosteriorAhora).
     let updateRes;
     try {
       updateRes = await query(
         `UPDATE turno SET inicio = $1, fin = $2
-         WHERE id = $3 AND tenant_id = $4 AND estado = 'reservado'
+         WHERE id = $3 AND tenant_id = $4 AND estado = 'reservado' AND inicio > now()
            AND NOT EXISTS (
              SELECT 1 FROM barbero_suspension bs
              WHERE bs.tenant_id = turno.tenant_id AND bs.barbero_id = turno.barbero_id
@@ -603,17 +662,22 @@ export const reprogramarTurno = async (req, res) => {
       }
       throw err;
     }
-    // Sin filas actualizadas: o cambió el estado, o el nuevo horario pisa una
-    // suspensión. Una lectura solo decide qué 409 devolver.
+    // Sin filas actualizadas: cambió el estado, el turno ya empezó o el nuevo
+    // horario pisa una suspensión. Una lectura solo decide qué 409 devolver, en
+    // ese orden.
     if (updateRes.rowCount === 0) {
-      const estadoRes = await query(
-        `SELECT estado FROM turno WHERE id = $1 AND tenant_id = $2`,
+      const actualRes = await query(
+        `SELECT estado, inicio <= now() AS empezo FROM turno WHERE id = $1 AND tenant_id = $2`,
         [r.id, req.tenant_id]
       );
-      const estadoActual = estadoRes.rows[0]?.estado;
-      if (estadoActual !== 'reservado') {
-        console.warn('[turnero] reprogramarTurno — el turno cambió de estado antes del UPDATE | turno_id:', r.id, '| estado:', estadoActual);
-        return res.status(409).json({ error: `El turno está en estado "${estadoActual}" y no se puede reprogramar` });
+      const actual = actualRes.rows[0];
+      if (actual?.estado !== 'reservado') {
+        console.warn('[turnero] reprogramarTurno — el turno cambió de estado antes del UPDATE | turno_id:', r.id, '| estado:', actual?.estado);
+        return res.status(409).json({ error: `El turno está en estado "${actual?.estado}" y no se puede reprogramar` });
+      }
+      if (actual.empezo) {
+        console.warn('[turnero] reprogramarTurno — el turno empezó antes del UPDATE | turno_id:', r.id);
+        return res.status(409).json(CUERPO_409_TURNO_YA_EMPEZO);
       }
       console.warn('[turnero] reprogramarTurno — el nuevo horario pisa una suspensión | turno_id:', r.id);
       return res.status(409).json({ error: MENSAJE_SLOT_OCUPADO });

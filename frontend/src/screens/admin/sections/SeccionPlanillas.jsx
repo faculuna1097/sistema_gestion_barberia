@@ -63,7 +63,7 @@ import {
   formatDuracion,
   formatAntelacion,
 } from '../../../utils/fecha';
-import { fmtPesos, fmtPorcentaje, formatPago, OPCIONES_FORMA_PAGO } from '../../../utils/formato';
+import { fmtPesos, fmtPorcentaje, formatPago, OPCIONES_FORMA_PAGO, textoCliente } from '../../../utils/formato';
 import { textoEstadoBloque } from '../../../utils/descansos';
 import { sumarComision, porcentajesDeCortes, textoPorcentajeComision } from '../../../utils/comision';
 import { cargarChunk } from '../../../utils/cargarChunk';
@@ -118,16 +118,16 @@ function sumarCortes(cortes) {
 
 /**
  * Texto de la columna "Cliente" de un corte: el nombre del cliente si vino de
- * un turno, o "sin turno" si fue alguien que llegó sin reservar.
+ * un turno ("Sin datos" si el turno no tiene cliente), o "sin turno" si fue
+ * alguien que llegó sin reservar.
  * Lo usan la tabla del Detalle y su Excel.
  * @param {{con_turno?: boolean, cliente_nombre: string|null}} corte
- * @returns {string} El nombre, 'sin turno', o '—' si el backend no mandó
- *   `con_turno` (así un backend viejo no rotula todo como "sin turno") o si el
- *   turno no tiene nombre de cliente.
+ * @returns {string} El nombre, 'Sin datos', 'sin turno', o '—' si el backend no
+ *   mandó `con_turno` (así un backend viejo no rotula todo como "sin turno").
  */
-function textoCliente(corte) {
+function textoClienteCorte(corte) {
   if (corte.con_turno === false) return 'sin turno';
-  if (corte.con_turno === true) return corte.cliente_nombre || '—';
+  if (corte.con_turno === true) return textoCliente(corte.cliente_nombre);
   return '—';
 }
 
@@ -314,7 +314,7 @@ export default function SeccionPlanillas({ modoBarbero = false }) {
         cd.forEach((c) => {
           filas.push({
             Barbero: '', Fecha: formatFechaCorta(c.fecha), Hora: c.hora, Servicio: c.servicio_nombre,
-            Cliente: textoCliente(c),
+            Cliente: textoClienteCorte(c),
             'Monto ($)': c.monto_servicios, 'Propina ($)': c.propina,
             'Total ($)': c.monto_servicios + c.propina,
             ...(mostrarComisiones ? { 'A pagar ($)': '' } : {}),
@@ -688,7 +688,7 @@ function BloqueDia({ fecha, cortesDelDia, expandido, esHoy, onToggle, infoComisi
                 <tr key={c.corte_id} className="om-fila-hover">
                   <TdCelda>{c.hora}</TdCelda>
                   <TdCelda>{c.servicio_nombre}</TdCelda>
-                  <TdCelda>{textoCliente(c)}</TdCelda>
+                  <TdCelda>{textoClienteCorte(c)}</TdCelda>
                   <TdCelda alinear="right">{fmtPesos(c.monto_servicios)}</TdCelda>
                   <TdCelda alinear="right">
                     {c.propina > 0
