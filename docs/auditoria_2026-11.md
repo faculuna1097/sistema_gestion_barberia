@@ -2274,7 +2274,7 @@ en Z7-01, ver la nota del orquestador dentro del hallazgo.
   encabezado de age antes de subir. `PGSSLMODE=verify-full` con la CA de Supabase y `pg_dump` 17 por ruta
   completa.
 - Si falla: el paso `if: failure() || cancelled()` manda el check-in `error`; si ni siquiera arrancó, Sentry
-  Crons avisa por check-in perdido (margen de 90 min, duración máxima de 30). Cubre también que GitHub
+  Crons avisa por check-in perdido (margen de 90 min, de 12 h desde el 2026-11-19; duración máxima de 30). Cubre también que GitHub
   desactive el workflow a los 60 días.
 
 **`resguardo_lectura` (consultado en el catálogo)**

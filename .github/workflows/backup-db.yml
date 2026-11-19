@@ -61,7 +61,12 @@ env:
   # Configuración del monitor de Sentry, que viaja en cada check-in (el primero lo
   # crea). MONITOR_CRON tiene que coincidir con el `schedule` de arriba (en UTC).
   MONITOR_CRON: '17 7 * * *'
-  MONITOR_MARGEN_MIN: '90'
+  # Margen de 12 h: GitHub lanza las corridas programadas con horas de demora (del
+  # 13/11 al 19/11/2026, entre 7 y 10 h tarde) y con 90 min Sentry avisaba todos los
+  # días un check-in perdido aunque el backup saliera bien. Un backup que falla se
+  # sigue avisando en el momento (check-in `error`); lo único que tarda más en avisar
+  # es que GitHub no lo haya lanzado.
+  MONITOR_MARGEN_MIN: '720'
   MONITOR_DURACION_MAX_MIN: '30'
 
 jobs:

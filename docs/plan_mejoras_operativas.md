@@ -573,7 +573,9 @@ _(Los completa el orquestador durante la tanda.)_
   17:03 UTC) y todas terminan `success`. No es un backup que falla: es GitHub que no respeta el horario. En el
   cierre, decidir con el usuario cómo resolverlo: agrandar el margen del monitor, dispararlo desde un reloj
   confiable (por ejemplo, un cron de Railway que llame a `workflow_dispatch`) o mover el horario; y revisar de paso
-  la regla de Sentry que lo manda como "issue que vuelve".
+  la regla de Sentry que lo manda como "issue que vuelve". **Decidido en el cierre (2026-11-19, con el usuario):**
+  margen de 12 h (`MONITOR_MARGEN_MIN: '720'`); un backup que falla se sigue avisando en el momento. La regla
+  "issue que vuelve" no se toca: deja de dispararse cuando el monitor deja de abrir el issue.
 - **(2026-11-19, fase 10) Lo que deja F2b:**
   - **Datos de prueba en demo, por pedido del usuario** (para su prueba antes del merge): 10 turnos "Sin datos" de
     Alejo del 24/11 (los de 10:30 y 11:20 pasaron a Facundo), sus ofertas de traspaso y 2 descansos de Facundo (15:30
@@ -603,7 +605,9 @@ _(Los completa el orquestador durante la tanda.)_
   - **El aviso del tope diario de recuperación en Sentry** (`recuperacion: tope diario de links`) es un issue propio,
     no un `rateLimit: …`. Avisa a Discord por la regla de issue nuevo; si se quiere que avise también cuando se repite,
     como los cortes del rate limiter, hay que revisar el filtro de la regla "Rate limiter sigue" en Sentry.
-    **El usuario lo quiere (2026-11-18); se hace en el cierre (fase 11):** leer el filtro de esa regla (con el
+    **Resuelto en el cierre (2026-11-19):** la regla filtra por "el tag `limite` está seteado" (más de 1 evento en
+    una hora, avisa como mucho una vez por hora); el aviso del tope suma `limite: 'recuperacion-tope'`. Lo que
+    estaba planeado: **El usuario lo quiere (2026-11-18); se hace en el cierre (fase 11):** leer el filtro de esa regla (con el
     usuario logueado en Sentry) y, si filtra por el prefijo `rateLimit:` o por el tag `limite`, adaptar el aviso en
     `solicitarRecuperacion` para que lo cumpla; si no, sumarle el issue a la regla en Sentry, con el OK del usuario.
 - **(2026-11-17, auditoría 2026-11) Aceptados por el usuario, que tocan esta tanda:** Z1-06 (la sesión del

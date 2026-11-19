@@ -71,7 +71,9 @@ const rechazarToken = (res, nombreFuncion, tenantId) => {
  * - Si el local ya tiene MAX_LINKS_POR_DIA links en las últimas 24 horas (tope de
  *   emitirToken, auditoría 2026-11 Z1-01): la misma respuesta, sin mail. Es señal de
  *   abuso: además del warn, va un aviso a Sentry (llega a Discord), agrupado en un
- *   solo issue como los cortes del rate limiter.
+ *   solo issue como los cortes del rate limiter. Lleva el tag `limite`, como ellos: la
+ *   regla "Rate limiter sigue" de Sentry filtra por ese tag, así que también avisa
+ *   cuando se repite (como mucho una vez por hora), no solo la primera vez.
  * El envío es best-effort como el resto del mailer: si Resend falla, el error llega a
  * Sentry (console.error de enviarMail) y la respuesta es la misma (decidido con el
  * usuario el 2026-11-13).
@@ -114,7 +116,7 @@ export async function solicitarRecuperacion(req, res) {
     if (emision === 'tope') {
       console.warn(`[authRecuperar] solicitarRecuperacion — tope: el local ya tiene ${MAX_LINKS_POR_DIA} links en 24 horas | tenant:`, tenantId, '| tipo:', tipo);
       reportarAviso('recuperacion: tope diario de links', {
-        tags: { tipo },
+        tags: { limite: 'recuperacion-tope', tipo },
         fingerprint: ['recuperacion', 'tope-diario'],
       });
       return res.json({ enviado: true, email });
