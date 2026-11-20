@@ -1,7 +1,7 @@
 # Mejoras operativas — núcleo de decisiones
 
-> ✅ **Completado (2026-11-19) en `feature/mejoras-operativas`; sin deploy todavía** (el deploy, el post-deploy y la
-> prueba del usuario, en [`estado_actual.md`](estado_actual.md) → Pendientes). Documento **archivado**: solo el
+> ✅ **Completado y en producción (2026-11-19, PR #13)** (lo que queda del post-deploy, en
+> [`estado_actual.md`](estado_actual.md) → Pendientes). Documento **archivado**: solo el
 > "por qué". El plan con las fases, el contrato final de cada endpoint y los hallazgos es
 > [`plan_mejoras_operativas.md`](plan_mejoras_operativas.md) (§5 tiene una fila por fase con lo que quedó). Schema en
 > [`SQL_Schema.md`](SQL_Schema.md) (`turno.cliente_id` nullable, `turno.no_asistio_por`, `turno_traspaso`,

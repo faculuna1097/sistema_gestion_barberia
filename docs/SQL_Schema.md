@@ -54,10 +54,6 @@ CREATE TABLE public.tenant (
   operativo_password_hash text,
   operativo_token_version integer NOT NULL DEFAULT 0,
   admin_token_version integer NOT NULL DEFAULT 0,
-  -- telefono: columna vieja, reemplazada por telefono_local (2026-11-13). La lee el
-  -- backend de main hasta el deploy de mejoras-operativas; después se borra (pasos
-  -- post-deploy en plan_mejoras_operativas.md). Hasta entonces el alta escribe las dos.
-  telefono text,
   direccion text,
   -- Teléfono público del local, texto libre (hasta 30, lo valida el backend): el
   -- `tel:` del turnero, que lo expone con la clave `telefono`.

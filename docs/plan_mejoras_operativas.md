@@ -5,9 +5,10 @@
 > Las líneas y archivos citados en §3 son del 2026-11-05: confirmalos al escribir cada prompt, porque las fases
 > anteriores los mueven. Aprobar el plan no es arrancar: el orquestador confirma con el usuario antes de cada fase.
 >
-> **Archivado (2026-11-19): terminada, sin deploy.** El núcleo de decisiones está en
-> [`decisiones_mejoras_operativas.md`](./decisiones_mejoras_operativas.md); la prueba del usuario, el merge, el deploy y
-> el post-deploy, en `estado_actual.md` → Pendientes (la lista de la prueba, en §7 de acá).
+> **Archivado (2026-11-19): terminada y en producción** (mergeada a `main` el 2026-11-19, PR #13, merge commit
+> `6c510d6`; la prueba del usuario antes del merge, §7, se salteó por decisión del usuario). El núcleo de decisiones
+> está en [`decisiones_mejoras_operativas.md`](./decisiones_mejoras_operativas.md); lo que queda del post-deploy, en
+> `estado_actual.md` → Pendientes.
 >
 > **Estado (2026-11-19):** **todas las fases hechas, con el cierre (11).** Hechas y commiteadas: 1a (F9), 1b (F11), 1c (F10), 1 (F7 + F8), 2 (F6a),
 > 3 (F6b), 4 (F5), 5 (F1a), 6 (F1b) y, de la auditoría 2026-11, 6b (Z5-04 + Z4-09, `edc3919`), 6c (Z2-01, Z5-09 y el
