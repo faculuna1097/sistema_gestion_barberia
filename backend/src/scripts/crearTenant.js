@@ -139,8 +139,8 @@ async function crearTenant() {
       `INSERT INTO tenant
         (nombre_negocio, subdominio, pin_admin, suscripcion_vigente_hasta,
          operativo_usuario, operativo_password_hash,
-         email_duenio, telefono_duenio, telefono_local, telefono, activo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, true)
+         email_duenio, telefono_duenio, telefono_local, activo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
        RETURNING id`,
       [nombre, subdominio, pinHasheado, fechaSuscripcion, usuarioOperativo, passwordOperativaHash,
         email_duenio, telefono_duenio, telefono_local]
