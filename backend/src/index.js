@@ -11,6 +11,7 @@ import { verificarToken } from './middlewares/authMiddleware.js';
 import { tenantMiddleware, invalidar } from './middlewares/tenantMiddleware.js';
 import { verificarClavePlataforma } from './middlewares/plataformaAuthMiddleware.js';
 import { limiterGlobal, limiterLogin } from './middlewares/rateLimitMiddleware.js';
+import { diagnosticoIp } from './middlewares/diagnosticoIp.js';
 import { sanitizarObjeto, enmascararTokensEnRuta, rutaParaLog } from './utils/sanitizarLogs.js';
 import { registrarHandlerErrores, vaciarEventos } from './config/sentry.js';
 
@@ -70,6 +71,10 @@ const PORT = process.env.PORT || 3001;
 // X-Forwarded-For inventado; express-rate-limit lo rechaza con
 // ERR_ERL_PERMISSIVE_TRUST_PROXY). Debe setearse antes de montar los limiters.
 app.set('trust proxy', 1);
+// TEMPORAL — diagnóstico de la IP del cliente (ver el archivo). Va antes de todo
+// para cubrir cada request, /api/health y los 429 incluidos. Se saca en el PR de
+// trust proxy.
+app.use(diagnosticoIp);
 
 // --- Middlewares globales ---
 // helmet setea los headers de seguridad estándar (X-Content-Type-Options,
