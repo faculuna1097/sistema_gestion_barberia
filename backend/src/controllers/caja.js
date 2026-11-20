@@ -5,7 +5,6 @@ import { esMontoPositivo } from '../utils/validarNumero.js';
 import { esFormaPagoValida } from '../utils/validarPago.js';
 import { esFechaISO, esFechaFutura, hoyISO } from '../utils/validarFecha.js';
 import { esUUID } from '../utils/validarUuid.js';
-import { porcentajeComisionSql } from '../utils/comision.js';
 import {
   TIPOS_MOVIMIENTO_EXTRA,
   MAX_DESCRIPCION_MOVIMIENTO,
@@ -63,10 +62,6 @@ export const getMovimientosDia = async (req, res) => {
          t.inicio  AS turno_inicio,
          t.estado  AS turno_estado,
          cl.nombre AS turno_cliente_nombre,
-         -- % de comisión de este corte (el guardado al registrarlo). Hasta F4 lo
-         -- usaba el filtro "Solo barberos" del panel (sacaba los del 100%); queda
-         -- para el panel publicado antes del deploy de F4, que lo sigue leyendo.
-         ${porcentajeComisionSql('c', 'b')} AS comision_valor,
          -- El barbero está vinculado a un socio activo (vínculo de ahora, no el de
          -- la fecha del corte): el filtro "Solo barberos" saca estos cortes.
          ${esSocioSql('b')} AS es_socio,
@@ -92,7 +87,6 @@ export const getMovimientosDia = async (req, res) => {
          p.nombre || ' x' || v.cantidad AS detalle,
          (v.precio_unitario * v.cantidad) AS monto,
          v.forma_pago,
-         NULL AS comision_valor,
          'venta' AS tipo
        FROM venta v
        JOIN producto p ON v.producto_id = p.id
@@ -112,7 +106,6 @@ export const getMovimientosDia = async (req, res) => {
          COALESCE(cg.nombre, 'Sin categoría') || ': ' || g.descripcion AS detalle,
          g.monto AS monto,
          g.forma_pago,
-         NULL AS comision_valor,
          'gasto' AS tipo
        FROM gasto g
        LEFT JOIN categoria_gasto cg ON g.categoria_id = cg.id
@@ -138,7 +131,6 @@ export const getMovimientosDia = async (req, res) => {
          END AS detalle,
          me.monto AS monto,
          me.forma_pago,
-         NULL AS comision_valor,
          me.tipo AS tipo
        FROM movimiento_extra me
        LEFT JOIN socio s ON s.id = me.socio_id AND s.tenant_id = me.tenant_id
@@ -151,8 +143,7 @@ export const getMovimientosDia = async (req, res) => {
 
     // ── Merge, sentido y orden cronológico (más reciente primero) ────────────
     // pg devuelve los NUMERIC como string: la API expone el monto como número,
-    // igual que el 201 de crearMovimientoExtra. `comision_valor` también (solo los
-    // cortes la traen; el resto manda NULL, que sigue siendo null).
+    // igual que el 201 de crearMovimientoExtra.
     const movimientos = [
       ...cortesResult.rows,
       ...ventasResult.rows,
@@ -162,7 +153,6 @@ export const getMovimientosDia = async (req, res) => {
       .map((m) => ({
         ...m,
         monto: Number(m.monto),
-        comision_valor: m.comision_valor === null ? null : Number(m.comision_valor),
         sentido: sentidoDeMovimiento(m.tipo),
       }))
       .sort((b, a) => new Date(a.timestamp) - new Date(b.timestamp));
